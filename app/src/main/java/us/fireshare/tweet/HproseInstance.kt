@@ -2510,17 +2510,84 @@ object HproseInstance {
 
     /**
      * Update user data from server using "get_user" entry with retry logic
+     * Matches iOS implementation: first attempt uses existing baseUrl, retries always resolve fresh IP
      * @return true if user data was successfully fetched and updated, false otherwise
      */
     private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 3, skipRetryAndBlacklist: Boolean = false): Boolean {
         Timber.tag("updateUserFromServer").d("🔄 STARTING USER UPDATE WITH RETRY: userId: ${user.mid}, maxRetries: $maxRetries")
         val originalBaseUrl = user.baseUrl
-        var hasTriedEmptyBaseUrl = false
         
-        var attempt = 0
-        while (attempt < maxRetries) {
-            var shouldRetryImmediately = false
+        // Track if user cache has expired to determine if we should force fresh IP resolution
+        val hasExpired = user.hasExpired
+        val userHasBaseUrl = !user.baseUrl.isNullOrEmpty()
+        val forceFreshIP = originalBaseUrl.isNullOrEmpty() || hasExpired
+        
+        var lastError: Exception? = null
+        
+        // Custom retry logic matching iOS implementation
+        for (attempt in 1..maxRetries) {
             try {
+                // First attempt: Use user's existing baseUrl if available AND not forcing refresh
+                // Retry attempts: Always force fresh IP resolution
+                if (attempt == 1) {
+                    if (!forceFreshIP && userHasBaseUrl && !user.baseUrl.isNullOrEmpty()) {
+                        // User has a baseUrl and we're not forcing refresh - use it
+                        Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl: ${user.baseUrl} for userId: ${user.mid} (hasExpired: $hasExpired)")
+                    } else {
+                        // Force fresh IP resolution: either baseUrl param is empty, user is expired, or user has no baseUrl
+                        val oldBaseUrl = user.baseUrl ?: "nil"
+                        val reason = when {
+                            originalBaseUrl.isNullOrEmpty() -> "forcing fresh IP resolution (baseUrl param empty)"
+                            hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
+                            else -> "no baseUrl"
+                        }
+                        Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: $oldBaseUrl, reason: $reason")
+                        
+                        val providerIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
+                        if (providerIP == null) {
+                            throw Exception("Provider not found for userId: ${user.mid}")
+                        }
+                        
+                        val resolvedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
+                            providerIP
+                        } else {
+                            "http://$providerIP"
+                        }
+                        user.baseUrl = resolvedUrl
+                        user.clearHproseService()
+                        Timber.tag("updateUserFromServer").d("🌐 Resolved provider IP for userId: ${user.mid} to ${user.baseUrl}")
+                    }
+                } else {
+                    // Retry attempts: Always force fresh IP resolution
+                    val oldBaseUrl = user.baseUrl ?: "nil"
+                    Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Re-resolving provider IP for userId: ${user.mid}, old baseUrl: $oldBaseUrl")
+                    
+                    val providerIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
+                    if (providerIP == null) {
+                        throw Exception("Provider not found for userId: ${user.mid}")
+                    }
+                    
+                    // Check if resolved IP is the same as current IP (redirect loop prevention)
+                    val normalizedProviderIp = providerIP.removePrefix("http://").removePrefix("http")
+                    val currentBaseUrlString = user.baseUrl ?: ""
+                    val normalizedCurrentIp = currentBaseUrlString.removePrefix("http://")
+                    
+                    if (normalizedProviderIp == normalizedCurrentIp && normalizedCurrentIp.isNotEmpty()) {
+                        Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED on retry - resolved IP ($providerIP) same as current IP ($currentBaseUrlString)")
+                        throw Exception("Redirect loop detected - resolved IP same as current IP: $providerIP")
+                    }
+                    
+                    val resolvedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
+                        providerIP
+                    } else {
+                        "http://$providerIP"
+                    }
+                    user.baseUrl = resolvedUrl
+                    user.clearHproseService()
+                    Timber.tag("updateUserFromServer").d("🌐 Re-resolved provider IP for userId: ${user.mid} to ${user.baseUrl}")
+                }
+                
+                // Perform the actual server communication
                 val entry = "get_user"
                 val params = mapOf(
                     "aid" to appId,
@@ -2529,7 +2596,7 @@ object HproseInstance {
                     "userid" to user.mid
                 )
                 
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT ${attempt + 1}/$maxRetries: Calling get_user for userId: ${user.mid}, baseUrl: ${user.baseUrl}")
+                Timber.tag("updateUserFromServer").d("📡 Calling get_user for userId: ${user.mid}, baseUrl: ${user.baseUrl}")
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
                 
                 // Unwrap v2 response - get_user can return either String (IP) or Map (user data)
@@ -2538,14 +2605,14 @@ object HproseInstance {
                 } else {
                     rawResponse
                 }
-
+                
                 when (response) {
                     is String -> {
-                        // User data not found on this node, but IP of a valid provider is returned.
+                        // Server returned a provider IP (redirect) - update baseUrl and immediately retry with it
                         val providerIP = response.trim()
                         Timber.tag("updateUserFromServer").d("🔄 PROVIDER IP RECEIVED: userId: ${user.mid}, providerIP: $providerIP")
                         
-                        // Normalize IPs for redirect loop detection (remove http:// prefix)
+                        // Normalize IPs for redirect loop detection
                         val normalizedRedirectIp = providerIP.removePrefix("http://").removePrefix("http")
                         val currentBaseUrlString = user.baseUrl ?: ""
                         val normalizedCurrentIp = currentBaseUrlString.removePrefix("http://")
@@ -2553,31 +2620,27 @@ object HproseInstance {
                         // Check for redirect loop - being redirected to the same IP we're already on
                         if (normalizedCurrentIp == normalizedRedirectIp && normalizedCurrentIp.isNotEmpty()) {
                             Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected to same IP: $providerIP (current: $currentBaseUrlString)")
-                            if (!skipRetryAndBlacklist) {
-                                BlackList.recordFailure(user.mid)
-                            }
                             throw Exception("Redirect loop detected - redirected to same IP: $providerIP")
                         }
                         
-                        // Provider IP received, update baseUrl and retry
+                        // Update baseUrl and immediately retry with the redirect IP (inline, similar to original Android code)
                         val redirectedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
                             providerIP
                         } else {
                             "http://$providerIP"
                         }
                         user.baseUrl = redirectedUrl
-                        Timber.tag("updateUserFromServer").d("🌐 RETRYING WITH NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
-                        
-                        // Clear hproseService to force reconnection with new baseUrl
                         user.clearHproseService()
+                        Timber.tag("updateUserFromServer").d("🌐 RETRYING WITH REDIRECT BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
                         
-                        // Retry with new baseUrl - use Any to handle both String and Map responses
+                        // Immediately retry with new baseUrl (inline retry)
                         val retryRawResponse = user.hproseService?.runMApp<Any>(entry, params)
                         val retryResponse = if (retryRawResponse is Map<*, *>) {
                             unwrapV2Response<Any>(retryRawResponse) ?: retryRawResponse
                         } else {
                             retryRawResponse
                         }
+                        
                         when (retryResponse) {
                             is String -> {
                                 // Second redirect returned - check if it's the same IP (redirect loop)
@@ -2588,17 +2651,11 @@ object HproseInstance {
                                 if (newNormalizedIp == normalizedRedirectIp) {
                                     // Redirect loop - same IP returned twice
                                     Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED: userId: ${user.mid}, redirected server returned same IP: $newIpAddress (same as first redirect: $providerIP)")
-                                    if (!skipRetryAndBlacklist) {
-                                        BlackList.recordFailure(user.mid)
-                                    }
                                     throw Exception("Redirect loop detected - redirected server returned same IP: $newIpAddress")
                                 }
                                 
                                 // Second redirect returned - user not found on this server either
                                 Timber.tag("updateUserFromServer").w("⚠️ USER NOT FOUND AFTER REDIRECT: userId: ${user.mid}, second IP returned: $newIpAddress")
-                                if (!skipRetryAndBlacklist) {
-                                    BlackList.recordFailure(user.mid)
-                                }
                                 throw Exception("User not found after redirect - second IP returned: $newIpAddress")
                             }
                             is Map<*, *> -> {
@@ -2606,7 +2663,7 @@ object HproseInstance {
                                 if (!skipRetryAndBlacklist) {
                                     BlackList.recordSuccess(user.mid)
                                 }
-                                Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED: userId: ${user.mid}, dataKeys: ${retryResponse.keys}")
+                                Timber.tag("updateUserFromServer").d("📊 USER DATA RECEIVED AFTER REDIRECT: userId: ${user.mid}, dataKeys: ${retryResponse.keys}")
                                 user.from(retryResponse as Map<String, Any>)
                                 // Validate that user data is not null or empty
                                 if (user.mid.isNotEmpty() && user.username != null) {
@@ -2614,25 +2671,20 @@ object HproseInstance {
                                     return true // Success, exit retry loop
                                 } else {
                                     Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
+                                    throw Exception("Invalid user data received")
                                 }
                             }
                             null -> {
                                 Timber.tag("updateUserFromServer").w("⚠️ NULL RESPONSE AFTER REDIRECT: userId: ${user.mid}")
-                                if (!skipRetryAndBlacklist) {
-                                    BlackList.recordFailure(user.mid)
-                                }
                                 throw Exception("User not found after redirect - null response")
                             }
                             else -> {
-                                Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE AFTER PROVIDER IP: userId: ${user.mid}, type: ${retryResponse.javaClass.simpleName}")
-                                if (!skipRetryAndBlacklist) {
-                                    BlackList.recordFailure(user.mid)
-                                }
+                                Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE AFTER REDIRECT: userId: ${user.mid}, type: ${retryResponse.javaClass.simpleName}")
                                 throw Exception("Unexpected response type after redirect: ${retryResponse.javaClass.simpleName}")
                             }
                         }
                     }
-
+                    
                     is Map<*, *> -> {
                         // Record successful access (skip for search operations)
                         if (!skipRetryAndBlacklist) {
@@ -2646,85 +2698,54 @@ object HproseInstance {
                             return true // Success, exit retry loop
                         } else {
                             Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
+                            throw Exception("Invalid user data received")
                         }
                     }
                     
                     null -> {
-                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE: userId: ${user.mid}, attempt: ${attempt + 1}")
-                        // On first failure with null response, try with empty baseUrl to refresh IP (skip for search operations)
-                        if (!skipRetryAndBlacklist && !hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
-                            Timber.tag("updateUserFromServer").d("🔄 NULL RESPONSE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
-                            user.clearHproseService()
-                            user.baseUrl = ""
-                            val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
-                            if (newProviderIP != null) {
-                                user.baseUrl = "http://$newProviderIP"
-                                Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
-                                hasTriedEmptyBaseUrl = true
-                                shouldRetryImmediately = true // Retry immediately with new baseUrl
-                            } else {
-                                Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
-                                user.baseUrl = originalBaseUrl
-                            }
-                        }
+                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE: userId: ${user.mid}, attempt: $attempt")
+                        throw Exception("Null response from server")
+                    }
+                    
+                    else -> {
+                        Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE: userId: ${user.mid}, type: ${response.javaClass.simpleName}")
+                        throw Exception("Unexpected response type: ${response.javaClass.simpleName}")
                     }
                 }
             } catch (e: Exception) {
-                // Record failed access (skip for search operations)
-                if (!skipRetryAndBlacklist) {
-                    BlackList.recordFailure(user.mid)
-                }
-                Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: ${attempt + 1}, error: ${e.message}")
+                lastError = e
+                Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
                 
-                // Check if it's a network-related error that should be retried
-                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
-                
-                if (!isNetworkError) {
-                    // Don't retry for non-network errors
-                    Timber.tag("updateUserFromServer").e("🚫 NON-NETWORK ERROR: userId: ${user.mid}, not retrying, error: ${e.message}")
-                    return false
-                } else {
-                    Timber.tag("updateUserFromServer").d("🌐 NETWORK ERROR: userId: ${user.mid}, will retry, error: ${e.message}")
-                }
-                
-                // On first failure (network error or null response), try with empty baseUrl to refresh IP (skip for search operations)
-                if (!skipRetryAndBlacklist && !hasTriedEmptyBaseUrl && !originalBaseUrl.isNullOrEmpty() && attempt < maxRetries - 1) {
-                    Timber.tag("updateUserFromServer").d("🔄 FIRST FAILURE - RETRYING WITH EMPTY BASE URL: userId: ${user.mid} to force IP resolution")
-                    // Clear the cached service first
-                    user.clearHproseService()
-                    // Set baseUrl to empty to force IP resolution
-                    user.baseUrl = ""
-                    // Get a new provider IP to resolve the server address
-                    val newProviderIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
-                    if (newProviderIP != null) {
-                        user.baseUrl = "http://$newProviderIP"
-                        Timber.tag("updateUserFromServer").d("🌐 RESOLVED NEW BASE URL: userId: ${user.mid}, newBaseUrl: ${user.baseUrl}")
-                        hasTriedEmptyBaseUrl = true
-                        shouldRetryImmediately = true // Retry immediately with new baseUrl (don't wait)
-                    } else {
-                        Timber.tag("updateUserFromServer").w("⚠️ FAILED TO RESOLVE PROVIDER IP: userId: ${user.mid}, will continue with original baseUrl")
-                        // Restore original baseUrl if we can't resolve
-                        user.baseUrl = originalBaseUrl
+                // Check if this is a redirect loop error - don't retry in this case
+                if (e.message?.contains("Redirect loop detected") == true) {
+                    Timber.tag("updateUserFromServer").e("🔄 REDIRECT LOOP DETECTED, stopping retries for userId: ${user.mid}")
+                    if (!skipRetryAndBlacklist) {
+                        BlackList.recordFailure(user.mid)
                     }
+                    return false
                 }
-            }
-            
-            // If we should retry immediately, don't increment attempt and don't wait
-            if (shouldRetryImmediately) {
-                Timber.tag("updateUserFromServer").d("🔄 RETRYING IMMEDIATELY: userId: ${user.mid} with new baseUrl")
-                // Don't increment attempt, just continue the loop
-            } else {
-                attempt++
+                
+                // If skipRetries is true, don't retry (for username searches)
+                if (skipRetryAndBlacklist) {
+                    return false
+                }
+                
                 // If this isn't the last attempt, wait before retrying
                 if (attempt < maxRetries) {
-                    val delayMs = minOf(3000L, 1000L * (1 shl (attempt - 1))) // Exponential backoff: 1s, 2s
+                    // Exponential backoff: 1s, 2s (matching iOS: attempt * 1_000_000_000 nanoseconds = attempt * 1000ms)
+                    val delayMs = attempt * 1000L
                     Timber.tag("updateUserFromServer").d("⏳ RETRYING IN ${delayMs}ms: userId: ${user.mid}, attempt ${attempt + 1}/$maxRetries")
                     kotlinx.coroutines.delay(delayMs)
                 }
             }
         }
+        
+        // All retries failed
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
-        return false // All retries failed
+        if (!skipRetryAndBlacklist && lastError != null) {
+            BlackList.recordFailure(user.mid)
+        }
+        return false
     }
 
     /**
