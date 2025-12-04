@@ -135,60 +135,42 @@ class TweetViewModel @AssistedInject constructor(
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
-        Timber.d("TweetViewModel - Initializing with tweet: ${tweet.mid}, attachments: ${tweet.attachments?.size}")
         if (tweetState.value.author == null) {
-            Timber.d("TweetViewModel - Author is null, checking cache first")
             viewModelScope.launch(Dispatchers.IO) {
                 // Step 1: Check if there's a cached tweet with author already populated
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null && cachedTweet.author != null) {
-                        Timber.d("TweetViewModel - Found cached tweet with author: ${cachedTweet.mid}, author: ${cachedTweet.author?.username}")
                         _tweetState.value = cachedTweet
                         _attachments.value = cachedTweet.attachments
                         return@launch
                     }
-                } else {
-                    Timber.w("Tweet mid is null, skipping cache check")
                 }
                 
                 // Step 2: Try to get user from cache and populate author
-                var cachedUser: User? = null  // Declare here to make it accessible later
+                var cachedUser: User? = null
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.authorId != null) {
                     cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
                     if (cachedUser != null) {
-                        Timber.d("TweetViewModel - Found cached user: ${cachedUser.username}, populating author")
                         val tweetWithAuthor = tweet.copy(author = cachedUser)
                         _tweetState.value = tweetWithAuthor
-                        // Continue to refresh tweet to get latest data, but now with author populated
-                    } else {
-                        Timber.d("TweetViewModel - User not in cache, will fetch from server")
                     }
-                } else {
-                    Timber.w("Tweet authorId is null, skipping user cache check")
                 }
                 
-                // Step 3: Ensure we have the author before refreshing tweet
-                // For deep links, we need to fetch the author first to get their baseUrl
-                // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery (important for deep links)
+                // Step 3: Fetch author if not cached (for deep links)
+                // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery
                 var author: User? = cachedUser
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.authorId != null && author == null) {
-                    Timber.d("TweetViewModel - Fetching author from server for deep link: ${tweet.authorId}")
                     try {
-                        // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery (important for deep links)
-                        // This bypasses cache and forces fresh fetch with provider IP discovery
-                        Timber.d("TweetViewModel - About to call getUser for authorId: ${tweet.authorId} with forceRefresh=true")
                         author = HproseInstance.getUser(tweet.authorId, baseUrl = "", forceRefresh = true)
-                        Timber.d("TweetViewModel - getUser returned: ${if (author != null) "success, username=${author.username}, baseUrl=${author.baseUrl}" else "null"}")
                         if (author != null) {
-                            Timber.d("TweetViewModel - Successfully fetched author: ${author.username}, baseUrl: ${author.baseUrl}")
                             val tweetWithAuthor = tweet.copy(author = author)
                             _tweetState.value = tweetWithAuthor
                         } else {
-                            Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId} - getUser returned null")
+                            Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId}")
                         }
                     } catch (e: Exception) {
                         Timber.e(e, "TweetViewModel - Exception fetching author: ${tweet.authorId}")
@@ -199,11 +181,9 @@ class TweetViewModel @AssistedInject constructor(
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
                     HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
-                        Timber.d("TweetViewModel - Refreshed tweet: ${refreshedTweet.mid}, attachments: ${refreshedTweet.attachments?.size}, author: ${refreshedTweet.author?.username}")
                         _tweetState.value = refreshedTweet
                         _attachments.value = refreshedTweet.attachments
                     } ?: run {
-                        Timber.w("TweetViewModel - Failed to refresh tweet, but keeping author if available")
                         // If refresh failed but we have author, at least show tweet with author
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
@@ -211,7 +191,6 @@ class TweetViewModel @AssistedInject constructor(
                         }
                     }
                 } else {
-                    Timber.w("Cannot refresh tweet due to null mid or authorId")
                     // Optionally populate with author if available
                     val currentAuthor = author ?: cachedUser
                     if (currentAuthor != null && tweetState.value.author == null) {
@@ -219,8 +198,6 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             }
-        } else {
-            Timber.d("TweetViewModel - Author exists, using existing tweet data")
         }
     }
 

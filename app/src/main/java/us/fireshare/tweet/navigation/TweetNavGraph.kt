@@ -110,7 +110,6 @@ fun TweetNavGraph(
         if (currentUri != null && currentUri != lastProcessedUri) {
             val destination = parseDeepLink(appLinkIntent)
             if (destination != null) {
-                Timber.tag("DeepLink").d("Navigating to deep link: tweetId=${destination.tweetId}, authorId=${destination.authorId}")
                 // Navigate to deep link, clearing back stack to root
                 navController.navigate(destination) {
                     popUpTo(navController.graph.startDestinationId) {
@@ -287,15 +286,10 @@ private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     
     val appLinkData = intent.data
     if (appLinkData == null) {
-        Timber.tag("DeepLink").d("Intent data is null")
         return null
     }
     
-    Timber.tag("DeepLink").d("Parsing deep link: ${appLinkData}")
-    Timber.tag("DeepLink").d("Host: ${appLinkData.host}, Path: ${appLinkData.path}")
-    
     val pathSegments = appLinkData.pathSegments
-    Timber.tag("DeepLink").d("Path segments: $pathSegments (size: ${pathSegments.size})")
     
     // Expected format: /tweet/{tweetId}/{authorId}
     // pathSegments will be: ["tweet", "tweetId", "authorId"]
@@ -313,11 +307,10 @@ private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     val authorId = pathSegments[2]
     
     if (tweetId.isBlank() || authorId.isBlank()) {
-        Timber.tag("DeepLink").w("Invalid deep link: tweetId or authorId is blank (tweetId='$tweetId', authorId='$authorId')")
+        Timber.tag("DeepLink").w("Invalid deep link: tweetId or authorId is blank")
         return null
     }
     
-    Timber.tag("DeepLink").d("Successfully parsed deep link: tweetId=$tweetId, authorId=$authorId")
     return NavTweet.DeepLink(tweetId, authorId)
 }
 

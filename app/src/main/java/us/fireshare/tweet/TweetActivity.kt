@@ -179,7 +179,6 @@ class TweetActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Timber.tag("TweetActivity").d("onNewIntent called with: ${intent.data}")
         setIntent(intent) // Update the intent so getIntent() returns the latest one
         handleIntent(intent)
     }
@@ -189,7 +188,6 @@ class TweetActivity : ComponentActivity() {
      */
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
-            Timber.tag("DeepLink").d("Handling deep link: ${intent.data}")
             activityViewModel.currentIntent.value = intent
         }
     }
