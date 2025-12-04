@@ -133,9 +133,7 @@ object HproseInstance {
                         isAppUserRefreshing = false
                     }
                 }
-            } else if (isAppUserRefreshing) {
-                Timber.tag("appUser").d("AppUser refresh already in progress, skipping duplicate request")
-            }
+            } // Skip logging duplicate refresh requests to reduce verbosity
             return _appUser
         }
         set(value) {
@@ -2789,7 +2787,10 @@ object HproseInstance {
         var waitAttempts = 0
         val maxWaitAttempts = 50 // 50 * 200ms = 10 seconds max wait
         while (appUser.hproseService == null && waitAttempts < maxWaitAttempts) {
-            Timber.tag("getProviderIP").d("Waiting for appUser.hproseService to be available (attempt ${waitAttempts + 1}/$maxWaitAttempts)")
+            // Only log every 5 attempts to reduce verbosity
+            if (waitAttempts % 5 == 0) {
+                Timber.tag("getProviderIP").d("Waiting for appUser.hproseService to be available (attempt ${waitAttempts + 1}/$maxWaitAttempts)")
+            }
             kotlinx.coroutines.delay(200)
             waitAttempts++
         }
