@@ -2403,9 +2403,59 @@ object HproseInstance {
         Timber.tag("getUser").d("=== USER FETCH START === userId: $userId, baseUrl: $baseUrl, maxRetries: $maxRetries, forceRefresh: $forceRefresh")
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
-            if (cachedUser != null && cachedUser.baseUrl != null) {
-                Timber.tag("getUser").d("✅ CACHE HIT: Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}, baseUrl: ${cachedUser.baseUrl}")
-                return cachedUser
+            if (cachedUser != null) {
+                // Check if cached user is valid and not expired
+                if (cachedUser.username != null && !cachedUser.hasExpired && cachedUser.baseUrl != null && !baseUrl.isNullOrEmpty()) {
+                    Timber.tag("getUser").d("✅ CACHE HIT: Using cached user for userId: $userId, username: ${cachedUser.username}, hasExpired: ${cachedUser.hasExpired}, baseUrl: ${cachedUser.baseUrl}")
+                    return cachedUser
+                } else if (cachedUser.username != null && cachedUser.hasExpired && cachedUser.baseUrl != null) {
+                    // Cached user is expired - return it immediately but refresh in background
+                    Timber.tag("getUser").d("⏰ CACHE EXPIRED: Returning expired cached user immediately for userId: $userId, username: ${cachedUser.username}, launching background refresh")
+                    
+                    // Launch background task to refresh user from server
+                    val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
+                        if (!ongoingUserUpdates.contains(userId)) {
+                            ongoingUserUpdates.add(userId)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    
+                    if (shouldStartBackgroundRefresh) {
+                        TweetApplication.applicationScope.launch {
+                            try {
+                                Timber.tag("getUser").d("🔄 BACKGROUND REFRESH START: userId: $userId")
+                                val userInstance = getUserInstance(userId)
+                                userInstance.baseUrl = cachedUser.baseUrl // Use existing baseUrl
+                                
+                                val effectiveMaxRetries = if (skipRetryAndBlacklist) 1 else maxRetries
+                                val fetchSuccess = updateUserFromServerWithRetry(userInstance, effectiveMaxRetries, skipRetryAndBlacklist)
+                                
+                                if (fetchSuccess && userInstance.mid.isNotEmpty() && userInstance.username != null) {
+                                    Timber.tag("getUser").d("✅ BACKGROUND REFRESH SUCCESS: userId: $userId, username: ${userInstance.username}")
+                                    // Update cache with fresh user data
+                                    TweetCacheManager.saveUser(userInstance)
+                                    // User singleton is already updated via getUserInstance, so views will see the update
+                                } else {
+                                    Timber.tag("getUser").w("❌ BACKGROUND REFRESH FAILED: userId: $userId, fetchSuccess: $fetchSuccess")
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("getUser").e(e, "❌ BACKGROUND REFRESH ERROR: userId: $userId")
+                            } finally {
+                                userUpdateMutex.withLock {
+                                    ongoingUserUpdates.remove(userId)
+                                }
+                                Timber.tag("getUser").d("🧹 BACKGROUND REFRESH COMPLETE: userId: $userId")
+                            }
+                        }
+                    } else {
+                        Timber.tag("getUser").d("🔄 BACKGROUND REFRESH ALREADY IN PROGRESS: userId: $userId")
+                    }
+                    
+                    // Return expired cached user immediately
+                    return cachedUser
+                }
             }
         } else {
             Timber.tag("getUser").d("🔄 FORCE REFRESH: Skipping cache for userId: $userId")
