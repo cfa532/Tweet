@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +40,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 
@@ -86,35 +90,7 @@ fun TweetFeedScreen(
 
     // Calculate the transparency based on scrolling state with proper thresholds
     var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
-
-    // Track scroll state and update bottom bar transparency with thresholds
-    LaunchedEffect(scrollState) {
-        when (scrollState.direction) {
-            ScrollDirection.UP -> {
-                // Scroll UP (content moves down): restore header and bottom bar
-                // Only restore if we've scrolled up significantly
-                if (scrollState.isScrolling) {
-                    bottomBarTransparency = 0.98f
-                }
-            }
-
-            ScrollDirection.DOWN -> {
-                // Scroll DOWN (content moves up): reduce bottom bar opacity
-                // Only reduce if we've scrolled down significantly
-                if (scrollState.isScrolling) {
-                    delay(100) // Small delay for smooth transition
-                    if (scrollState.direction == ScrollDirection.DOWN) {
-                        bottomBarTransparency = 0.2f
-                    }
-                }
-            }
-
-            ScrollDirection.NONE -> {
-                // Idle state: keep current opacity, don't restore automatically
-                // Only restore when user starts scrolling up
-            }
-        }
-    }
+    val coroutineScope = rememberCoroutineScope()
 
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     val pagerState = rememberPagerState(pageCount = { tabs.size })
@@ -199,7 +175,34 @@ fun TweetFeedScreen(
                                             parentEntry,
                                             scrollBehavior,
                                             viewModel,
-                                            onScrollStateChange = { scrollState = it })
+                                            onScrollStateChange = { newScrollState ->
+                                                scrollState = newScrollState
+                                                
+                                                // Update bottom bar transparency based on scroll direction
+                                                when (newScrollState.direction) {
+                                                    ScrollDirection.UP -> {
+                                                        // Scroll UP (content moves down): restore header and bottom bar immediately
+                                                        bottomBarTransparency = 0.98f
+                                                    }
+                                                    
+                                                    ScrollDirection.DOWN -> {
+                                                        // Scroll DOWN (content moves up): reduce bottom bar opacity
+                                                        coroutineScope.launch {
+                                                            withContext(Dispatchers.Main) {
+                                                                delay(100) // Small delay for smooth transition
+                                                                if (scrollState.direction == ScrollDirection.DOWN) {
+                                                                    bottomBarTransparency = 0.2f
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    ScrollDirection.NONE -> {
+                                                        // Idle state: keep current opacity, don't restore automatically
+                                                        // Only restore when user starts scrolling up
+                                                    }
+                                                }
+                                            })
                                     }
                                 } else {
                                     // Fallback for API < 30

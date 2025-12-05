@@ -312,33 +312,36 @@ fun TweetListView(
 
     // Track scroll state and notify parent
     LaunchedEffect(listState) {
-        val previousFirstVisibleItem = listState.firstVisibleItemIndex
-        val previousScrollOffset = listState.firstVisibleItemScrollOffset
+        var previousFirstVisibleItem = listState.firstVisibleItemIndex
+        var previousScrollOffset = listState.firstVisibleItemScrollOffset
 
         snapshotFlow {
-            val isScrolling = listState.isScrollInProgress
-            val firstVisibleItem = listState.firstVisibleItemIndex
-            val scrollOffset = listState.firstVisibleItemScrollOffset
-
-            // Determine scroll direction with higher thresholds to filter out small gestures
-            val SCROLL_OFFSET_THRESHOLD = 30 // Reduced from 50 to 30 for more sensitivity
-            val ITEM_INDEX_THRESHOLD = 1     // Reduced from 2 to 1 for more sensitivity
-
-            val direction = when {
-                !isScrolling -> ScrollDirection.NONE
-                firstVisibleItem < previousFirstVisibleItem - ITEM_INDEX_THRESHOLD ||
-                        (firstVisibleItem == previousFirstVisibleItem && scrollOffset < previousScrollOffset - SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.UP
-
-                firstVisibleItem > previousFirstVisibleItem + ITEM_INDEX_THRESHOLD ||
-                        (firstVisibleItem == previousFirstVisibleItem && scrollOffset > previousScrollOffset + SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.DOWN
-
-                else -> ScrollDirection.NONE
-            }
-
-            ScrollState(isScrolling, direction)
+            Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         }
-            .collect { scrollState ->
-                onScrollStateChange?.invoke(scrollState)
+            .collect { (firstVisibleItem, scrollOffset) ->
+                val isScrolling = listState.isScrollInProgress
+                
+                // Determine scroll direction with higher thresholds to filter out small gestures
+                val SCROLL_OFFSET_THRESHOLD = 30 // Reduced from 50 to 30 for more sensitivity
+                val ITEM_INDEX_THRESHOLD = 1     // Reduced from 2 to 1 for more sensitivity
+                
+                val indexDelta = firstVisibleItem - previousFirstVisibleItem
+                val offsetDelta = scrollOffset - previousScrollOffset
+
+                val direction = when {
+                    !isScrolling -> ScrollDirection.NONE
+                    indexDelta < -ITEM_INDEX_THRESHOLD ||
+                            (indexDelta == 0 && offsetDelta < -SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.UP
+                    indexDelta > ITEM_INDEX_THRESHOLD ||
+                            (indexDelta == 0 && offsetDelta > SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.DOWN
+                    else -> ScrollDirection.NONE
+                }
+
+                // Update previous values for next comparison
+                previousFirstVisibleItem = firstVisibleItem
+                previousScrollOffset = scrollOffset
+
+                onScrollStateChange?.invoke(ScrollState(isScrolling, direction))
             }
     }
 
