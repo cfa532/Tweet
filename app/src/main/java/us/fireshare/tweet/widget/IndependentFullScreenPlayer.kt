@@ -399,9 +399,9 @@ private fun VideoInfoOverlay(
         ) {
             val actionColor = Color.White.copy(alpha = 0.7f)
             CommentButton(viewModel, color = actionColor)
+            RetweetButton(viewModel, color = actionColor)
             LikeButton(viewModel, color = actionColor)
             BookmarkButton(viewModel, color = actionColor)
-            RetweetButton(viewModel, color = actionColor)
             Spacer(modifier = Modifier.width(20.dp))
             ShareButton(viewModel, color = actionColor)
         }

@@ -541,9 +541,9 @@ fun MediaBrowser(
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         CommentButton(viewModel)
+                        RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)
                     }

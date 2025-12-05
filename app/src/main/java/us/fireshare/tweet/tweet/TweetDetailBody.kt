@@ -236,9 +236,9 @@ fun TweetDetailBody(
                     ) {
                         // State hoist
                         CommentButton(viewModel, onExpandReply = onExpandReply)
+                        RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        RetweetButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)
                     }

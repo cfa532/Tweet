@@ -45,8 +45,10 @@ import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.TweetViewModel
-
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.layout.width
 suspend fun guestWarning(context: Context, navController: NavController? = null) {
     Toast.makeText(context, context.getString(R.string.guest_reminder), Toast.LENGTH_LONG).show()
     // Navigate to login after a short delay
@@ -85,21 +87,20 @@ fun CommentButton(
             navController.navigate(ComposeComment(tweet.mid))
         }
     }) {
-        Row(horizontalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.Start) {
             Icon(
                 painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(4.dp))
-            if (count > 0) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color ?: MaterialTheme.colorScheme.primary
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = if (count > 0) CountFormatUtils.formatCount(count) else "",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                color = color ?: MaterialTheme.colorScheme.primary,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -135,21 +136,20 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         }
     }) {
-        Row(horizontalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.Start) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
                 contentDescription = stringResource(R.string.forward),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(4.dp))
-            if (count > 0) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color ?: if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = if (count > 0) CountFormatUtils.formatCount(count) else "",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                color = color ?: if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -176,22 +176,21 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 }
             }
     } ) {
-        Row(horizontalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.Start) {
             Icon(
                 painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
                 contentDescription = stringResource(R.string.like),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
                 tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(4.dp))
-            if (count > 0) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color
-                        ?: MaterialTheme.colorScheme.secondary
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = if (count > 0) CountFormatUtils.formatCount(count) else "",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color
+                    ?: MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -219,7 +218,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             }
     } )
     {
-        Row(horizontalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.Start) {
             Icon(
                 painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
                 contentDescription = stringResource(R.string.like),
@@ -227,15 +226,14 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                     .padding(bottom = 1.dp),
                 tint = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
             )
-            Spacer(modifier = Modifier.width(4.dp))
-            if (count > 0) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color
-                        ?: MaterialTheme.colorScheme.secondary
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = if (count > 0) CountFormatUtils.formatCount(count) else "",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color
+                    ?: MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
