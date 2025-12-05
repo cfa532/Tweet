@@ -21,6 +21,7 @@
     <string name="comment">Comment</string>
     <string name="reply_to">Reply to</string>
     <string name="comment_as_tweet">Post as Tweet</string>
+    <string name="quote_original">Quote Original</string>
     <string name="guest_reminder">Please login or register</string>
     <string name="update_available">Update Available</string>
     <string name="update_message">A new version of the app is available. Would you like to update?</string>

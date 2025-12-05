@@ -114,6 +114,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val hasRetweeted = tweet.favorites?.get(UserActions.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val errorMessage = stringResource(R.string.tweet_failed)
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
@@ -130,7 +131,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
                     Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
                     // Show error message to user
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, context.getString(R.string.tweet_failed), Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                     }
                 }
             }

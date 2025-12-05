@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -166,7 +167,7 @@ fun ComposeCommentScreen(
     Scaffold(
         topBar = {
             ComposeTopAppBar(
-                title = "Comment",
+                title = stringResource(R.string.comment),
                 showCamera = showCamera,
                 onBackClick = onBackClick,
                 onSendClick = onSendClick,
@@ -223,7 +224,7 @@ fun ComposeCommentScreen(
                 ActionButtonsRow(
                     isChecked = isCheckedToTweet,
                     onCheckedChange = { tweetViewModel.onCheckedChange(it) },
-                    checkboxLabel = "Quote Original",
+                    checkboxLabel = stringResource(R.string.quote_original),
                     onCameraClick = onCameraClick,
                     onFilePickerClick = onFilePickerClick,
                     onSendClick = onSendClick,
@@ -238,7 +239,7 @@ fun ComposeCommentScreen(
         showDialog = showExitConfirmation,
         onDismiss = { },
         onConfirm = { popBack() },
-        title = "Discard Comment"
+        title = stringResource(R.string.discard_comment)
     )
 
     // Camera handler

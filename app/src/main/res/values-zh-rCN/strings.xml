@@ -22,6 +22,7 @@
     <string name="comment">评论</string>
     <string name="reply_to">回覆给</string>
     <string name="comment_as_tweet">同时发帖</string>
+    <string name="quote_original">引用原文</string>
     <string name="guest_reminder">请先登录或注册</string>
     <string name="update_available">有升级版本</string>
     <string name="update_message">有新版本，需要升级吗？</string>
