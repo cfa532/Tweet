@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,7 +47,6 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.foundation.layout.width
 suspend fun guestWarning(context: Context, navController: NavController? = null) {
     Toast.makeText(context, context.getString(R.string.guest_reminder), Toast.LENGTH_LONG).show()
     // Navigate to login after a short delay
