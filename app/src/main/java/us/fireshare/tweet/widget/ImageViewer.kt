@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -369,6 +371,15 @@ fun AdvancedImageViewer(
     var isClosing by remember { mutableStateOf(false) }
     var navigationDirection by remember { mutableIntStateOf(0) } // -1 for previous, 1 for next, 0 for none
     
+    // Calculate current image index for navigation dots
+    val currentImageIndex = remember(imageUrl, imageUrls) {
+        if (imageUrls != null && imageUrls.isNotEmpty()) {
+            imageUrls.indexOfFirst { it == imageUrl }.takeIf { it >= 0 } ?: 0
+        } else {
+            0
+        }
+    }
+    
     // Reset navigation direction after animation completes
     LaunchedEffect(imageUrl) {
         if (navigationDirection != 0) {
@@ -687,6 +698,27 @@ fun AdvancedImageViewer(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // Navigation dots indicator - show when there are multiple images
+        if (imageUrls != null && imageUrls.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                repeat(imageUrls.size) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (index == currentImageIndex) 10.dp else 8.dp)
+                            .background(
+                                color = if (index == currentImageIndex) Color.White else Color.White.copy(alpha = 0.5f),
+                                shape = CircleShape
+                            )
+                    )
                 }
             }
         }

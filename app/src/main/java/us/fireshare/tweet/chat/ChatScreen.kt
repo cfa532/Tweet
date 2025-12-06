@@ -175,6 +175,7 @@ fun ChatScreen(
     var showFullScreen by remember { mutableStateOf(false) }
     var fullScreenAttachment by remember { mutableStateOf<us.fireshare.tweet.datamodel.MimeiFileType?>(null) }
     var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var fullScreenMessage by remember { mutableStateOf<ChatMessage?>(null) } // Store message to access all attachments
 
     var pendingScrollJob by remember { mutableStateOf<Job?>(null) }
 
@@ -403,10 +404,12 @@ fun ChatScreen(
                                 onImageClick = { attachment, bitmap ->
                                     fullScreenAttachment = attachment
                                     fullScreenBitmap = bitmap
+                                    fullScreenMessage = msg // Store message for navigation
                                     showFullScreen = true
                                 },
                                 onVideoClick = { attachment ->
                                     fullScreenAttachment = attachment
+                                    fullScreenMessage = msg // Store message for navigation
                                     showFullScreen = true
                                 }
                             )
@@ -433,11 +436,32 @@ fun ChatScreen(
         
         when (attachment.type) {
             MediaType.Image -> {
+                // Get all image attachments from the message for navigation
+                val message = fullScreenMessage
+                val allAttachments = message?.attachments ?: emptyList()
+                val imageAttachments = allAttachments.mapIndexedNotNull { idx, item ->
+                    val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(item)
+                    if (inferredType == MediaType.Image) {
+                        idx to us.fireshare.tweet.HproseInstance.getMediaUrl(item.mid, appUser.baseUrl).toString()
+                    } else {
+                        null
+                    }
+                }
+                
+                // Find current image index
+                val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+                    allAttachments[idx].mid == attachment.mid
+                }
+                
+                // Get list of image URLs
+                val imageUrls = imageAttachments.map { (_, url) -> url }
+                
                 Dialog(
                     onDismissRequest = { 
                         showFullScreen = false
                         fullScreenAttachment = null
                         fullScreenBitmap = null
+                        fullScreenMessage = null
                     },
                     properties = DialogProperties(
                         usePlatformDefaultWidth = false,
@@ -450,17 +474,45 @@ fun ChatScreen(
                             .fillMaxSize()
                             .background(Color.Black)
                     ) {
-                us.fireshare.tweet.widget.AdvancedImageViewer(
-                    imageUrl = mediaUrl,
-                    enableLongPress = true,
+                        us.fireshare.tweet.widget.AdvancedImageViewer(
+                            imageUrl = mediaUrl,
+                            enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
-                    onClose = { 
-                        showFullScreen = false
-                        fullScreenAttachment = null
-                        fullScreenBitmap = null
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                            onClose = { 
+                                showFullScreen = false
+                                fullScreenAttachment = null
+                                fullScreenBitmap = null
+                                fullScreenMessage = null
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                            imageUrls = if (imageUrls.size > 1) imageUrls else null,
+                            onNextImage = {
+                                if (imageAttachments.isNotEmpty() && message != null) {
+                                    // Wrap around: if at last image, go to first
+                                    val nextIndex = if (currentImageIndexInList >= imageAttachments.size - 1) {
+                                        0 // Wrap to first image
+                                    } else {
+                                        currentImageIndexInList + 1
+                                    }
+                                    val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                    fullScreenAttachment = message.attachments!![nextMediaIndex]
+                                    fullScreenBitmap = null // Reset bitmap to load new image
+                                }
+                            },
+                            onPreviousImage = {
+                                if (imageAttachments.isNotEmpty() && message != null) {
+                                    // Wrap around: if at first image, go to last
+                                    val prevIndex = if (currentImageIndexInList <= 0) {
+                                        imageAttachments.size - 1 // Wrap to last image
+                                    } else {
+                                        currentImageIndexInList - 1
+                                    }
+                                    val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                    fullScreenAttachment = message.attachments!![prevMediaIndex]
+                                    fullScreenBitmap = null // Reset bitmap to load new image
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -479,6 +531,7 @@ fun ChatScreen(
                             showFullScreen = false
                             fullScreenAttachment = null
                             fullScreenBitmap = null
+                            fullScreenMessage = null
                         },
                         enableImmersiveMode = true
                     )
@@ -490,6 +543,7 @@ fun ChatScreen(
                             showFullScreen = false
                             fullScreenAttachment = null
                             fullScreenBitmap = null
+                            fullScreenMessage = null
                         },
                         enableImmersiveMode = true,
                         autoReplay = true
