@@ -122,7 +122,7 @@ fun TweetDetailBody(
                     )
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, parentEntry, context = "default")
+                TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail")
             }
             // Tweet detail's content
             Surface(
