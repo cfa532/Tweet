@@ -134,7 +134,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 83  // Play version code increased for release
+            versionCode = 84  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             // Play version is based on full version but with different settings
