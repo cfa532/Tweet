@@ -89,8 +89,17 @@ fun TweetDetailScreen(
     }
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
+    val tweetDeleted by viewModel.tweetDeleted.collectAsState()
     val navController = LocalNavController.current
     val context = LocalContext.current
+
+    // Navigate away if tweet gets deleted
+    LaunchedEffect(tweetDeleted) {
+        if (tweetDeleted) {
+            Timber.tag("TweetDetailScreen").d("Tweet ${tweet.mid} was deleted, navigating back")
+            navController.popBackStack()
+        }
+    }
 
     // Cancel image loading when leaving the screen
     DisposableEffect(Unit) {

@@ -105,17 +105,15 @@ fun TweetDropdownMenuItems(
                     return@DropdownMenuItem
                 }
 
-                // inform user the tweet is being deleted.
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.delete_tweet),
-                    Toast.LENGTH_SHORT
-                ).show()
+                // Dismiss menu immediately for better UX
                 onDismissRequest()
 
+                // OPTIMISTIC DELETE: Tweet will be removed from UI immediately
+                // If deletion fails, it will be restored and error shown
                 applicationScope.launch(IO) {
                     try {
-                        Timber.tag("TweetDropdownMenuItems").d("Starting deletion of tweet: ${tweet.mid}")
+                        Timber.tag("TweetDropdownMenuItems").d("Starting optimistic deletion of tweet: ${tweet.mid}")
+                        
                         tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
                             // Deletion completed successfully
                             Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
@@ -130,24 +128,39 @@ fun TweetDropdownMenuItems(
                                     }
                                 }
                             }
+                            
+                            // Show success message on Main thread
+                            applicationScope.launch(Main) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.delete_tweet),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     } catch (e: Exception) {
+                        // Deletion failed - tweet has been restored
                         Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Error deleting tweet: ${e.message}")
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Stack trace: ${e.stackTraceToString()}")
-                        // Show error toast for any exceptions
+                            .e(e, "Failed to delete tweet: ${e.message}")
+                        
+                        // Show error toast on Main thread
                         withContext(Main) {
                             val errorMessage = e.message ?: context.getString(R.string.delete_failed)
-                            // Truncate error message if too long to avoid UI issues
-                            val displayMessage = if (errorMessage.length > 100) {
-                                errorMessage.take(100) + "..."
-                            } else {
-                                errorMessage
+                            // Clean up the error message
+                            val displayMessage = when {
+                                errorMessage.contains("Failed to delete tweet:") -> {
+                                    // Extract the actual error after the prefix
+                                    errorMessage.substringAfter("Failed to delete tweet: ").let {
+                                        if (it.length > 80) it.take(80) + "..." else it
+                                    }
+                                }
+                                errorMessage.length > 80 -> errorMessage.take(80) + "..."
+                                else -> errorMessage
                             }
+                            
                             Toast.makeText(
                                 context,
-                                displayMessage,
+                                "${context.getString(R.string.delete_failed)}: $displayMessage",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -155,8 +168,7 @@ fun TweetDropdownMenuItems(
                         // Catch any other errors (including cancellation exceptions)
                         Timber.tag("TweetDropdownMenuItems")
                             .e(e, "Unexpected error deleting tweet: ${e.message}")
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Stack trace: ${e.stackTraceToString()}")
+                        
                         withContext(Main) {
                             Toast.makeText(
                                 context,

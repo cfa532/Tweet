@@ -81,6 +81,9 @@ class TweetViewModel @AssistedInject constructor(
     private val _isSharing = MutableStateFlow(false)
     val isSharing: StateFlow<Boolean> get() = _isSharing.asStateFlow()
 
+    private val _tweetDeleted = MutableStateFlow(false)
+    val tweetDeleted: StateFlow<Boolean> get() = _tweetDeleted.asStateFlow()
+
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
 
     // remember current video playback position after configuration changes.
@@ -936,6 +939,28 @@ class TweetViewModel @AssistedInject constructor(
                         is TweetEvent.TweetUpdated -> {
                             // Update tweet if this is the same tweet
                             if (event.tweet.mid == tweetState.value.mid) {
+                                _tweetState.value = event.tweet
+                            }
+                        }
+
+                        is TweetEvent.TweetDeleted -> {
+                            // Check if this ViewModel's tweet was deleted
+                            if (event.tweetId == tweetState.value.mid) {
+                                Timber.tag("TweetViewModel")
+                                    .d("This tweet (${tweetState.value.mid}) was deleted, marking as unavailable")
+                                // Mark tweet as deleted/unavailable by setting a flag
+                                // TweetDetailScreen should observe this and navigate away
+                                _tweetDeleted.value = true
+                            }
+                        }
+
+                        is TweetEvent.TweetRestored -> {
+                            // Check if this ViewModel's tweet was restored after failed deletion
+                            if (event.tweet.mid == tweetState.value.mid) {
+                                Timber.tag("TweetViewModel")
+                                    .d("This tweet (${tweetState.value.mid}) was restored, clearing deleted flag")
+                                // Clear deleted flag and update tweet state
+                                _tweetDeleted.value = false
                                 _tweetState.value = event.tweet
                             }
                         }

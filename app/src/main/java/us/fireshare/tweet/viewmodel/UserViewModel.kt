@@ -1414,6 +1414,21 @@ class UserViewModel @AssistedInject constructor(
                         }
                     }
                     
+                    is TweetEvent.TweetRestored -> {
+                        // Restore tweet if it belongs to current user
+                        if (event.tweet.authorId == user.value.mid) {
+                            Timber.tag("UserViewModel").d("Restoring tweet ${event.tweet.mid} after failed deletion")
+                            
+                            // Add back to tweets list if not already present
+                            if (!tweets.value.any { it.mid == event.tweet.mid }) {
+                                _tweets.value = (listOf(event.tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                            }
+                            
+                            // Note: Don't restore to pinned/favorites/bookmarks automatically
+                            // as we don't know which lists it was in before deletion attempt
+                        }
+                    }
+                    
                     is TweetEvent.TweetRetweeted -> {
                         // Add the retweet to the user's tweet list if it's the current user's retweet
                         if (event.retweet.authorId == user.value.mid) {

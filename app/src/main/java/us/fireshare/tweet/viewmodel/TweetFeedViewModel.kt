@@ -389,7 +389,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     // Optimistic deletion: Remove from UI immediately, then delete from backend
-    // If deletion fails, restore the tweet from server
+    // If deletion fails, restore the tweet and throw exception
     suspend fun delTweet(
         navController: NavController,
         tweetId: MimeiId,
@@ -415,79 +415,104 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 ?: userViewModel.bookmarks.value.find { it.mid == tweetId }
         }
 
-        // OPTIMISTIC UPDATE: Remove tweet immediately
-        // Must happen on Main thread to ensure UI updates immediately
+        Timber.tag("TweetFeedViewModel").d("Starting optimistic deletion of tweet $tweetId")
+
+        // STEP 1: OPTIMISTIC UPDATE - Remove tweet from UI immediately
         withContext(Main) {
             removeTweet(tweetId)
-
-            // Note: tweetCount is updated by getUser() refresh inside deleteTweet()
-
-            // Also remove from UserViewModel lists if provided (for profile screen)
             userViewModel?.removeTweetFromAllLists(tweetId)
+            Timber.tag("TweetFeedViewModel").d("Tweet $tweetId removed from UI (optimistic)")
         }
 
-        // Navigate back immediately for better UX
-        applicationScope.launch(Main) {
-            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                navController.popBackStack()
-            }
-        }
+        // STEP 2: POST DELETION NOTIFICATION IMMEDIATELY (Optimistic)
+        // This ensures ALL ViewModels listening will remove the tweet instantly
+        // TweetViewModel will set tweetDeleted=true, causing TweetDetailScreen to navigate away
+        val authorId = finalTweetToDelete?.authorId ?: appUser.mid
+        Timber.tag("TweetFeedViewModel").d("Posting optimistic TweetDeleted notification for $tweetId")
+        TweetNotificationCenter.post(
+            TweetEvent.TweetDeleted(
+                tweetId,
+                authorId
+            )
+        )
 
-        // Perform actual deletion in background
-        // Delete from local cache first
-        dao.deleteCachedTweet(tweetId)
+        // NOTE: No need to navigate here - TweetDetailScreen observes tweetDeleted state
+        // and will navigate away automatically when TweetViewModel receives the notification
 
-        // Delete from backend
-        var deletionFailed = false
+        // STEP 3: Delete from local cache
         try {
+            dao.deleteCachedTweet(tweetId)
+            Timber.tag("TweetFeedViewModel").d("Tweet $tweetId deleted from local cache")
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").w(e, "Failed to delete tweet from cache")
+        }
+
+        // STEP 4: Delete from backend
+        var deletionFailed = false
+        var errorMessage: String? = null
+        try {
+            Timber.tag("TweetFeedViewModel").d("Attempting backend deletion of tweet $tweetId")
             val deletedTweetId = HproseInstance.deleteTweet(tweetId)
             if (deletedTweetId != null) {
-                // Always post notification even if finalTweetToDelete is null
-                // This ensures all ViewModels listening to notifications will remove the tweet
-                val authorId = finalTweetToDelete?.authorId ?: appUser.mid
-                Timber.tag("TweetFeedViewModel").d("Posting TweetDeleted notification for $deletedTweetId by $authorId")
-                TweetNotificationCenter.post(
-                    TweetEvent.TweetDeleted(
-                        deletedTweetId,
-                        authorId
-                    )
-                )
+                // Success - backend confirmed deletion
+                Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
             } else {
                 deletionFailed = true
-                Timber.tag("TweetFeedViewModel").w("deleteTweet returned null for tweetId $tweetId")
+                errorMessage = "Backend returned null"
+                Timber.tag("TweetFeedViewModel").w("Backend deleteTweet returned null for tweetId $tweetId")
             }
         } catch (e: Exception) {
             deletionFailed = true
-            Timber.tag("TweetFeedViewModel").e(e, "Error deleting tweet: ${e.message}")
+            errorMessage = e.message ?: "Unknown error"
+            Timber.tag("TweetFeedViewModel").e(e, "Backend deletion failed: ${e.message}")
         }
         
-        // If deletion failed, restore the tweet from server
+        // STEP 5: If deletion failed, restore the tweet
         if (deletionFailed && finalTweetToDelete != null) {
+            Timber.tag("TweetFeedViewModel").w("Deletion failed, restoring tweet $tweetId")
+            
+            // Try to fetch fresh version from server
             var restoredTweet: Tweet? = null
             try {
                 restoredTweet = HproseInstance.fetchTweet(finalTweetToDelete.mid, finalTweetToDelete.authorId)
+                Timber.tag("TweetFeedViewModel").d("Fetched fresh tweet from server for restoration")
             } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").w(e, "Failed to fetch tweet from server")
+                Timber.tag("TweetFeedViewModel").w(e, "Failed to fetch tweet from server, using cached version")
             }
             
             val tweetToRestore = restoredTweet ?: finalTweetToDelete
             
-            // Restore in TweetFeedViewModel if it was there
-            if (wasInTweetFeed) {
-                _tweets.update { current ->
-                    if (current.any { it.mid == tweetToRestore.mid }) current
-                    else (current + tweetToRestore).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            // Restore on Main thread to ensure immediate UI update
+            withContext(Main) {
+                // Restore in TweetFeedViewModel if it was there
+                if (wasInTweetFeed) {
+                    _tweets.update { current ->
+                        if (current.any { it.mid == tweetToRestore.mid }) {
+                            Timber.tag("TweetFeedViewModel").d("Tweet already in list, skipping restoration")
+                            current
+                        } else {
+                            val restored = (current + tweetToRestore).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                            Timber.tag("TweetFeedViewModel").d("Restored tweet to TweetFeedViewModel, now ${restored.size} tweets")
+                            restored
+                        }
+                    }
+                }
+                
+                // Restore in UserViewModel if it was in any lists
+                if (userViewModel != null && (wasInUserTweets || wasInPinnedTweets || wasInFavorites || wasInBookmarks)) {
+                    userViewModel.restoreTweetToLists(tweetToRestore, wasInUserTweets, wasInPinnedTweets, wasInFavorites, wasInBookmarks)
+                    Timber.tag("TweetFeedViewModel").d("Restored tweet to UserViewModel lists")
                 }
             }
             
-            // Restore in UserViewModel if it was in any lists
-            if (userViewModel != null && (wasInUserTweets || wasInPinnedTweets || wasInFavorites || wasInBookmarks)) {
-                userViewModel.restoreTweetToLists(tweetToRestore, wasInUserTweets, wasInPinnedTweets, wasInFavorites, wasInBookmarks)
-            }
+            // POST RESTORATION NOTIFICATION so all listeners can restore the tweet
+            Timber.tag("TweetFeedViewModel").d("Posting TweetRestored notification for $tweetId")
+            TweetNotificationCenter.post(TweetEvent.TweetRestored(tweetToRestore))
             
-            throw Exception("Failed to delete tweet")
+            throw Exception("Failed to delete tweet: $errorMessage")
         }
         
+        Timber.tag("TweetFeedViewModel").d("Tweet deletion completed successfully")
         callback()
     }
 
@@ -614,16 +639,37 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         is TweetEvent.TweetDeleted -> {
                             // Remove tweet from feed if it still exists (in case optimistic removal failed)
                             withContext(Main) {
-                                val beforeCount = _tweets.value.size
-                                _tweets.value = _tweets.value.filterNot { it.mid == event.tweetId }
-                                val afterCount = _tweets.value.size
-                                
-                                if (beforeCount > afterCount) {
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Removed tweet ${event.tweetId} from feed via notification (${beforeCount} -> ${afterCount})")
-                                } else {
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Tweet ${event.tweetId} not found in feed (already removed optimistically)")
+                                _tweets.update { currentTweets ->
+                                    val beforeCount = currentTweets.size
+                                    val filteredTweets = currentTweets.filterNot { it.mid == event.tweetId }
+                                    val afterCount = filteredTweets.size
+                                    
+                                    if (beforeCount > afterCount) {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Removed tweet ${event.tweetId} from feed via notification (${beforeCount} -> ${afterCount})")
+                                    } else {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Tweet ${event.tweetId} not found in feed (already removed optimistically)")
+                                    }
+                                    filteredTweets
+                                }
+                            }
+                        }
+
+                        is TweetEvent.TweetRestored -> {
+                            // Restore tweet to feed after failed deletion
+                            withContext(Main) {
+                                _tweets.update { currentTweets ->
+                                    if (!currentTweets.any { it.mid == event.tweet.mid }) {
+                                        val restored = (listOf(event.tweet) + currentTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Restored tweet ${event.tweet.mid} to feed after failed deletion")
+                                        restored
+                                    } else {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Tweet ${event.tweet.mid} already in feed, skipping restoration")
+                                        currentTweets
+                                    }
                                 }
                             }
                         }
