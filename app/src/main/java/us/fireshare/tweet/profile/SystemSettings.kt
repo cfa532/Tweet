@@ -42,8 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -110,7 +108,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
     ) { innerPadding ->
         // Shared state variables for save functionality
         var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
-        var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
         var showDialog by remember { mutableStateOf(false) }
 
         Column(
@@ -197,44 +194,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 )
                             }
                         }
-                    }
-                }
-
-                item {
-                    // Cloud port section
-                    val focusRequester = remember { FocusRequester() }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cloud_port),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = cloudPort ?: "",
-                            onValueChange = { cloudPort = it },
-                            placeholder = { Text("8010") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
                     }
                 }
 
@@ -438,27 +397,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             // Save theme mode
                             HproseInstance.preferenceHelper.setThemeMode(currentThemeMode)
                             ThemeManager.updateThemeMode(currentThemeMode)
-
-                            // Save cloud port
-                            HproseInstance.preferenceHelper.setCloudPort(cloudPort)
-                            if (!appUser.isGuest()) {
-                                try {
-                                    // Send 0 as cloudPort if field is empty/blank to indicate removal
-                                    val portString = cloudPort
-                                    val portValue = if (portString.isNullOrBlank()) 0 else (portString.toIntOrNull() ?: 0)
-                                    applicationScope.launch(Dispatchers.IO) {
-                                        val (success, _) = HproseInstance.updateUserCore(
-                                            cloudDrivePort = portValue
-                                        )
-                                        if (success) {
-                                            appUser.cloudDrivePort = portValue
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.tag("SystemSettings")
-                                        .e("An unexpected error occurred: $e")
-                                }
-                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
