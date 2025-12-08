@@ -63,6 +63,10 @@ fun TweetDropdownMenuItems(
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val context = LocalContext.current
+    // Capture string resources at composable level to avoid Android Studio warnings
+    val deleteTweetText = stringResource(R.string.delete_tweet)
+    val deleteFailedText = stringResource(R.string.delete_failed)
+    val networkErrorText = stringResource(R.string.network_error_connection_lost)
 
     // Show delete button based on context
     val shouldShowDeleteButton = when (contextType) {
@@ -82,11 +86,11 @@ fun TweetDropdownMenuItems(
             modifier = Modifier.alpha(0.8f),
             onClick = {
                 // Validate that we can actually delete this tweet
-                if (tweet.mid.isNullOrBlank()) {
+                if (tweet.mid.isBlank()) {
                     Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: tweet.mid is null or blank")
                     Toast.makeText(
                         context,
-                        context.getString(R.string.delete_failed),
+                        deleteFailedText,
                         Toast.LENGTH_SHORT
                     ).show()
                     onDismissRequest()
@@ -98,7 +102,7 @@ fun TweetDropdownMenuItems(
                     Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: hproseService is null")
                     Toast.makeText(
                         context,
-                        context.getString(R.string.network_error_connection_lost),
+                        networkErrorText,
                         Toast.LENGTH_LONG
                     ).show()
                     onDismissRequest()
@@ -133,7 +137,7 @@ fun TweetDropdownMenuItems(
                             applicationScope.launch(Main) {
                                 Toast.makeText(
                                     context,
-                                    context.getString(R.string.delete_tweet),
+                                    deleteTweetText,
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -145,7 +149,7 @@ fun TweetDropdownMenuItems(
                         
                         // Show error toast on Main thread
                         withContext(Main) {
-                            val errorMessage = e.message ?: context.getString(R.string.delete_failed)
+                            val errorMessage = e.message ?: deleteFailedText
                             // Clean up the error message
                             val displayMessage = when {
                                 errorMessage.contains("Failed to delete tweet:") -> {
@@ -160,7 +164,7 @@ fun TweetDropdownMenuItems(
                             
                             Toast.makeText(
                                 context,
-                                "${context.getString(R.string.delete_failed)}: $displayMessage",
+                                "$deleteFailedText: $displayMessage",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -172,7 +176,7 @@ fun TweetDropdownMenuItems(
                         withContext(Main) {
                             Toast.makeText(
                                 context,
-                                context.getString(R.string.delete_failed),
+                                deleteFailedText,
                                 Toast.LENGTH_LONG
                             ).show()
                         }

@@ -51,6 +51,8 @@ fun ComposeCommentScreen(
     val tweetViewModel = sharedViewModel.tweetViewModel
     val isCheckedToTweet by tweetViewModel.isCheckedToTweet
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    // Capture string resources at composable level to avoid Android Studio warnings
+    val filesTooLargeText = stringResource(R.string.files_too_large)
 
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
@@ -85,7 +87,7 @@ fun ComposeCommentScreen(
                 if (FileSizeUtils.isFileSizeValid(fileSize)) {
                     selectedAttachments.add(uri)
                 } else {
-                    Toast.makeText(context, context.getString(R.string.files_too_large), Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, filesTooLargeText, Toast.LENGTH_LONG).show()
                 }
             }
         }

@@ -559,12 +559,16 @@ fun ChatScreen(
 
 @Composable
 fun ChatItem(
-    viewModel: ChatViewModel, 
-    message: ChatMessage, 
+    viewModel: ChatViewModel,
+    message: ChatMessage,
     messages: List<ChatMessage>,
     onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
+    // Capture string resources at composable level to avoid Android Studio warnings
+    val errorUnknownErrorText = stringResource(R.string.error_unknown_error)
+    val errorMessageFailedFormat = stringResource(R.string.error_message_failed)
+    val context = LocalContext.current
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
     
@@ -604,7 +608,6 @@ fun ChatItem(
             
             // Show failure icon for failed messages sent by current user
             if (isSentByCurrentUser && !message.success) {
-                val context = LocalContext.current
                 Icon(
                     imageVector = Icons.Default.Error,
                     contentDescription = stringResource(R.string.message_failed_send_tap_error),
@@ -613,8 +616,8 @@ fun ChatItem(
                         .size(24.dp)
                         .align(Alignment.CenterVertically)
                         .clickable {
-                            val errorMessage = message.errorMsg ?: context.getString(R.string.error_unknown_error)
-                            Toast.makeText(context, context.getString(R.string.error_message_failed, errorMessage), Toast.LENGTH_LONG).show()
+                            val errorMessage = message.errorMsg ?: errorUnknownErrorText
+                            Toast.makeText(context, errorMessageFailedFormat.format(errorMessage), Toast.LENGTH_LONG).show()
                         }
                 )
             }
@@ -722,7 +725,6 @@ fun ChatItem(
                 // Show failure icon for failed messages sent by current user
                 if (!message.success) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    val context = LocalContext.current
                     Icon(
                         imageVector = Icons.Default.Error,
                         contentDescription = stringResource(R.string.message_failed_send_tap_error),
@@ -730,8 +732,8 @@ fun ChatItem(
                         modifier = Modifier
                             .size(16.dp)
                             .clickable {
-                                val errorMessage = message.errorMsg ?: context.getString(R.string.error_unknown_error)
-                                Toast.makeText(context, context.getString(R.string.error_message_failed, errorMessage), Toast.LENGTH_LONG).show()
+                                val errorMessage = message.errorMsg ?: errorUnknownErrorText
+                                Toast.makeText(context, errorMessageFailedFormat.format(errorMessage), Toast.LENGTH_LONG).show()
                             }
                     )
                 }
