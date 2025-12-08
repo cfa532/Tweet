@@ -91,29 +91,56 @@ class VideoNormalizer(private val context: Context) {
             // Resample to 720p while maintaining aspect ratio
             val (targetWidth, targetHeight) = calculate720pDimensions(width, height)
             
+            // Determine bitrate based on resolution
+            val bitrate = getBitrateForResolution(targetWidth, targetHeight)
+            
             """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset fast
-                -crf 23
+                -b:v $bitrate
+                -b:a 128k
+                -maxrate $bitrate
+                -bufsize $bitrate
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
             // Just normalize to standard MP4 without resampling
+            // Determine bitrate based on original resolution
+            val bitrate = getBitrateForResolution(width, height)
+            
             """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -preset fast
-                -crf 23
+                -b:v $bitrate
+                -b:a 128k
+                -maxrate $bitrate
+                -bufsize $bitrate
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
+        }
+    }
+
+    /**
+     * Get bitrate for a given resolution
+     * 720p: 1500k, other resolutions adjusted proportionally
+     */
+    private fun getBitrateForResolution(width: Int, height: Int): String {
+        val maxDimension = maxOf(width, height)
+        
+        return when {
+            maxDimension >= 720 -> "1500k"  // 720p and above
+            maxDimension >= 480 -> "1000k"  // 480p
+            maxDimension >= 360 -> "750k"   // 360p
+            else -> "500k"                   // Lower resolutions
         }
     }
 

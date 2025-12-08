@@ -50,17 +50,17 @@ class LocalHLSConverter(private val context: Context) {
             val lowerResolutionBitrate: String
             
             if (fileSizeMB >= sizeThreshold256MB) {
-                // >= 256MB: 720p (1000kb) + 360p (1000kb)
-                resolution720pBitrate = "1000k"
+                // >= 256MB: 720p (1500kb) + 360p (750kb)
+                resolution720pBitrate = "1500k"
                 lowerResolution = 360
-                lowerResolutionBitrate = "1000k"
-                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB >= 256MB, using 720p (1000k) + 360p (1000k)")
+                lowerResolutionBitrate = "750k"
+                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB >= 256MB, using 720p (1500k) + 360p (750k)")
             } else {
-                // < 256MB: 720p (3000kb) + 480p (1500kb)
-                resolution720pBitrate = "3000k"
+                // < 256MB: 720p (1500kb) + 480p (1000kb)
+                resolution720pBitrate = "1500k"
                 lowerResolution = 480
-                lowerResolutionBitrate = "1500k"
-                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB < 256MB, using 720p (3000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
+                lowerResolutionBitrate = "1000k"
+                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB < 256MB, using 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             }
             
             // Check video resolution to determine if we should use COPY codec
