@@ -91,7 +91,7 @@
     <string name="follow_operation_failed_refresh_message">Please refresh your following list to update it.</string>
     <string name="post_your_reply">Post your reply</string>
     <string name="reply">Reply</string>
-    <string name="delete_tweet">Deleting tweet</string>
+    <string name="delete_tweet">Tweet deleted</string>
     <string name="login_getuserid_fail">Cannot get user Id</string>
     <string name="login_getuser_fail">Cannot get User</string>
     <string name="login_success">Login success. Navigating ...</string>
