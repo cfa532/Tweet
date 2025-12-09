@@ -57,76 +57,10 @@ data class User(
         }
 
         /**
-         * Update user instance with backend data. Keep current baseUrl
-         */
-        fun from(dict: Map<String, Any>): User {
-            try {
-                val gson = com.google.gson.Gson()
-                
-                // Pre-process the dictionary to handle scientific notation in numeric fields
-                val processedDict = dict.toMutableMap()
-                
-                // Handle timestamp and lastLogin fields
-                processedDict["timestamp"]?.let { value ->
-                    when (value) {
-                        is Number -> processedDict["timestamp"] = value.toLong()
-                        is String -> {
-                            try {
-                                processedDict["timestamp"] = value.toDouble().toLong()
-                            } catch (_: NumberFormatException) {
-                                Timber.w("Failed to parse timestamp: $value")
-                            }
-                        }
-                    }
-                }
-                
-                processedDict["lastLogin"]?.let { value ->
-                    when (value) {
-                        is Number -> processedDict["lastLogin"] = value.toLong()
-                        is String -> {
-                            try {
-                                processedDict["lastLogin"] = value.toDouble().toLong()
-                            } catch (_: NumberFormatException) {
-                                Timber.w("Failed to parse lastLogin: $value")
-                            }
-                        }
-                    }
-                }
-                
-                val jsonString = gson.toJson(processedDict)
-                val decodedUser = gson.fromJson(jsonString, User::class.java)
-                
-                // Keep original baseUrl when updated by user dictionary from backend
-                val instance = getInstance(mid = decodedUser.mid)
-                val oldBaseUrl = instance.baseUrl
-                val oldWritableUrl = instance.writableUrl
-                decodedUser.baseUrl = instance.baseUrl
-                decodedUser.writableUrl = instance.writableUrl
-                
-                updateUserInstance(decodedUser)
-                
-                // Clear cached services if URLs changed
-                if (oldBaseUrl != instance.baseUrl) {
-                    instance.clearHproseService()
-                }
-                if (oldWritableUrl != instance.writableUrl) {
-                    instance.clearUploadService()
-                }
-                
-                return userInstances[decodedUser.mid]!!
-            } catch (e: Exception) {
-                Timber.e("Cannot decode dict to user: $e")
-                throw RuntimeException("Cannot decode dict to user", e)
-            }
-        }
-
-        /**
          * Update user instance with new data
          */
-        private fun updateUserInstance(user: User) {
+        fun updateUserInstance(user: User, shouldUpdateBaseUrl: Boolean = false) {
             val instance = getInstance(mid = user.mid)
-            val oldBaseUrl = instance.baseUrl
-            val oldWritableUrl = instance.writableUrl
             instance.apply {
                 name = user.name
                 username = user.username
@@ -138,11 +72,11 @@ data class User(
                 lastLogin = user.lastLogin
                 cloudDrivePort = user.cloudDrivePort
                 hostIds = user.hostIds
-                // CRITICAL: Never overwrite baseUrl from user parameter - it might be from hostId[0]
-                // baseUrl should only be set via getProviderIP(user.mid) in HproseInstance
-                // Preserve the existing baseUrl that was correctly resolved from provider IP
-                // Note: baseUrl is preserved above in User.from(dict:), so we don't overwrite it here
-                writableUrl = user.writableUrl
+
+                // CRITICAL: Never overwrite baseUrl from user parameter
+                if (shouldUpdateBaseUrl) {
+                    baseUrl = user.baseUrl
+                }
                 
                 tweetCount = user.tweetCount
                 followingCount = user.followingCount
@@ -160,21 +94,6 @@ data class User(
                 commentsList = user.commentsList
                 topTweets = user.topTweets
             }
-            
-            // Clear cached services if URLs changed
-            if (oldBaseUrl != instance.baseUrl) {
-                instance.clearHproseService()
-            }
-            if (oldWritableUrl != instance.writableUrl) {
-                instance.clearUploadService()
-            }
-        }
-        
-        /**
-         * Update user instance from another User object (convenience method)
-         */
-        fun updateFrom(other: User) {
-            updateUserInstance(other)
         }
     }
 
@@ -418,8 +337,6 @@ data class User(
     }
 
     fun from(userData: User) {
-        val oldBaseUrl = baseUrl
-        val oldWritableUrl = writableUrl
         name = userData.name
         username = userData.username
         avatar = userData.avatar
@@ -435,14 +352,6 @@ data class User(
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
         hostIds = userData.hostIds
-        
-        // Clear cached services if URLs changed
-        if (oldBaseUrl != baseUrl) {
-            clearHproseService()
-        }
-        if (oldWritableUrl != writableUrl) {
-            clearUploadService()
-        }
     }
 
     /**

@@ -167,7 +167,7 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Refresh user data to ensure it's up to date (e.g., after profile editing)
-     * Includes retry logic with exponential backoff for network-related failures.
+     * Includes retry logic.
      */
     suspend fun refreshUserData(maxRetries: Int = 3) {
         try {
@@ -176,7 +176,8 @@ class UserViewModel @AssistedInject constructor(
             // If this is the current user's profile, update appUser from refreshed data
             if (userId == appUser.mid) {
                 // Update appUser singleton with server data
-                User.updateFrom(user.value)
+                User.updateUserInstance(user.value)
+
                 // Ensure appUser reference points to the updated singleton
                 appUser = User.getInstance(appUser.mid)
                 TweetCacheManager.saveUser(appUser)
@@ -204,7 +205,7 @@ class UserViewModel @AssistedInject constructor(
         repeat(maxRetries) { attempt ->
             try {
                 // Force refresh from server, skip cache
-                // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                // Pass empty string to force IP re-resolution
                 val refreshedUser = getUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
@@ -262,9 +263,8 @@ class UserViewModel @AssistedInject constructor(
                     // Update the user objects with new avatar
                     appUser = appUser.copy(avatar = avatar)
                     _user.value = user.value.copy(avatar = avatar)
-                    
+                    User.updateUserInstance(appUser)
 
-                    
                     // Save the updated user to cache
                     TweetCacheManager.saveUser(appUser)
                 }
@@ -1213,19 +1213,15 @@ class UserViewModel @AssistedInject constructor(
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
                 appUser = appUser.copy(baseUrl = "http://$ip")
+                _user.value = user.value.copy(baseUrl = "http://$ip")
+                User.updateUserInstance(appUser, true)
             } ?: run {
                 hostIdError.value = context.getString(R.string.node_not_found)
                 isLoading.value = false
                 return
             }
         }
-        var updatedUser = User(
-            baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
-            name = name.value.trim(), hostIds = hostId.value.trim().takeIf { it.isNotEmpty() }?.let { listOf(it) },
-            username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value.trim(),
-            cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0)
-        )
+
         // Call the new separate functions based on user type
         val (success, errorMessage) = if (appUser.isGuest()) {
             HproseInstance.registerUser(
@@ -1336,7 +1332,7 @@ class UserViewModel @AssistedInject constructor(
             // Validate port range if not empty
             if (value.isNotEmpty()) {
                 val port = value.toIntOrNull()
-                if (port != null && (port < 8000 || port > 65535)) {
+                if (port != null && (port !in 8000..65535)) {
                     cloudDrivePortError.value = "Port must be between 8000 and 65535"
                 } else {
                     cloudDrivePortError.value = ""
