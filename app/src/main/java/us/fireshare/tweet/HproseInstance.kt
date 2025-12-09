@@ -46,6 +46,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.User.Companion.getInstance
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
@@ -95,7 +96,7 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     
     // Private backing field for appUser
-    private var _appUser: User = User(mid = TW_CONST.GUEST_ID)
+    private var _appUser: User = getInstance(TW_CONST.GUEST_ID)
     
     // Lazy initialization of MediaUploadService
     private val mediaUploadService: MediaUploadService by lazy {
@@ -2297,7 +2298,7 @@ object HproseInstance {
             }
         }
 
-        // Check if we're already updating this user
+        // Deduplication: Check if we're already updating this user.
         val shouldProceed = userUpdateMutex.withLock {
             if (ongoingUserUpdates.contains(userId)) {
                 false
@@ -2412,7 +2413,7 @@ object HproseInstance {
                         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl: ${user.baseUrl} for userId: ${user.mid} (hasExpired: $hasExpired)")
                     } else {
                         // Force fresh IP resolution: either baseUrl param is empty, user is expired, or user has no baseUrl
-                        val oldBaseUrl = user.baseUrl ?: "nil"
+                        val oldBaseUrl = user.baseUrl ?: ""
                         val reason = when {
                             originalBaseUrl.isNullOrEmpty() -> "forcing fresh IP resolution (baseUrl param empty)"
                             hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
