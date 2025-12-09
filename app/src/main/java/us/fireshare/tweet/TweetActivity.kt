@@ -412,7 +412,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     Timber.tag("checkForUpgrade").e("Server versionInfo missing 'version' key")
                     return@launch
                 }
-                Timber.tag("checkForUpgrade").d("Server version: $serverVersionString")
                 
                 // Parse and compare versions
                 val currentVersion = try {
