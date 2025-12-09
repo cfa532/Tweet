@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
@@ -2641,24 +2642,52 @@ object HproseInstance {
         
         repeat(maxRetries) { attempt ->
             try {
-                val entry = "get_provider_ip"
+                val entry = "get_provider_ips"
                 val params = mapOf(
                     "aid" to appId,
                     "ver" to "last",
                     "version" to "v2",
                     "mid" to userId
                 )
-                Timber.tag("getProviderIP").d("Calling get_provider_ip for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
+                Timber.tag("getProviderIP").d("Calling get_provider_ips for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
                 val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
-                val response = unwrapV2Response<String>(rawResponse)
-                if (response != null) {
-                    Timber.tag("getProviderIP").d("✅ Successfully got provider IP for userId: $userId, IP: $response")
-                    return response
+                val ipArray = unwrapV2Response<List<String>>(rawResponse)
+                
+                if (ipArray != null && ipArray.isNotEmpty()) {
+                    Timber.tag("getProviderIP").d("Received ${ipArray.size} provider IPs for userId: $userId")
+                    
+                    // Try each IP until we find one that works
+                    for ((index, ip) in ipArray.withIndex()) {
+                        try {
+                            Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipArray.size}: $ip")
+                            
+                            // Test the IP by making a simple HTTP request with timeout
+                            val testUrl = "http://$ip/mm/$userId"
+                            val response = withTimeoutOrNull(5000) {
+                                httpClient.get(testUrl)
+                            }
+                            
+                            if (response != null && response.status.value in 200..299) {
+                                Timber.tag("getProviderIP").d("✅ Found working IP: $ip (attempt ${index + 1}/${ipArray.size})")
+                                return ip
+                            } else {
+                                val statusCode = response?.status?.value ?: "timeout"
+                                Timber.tag("getProviderIP").w("IP $ip returned status: $statusCode, trying next IP")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("getProviderIP").w("IP $ip failed with exception: ${e.message}, trying next IP")
+                            // Continue to next IP
+                        }
+                    }
+                    
+                    // If no IP worked but we have IPs, return first as fallback
+                    Timber.tag("getProviderIP").w("No working IP found, returning first IP as fallback")
+                    return ipArray.firstOrNull()
                 } else {
-                    Timber.tag("getProviderIP").w("get_provider_ip returned null response for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
+                    Timber.tag("getProviderIP").w("get_provider_ips returned null or empty array for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
                 }
             } catch (e: Exception) {
-                Timber.tag("getProviderIP").e(e, "Error getting provider IP for user: $userId (attempt ${attempt + 1}/$maxRetries)")
+                Timber.tag("getProviderIP").e(e, "Error getting provider IPs for user: $userId (attempt ${attempt + 1}/$maxRetries)")
                 
                 // Check if it's a network-related error that should be retried
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
@@ -2673,19 +2702,20 @@ object HproseInstance {
             // If this isn't the last attempt, wait before retrying
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
-                Timber.tag("getProviderIP").d("Retrying provider IP fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                Timber.tag("getProviderIP").d("Retrying provider IPs fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
                 delay(delayMs)
             }
         }
-        Timber.tag("getProviderIP").w("❌ Failed to get provider IP for userId: $userId after $maxRetries attempts")
+        Timber.tag("getProviderIP").w("❌ Failed to get provider IPs for userId: $userId after $maxRetries attempts")
         return null
     }
 
     /**
-     * Get provider IP for a user using "get_provider" entry
+     * Get provider IP for a user using "get_provider_ips" entry
+     * Tries each IP returned until a working one is found
      */
     suspend fun getProviderIP(mid: MimeiId): String? {
-        val entry = "get_provider_ip"
+        val entry = "get_provider_ips"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -2694,9 +2724,44 @@ object HproseInstance {
         )
         return try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
-            unwrapV2Response<String>(rawResponse)
+            val ipArray = unwrapV2Response<List<String>>(rawResponse)
+            
+            if (ipArray == null || ipArray.isEmpty()) {
+                Timber.tag("getProviderIP").w("get_provider_ips returned null or empty array for mid: $mid")
+                return null
+            }
+            
+            Timber.tag("getProviderIP").d("Received ${ipArray.size} provider IPs for mid: $mid")
+            
+            // Try each IP until we find one that works
+            for ((index, ip) in ipArray.withIndex()) {
+                try {
+                    Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipArray.size}: $ip")
+                    
+                    // Test the IP by making a simple HTTP request with timeout
+                    val testUrl = "http://$ip/mm/$mid"
+                    val response = withTimeoutOrNull(5000) {
+                        httpClient.get(testUrl)
+                    }
+                    
+                    if (response != null && response.status.value in 200..299) {
+                        Timber.tag("getProviderIP").d("✅ Found working IP: $ip (attempt ${index + 1}/${ipArray.size})")
+                        return ip
+                    } else {
+                        val statusCode = response?.status?.value ?: "timeout"
+                        Timber.tag("getProviderIP").w("IP $ip returned status: $statusCode, trying next IP")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("getProviderIP").w("IP $ip failed with exception: ${e.message}, trying next IP")
+                    // Continue to next IP
+                }
+            }
+            
+            // If no IP worked, log warning and return the first IP as fallback
+            Timber.tag("getProviderIP").w("❌ No working IP found for mid: $mid, returning first IP as fallback")
+            ipArray.firstOrNull()
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("Error getting provider IP for user: $mid")
+            Timber.tag("getProviderIP").e("Error getting provider IPs for user: $mid")
             Timber.tag("getProviderIP").e("Exception: $e")
             null
         }
