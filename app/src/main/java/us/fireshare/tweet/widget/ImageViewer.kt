@@ -232,8 +232,6 @@ fun AdvancedImageViewer(
                     if (cachedFile != null && cachedFile.exists()) {
                         imageFile = cachedFile
                     }
-                    
-                    Timber.tag("ImageViewer").d("Showing compressed cached image as placeholder: $imageUrl")
                 } else {
                     // No compressed cache found, check original cache before showing loading
                     val originalMid = "${mid}_original"
@@ -857,8 +855,6 @@ fun ImageViewer(
                         if (cachedFile != null && cachedFile.exists()) {
                             imageFile = cachedFile
                         }
-                        
-                        Timber.tag("ImageViewer").d("Showing compressed cached image as placeholder: $imageUrl")
                     } else {
                         // No compressed cache found, set loading state to load compressed from server
                         loadState = loadState.copy(isLoading = true, hasError = false)

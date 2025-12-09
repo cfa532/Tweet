@@ -190,7 +190,6 @@ fun MediaItemView(
                         loadOriginalImage = loadOriginalImage,
                         onBitmapLoaded = { bitmap ->
                             currentBitmap = bitmap
-                            Timber.tag("MediaItemView").d("Bitmap loaded for image at index $index: ${bitmap?.width}x${bitmap?.height}")
                         }
                     )
                 }

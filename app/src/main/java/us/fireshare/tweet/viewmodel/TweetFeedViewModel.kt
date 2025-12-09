@@ -582,11 +582,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         isListeningToNotifications = true
-        Timber.tag("TweetFeedViewModel")
-            .d("TweetFeedViewModel instance starting to listen to notifications")
         applicationScope.launch {
             try {
-                Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
