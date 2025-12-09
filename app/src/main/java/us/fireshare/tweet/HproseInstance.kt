@@ -3,12 +3,11 @@ package us.fireshare.tweet
 import android.app.Application
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.util.UnstableApi
+import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -22,8 +21,11 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -36,6 +38,7 @@ import us.fireshare.tweet.datamodel.ChatMessageDeserializer
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.FeedResetReason
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
@@ -44,13 +47,11 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
-import us.fireshare.tweet.service.FileTypeDetector
 import us.fireshare.tweet.service.MediaUploadService
+import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
-import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
-import java.io.File
 import java.util.UUID
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
@@ -95,10 +96,6 @@ object HproseInstance {
     
     // Private backing field for appUser
     private var _appUser: User = User(mid = TW_CONST.GUEST_ID)
-    
-    // Track if appUser refresh is in progress to prevent concurrent refreshes
-    @Volatile
-    private var isAppUserRefreshing = false
     
     // Lazy initialization of MediaUploadService
     private val mediaUploadService: MediaUploadService by lazy {
@@ -417,7 +414,7 @@ object HproseInstance {
                 val errorMsg = "Failed to create client for sender node"
                 Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${appUser.baseUrl}")
                 if (attempt < maxRetries) {
-                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                    delay((attempt + 1) * 1000L)
                     continue
                 }
                 return Pair(false, errorMsg)
@@ -435,7 +432,7 @@ object HproseInstance {
                         val responseMap = response as? Map<String, Any>
                         val success = responseMap?.get("success") as? Boolean
                         if (success == false) {
-                            lastError = responseMap?.get("error") as? String ?: "Unknown error"
+                            lastError = responseMap["error"] as? String ?: "Unknown error"
                         }
                         success ?: false
                     }
@@ -452,7 +449,7 @@ object HproseInstance {
                     if (attempt < maxRetries) {
                         val delay = (attempt + 1) * 2000L // 2, 4 seconds
                         Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
-                        kotlinx.coroutines.delay(delay)
+                        delay(delay)
                         continue
                     }
                 }
@@ -461,7 +458,7 @@ object HproseInstance {
                 Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
                 
                 if (attempt < maxRetries) {
-                    kotlinx.coroutines.delay((attempt + 1) * 2000L)
+                    delay((attempt + 1) * 2000L)
                     continue
                 }
             }
@@ -481,7 +478,7 @@ object HproseInstance {
         msg: ChatMessage,
         maxRetries: Int = 2
     ): Pair<Boolean, String?> {
-        var receiptUser: User? = null
+        var receiptUser: User?
         var lastError: String? = null
         
         for (attempt in 0..maxRetries) {
@@ -514,7 +511,7 @@ object HproseInstance {
                 val errorMsg = "Failed to create client for recipient node"
                 Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${receiptUser.baseUrl}")
                 if (attempt < maxRetries) {
-                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                    delay((attempt + 1) * 1000L)
                     continue
                 }
                 return Pair(false, errorMsg)
@@ -532,7 +529,7 @@ object HproseInstance {
                         val responseMap = receiptResponse as? Map<String, Any>
                         val successValue = responseMap?.get("success") as? Boolean
                         if (successValue == false) {
-                            lastError = responseMap?.get("error") as? String ?: "Failed to send to recipient node"
+                            lastError = responseMap["error"] as? String ?: "Failed to send to recipient node"
                         }
                         successValue ?: true // Default to true for backward compatibility
                     }
@@ -549,7 +546,7 @@ object HproseInstance {
                     if (attempt < maxRetries) {
                         val delay = (attempt + 1) * 2000L // 2, 4 seconds
                         Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
-                        kotlinx.coroutines.delay(delay)
+                        delay(delay)
                         continue
                     }
                 }
@@ -558,7 +555,7 @@ object HproseInstance {
                 Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
                 
                 if (attempt < maxRetries) {
-                    kotlinx.coroutines.delay((attempt + 1) * 2000L)
+                    delay((attempt + 1) * 2000L)
                     continue
                 }
             }
@@ -595,8 +592,7 @@ object HproseInstance {
                     val success = responseMap?.get("success") as? Boolean
                     if (success == true) {
                         // Extract data field which should be a List
-                        val data = responseMap?.get("data")
-                        when (data) {
+                        when (val data = responseMap["data"]) {
                             is List<*> -> data.filterIsInstance<Map<String, Any>>()
                             else -> {
                                 Timber.tag("fetchMessages").w("Unexpected data type: ${data?.javaClass?.simpleName}")
@@ -683,8 +679,7 @@ object HproseInstance {
                     val success = responseMap?.get("success") as? Boolean
                     if (success == true) {
                         // Extract data field which should be a List
-                        val data = responseMap?.get("data")
-                        when (data) {
+                        when (val data = responseMap["data"]) {
                             is List<*> -> data.filterIsInstance<Map<String, Any>>()
                             else -> {
                                 Timber.tag("checkNewMessages").w("Unexpected data type: ${data?.javaClass?.simpleName}")
@@ -709,7 +704,6 @@ object HproseInstance {
             }
             
             Timber.tag("checkNewMessages").d("Extracted ${response.size} messages from response")
-            
             Timber.tag("checkNewMessages").d("Received ${response.size} messages from server (before filtering)")
             
             val gson = GsonBuilder()
@@ -864,7 +858,7 @@ object HproseInstance {
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                 Timber.tag("Login").d("Retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                kotlinx.coroutines.delay(delayMs)
+                delay(delayMs)
             }
         }
         
@@ -938,10 +932,7 @@ object HproseInstance {
         )
 
         try {
-            val rawResponse = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
-
-            // Check raw response directly for v2 format (like iOS does)
-            val response = rawResponse as? Map<String, Any>
+            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("registerUser").e("Registration failed: No response from server")
@@ -988,7 +979,7 @@ object HproseInstance {
                 return Pair(false, message)
             } else {
                 // Not a v2 response, try unwrapV2Response for backward compatibility
-                val unwrappedResponse = unwrapV2Response<Map<String, Any>>(rawResponse)
+                val unwrappedResponse = unwrapV2Response<Map<String, Any>>(response)
                 if (unwrappedResponse != null) {
                     Timber.tag("registerUser").d("Registration successful (legacy format)")
                     return Pair(true, null)
@@ -1068,10 +1059,7 @@ object HproseInstance {
         )
 
         try {
-            val rawResponse = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
-
-            // Check raw response directly for v2 format (like iOS does)
-            val response = rawResponse as? Map<String, Any>
+            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -1486,8 +1474,7 @@ object HproseInstance {
             
             // Unwrap v2 response format: {success: true, data: result} or {success: false, message: "..."}
             val tweetData = if (rawResponse != null && rawResponse.containsKey("success")) {
-                val successValue = rawResponse["success"]
-                val success = when (successValue) {
+                val success = when (val successValue = rawResponse["success"]) {
                     is Boolean -> successValue
                     is Int -> successValue != 0
                     else -> false
@@ -1520,116 +1507,6 @@ object HproseInstance {
         }
     }
 
-    /**
-     * @param userId The user ID to resync with main host node.
-     * @return Updated User object from server, or null if resync failed
-     */
-    @Suppress("UNREACHABLE_CODE")
-    suspend fun syncUser(userId: MimeiId): User? {
-        // Check if user is blacklisted
-        if (BlackList.isBlacklisted(userId)) {
-            Timber.tag("syncUser").d("User $userId is blacklisted, returning null")
-            return null
-        }
-
-        // First attempt: Try with cached user's baseUrl
-        val user = getUser(userId) ?: return null
-
-        val result = try {
-            val entry = "resync_user"
-            val params = mapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "userid" to userId,
-            )
-            
-            val rawResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-            if (response != null) {
-                // Record successful access
-                BlackList.recordSuccess(userId)
-                
-                // Create updated user from server response
-                val resyncedUser = getUserInstance(userId)
-                resyncedUser.from(response)
-                resyncedUser.baseUrl = user.baseUrl
-                
-                // Update cache with refreshed user data (including baseUrl)
-                TweetCacheManager.saveUser(resyncedUser)
-                
-                Timber.tag("syncUser").d("Successfully synced user: $userId")
-                resyncedUser
-            } else {
-                // If we reach here, the call returned null, try with empty baseUrl
-                Timber.tag("syncUser").w("Initial sync attempt returned null for user: $userId, retrying with empty baseUrl")
-                syncUserWithEmptyBaseUrl(userId)
-            }
-        } catch (e: Exception) {
-            // Check if it's a network-related error that should trigger retry with empty baseUrl
-            val isNetworkError = ErrorMessageUtils.isNetworkError(e)
-            
-            if (isNetworkError) {
-                Timber.tag("syncUser").w("Network error during sync for user: $userId, retrying with empty baseUrl. Error: ${e.message}")
-                // Retry with empty baseUrl to force IP resolution
-                syncUserWithEmptyBaseUrl(userId)
-            } else {
-                // Record failed access
-                BlackList.recordFailure(userId)
-                
-                Timber.tag("syncUser").e("Error refreshing user: $userId")
-                Timber.tag("syncUser").e("Exception: $e")
-                
-                null
-            }
-        }
-        return result
-    }
-
-    /**
-     * Helper function to sync user with empty baseUrl to force IP resolution
-     */
-    private suspend fun syncUserWithEmptyBaseUrl(userId: MimeiId): User? {
-        return try {
-            // Force IP resolution by using empty baseUrl
-            val user = getUser(userId, baseUrl = "") ?: return null
-            
-            val entry = "resync_user"
-            val params = mapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "userid" to userId,
-            )
-            
-            val rawResponse = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
-            val userData = unwrapV2Response<Map<String, Any>>(rawResponse)
-            userData?.let {
-                // Record successful access
-                BlackList.recordSuccess(userId)
-                
-                // Create updated user from server response
-                val resyncedUser = getUserInstance(userId)
-                resyncedUser.from(it)
-                resyncedUser.baseUrl = user.baseUrl
-                
-                // Update cache with refreshed user data (including resolved baseUrl)
-                TweetCacheManager.saveUser(resyncedUser)
-                
-                Timber.tag("syncUser").d("Successfully synced user: $userId with resolved baseUrl: ${user.baseUrl}")
-                resyncedUser
-            }
-        } catch (e: Exception) {
-            // Record failed access
-            BlackList.recordFailure(userId)
-            
-            Timber.tag("syncUser").e("Error refreshing user with empty baseUrl: $userId")
-            Timber.tag("syncUser").e("Exception: $e")
-            
-            null
-        }
-    }
-
     suspend fun loadCachedTweets(
         startRank: Int,  // earlier in time, therefore smaller timestamp
         count: Int,
@@ -1643,7 +1520,7 @@ object HproseInstance {
                 val tweet = cachedTweet.originalTweet
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
-                if (tweet.authorId.isNullOrEmpty()) {
+                if (tweet.authorId.isEmpty()) {
                     Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
@@ -1696,7 +1573,7 @@ object HproseInstance {
             Timber.tag("loadCachedTweetsByAuthor").d("Checking mainfeed cache (uid = appUser.mid) for author: $authorId")
             dao.getCachedTweetsByUser(appUser.mid, 0, count * 3).forEach { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
-                if (!tweet.authorId.isNullOrEmpty() && tweet.authorId == authorId) {
+                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
                     allCachedTweets.add(tweet)
                 }
             }
@@ -1705,7 +1582,7 @@ object HproseInstance {
             Timber.tag("loadCachedTweetsByAuthor").d("Checking user's own cache (uid = $authorId) for author: $authorId")
             dao.getCachedTweetsByUser(authorId, 0, count * 3).forEach { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
-                if (!tweet.authorId.isNullOrEmpty() && tweet.authorId == authorId) {
+                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
                     allCachedTweets.add(tweet)
                 }
             }
@@ -1915,8 +1792,7 @@ object HproseInstance {
                     } else {
                         // For v2 API: server returns {success: true, data: {isFollowing: bool}}
                         // Extract isFollowing from the data dictionary
-                        val data = responseMap?.get("data")
-                        when (data) {
+                        when (val data = responseMap?.get("data")) {
                             is Map<*, *> -> {
                                 val dataMap = data as? Map<String, Any>
                                 val isFollowing = dataMap?.get("isFollowing") as? Boolean
@@ -2186,40 +2062,33 @@ object HproseInstance {
                 throw Exception(errorMsg)
             }
 
-            if (response != null) {
-                val deletedTweetId = response["tweetid"] as? MimeiId
-                
-                if (deletedTweetId == null) {
-                    val errorMsg = "Delete tweet failed: server returned success but no tweetid"
-                    Timber.tag("deleteTweet").e(errorMsg)
-                    throw Exception(errorMsg)
-                }
-                
-                // Refresh appUser from server to get updated tweetCount and other properties
-                try {
-                    // Invalidate cache to force fresh fetch from server
-                    TweetCacheManager.removeCachedUser(appUser.mid)
-                    val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
-                    if (refreshedUser != null && !refreshedUser.isGuest()) {
-                        // Create a new user object to trigger recompose
-                        val updatedUser = refreshedUser.copy()
-                        appUser = updatedUser
-                        TweetCacheManager.saveUser(appUser)
-                        
-                        // Notify other ViewModels that user data has been updated
-                        TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
-                }
-                
-                deletedTweetId
-            } else {
-                val errorMessage =
-                    rawResponse?.get("message") as? String ?: applicationContext.getString(R.string.error_tweet_deletion_unknown)
-                Timber.tag("deleteTweet").e("Delete tweet failed: $errorMessage")
-                throw Exception(errorMessage)
+            val deletedTweetId = response["tweetid"] as? MimeiId
+
+            if (deletedTweetId == null) {
+                val errorMsg = "Delete tweet failed: server returned success but no tweetid"
+                Timber.tag("deleteTweet").e(errorMsg)
+                throw Exception(errorMsg)
             }
+
+            // Refresh appUser from server to get updated tweetCount and other properties
+            try {
+                // Invalidate cache to force fresh fetch from server
+                TweetCacheManager.removeCachedUser(appUser.mid)
+                val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
+                if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    // Create a new user object to trigger recompose
+                    val updatedUser = refreshedUser.copy()
+                    appUser = updatedUser
+                    TweetCacheManager.saveUser(appUser)
+
+                    // Notify other ViewModels that user data has been updated
+                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
+                }
+            } catch (e: Exception) {
+                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
+            }
+
+            deletedTweetId
         } catch (e: Exception) {
             Timber.tag("deleteTweet").e(e, "Error deleting tweet: ${e.message}")
             Timber.tag("deleteTweet").e("Stack trace: ${e.stackTraceToString()}")
@@ -2347,7 +2216,7 @@ object HproseInstance {
 
     // Track ongoing user updates to prevent concurrent calls for the same user
     private val ongoingUserUpdates = mutableSetOf<String>()
-    private val userUpdateMutex = kotlinx.coroutines.sync.Mutex()
+    private val userUpdateMutex = Mutex()
 
     /**
      * Given userId, get baseUrl where user data can be accessed.
@@ -2447,7 +2316,7 @@ object HproseInstance {
             val startTime = System.currentTimeMillis()
             
             while (true) {
-                kotlinx.coroutines.delay(50) // Wait 50ms between checks
+                delay(50) // Wait 50ms between checks
                 
                 // Check if we've been waiting too long
                 if (System.currentTimeMillis() - startTime > maxWaitTime) {
@@ -2464,12 +2333,8 @@ object HproseInstance {
                 if (!isStillUpdating) {
                     // The other thread has finished, try to get the cached result
                     val result = TweetCacheManager.getCachedUser(userId)
-                    if (result != null) {
-                        return result
-                    } else {
-                        // If no cached result, we need to retry the entire process
-                        return getUser(userId, baseUrl, maxRetries, forceRefresh)
-                    }
+                    return result ?: // If no cached result, we need to retry the entire process
+                    getUser(userId, baseUrl, maxRetries, forceRefresh)
                 }
             }
         }
@@ -2554,12 +2419,10 @@ object HproseInstance {
                             else -> "no baseUrl"
                         }
                         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: $oldBaseUrl, reason: $reason")
-                        
+
                         val providerIP = getProviderIPWithRetry(user.mid, maxRetries = 2)
-                        if (providerIP == null) {
-                            throw Exception("Provider not found for userId: ${user.mid}")
-                        }
-                        
+                            ?: throw Exception("Provider not found for userId: ${user.mid}")
+
                         val resolvedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
                             providerIP
                         } else {
@@ -2745,7 +2608,7 @@ object HproseInstance {
                 if (attempt < maxRetries) {
                     // Exponential backoff: 1s, 2s (matching iOS: attempt * 1_000_000_000 nanoseconds = attempt * 1000ms)
                     val delayMs = attempt * 1000L
-                    kotlinx.coroutines.delay(delayMs)
+                    delay(delayMs)
                 }
             }
         }
@@ -2770,7 +2633,7 @@ object HproseInstance {
             if (waitAttempts % 5 == 0) {
                 Timber.tag("getProviderIP").d("Waiting for appUser.hproseService to be available (attempt ${waitAttempts + 1}/$maxWaitAttempts)")
             }
-            kotlinx.coroutines.delay(200)
+            delay(200)
             waitAttempts++
         }
         
@@ -2814,7 +2677,7 @@ object HproseInstance {
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
                 Timber.tag("getProviderIP").d("Retrying provider IP fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                kotlinx.coroutines.delay(delayMs)
+                delay(delayMs)
             }
         }
         Timber.tag("getProviderIP").w("❌ Failed to get provider IP for userId: $userId after $maxRetries attempts")
@@ -2855,11 +2718,9 @@ object HproseInstance {
             "tweetid" to tweetId
         )
         return try {
-            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
-            
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            when (rawResponse) {
+            when (val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)) {
                 is Boolean -> {
                     // Legacy format: direct boolean response
                     rawResponse
@@ -2873,8 +2734,7 @@ object HproseInstance {
                         null
                     } else {
                         // Try to extract from v2 format: {success: true, data: {isPinned: bool}}
-                        val data = responseMap?.get("data")
-                        when (data) {
+                        when (val data = responseMap?.get("data")) {
                             is Map<*, *> -> {
                                 val dataMap = data as? Map<String, Any>
                                 dataMap?.get("isPinned") as? Boolean
@@ -2934,323 +2794,10 @@ object HproseInstance {
      * */
     @OptIn(UnstableApi::class)
     suspend fun uploadToIPFS(
-        context: Context,
         uri: Uri,
         referenceId: MimeiId? = null
     ): MimeiFileType? {
         return mediaUploadService.uploadToIPFS(uri, referenceId)
-    }
-
-    /**
-     * Legacy upload method - keeping for backwards compatibility
-     * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
-     * */
-    @OptIn(UnstableApi::class)
-    private suspend fun uploadToIPFS_Legacy(
-        context: Context,
-        uri: Uri,
-        referenceId: MimeiId? = null
-    ): MimeiFileType? {
-        // Get file name
-        var fileName: String? = null
-        try {
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst() && cursor.columnCount > 0) {
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex != -1) {
-                        fileName = cursor.getString(nameIndex)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("uploadToIPFS")
-                .w("Failed to get file name from content resolver: ${e.message}")
-            // Fallback: try to get filename from URI
-            fileName = uri.lastPathSegment
-        }
-
-        // Get file timestamp
-        val fileTimestamp: Long = try {
-            val documentFile = DocumentFile.fromSingleUri(context, uri)
-            documentFile?.lastModified()?.let {
-                if (it == 0L) System.currentTimeMillis() else it
-            } ?: System.currentTimeMillis()
-        } catch (e: Exception) {
-            Timber.tag("uploadToIPFS").w("Failed to get file timestamp: ${e.message}")
-            System.currentTimeMillis()
-        }
-
-        // Determine MediaType based on MIME type
-        val mimeType = try {
-            context.contentResolver.getType(uri)
-        } catch (e: Exception) {
-            Timber.tag("uploadToIPFS").w("Failed to get MIME type: ${e.message}")
-            null
-        }
-
-        val mediaType = when {
-            mimeType?.startsWith("image/") == true -> us.fireshare.tweet.datamodel.MediaType.Image
-            mimeType?.startsWith("video/") == true -> us.fireshare.tweet.datamodel.MediaType.Video
-            mimeType?.startsWith("audio/") == true -> us.fireshare.tweet.datamodel.MediaType.Audio
-            mimeType == "application/pdf" -> us.fireshare.tweet.datamodel.MediaType.PDF
-            mimeType == "application/zip" || mimeType == "application/x-zip-compressed" || 
-            mimeType == "application/x-rar-compressed" || mimeType == "application/x-7z-compressed" -> us.fireshare.tweet.datamodel.MediaType.Zip
-            mimeType == "application/msword" || mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> us.fireshare.tweet.datamodel.MediaType.Word
-            mimeType == "application/vnd.ms-excel" || mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> us.fireshare.tweet.datamodel.MediaType.Excel
-            mimeType == "application/vnd.ms-powerpoint" || mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> us.fireshare.tweet.datamodel.MediaType.PPT
-            mimeType?.startsWith("text/plain") == true -> us.fireshare.tweet.datamodel.MediaType.Txt
-            mimeType?.startsWith("text/html") == true -> us.fireshare.tweet.datamodel.MediaType.Html
-            else -> {
-                // Fallback: try to determine type from file extension
-                val extension = fileName?.substringAfterLast('.', "")?.lowercase()
-                val extensionType = when (extension) {
-                    "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif" -> us.fireshare.tweet.datamodel.MediaType.Image
-                    "mp4", "avi", "mov", "mkv", "webm", "m4v", "3gp" -> us.fireshare.tweet.datamodel.MediaType.Video
-                    "mp3", "wav", "aac", "ogg", "flac", "m4a" -> us.fireshare.tweet.datamodel.MediaType.Audio
-                    "pdf" -> us.fireshare.tweet.datamodel.MediaType.PDF
-                    "zip", "rar", "7z" -> us.fireshare.tweet.datamodel.MediaType.Zip
-                    "doc", "docx" -> us.fireshare.tweet.datamodel.MediaType.Word
-                    "xls", "xlsx" -> us.fireshare.tweet.datamodel.MediaType.Excel
-                    "ppt", "pptx" -> us.fireshare.tweet.datamodel.MediaType.PPT
-                    "txt", "rtf", "csv" -> us.fireshare.tweet.datamodel.MediaType.Txt
-                    "html", "htm" -> us.fireshare.tweet.datamodel.MediaType.Html
-                    else -> us.fireshare.tweet.datamodel.MediaType.Unknown
-                }
-                
-                // If extension detection failed, use FileTypeDetector for magic bytes detection
-                if (extensionType == us.fireshare.tweet.datamodel.MediaType.Unknown) {
-                    Timber.tag("uploadToIPFS").d("Extension detection failed, using FileTypeDetector for magic bytes detection")
-                    FileTypeDetector.detectFileType(context, uri, fileName)
-                } else {
-                    extensionType
-                }
-            }
-        }
-
-        // For video files, optionally bypass local processing for small files
-        if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video || mediaType == us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO) {
-            if (mediaType == us.fireshare.tweet.datamodel.MediaType.Video) {
-                val fileSize = getFileSize(context, uri)
-                if (fileSize != null && fileSize < MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES) {
-                    Timber.tag("uploadToIPFS").d(
-                        "Video size (%d bytes) below %d threshold, converting to MP4 first",
-                        fileSize,
-                        MediaUploadService.VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES
-                    )
-                    // For videos < 50MB, convert to MP4 first with resolution reduction if needed
-                    return normalizeAndUploadVideo(context, uri, fileName, fileTimestamp, referenceId)
-                }
-            }
-            Timber.tag("uploadToIPFS").d("Detected video file, attempting local processing only")
-            try {
-                val localResult = processVideoLocally(context, uri, fileName, fileTimestamp, referenceId)
-                if (localResult != null) {
-                    Timber.tag("uploadToIPFS()")
-                        .d("Video processed locally successfully: ${localResult.mid}")
-                    return localResult
-                } else {
-                    Timber.tag("uploadToIPFS()")
-                        .e("Local video processing failed - no fallback available")
-                    return null
-                }
-            } catch (e: Exception) {
-                Timber.tag("uploadToIPFS()")
-                    .e("Local video processing failed with exception: ${e.message}")
-                return null
-            }
-        } else {
-            Timber.tag("uploadToIPFS").d("Non-video file, proceeding with IPFS upload")
-        }
-
-        // Fall back to original IPFS method for non-video files or if netdisk upload fails
-        Timber.tag("uploadToIPFS").d("Calling uploadToIPFSOriginal with mediaType: $mediaType")
-        val result =
-            uploadToIPFSOriginal(context, uri, fileName, fileTimestamp, referenceId, mediaType)
-        if (result != null) {
-            Timber.tag("uploadToIPFS").d("uploadToIPFSOriginal succeeded: ${result.mid}")
-        } else {
-            Timber.tag("uploadToIPFS").e("uploadToIPFSOriginal returned null")
-        }
-        Timber.tag("uploadToIPFS").d("Returning result: ${result?.mid ?: "null"}")
-        return result
-    }
-
-    /**
-     * Check if TUS server is available at tusServerUrl
-     */
-    private suspend fun isConversionServerAvailable(): Boolean {
-        return try {
-            Timber.tag("isConversionServerAvailable").d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
-            
-            // First check if cloudDrivePort is valid (0 means not set)
-            if (appUser.cloudDrivePort == 0) {
-                Timber.tag("isConversionServerAvailable").d("cloudDrivePort is not set (value: ${appUser.cloudDrivePort})")
-                return false
-            }
-            
-            // Ensure writableUrl is resolved
-            if (appUser.writableUrl.isNullOrEmpty()) {
-                val resolved = appUser.resolveWritableUrl()
-                Timber.tag("isConversionServerAvailable").d("Resolved writableUrl: $resolved")
-                if (resolved.isNullOrEmpty()) {
-                    Timber.tag("isConversionServerAvailable").d("Could not resolve writableUrl")
-                    return false
-                }
-            }
-            
-            val tusServerUrl = appUser.tusServerUrl
-            if (tusServerUrl.isNullOrEmpty()) {
-                Timber.tag("isConversionServerAvailable").d("tusServerUrl is not available (cloudDrivePort=${appUser.cloudDrivePort}, writableUrl=${appUser.writableUrl})")
-                return false
-            }
-            
-            // Try to ping the /health endpoint
-            val healthCheckUrl = "$tusServerUrl/health"
-            Timber.tag("isConversionServerAvailable").d("Checking server availability at: $healthCheckUrl")
-            
-            val response = withContext(Dispatchers.IO) {
-                try {
-                    httpClient.get(healthCheckUrl)
-                } catch (e: Exception) {
-                    Timber.tag("isConversionServerAvailable").w("Health check request failed: ${e.message}")
-                    return@withContext null
-                }
-            }
-            
-            val isAvailable = response?.status == HttpStatusCode.OK
-            Timber.tag("isConversionServerAvailable").d("Server available: $isAvailable")
-            isAvailable
-        } catch (e: Exception) {
-            Timber.tag("isConversionServerAvailable").w("Error checking conversion server: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Process video locally using FFmpeg Kit
-     * Strategy:
-     * 1. Check if cloudDrivePort is valid and conversion server is available
-     * 2. If available: convert to HLS, compress, and upload to /process-zip
-     * 3. If not available: normalize to mp4 (resample to 720p if > 720p) and upload to IPFS
-     */
-    private suspend fun processVideoLocally(
-        context: Context,
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        referenceId: MimeiId?
-    ): MimeiFileType? {
-        return try {
-            Timber.tag("processVideoLocally").d("Starting local video processing for: $fileName")
-            
-            // Check if conversion server is available
-            val serverAvailable = isConversionServerAvailable()
-            Timber.tag("processVideoLocally").d("Conversion server available: $serverAvailable")
-            
-            if (serverAvailable) {
-                // Use HLS conversion and upload to process-zip endpoint
-                Timber.tag("processVideoLocally").d("Using HLS conversion with process-zip endpoint")
-                val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
-                val result = localProcessingService.processVideo(
-                    uri = uri,
-                    fileName = fileName ?: "video",
-                    fileTimestamp = fileTimestamp,
-                    referenceId = referenceId
-                )
-                
-                when (result) {
-                    is LocalVideoProcessingService.VideoProcessingResult.Success -> {
-                        Timber.tag("processVideoLocally").d("Local processing successful: ${result.mimeiFile.mid}")
-                        result.mimeiFile
-                    }
-                    is LocalVideoProcessingService.VideoProcessingResult.Error -> {
-                        Timber.tag("processVideoLocally").e("Local processing failed: ${result.message}")
-                        null
-                    }
-                }
-            } else {
-                // Normalize to mp4 and upload via IPFS
-                Timber.tag("processVideoLocally").d("Conversion server not available, normalizing to mp4 and uploading via IPFS")
-                return normalizeAndUploadVideo(context, uri, fileName, fileTimestamp, referenceId)
-            }
-        } catch (e: Exception) {
-            Timber.tag("processVideoLocally").e(e, "Error in local video processing")
-            null
-        }
-    }
-
-    /**
-     * Normalize video to MP4 format and upload via IPFS
-     * - Converts video to MP4 format
-     * - If resolution > 720p, reduces to 720p
-     * - Otherwise keeps original resolution
-     * - Uploads the normalized video
-     */
-    private suspend fun normalizeAndUploadVideo(
-        context: Context,
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        referenceId: MimeiId?
-    ): MimeiFileType? {
-        return try {
-            Timber.tag("normalizeAndUploadVideo").d("Normalizing video to MP4 for IPFS upload")
-            
-            // Check if video resolution is > 720p
-            val videoResolution = VideoManager.getVideoResolution(context, uri)
-            val needsResampling = if (videoResolution != null) {
-                val (width, height) = videoResolution
-                width > 1280 || height > 720
-            } else {
-                false
-            }
-            
-            if (needsResampling) {
-                Timber.tag("normalizeAndUploadVideo").d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
-            } else {
-                Timber.tag("normalizeAndUploadVideo").d("Video ${videoResolution?.first}x${videoResolution?.second} will keep original resolution")
-            }
-            
-            // Normalize video to mp4
-            val normalizer = us.fireshare.tweet.video.VideoNormalizer(context)
-            val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
-            
-            try {
-                val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
-                
-                when (normalizationResult) {
-                    is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Success -> {
-                        Timber.tag("normalizeAndUploadVideo").d("Video normalization successful")
-                        
-                        // Upload normalized video via IPFS
-                        val normalizedUri = android.net.Uri.fromFile(normalizedFile)
-                        val result = uploadToIPFSOriginal(
-                            context,
-                            normalizedUri,
-                            fileName,
-                            fileTimestamp,
-                            referenceId,
-                            us.fireshare.tweet.datamodel.MediaType.Video
-                        )
-                        
-                        Timber.tag("normalizeAndUploadVideo").d("IPFS upload result: ${result?.mid}")
-                        result
-                    }
-                    is us.fireshare.tweet.video.VideoNormalizer.NormalizationResult.Error -> {
-                        Timber.tag("normalizeAndUploadVideo").e("Video normalization failed: ${normalizationResult.message}")
-                        null
-                    }
-                }
-            } finally {
-                // Clean up normalized file
-                if (normalizedFile.exists()) {
-                    normalizedFile.delete()
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("normalizeAndUploadVideo").e(e, "Error in video normalization and upload")
-            null
-        }
     }
 
     /**
@@ -3263,7 +2810,7 @@ object HproseInstance {
         fileTimestamp: Long,
         jobId: String,
         baseUrl: String
-    ): MimeiFileType? {
+    ): MimeiFileType {
         val statusURL = "$baseUrl/convert-video/status/$jobId"
         var lastProgress = 0
         var lastMessage = "Starting video processing..."
@@ -3331,13 +2878,13 @@ object HproseInstance {
                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
                         
                         // Calculate file size from the original URI
-                        val fileSize = getFileSize(context, uri) ?: 0L
+                        val fileSize = getFileSize(uri) ?: 0L
                         Timber.tag("pollVideoConversionStatus").d("Video file size calculated: $fileSize bytes for URI: $uri")
 
                         Timber.tag("pollVideoConversionStatus").d("Video conversion completed successfully: $cid")
                         return MimeiFileType(
                             cid,
-                            us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO,
+                            MediaType.HLS_VIDEO,
                             fileSize,
                             fileName,
                             fileTimestamp,
@@ -3350,11 +2897,11 @@ object HproseInstance {
                     }
                     "uploading", "processing" -> {
                         // Continue polling
-                        kotlinx.coroutines.delay(3000) // Poll every 3 seconds
+                        delay(3000) // Poll every 3 seconds
                     }
                     else -> {
                         Timber.tag("pollVideoConversionStatus").w("Unknown status: $status")
-                        kotlinx.coroutines.delay(3000)
+                        delay(3000)
                     }
                 }
             } catch (e: Exception) {
@@ -3368,114 +2915,16 @@ object HproseInstance {
                 // Exponential backoff for retries, but cap at reasonable maximum
                 val retryDelay = minOf(60000L, 2000L * (1 shl minOf(consecutiveFailures - 1, 5))) // Max 60 seconds
                 Timber.tag("pollVideoConversionStatus").d("Retrying in ${retryDelay}ms...")
-                kotlinx.coroutines.delay(retryDelay)
+                delay(retryDelay)
             }
         }
-    }
-
-    /**
-     * Original IPFS upload method as fallback
-     */
-    @OptIn(UnstableApi::class)
-    private suspend fun uploadToIPFSOriginal(
-        context: Context,
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        referenceId: MimeiId?,
-        mediaType: us.fireshare.tweet.datamodel.MediaType
-    ): MimeiFileType? {
-        Timber.tag("uploadToIPFSOriginal").d("Starting upload for URI: $uri, mediaType: $mediaType")
-
-        // Resolve writableUrl before using uploadService
-        val resolvedUrl = appUser.resolveWritableUrl()
-        if (resolvedUrl.isNullOrEmpty()) {
-            Timber.tag("uploadToIPFSOriginal").e("Failed to resolve writableUrl")
-            return null
-        }
-        Timber.tag("uploadToIPFSOriginal").d("Successfully resolved writableUrl: $resolvedUrl")
-
-        var offset = 0L
-        var byteRead: Int
-        val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
-        val json = """{"aid": $appId, "ver": "last", "offset": 0}"""
-        val request = Gson().fromJson(json, Map::class.java).toMutableMap()
-
-        try {
-            Timber.tag("uploadToIPFSOriginal").d("Opening input stream for URI: $uri")
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.use { stream ->
-                    Timber.tag("uploadToIPFSOriginal").d("Starting chunked upload")
-                    while (stream.read(buffer).also { byteRead = it } != -1) {
-                        Timber.tag("uploadToIPFSOriginal")
-                            .d("Uploading chunk: offset=$offset, bytes=$byteRead")
-                        request["fsid"] = appUser.uploadService?.runMApp(
-                            "upload_ipfs",
-                            request.toMap(), listOf(buffer)
-                        )
-
-                        offset += byteRead
-                        request["offset"] = offset
-                    }
-                }
-            }
-            // Do not know the tweet mid yet, cannot add reference as 2nd argument.
-            // Do it later when uploading tweet.
-            request["finished"] = "true"
-            referenceId?.let { request["referenceid"] = it }
-            Timber.tag("uploadToIPFSOriginal").d("Finalizing upload with offset: $offset")
-            Timber.tag("uploadToIPFSOriginal").d("Final request: $request")
-
-            val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap())
-                ?: return null
-
-            Timber.tag("uploadToIPFSOriginal").d("Upload successful, CID: $cid")
-
-            // Calculate file size - use the offset which represents total bytes uploaded
-            val fileSize = offset
-            Timber.tag("uploadToIPFSOriginal").d("File size: $fileSize bytes for URI: $uri")
-
-            // Calculate aspect ratio for image or video
-            val aspectRatio = when (mediaType) {
-                us.fireshare.tweet.datamodel.MediaType.Image -> {
-                    val ratio = getImageAspectRatio(context, uri)
-                    Timber.tag("uploadToIPFSOriginal").d("Image aspect ratio: $ratio for URI: $uri")
-                    // Fallback to 4:3 if aspect ratio calculation fails
-                    ratio ?: (4f / 3f).also { 
-                        Timber.tag("uploadToIPFSOriginal").w("Using fallback aspect ratio 4:3 for image URI: $uri")
-                    }
-                }
-                us.fireshare.tweet.datamodel.MediaType.Video -> {
-                    val ratio = VideoManager.getVideoAspectRatio(context, uri)
-                    Timber.tag("uploadToIPFSOriginal").d("Video aspect ratio: $ratio for URI: $uri")
-                    // Fallback to 16:9 if aspect ratio calculation fails
-                    ratio
-                }
-                else -> {
-                    Timber.tag("uploadToIPFSOriginal").d("No aspect ratio calculation for media type: $mediaType")
-                    null
-                }
-            }
-
-            Timber.tag("uploadToIPFSOriginal").d("Final MimeiFileType created with file size: $fileSize, aspect ratio: $aspectRatio")
-            return MimeiFileType(cid, mediaType, fileSize, fileName, fileTimestamp, aspectRatio)
-        } catch (e: Exception) {
-            Timber.tag("uploadToIPFSOriginal()").e(e, "Error: ${e.message}")
-        }
-        return null
     }
 
     /**
      * Calculate file size from URI - delegates to MediaUploadService
      */
-    suspend fun getFileSize(context: Context, uri: Uri): Long? =
+    suspend fun getFileSize(uri: Uri): Long? =
         mediaUploadService.getFileSize(uri)
-
-    /**
-     * Get image aspect ratio - delegates to MediaUploadService
-     */
-    suspend fun getImageAspectRatio(context: Context, uri: Uri): Float? =
-        mediaUploadService.getImageAspectRatio(uri)
 
     /**
      * Ktor HTTP client with optimized connection pooling for distributed nodes
@@ -3581,7 +3030,7 @@ object HproseInstance {
                     Timber.tag("HproseInstance").d("Resuming video conversion for job: ${upload.videoConversionJobId}")
                     
                     // Create a coroutine to check job status and resume if needed
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    CoroutineScope(Dispatchers.IO).launch {
                         try {
                             val videoUri = upload.videoConversionUri?.toUri()
                             val fileName = videoUri?.lastPathSegment
@@ -3596,25 +3045,21 @@ object HproseInstance {
                                 jobId = upload.videoConversionJobId,
                                 baseUrl = upload.videoConversionBaseUrl
                             )
-                            
-                            if (result != null) {
-                                // Video conversion is finished, upload the tweet and get it done
-                                val tweet = Tweet(
-                                    mid = System.currentTimeMillis().toString(),
-                                    authorId = appUser.mid,
-                                    content = upload.tweetContent,
-                                    attachments = listOf(result),
-                                    isPrivate = upload.isPrivate
-                                )
-                                
-                                HproseInstance.uploadTweet(tweet)?.let { uploadedTweet ->
-                                    Timber.tag("HproseInstance").d("Successfully completed resumed video upload: ${uploadedTweet.mid}")
-                                    removeIncompleteUpload(context, upload.workId)
-                                } ?: run {
-                                    Timber.tag("HproseInstance").e("Failed to upload tweet after video conversion completion")
-                                }
-                            } else {
-                                Timber.tag("HproseInstance").e("Video conversion polling failed for job: ${upload.videoConversionJobId}")
+
+                            // Video conversion is finished, upload the tweet and get it done
+                            val tweet = Tweet(
+                                mid = System.currentTimeMillis().toString(),
+                                authorId = appUser.mid,
+                                content = upload.tweetContent,
+                                attachments = listOf(result),
+                                isPrivate = upload.isPrivate
+                            )
+
+                            uploadTweet(tweet)?.let { uploadedTweet ->
+                                Timber.tag("HproseInstance").d("Successfully completed resumed video upload: ${uploadedTweet.mid}")
+                                removeIncompleteUpload(context, upload.workId)
+                            } ?: run {
+                                Timber.tag("HproseInstance").e("Failed to upload tweet after video conversion completion")
                             }
                         } catch (e: Exception) {
                             Timber.tag("HproseInstance").e("Error resuming video conversion: $e")
@@ -3656,13 +3101,13 @@ object HproseInstance {
                     "isResume" to true
                 )
                 
-                val uploadRequest = androidx.work.OneTimeWorkRequest.Builder(
-                    us.fireshare.tweet.service.UploadTweetWorker::class.java
+                val uploadRequest = OneTimeWorkRequest.Builder(
+                    UploadTweetWorker::class.java
                 )
                     .setInputData(data)
                     .build()
                 
-                val workManager = androidx.work.WorkManager.getInstance(context)
+                val workManager = WorkManager.getInstance(context)
                 workManager.enqueue(uploadRequest)
                 
                 Timber.tag("HproseInstance").d("Resumed non-video upload for workId: ${upload.workId} with ${validUris.size} valid URIs")

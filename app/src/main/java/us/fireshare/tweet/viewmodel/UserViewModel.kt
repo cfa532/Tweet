@@ -6,8 +6,6 @@ import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -252,7 +250,6 @@ class UserViewModel @AssistedInject constructor(
             
             // For now, user avatar can only be image.
             HproseInstance.uploadToIPFS(
-                context,
                 uri,
                 referenceId = appUser.mid
             )?.let {

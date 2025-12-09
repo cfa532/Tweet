@@ -68,7 +68,7 @@ class UploadCommentWorker @AssistedInject constructor(
                     try {
                         Timber.tag("UploadCommentWorker").d("Starting upload for URI: $uri")
                         Timber.tag("UploadCommentWorker").d("Calling uploadToIPFS for URI: $uri")
-                        val result = uploadToIPFS(applicationContext, uri.toString().toUri())
+                        val result = uploadToIPFS(uri.toString().toUri())
                         if (result != null) {
                             Timber.tag("UploadCommentWorker").d("Successfully uploaded attachment: ${result.mid}")
                         } else {
@@ -179,7 +179,7 @@ class UploadTweetWorker @AssistedInject constructor(
                         val deferred = CoroutineScope(Dispatchers.IO).async {
                             try {
                                 Timber.tag("UploadTweetWorker").d("Calling uploadToIPFS for URI: $uriString")
-                                val result = uploadToIPFS(applicationContext, uriString.toUri())
+                                val result = uploadToIPFS(uriString.toUri())
                                 if (result != null) {
                                     Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment: ${result.mid}")
                                 } else {

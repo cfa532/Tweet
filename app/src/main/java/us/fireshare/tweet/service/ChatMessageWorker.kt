@@ -60,7 +60,7 @@ class SendChatMessageWorker @AssistedInject constructor(
                 try {
                     Timber.tag("SendChatMessageWorker").d("Starting attachment upload: $attachmentUri")
                     val uploadedFile = withContext(Dispatchers.IO) {
-                        uploadToIPFS(applicationContext, attachmentUri.toUri())
+                        uploadToIPFS(attachmentUri.toUri())
                     }
                     if (uploadedFile != null) {
                         attachments = listOf(uploadedFile)
