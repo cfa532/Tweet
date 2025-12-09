@@ -113,27 +113,6 @@ object HproseInstance {
      */
     var appUser: User
         get() {
-            // Check if appUser has expired and refresh if needed (with deduplication)
-            if (!_appUser.isGuest() && _appUser.hasExpired && !isAppUserRefreshing) {
-                isAppUserRefreshing = true
-                Timber.tag("appUser").d("AppUser expired, refreshing from server...")
-                // Use coroutine scope to refresh user data
-                TweetApplication.applicationScope.launch {
-                    try {
-                        val refreshedUser = getUser(_appUser.mid, _appUser.baseUrl)
-                        if (refreshedUser != null) {
-                            _appUser = refreshedUser
-                            Timber.tag("appUser").d("AppUser refreshed successfully")
-                        } else {
-                            Timber.tag("appUser").w("Failed to refresh appUser, keeping current instance")
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("appUser").e(e, "Error refreshing appUser")
-                    } finally {
-                        isAppUserRefreshing = false
-                    }
-                }
-            } // Skip logging duplicate refresh requests to reduce verbosity
             return _appUser
         }
         set(value) {
