@@ -284,8 +284,7 @@ object HproseInstance {
                             if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
                                 // Use the refreshed user's baseUrl
                                 appUser = refreshedUser
-                                User.updateUserInstance(appUser, true)
-                                TweetCacheManager.saveUser(appUser)
+                                TweetCacheManager.saveUser(refreshedUser)
                                 Timber.tag("initAppEntry").d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
                             } else {
                                 // Network fetch failed, try to load cached user
@@ -301,6 +300,7 @@ object HproseInstance {
                                     appUser.baseUrl = "http://$bestIp"
                                 }
                             }
+                            User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
                             Timber.tag("initAppEntry").d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
                         } else {
                             appUser.followingList = getAlphaIds()

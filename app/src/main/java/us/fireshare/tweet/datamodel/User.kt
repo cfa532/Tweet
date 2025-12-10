@@ -306,7 +306,7 @@ data class User(
                     value is String -> {
                         try {
                             value.toIntOrNull() ?: 0
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse cloudDrivePort: $value")
                             cloudDrivePort
                         }
