@@ -252,7 +252,7 @@ data class User(
     }
 
     /**
-     * Update user data from a map (similar to iOS updateFromMap)
+     * Update user data from a map, which should be from server.
      */
     fun from(userData: Map<String, Any>) {
         try {

@@ -164,11 +164,8 @@ object HproseInstance {
             // Initialize appUser with userId from preferences, or GUEST_ID if not available
             val storedUserId = preferenceHelper.getUserId()
             val initialUserId = if (storedUserId != TW_CONST.GUEST_ID) storedUserId else TW_CONST.GUEST_ID
-            appUser = User(
-                mid = initialUserId,
-                baseUrl = null,
-                followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
-            )
+            appUser = getInstance(initialUserId)
+            appUser.followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
             Timber.tag("HproseInstance").d("Initialized appUser with mid: ${appUser.mid}")
             
             // CRITICAL: initAppEntry() must complete first and set IP-based baseUrl

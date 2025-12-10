@@ -91,9 +91,7 @@ class TweetActivity : ComponentActivity() {
                 // Callback called after initialization completes
                 // Check for new messages and update badge on startup
                 lifecycleScope.launch(IO) {
-                    if (::chatSessionRepository.isInitialized) {
-                        checkMessagesAndUpdateBadge()
-                    }
+                    activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
             }
         }
@@ -123,13 +121,6 @@ class TweetActivity : ComponentActivity() {
 
                 // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
-
-                // Check for server upgrades (works for both mini and full versions)
-                launch {
-                    delay(15000)
-                    // All versions use checkForUpgrade for automatic checks
-                    activityViewModel.checkForUpgrade(this@TweetActivity)
-                }
 
                 // Start periodic appUser refresh every 30 minutes using WorkManager
                 scheduleAppUserRefresh()
@@ -379,8 +370,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
         viewModelScope.launch(IO) {
             try {
-                Timber.tag("checkForUpgrade").d("Starting upgrade check...")
-                delay(15000)    // delay 15s before checking for upgrade.
+                delay(3000)    // delay 3s before checking for upgrade.
                 
                 // Get current version
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
