@@ -1146,11 +1146,10 @@ class UserViewModel @AssistedInject constructor(
     suspend fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
         val ip = HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
-        appUser = User(
-            mid = TW_CONST.GUEST_ID,
-            baseUrl = "http://$ip",
-            followingList = HproseInstance.getAlphaIds()
-        )
+        appUser = User.getInstance(TW_CONST.GUEST_ID)
+        appUser.baseUrl = "http://$ip"
+        appUser.followingList = HproseInstance.getAlphaIds()
+
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
          * Don't clear tweet cache on logout - cache persists per user and is cleared periodically or manually

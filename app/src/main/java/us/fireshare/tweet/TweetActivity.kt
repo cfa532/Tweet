@@ -336,7 +336,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 // check for mimei of available App entry Urls. Update records in
                 // preference each time the app is run.
                 val mid = BuildConfig.ENTRY_URLS
-                HproseInstance.getProviderIP(mid)?.let { ip ->
+                HproseInstance.getProviderIP(mid).let { ip ->
                     val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
                     if (response.status == HttpStatusCode.OK) {
                         val newUrls = response.bodyAsText().split(System.lineSeparator())
@@ -352,8 +352,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     } else {
                         Timber.tag("loadEntryUrls").w("Failed to fetch entry URLs: HTTP ${response.status}")
                     }
-                } ?: run {
-                    Timber.tag("loadEntryUrls").w("Could not get provider IP for entry URLs mid: $mid")
                 }
             } catch (e: Exception) {
                 Timber.tag("loadEntryUrls").e(e, "Error loading entry URLs")
@@ -508,17 +506,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 Timber.tag("checkForMiniUpgrade").d("Calling HproseInstance.getProviderIP($packageId)")
                 val providerIp = HproseInstance.getProviderIP(packageId)
                 Timber.tag("checkForMiniUpgrade").d("getProviderIP() returned: $providerIp")
-                
-                if (providerIp == null) {
-                    Timber.tag("checkForMiniUpgrade").e("No provider IP available for packageId: $packageId")
-                    withContext(Main) {
-                        android.widget.Toast.makeText(context,
-                            "No provider IP available",
-                            android.widget.Toast.LENGTH_LONG).show()
-                    }
-                    return@launch
-                }
-                
+
                 val downloadUrl = "http://$providerIp/mm/$packageId"
                 Timber.tag("checkForMiniUpgrade").d("Downloading APK to check version: $downloadUrl")
                 

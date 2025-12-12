@@ -216,7 +216,7 @@ object HproseInstance {
     /**
      * Find the best IP by trying URLs and parsing HTML parameters
      */
-    private suspend fun findEntryIP(): String? {
+    private suspend fun findEntryIP(): String {
         val urls = preferenceHelper.getAppUrls()
         Timber.tag("initAppEntry").d("Attempting to initialize app entry with ${urls.size} URL(s): $urls")
 
@@ -261,7 +261,13 @@ object HproseInstance {
                          * bestIp is the IP with the smallest response time from valid public IPs.
                          * */
                         Timber.tag("initAppEntry").d("Successfully parsed paramMap: $paramMap")
-                        return filterIpAddresses(paramMap["addrs"] as List<String>)
+                        val entryIP = filterIpAddresses(paramMap["addrs"] as List<String>)
+                        if (entryIP != null) {
+                            return entryIP
+                        } else {
+                            Timber.tag("findEntryIP").w("filterIpAddresses returned null for URL: $url")
+                            // Continue to next URL
+                        }
                     }
                 } else {
                     Timber.tag("initAppEntry").w("No data found within window.setParam() for URL: $url")
@@ -275,74 +281,70 @@ object HproseInstance {
                 }
             }
         }
-        return null
+
+        // If we reach here, all URLs failed
+        val errorMsg = "Failed to find entry IP. Tried ${urls.size} URL(s): ${urls.joinToString(", ")}"
+        Timber.tag("findEntryIP").e(errorMsg)
+        throw IllegalStateException(errorMsg)
     }
 
     private suspend fun initAppEntry() {
         // Find the best IP by trying URLs
         val entryIP = findEntryIP()
-        if (entryIP != null) {
-            appUser.baseUrl = "http://$entryIP"
-            Timber.tag("initAppEntry").d("Set baseUrl to IP: http://$entryIP")
+        appUser.baseUrl = "http://$entryIP"
+        Timber.tag("initAppEntry").d("Set baseUrl to IP: http://$entryIP")
 
-            val userId = preferenceHelper.getUserId()
-            Timber.tag("initAppEntry").d("Retrieved userId from preferences: $userId")
-            if (userId != TW_CONST.GUEST_ID) {
-                /**
-                 * If there is a valid userId in preference, this is a login user.
-                 * Initiate current account.
-                 *
-                 * Always force refresh of appUser's baseUrl on app start to ensure we have the latest IP.
-                 * Pass empty string to force IP re-resolution and bypass cache (matching iOS behavior).
-                 * This matches iOS initAppEntry() which calls fetchUser(appUser.mid, baseUrl: "")
-                 * */
-                Timber.tag("initAppEntry")
-                    .d("Always refreshing appUser's baseUrl on app start for userId: $userId")
+        val userId = preferenceHelper.getUserId()
+        Timber.tag("initAppEntry").d("Retrieved userId from preferences: $userId")
+        if (userId != TW_CONST.GUEST_ID) {
+            /**
+             * If there is a valid userId in preference, this is a login user.
+             * Initiate current account.
+             *
+             * Always force refresh of appUser's baseUrl on app start to ensure we have the latest IP.
+             * Pass empty string to force IP re-resolution and bypass cache (matching iOS behavior).
+             * This matches iOS initAppEntry() which calls fetchUser(appUser.mid, baseUrl: "")
+             * */
+            Timber.tag("initAppEntry")
+                .d("Always refreshing appUser's baseUrl on app start for userId: $userId")
 
-                // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-                // forceRefresh ensures fresh data from server without needing to clear cache
-                val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
-                val refreshedBaseUrl = refreshedUser?.baseUrl
-                if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
-                    // Use the refreshed user's baseUrl
-                    appUser = refreshedUser
-                    TweetCacheManager.saveUser(refreshedUser)
-                    Timber.tag("initAppEntry")
-                        .d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
-                } else {
-                    // Network fetch failed, try to load cached user
-                    Timber.tag("initAppEntry")
-                        .w("User fetch failed, attempting to load cached user for userId: $userId")
-                    val cachedUser = TweetCacheManager.getCachedUser(userId)
-                    if (cachedUser != null) {
-                        // Use cached user but update baseUrl to the resolved IP
-                        appUser.baseUrl = "http://$entryIP"
-                        Timber.tag("initAppEntry")
-                            .d("✅ Loaded cached user with resolved IP baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
-                    } else {
-                        // No cached user found, fall back to bestIp with current userId
-                        Timber.tag("initAppEntry")
-                            .w("No cached user found, using resolved IP: $entryIP")
-                        appUser.baseUrl = "http://$entryIP"
-                    }
-                }
-                User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
+            // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+            // forceRefresh ensures fresh data from server without needing to clear cache
+            val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
+            val refreshedBaseUrl = refreshedUser?.baseUrl
+            if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
+                // Use the refreshed user's baseUrl
+                appUser = refreshedUser
+                TweetCacheManager.saveUser(refreshedUser)
                 Timber.tag("initAppEntry")
-                    .d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
+                    .d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
             } else {
-                appUser.followingList = getAlphaIds()
-                TweetCacheManager.saveUser(appUser)
-                Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
+                // Network fetch failed, try to load cached user
+                Timber.tag("initAppEntry")
+                    .w("User fetch failed, attempting to load cached user for userId: $userId")
+                val cachedUser = TweetCacheManager.getCachedUser(userId)
+                if (cachedUser != null) {
+                    // Use cached user but update baseUrl to the resolved IP
+                    appUser.baseUrl = "http://$entryIP"
+                    Timber.tag("initAppEntry")
+                        .d("✅ Loaded cached user with resolved IP baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+                } else {
+                    // No cached user found, fall back to bestIp with current userId
+                    Timber.tag("initAppEntry")
+                        .w("No cached user found, using resolved IP: $entryIP")
+                    appUser.baseUrl = "http://$entryIP"
+                }
             }
-            // once a workable URL is found, return successfully
-            Timber.tag("initAppEntry").d("✅ Successfully initialized app entry")
-            return
+            User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
+            Timber.tag("initAppEntry")
+                .d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
+        } else {
+            appUser.followingList = getAlphaIds()
+            TweetCacheManager.saveUser(appUser)
+            Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
         }
-
-        // If we reach here, all URLs failed - throw exception with detailed error message
-        val errorMsg = "Failed to initialize app entry. Tried ${urls.size} URL(s): ${urls.joinToString(", ")}"
-        Timber.tag("initAppEntry").e(errorMsg)
-        throw IllegalStateException(errorMsg)
+        // once a workable URL is found, return successfully
+        Timber.tag("initAppEntry").d("✅ Successfully initialized app entry")
     }
 
     /**
@@ -2356,12 +2358,9 @@ object HproseInstance {
             // Step 3: Determine the base URL to use with retry logic
             val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
                 // Get provider IP for the user with retry logic (returns full IP:port without protocol, e.g., "115.192.224.7:8081")
-                getProviderIP(userId)?.let { providerIP ->
+                getProviderIP(userId).let { providerIP ->
                     // getProviderIPWithRetry returns IP:port without protocol, add http:// prefix
                     "http://$providerIP"
-                } ?: run {
-                    Timber.tag("getUser").e("Failed to get provider IP for userId: $userId")
-                    return null
                 }
             } else {
                 baseUrl
@@ -2431,7 +2430,6 @@ object HproseInstance {
                         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: $oldBaseUrl, reason: $reason")
 
                         val providerIP = getProviderIP(user.mid)
-                            ?: throw Exception("Provider not found for userId: ${user.mid}")
 
                         val resolvedUrl = if (providerIP.startsWith("http://") || providerIP.startsWith("http")) {
                             providerIP
@@ -2448,7 +2446,6 @@ object HproseInstance {
                 } else {
                     // Retry attempts: Always force fresh IP resolution
                     val providerIP = getProviderIP(user.mid)
-                        ?: throw Exception("Provider not found for userId: ${user.mid}")
 
                     // Check if resolved IP:port is the same as current IP:port (redirect loop prevention)
                     // ip:8081 is different from ip:8082, so only exact match (IP:port) is a redirect loop
@@ -2669,11 +2666,11 @@ object HproseInstance {
      * Tries each IP returned until a working one is found
      * If no IPs are returned or all IPs fail, tries again with entry IP
      */
-    suspend fun getProviderIP(mid: MimeiId): String? {
+    suspend fun getProviderIP(mid: MimeiId): String {
         // Safety check: never try to get provider IP for GUEST_ID
         if (mid == TW_CONST.GUEST_ID) {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
-            return null
+            return findEntryIP()
         }
 
         val entry = "get_provider_ips"
@@ -2696,11 +2693,8 @@ object HproseInstance {
                 }
             }
 
-            // ipArray is not valid (null or empty) - get entry IP and try again
-            Timber.tag("getProviderIP").w("No valid provider IPs returned for user $mid, trying entry IP fallback")
-
-            val entryIP = findEntryIP()
-            if (entryIP != null) {
+            try {
+                val entryIP = findEntryIP()
                 Timber.tag("getProviderIP").d("Found entry IP: $entryIP, retrying with entry IP client")
 
                 // Temporarily update appUser baseUrl to entry IP
@@ -2725,6 +2719,9 @@ object HproseInstance {
                     // Always restore original baseUrl
                     appUser.baseUrl = originalBaseUrl
                 }
+            } catch (e: Exception) {
+                Timber.tag("getProviderIP").w("Failed to find entry IP for fallback: $e")
+                // Continue to throw the original error below
             }
 
             // All attempts failed - throw error
