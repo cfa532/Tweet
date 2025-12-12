@@ -2743,7 +2743,7 @@ object HproseInstance {
         return try {
             val params = mapOf(
                 "aid" to appId,
-                "ver" to "last",
+                "ver" to "last"
             )
             val rawResponse = hproseService?.runMApp<Any>("health", params)
             val responseMap = rawResponse as? Map<String, Any>
