@@ -4,6 +4,9 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -14,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
@@ -31,6 +35,37 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         val applicationScope = CoroutineScope(SupervisorJob() + IO)
     }
 
+    private val appLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            // App has come to foreground
+            Timber.tag("AppLifecycle").d("App came to foreground, refreshing appUser...")
+            applicationScope.launch {
+                try {
+                    if (!HproseInstance.appUser.isGuest()) {
+                        val refreshedUser = HproseInstance.fetchUser(
+                            HproseInstance.appUser.mid,
+                            baseUrl = "",  // Force IP re-resolution
+                            forceRefresh = true
+                        )
+                        if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
+                            HproseInstance.appUser = refreshedUser
+                            Timber.tag("AppLifecycle").d("✅ AppUser refreshed successfully on foreground")
+                        } else {
+                            Timber.tag("AppLifecycle").w("Failed to refresh appUser on foreground")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("AppLifecycle").e(e, "Error refreshing appUser on foreground")
+                }
+            }
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            // App has gone to background
+            Timber.tag("AppLifecycle").d("App went to background")
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) {
@@ -46,6 +81,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         
         // Initialize notification channels for system bar notifications
         SystemNotificationManager.initializeChannels(this)
+
+        // Register lifecycle observer to refresh appUser when app comes to foreground
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
 
         // Schedule the CleanUpWorker
         val cleanUpRequest = PeriodicWorkRequestBuilder<CleanUpWorker>(1, TimeUnit.DAYS)
