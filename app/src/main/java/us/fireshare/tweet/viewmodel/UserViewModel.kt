@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
 import us.fireshare.tweet.HproseInstance.loadCachedTweetsByAuthor
 import us.fireshare.tweet.HproseInstance.preferenceHelper
@@ -206,7 +206,7 @@ class UserViewModel @AssistedInject constructor(
             try {
                 // Force refresh from server, skip cache
                 // Pass empty string to force IP re-resolution
-                val refreshedUser = getUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
                     return // Success, exit retry loop
@@ -779,7 +779,7 @@ class UserViewModel @AssistedInject constructor(
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(IO) {
                 val loadedUser =
-                    getUser(userId, maxRetries = 3) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                    fetchUser(userId, maxRetries = 2) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 _user.value = loadedUser
 
                 // Initialize count variables from user data
@@ -809,7 +809,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun getUser() {
-        getUser(userId, maxRetries = 3)?.let {
+        fetchUser(userId, maxRetries = 2)?.let {
             _user.value = it
         }
     }
@@ -973,7 +973,7 @@ class UserViewModel @AssistedInject constructor(
                             val tweetWithAuthor = if (tweet.author == null) {
                                 // Check cache first before fetching from server
                                 val cachedAuthor = TweetCacheManager.getCachedUser(tweet.authorId)
-                                tweet.copy(author = cachedAuthor ?: getUser(tweet.authorId))
+                                tweet.copy(author = cachedAuthor ?: fetchUser(tweet.authorId))
                             } else {
                                 tweet
                             }
@@ -1280,7 +1280,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check fans
         followers.value.forEach { fanId ->
-            getUser(fanId)?.let { fan ->
+            fetchUser(fanId)?.let { fan ->
                 if (fan.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(fan.username!!)
                 }
@@ -1289,7 +1289,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check followings
         followings.value.forEach { followingId ->
-            getUser(followingId)?.let { following ->
+            fetchUser(followingId)?.let { following ->
                 if (following.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(following.username!!)
                 }

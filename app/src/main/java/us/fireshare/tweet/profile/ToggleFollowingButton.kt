@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TweetCacheManager
@@ -93,7 +93,7 @@ fun ToggleFollowingButton(
                         // Refresh user data for the followed/unfollowed user
                         try {
                             // Get fresh user data from server and cache it
-                            getUser(userId)?.let { refreshedUser ->
+                            fetchUser(userId)?.let { refreshedUser ->
                                 TweetCacheManager.saveUser(refreshedUser)
                                 // Refresh the current viewmodel's user data
                                 viewModel.refreshUserData()

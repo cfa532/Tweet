@@ -300,7 +300,7 @@ object HproseInstance {
 
                             // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
                             // forceRefresh ensures fresh data from server without needing to clear cache
-                            val refreshedUser = getUser(userId, baseUrl = "", forceRefresh = true)
+                            val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
                             val refreshedBaseUrl = refreshedUser?.baseUrl
                             if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
                                 // Use the refreshed user's baseUrl
@@ -395,7 +395,7 @@ object HproseInstance {
             
             // Refresh appUser's baseUrl if needed
             if (forceRefresh) {
-                val refreshedUser = getUser(appUser.mid, baseUrl = "", forceRefresh = true)
+                val refreshedUser = fetchUser(appUser.mid, baseUrl = "", forceRefresh = true)
                 if (refreshedUser != null && refreshedUser.baseUrl != appUser.baseUrl) {
                     appUser.baseUrl = refreshedUser.baseUrl
                     Timber.tag("sendMessage").d("✅ Updated sender's baseUrl to: ${refreshedUser.baseUrl}")
@@ -492,7 +492,7 @@ object HproseInstance {
             }
             
             // Fetch recipient user (with forced refresh on retry)
-            receiptUser = getUser(receiptId, baseUrl = if (forceRefresh) "" else null)
+            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh) "" else null)
             
             if (receiptUser == null) {
                 val errorMsg = "Recipient user not found"
@@ -806,7 +806,7 @@ object HproseInstance {
                     context.getString(R.string.login_getuserid_fail)
                 )
                 val user =
-                    getUser(userId, "") ?: return Pair(null, context.getString(R.string.login_getuser_fail))
+                    fetchUser(userId, "") ?: return Pair(null, context.getString(R.string.login_getuser_fail))
                 val entry = "login"
                 val params = mapOf(
                     "aid" to appId,
@@ -1221,7 +1221,7 @@ object HproseInstance {
                 if (originalTweetJson != null) {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
-                        originalTweet.author = getUser(originalTweet.authorId)
+                        originalTweet.author = fetchUser(originalTweet.authorId)
                         TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
                     } catch (e: Exception) {
                         Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
@@ -1238,7 +1238,7 @@ object HproseInstance {
                     // Try to decode the tweet
                     try {
                         val tweet = Tweet.from(tweetJson)
-                        tweet.author = getUser(tweet.authorId)
+                        tweet.author = fetchUser(tweet.authorId)
 
                         // Skip private tweets in feed
                         if (tweet.isPrivate) {
@@ -1306,7 +1306,7 @@ object HproseInstance {
                 if (originalTweetJson != null) {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
-                        originalTweet.author = getUser(originalTweet.authorId)
+                        originalTweet.author = fetchUser(originalTweet.authorId)
                         TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
                         Timber.tag("getTweetsByUser")
                             .d("Cached original tweet: ${originalTweet.mid}")
@@ -1379,7 +1379,7 @@ object HproseInstance {
 
         return try {
             // Check cache first using TweetCacheManager
-            val author = getUser(authorId)
+            val author = fetchUser(authorId)
             val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
             if (cachedTweet != null) {
                 cachedTweet.author = author
@@ -1463,7 +1463,7 @@ object HproseInstance {
         }
 
         return try {
-            val author = getUser(authorId) ?: return null
+            val author = fetchUser(authorId) ?: return null
             val entry = "refresh_tweet"
             val params = mapOf(
                 "aid" to appId,
@@ -1683,7 +1683,7 @@ object HproseInstance {
                     try {
                         // Invalidate cache to force fresh fetch from server
                         TweetCacheManager.removeCachedUser(appUser.mid)
-                        val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
+                        val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
                             // Create a new user object to trigger recompose
                             val updatedUser = refreshedUser.copy()
@@ -1918,7 +1918,7 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.author = getUser(updatedTweet.authorId)
+                    updatedTweet.author = fetchUser(updatedTweet.authorId)
                     // Cache by authorId
                     updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
@@ -1969,7 +1969,7 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.author = getUser(updatedTweet.authorId)
+                    updatedTweet.author = fetchUser(updatedTweet.authorId)
                     // Cache by authorId
                     updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
@@ -2022,7 +2022,7 @@ object HproseInstance {
                     // Try to decode the tweet
                     try {
                         val tweet = Tweet.from(tweetJson)
-                        tweet.author = getUser(tweet.authorId)
+                        tweet.author = fetchUser(tweet.authorId)
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")
@@ -2078,7 +2078,7 @@ object HproseInstance {
             try {
                 // Invalidate cache to force fresh fetch from server
                 TweetCacheManager.removeCachedUser(appUser.mid)
-                val refreshedUser = getUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
+                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     // Create a new user object to trigger recompose
                     val updatedUser = refreshedUser.copy()
@@ -2112,14 +2112,14 @@ object HproseInstance {
             // Fetch author if not already loaded
             if (tweet.author == null) {
                 // Check cache first before fetching from server
-                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: getUser(tweet.authorId)
+                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: fetchUser(tweet.authorId)
             }
             
             // Ensure author has a baseUrl (hproseService requires baseUrl)
             val author = tweet.author
             if (author == null || author.baseUrl.isNullOrEmpty()) {
                 // Fetch author to ensure we have their baseUrl
-                val fetchedAuthor = getUser(tweet.authorId)
+                val fetchedAuthor = fetchUser(tweet.authorId)
                 if (fetchedAuthor == null || fetchedAuthor.baseUrl.isNullOrEmpty()) {
                     Timber.tag("getComments()").e("Cannot fetch author or author has no baseUrl for tweet ${tweet.mid}")
                     return null
@@ -2237,7 +2237,7 @@ object HproseInstance {
      * Includes retry logic with exponential backoff for network-related failures.
      */
     @Suppress("SENSELESS_COMPARISON")
-    suspend fun getUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 3, forceRefresh: Boolean = false, skipRetryAndBlacklist: Boolean = false): User? {
+    suspend fun fetchUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 2, forceRefresh: Boolean = false, skipRetryAndBlacklist: Boolean = false): User? {
         if (userId == null) {
             Timber.tag("getUser").w("Null userId, returning null")
             return null
@@ -2338,7 +2338,7 @@ object HproseInstance {
                     // The other thread has finished, try to get the cached result
                     val result = TweetCacheManager.getCachedUser(userId)
                     return result ?: // If no cached result, we need to retry the entire process
-                    getUser(userId, baseUrl, maxRetries, forceRefresh)
+                    fetchUser(userId, baseUrl, maxRetries, forceRefresh)
                 }
             }
         }
@@ -2628,7 +2628,7 @@ object HproseInstance {
     /**
      * Get provider IP for a user with retry logic
      */
-    private suspend fun getProviderIPWithRetry(userId: MimeiId, maxRetries: Int = 3): String? {
+    private suspend fun getProviderIPWithRetry(userId: MimeiId, maxRetries: Int = 2): String? {
         // Wait for appUser.hproseService to be available (requires appUser.baseUrl to be set)
         var waitAttempts = 0
         val maxWaitAttempts = 50 // 50 * 200ms = 10 seconds max wait
@@ -2640,87 +2640,54 @@ object HproseInstance {
             delay(200)
             waitAttempts++
         }
-        
+
         if (appUser.hproseService == null) {
             Timber.tag("getProviderIP").e("❌ appUser.hproseService is still null after waiting, cannot get provider IP for userId: $userId")
             return null
         }
-        
+
         repeat(maxRetries) { attempt ->
             try {
-                val entry = "get_provider_ips"
-                val params = mapOf(
-                    "aid" to appId,
-                    "ver" to "last",
-                    "version" to "v2",
-                    "mid" to userId
-                )
-                Timber.tag("getProviderIP").d("Calling get_provider_ips for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
-                val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
-                val ipArray = unwrapV2Response<List<String>>(rawResponse)
-                
-                if (ipArray != null && ipArray.isNotEmpty()) {
-                    Timber.tag("getProviderIP").d("Received ${ipArray.size} provider IPs for userId: $userId")
-                    
-                    // Try each IP until we find one that works
-                    for ((index, ip) in ipArray.withIndex()) {
-                        try {
-                            Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipArray.size}: $ip")
-                            
-                            // Test the IP by making a simple HTTP request with timeout
-                            val testUrl = "http://$ip/mm/$userId"
-                            val response = withTimeoutOrNull(5000) {
-                                httpClient.get(testUrl)
-                            }
-                            
-                            if (response != null && response.status.value in 200..299) {
-                                Timber.tag("getProviderIP").d("✅ Found working IP: $ip (attempt ${index + 1}/${ipArray.size})")
-                                return ip
-                            } else {
-                                val statusCode = response?.status?.value ?: "timeout"
-                                Timber.tag("getProviderIP").w("IP $ip returned status: $statusCode, trying next IP")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("getProviderIP").w("IP $ip failed with exception: ${e.message}, trying next IP")
-                            // Continue to next IP
-                        }
-                    }
-                    
-                    // If no IP worked but we have IPs, return first as fallback
-                    Timber.tag("getProviderIP").w("No working IP found, returning first IP as fallback")
-                    return ipArray.firstOrNull()
-                } else {
-                    Timber.tag("getProviderIP").w("get_provider_ips returned null or empty array for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
+                val providerIP = getProviderIP(userId)
+                if (providerIP != null) {
+                    return providerIP
                 }
             } catch (e: Exception) {
-                Timber.tag("getProviderIP").e(e, "Error getting provider IPs for user: $userId (attempt ${attempt + 1}/$maxRetries)")
-                
+                Timber.tag("getProviderIPWithRetry").e(e, "Error getting provider IP for user: $userId (attempt ${attempt + 1}/$maxRetries)")
+
                 // Check if it's a network-related error that should be retried
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
-                
+
                 if (!isNetworkError) {
                     // Don't retry for non-network errors
-                    Timber.tag("getProviderIP").w("Non-network error, not retrying: ${e.message}")
+                    Timber.tag("getProviderIPWithRetry").w("Non-network error, not retrying: ${e.message}")
                     return null
                 }
             }
-            
+
             // If this isn't the last attempt, wait before retrying
             if (attempt < maxRetries - 1) {
                 val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
-                Timber.tag("getProviderIP").d("Retrying provider IPs fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                Timber.tag("getProviderIPWithRetry").d("Retrying provider IP fetch in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
                 delay(delayMs)
             }
         }
-        Timber.tag("getProviderIP").w("❌ Failed to get provider IPs for userId: $userId after $maxRetries attempts")
+        Timber.tag("getProviderIPWithRetry").w("❌ Failed to get provider IPs for userId: $userId after $maxRetries attempts")
         return null
     }
 
     /**
      * Get provider IP for a user using "get_provider_ips" entry
      * Tries each IP returned until a working one is found
+     * If all IPs fail, tries again with entry IP and throws error if still fails
      */
     suspend fun getProviderIP(mid: MimeiId): String? {
+        // Safety check: never try to get provider IP for GUEST_ID
+        if (mid == TW_CONST.GUEST_ID) {
+            Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
+            return null
+        }
+
         val entry = "get_provider_ips"
         val params = mapOf(
             "aid" to appId,
@@ -2728,48 +2695,122 @@ object HproseInstance {
             "version" to "v2",
             "mid" to mid
         )
+
         return try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             val ipArray = unwrapV2Response<List<String>>(rawResponse)
-            
-            if (ipArray == null || ipArray.isEmpty()) {
-                Timber.tag("getProviderIP").w("get_provider_ips returned null or empty array for mid: $mid")
+
+            // Only handle array of IP addresses
+            val ipAddresses = ipArray ?: emptyList()
+
+            if (ipAddresses.isEmpty()) {
+                Timber.tag("getProviderIP").w("No provider IPs returned for user $mid")
                 return null
             }
-            
-            Timber.tag("getProviderIP").d("Received ${ipArray.size} provider IPs for mid: $mid")
-            
-            // Try each IP until we find one that works
-            for ((index, ip) in ipArray.withIndex()) {
-                try {
-                    Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipArray.size}: $ip")
-                    
-                    // Test the IP by making a simple HTTP request with timeout
-                    val testUrl = "http://$ip/mm/$mid"
-                    val response = withTimeoutOrNull(5000) {
-                        httpClient.get(testUrl)
-                    }
-                    
-                    if (response != null && response.status.value in 200..299) {
-                        Timber.tag("getProviderIP").d("✅ Found working IP: $ip (attempt ${index + 1}/${ipArray.size})")
-                        return ip
-                    } else {
-                        val statusCode = response?.status?.value ?: "timeout"
-                        Timber.tag("getProviderIP").w("IP $ip returned status: $statusCode, trying next IP")
-                    }
+
+            Timber.tag("getProviderIP").d("Received ${ipAddresses.size} IP address(es) for user $mid: $ipAddresses")
+
+            // Try each IP address with health check
+            for ((index, ipAddress) in ipAddresses.withIndex()) {
+                Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipAddresses.size}: $ipAddress")
+
+                // Validate the IP address format by attempting to construct a URL
+                val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
+                val testURL = try {
+                    android.net.Uri.parse(testUrlString)
                 } catch (e: Exception) {
-                    Timber.tag("getProviderIP").w("IP $ip failed with exception: ${e.message}, trying next IP")
-                    // Continue to next IP
+                    Timber.tag("getProviderIP").w("Skipping invalid IP format: $ipAddress")
+                    continue
+                }
+
+                // Perform health check on this IP
+                val isHealthy = isServerHealthy(testURL)
+                if (isHealthy) {
+                    Timber.tag("getProviderIP").d("✅ Found healthy IP: $ipAddress")
+                    return ipAddress
+                } else {
+                    Timber.tag("getProviderIP").d("❌ IP $ipAddress failed health check")
                 }
             }
-            
-            // If no IP worked, log warning and return the first IP as fallback
-            Timber.tag("getProviderIP").w("❌ No working IP found for mid: $mid, returning first IP as fallback")
-            ipArray.firstOrNull()
+
+            // All IPs failed - try with entry IP
+            Timber.tag("getProviderIP").w("All provider IPs failed health check for user $mid, trying entry IP fallback")
+
+            // Get entry IP and try again
+            val entryIP = findEntryIP(preferenceHelper.getAppUrls().toSet())
+            if (entryIP != null) {
+                Timber.tag("getProviderIP").d("Found entry IP: $entryIP, retrying with entry IP client")
+
+                // Temporarily update appUser baseUrl to entry IP
+                val originalBaseUrl = appUser.baseUrl
+                val entryIPUri = "$entryIP/webapi/"
+                appUser.baseUrl = entryIPUri
+
+                try {
+                    // Retry the get_provider_ips call with entry IP client
+                    val retryRawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+                    val retryIpArray = unwrapV2Response<List<String>>(retryRawResponse)
+                    val retryIpAddresses = retryIpArray ?: emptyList()
+
+                    if (retryIpAddresses.isNotEmpty()) {
+                        Timber.tag("getProviderIP").d("Entry IP retry returned ${retryIpAddresses.size} IP address(es)")
+
+                        // Try each IP from the entry IP response
+                        for ((index, ipAddress) in retryIpAddresses.withIndex()) {
+                            Timber.tag("getProviderIP").d("Entry IP retry - Testing IP ${index + 1}/${retryIpAddresses.size}: $ipAddress")
+
+                            val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
+                            val testURL = try {
+                                android.net.Uri.parse(testUrlString)
+                            } catch (e: Exception) {
+                                Timber.tag("getProviderIP").w("Entry IP retry - Skipping invalid IP format: $ipAddress")
+                                continue
+                            }
+
+                            val isHealthy = isServerHealthy(testURL)
+                            if (isHealthy) {
+                                Timber.tag("getProviderIP").d("✅ Entry IP retry found healthy IP: $ipAddress")
+                                return ipAddress
+                            } else {
+                                Timber.tag("getProviderIP").d("❌ Entry IP retry - IP $ipAddress failed health check")
+                            }
+                        }
+                    }
+                } finally {
+                    // Always restore original baseUrl
+                    appUser.baseUrl = originalBaseUrl
+                }
+            }
+
+            // All attempts failed - throw error
+            Timber.tag("getProviderIP").e("All provider IP resolution attempts failed for user $mid")
+            throw RuntimeException("Failed to resolve provider IP for user $mid after trying all IPs and entry IP fallback")
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("Error getting provider IPs for user: $mid")
-            Timber.tag("getProviderIP").e("Exception: $e")
-            null
+            Timber.tag("getProviderIP").e("Error getting provider IPs for user $mid: $e")
+            throw e
+        }
+    }
+
+    /**
+     * Check if a server is healthy by making a simple HTTP request
+     */
+    private suspend fun isServerHealthy(url: android.net.Uri, logFailures: Boolean = false): Boolean {
+        return try {
+            val testUrl = url.toString()
+            val response = withTimeoutOrNull(5000) {
+                httpClient.get(testUrl)
+            }
+            val isHealthy = response != null && response.status.value in 200..299
+            if (!isHealthy && logFailures) {
+                val statusCode = response?.status?.value ?: "timeout"
+                Timber.tag("isServerHealthy").w("Health check failed for $testUrl: $statusCode")
+            }
+            isHealthy
+        } catch (e: Exception) {
+            if (logFailures) {
+                Timber.tag("isServerHealthy").w("Health check exception for ${url.toString()}: ${e.message}")
+            }
+            false
         }
     }
 

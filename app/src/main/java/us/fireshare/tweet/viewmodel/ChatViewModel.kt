@@ -80,7 +80,7 @@ class ChatViewModel @AssistedInject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _receipt.value = HproseInstance.getUser(receiptId)
+            _receipt.value = HproseInstance.fetchUser(receiptId)
                 ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
 
             // Load only the latest 20 messages from local database

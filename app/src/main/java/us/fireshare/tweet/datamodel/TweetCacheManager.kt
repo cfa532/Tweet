@@ -363,7 +363,7 @@ object TweetCacheManager {
                 for (userId in candidateIds) {
                     if (results.size >= limit || results.containsKey(userId)) continue
                     try {
-                        val user = HproseInstance.getUser(userId)
+                        val user = HproseInstance.fetchUser(userId)
                         consider(user)
                     } catch (e: Exception) {
                         Timber.tag("TweetCacheManager").v(e, "searchUsers: Failed to fetch user $userId")
@@ -435,7 +435,7 @@ object TweetCacheManager {
             if (tweet.author == null) {
                 try {
                     // Check cache first before fetching from server
-                    tweet.author = getCachedUser(tweet.authorId) ?: HproseInstance.getUser(tweet.authorId)
+                    tweet.author = getCachedUser(tweet.authorId) ?: HproseInstance.fetchUser(tweet.authorId)
                 } catch (e: Exception) {
                     Timber.tag("TweetCacheManager").v(e, "searchTweets: Failed to fetch author ${tweet.authorId}")
                 }

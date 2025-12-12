@@ -26,7 +26,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.getAlphaIds
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
@@ -302,7 +302,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * */
     private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
         try {
-            getUser(userId)?.let { user ->
+            fetchUser(userId)?.let { user ->
                 val tweetsWithNulls = HproseInstance.getTweetsByUser(
                     user,
                     pageNumber,

@@ -56,7 +56,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.HproseInstance.getUserId
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
@@ -530,7 +530,7 @@ class SearchViewModel @Inject constructor() : ViewModel() {
         return try {
             val exactId = getUserId(query) ?: getUserId(query.lowercase())
             // Use skipRetryAndBlacklist = true for search operations - don't retry or update blacklist
-            exactId?.let { getUser(it, skipRetryAndBlacklist = true) }
+            exactId?.let { fetchUser(it, skipRetryAndBlacklist = true) }
         } catch (e: Exception) {
             Timber.tag("SearchViewModel").v(e, "Exact user lookup failed for query: $query")
             null

@@ -44,7 +44,7 @@ class UploadCommentWorker @AssistedInject constructor(
                 Timber.tag("UploadCommentWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for target user: $authorId")
                 try {
                     // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
-                    val refreshedUser = HproseInstance.getUser(authorId, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                    val refreshedUser = HproseInstance.fetchUser(authorId, baseUrl = "", maxRetries = 1, forceRefresh = true)
                     if (refreshedUser != null) {
                         Timber.tag("UploadCommentWorker").d("Successfully refreshed baseUrl for user $authorId during comment upload retry")
                     } else {
@@ -143,7 +143,7 @@ class UploadTweetWorker @AssistedInject constructor(
                 Timber.tag("UploadTweetWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
                 try {
                     // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
-                    val refreshedUser = HproseInstance.getUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                    val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
                     if (refreshedUser != null && !refreshedUser.isGuest()) {
                         // Update appUser with refreshed data
                         HproseInstance.appUser = refreshedUser
@@ -328,7 +328,7 @@ class FollowUserWorker @AssistedInject constructor(
             if (runAttemptCount > 1) {
                 Timber.tag("FollowUserWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
                 try {
-                    val refreshedUser = HproseInstance.getUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                    val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
                     if (refreshedUser != null && !refreshedUser.isGuest()) {
                         HproseInstance.appUser = refreshedUser
                         Timber.tag("FollowUserWorker").d("Successfully refreshed baseUrl for appUser during follow retry")

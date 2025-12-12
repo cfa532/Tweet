@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.NavTweet
@@ -105,7 +105,7 @@ fun ProfileTopBarButton(
                                     // Refresh user data for the followed/unfollowed user
                                     try {
                                         // Get fresh user data from server and cache it
-                                        getUser(user.mid)?.let { refreshedUser ->
+                                        fetchUser(user.mid)?.let { refreshedUser ->
                                             TweetCacheManager.saveUser(refreshedUser)
                                             // Refresh the current viewmodel's user data
                                             viewModel.refreshUserData()

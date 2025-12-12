@@ -30,7 +30,7 @@ class AppUserRefreshWorker @AssistedInject constructor(
                 // Use the existing getUser function to refresh appUser
                 // Force refresh to always fetch fresh data from server (bypass cache)
                 // Use current baseUrl (don't force IP refresh during periodic refresh)
-                val refreshedUser = HproseInstance.getUser(
+                val refreshedUser = HproseInstance.fetchUser(
                     HproseInstance.appUser.mid, 
                     HproseInstance.appUser.baseUrl,
                     maxRetries = 3,

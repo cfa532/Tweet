@@ -168,7 +168,7 @@ class TweetViewModel @AssistedInject constructor(
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.authorId != null && author == null) {
                     try {
-                        author = HproseInstance.getUser(tweet.authorId, baseUrl = "", forceRefresh = true)
+                        author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
                         if (author != null) {
                             val tweetWithAuthor = tweet.copy(author = author)
                             _tweetState.value = tweetWithAuthor
@@ -263,7 +263,7 @@ class TweetViewModel @AssistedInject constructor(
 
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0): Int {
         val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
-            it.author = HproseInstance.getUser(it.authorId)
+            it.author = HproseInstance.fetchUser(it.authorId)
             it
         } ?: emptyList()
 
@@ -543,7 +543,7 @@ class TweetViewModel @AssistedInject constructor(
     private suspend fun resolveAttachmentBaseURL(sourceTweet: Tweet): String {
         // Try to get author's base URL
         try {
-            val author = HproseInstance.getUser(sourceTweet.authorId)
+            val author = HproseInstance.fetchUser(sourceTweet.authorId)
             if (author?.baseUrl != null) {
                 return author.baseUrl.toString()
             }
