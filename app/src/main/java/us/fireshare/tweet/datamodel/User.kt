@@ -300,10 +300,10 @@ data class User(
             // Handle cloudDrivePort: update if present in response (including null), handle both Number and String types
             if (processedData.containsKey("cloudDrivePort")) {
                 val value = processedData["cloudDrivePort"]
-                cloudDrivePort = when {
-                    value == null -> 0
-                    value is Number -> value.toInt()
-                    value is String -> {
+                cloudDrivePort = when (value) {
+                    null -> 0
+                    is Number -> value.toInt()
+                    is String -> {
                         try {
                             value.toIntOrNull() ?: 0
                         } catch (_: NumberFormatException) {
@@ -311,6 +311,7 @@ data class User(
                             cloudDrivePort
                         }
                     }
+
                     else -> cloudDrivePort
                 }
             }

@@ -144,12 +144,12 @@ class UploadTweetWorker @AssistedInject constructor(
                 try {
                     // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
                     val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
-                    if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    if (refreshedUser != null && !refreshedUser.isGuest() && !refreshedUser.baseUrl.isNullOrBlank()) {
                         // Update appUser with refreshed data
                         HproseInstance.appUser = refreshedUser
-                        Timber.tag("UploadTweetWorker").d("Successfully refreshed baseUrl for appUser during tweet upload retry")
+                        Timber.tag("UploadTweetWorker").d("Successfully refreshed baseUrl for appUser during tweet upload retry: ${refreshedUser.baseUrl}")
                     } else {
-                        Timber.tag("UploadTweetWorker").w("Failed to refresh baseUrl for appUser during tweet upload retry")
+                        Timber.tag("UploadTweetWorker").w("Failed to refresh baseUrl for appUser during tweet upload retry (invalid baseUrl: ${refreshedUser?.baseUrl})")
                     }
                 } catch (e: Exception) {
                     Timber.tag("UploadTweetWorker").e(e, "Error refreshing baseUrl for appUser during tweet upload retry")
@@ -329,11 +329,11 @@ class FollowUserWorker @AssistedInject constructor(
                 Timber.tag("FollowUserWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
                 try {
                     val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
-                    if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    if (refreshedUser != null && !refreshedUser.isGuest() && !refreshedUser.baseUrl.isNullOrBlank()) {
                         HproseInstance.appUser = refreshedUser
-                        Timber.tag("FollowUserWorker").d("Successfully refreshed baseUrl for appUser during follow retry")
+                        Timber.tag("FollowUserWorker").d("Successfully refreshed baseUrl for appUser during follow retry: ${refreshedUser.baseUrl}")
                     } else {
-                        Timber.tag("FollowUserWorker").w("Failed to refresh baseUrl for appUser during follow retry")
+                        Timber.tag("FollowUserWorker").w("Failed to refresh baseUrl for appUser during follow retry (invalid baseUrl: ${refreshedUser?.baseUrl})")
                     }
                 } catch (e: Exception) {
                     Timber.tag("FollowUserWorker").e(e, "Error refreshing baseUrl for appUser during follow retry")

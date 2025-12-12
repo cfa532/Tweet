@@ -37,12 +37,12 @@ class AppUserRefreshWorker @AssistedInject constructor(
                     forceRefresh = true  // Always fetch fresh data, don't use cache
                 )
                 
-                if (refreshedUser != null) {
+                if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                     HproseInstance.appUser = refreshedUser
-                    Timber.tag("AppUserRefreshWorker").d("AppUser refreshed successfully")
+                    Timber.tag("AppUserRefreshWorker").d("AppUser refreshed successfully with baseUrl: ${refreshedUser.baseUrl}")
                     Result.success()
                 } else {
-                    Timber.tag("AppUserRefreshWorker").w("Failed to refresh appUser, keeping current instance")
+                    Timber.tag("AppUserRefreshWorker").w("Failed to refresh appUser or refreshed user has invalid baseUrl (${refreshedUser?.baseUrl}), keeping current instance")
                     Result.retry()
                 }
             } else {
