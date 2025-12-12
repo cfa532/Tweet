@@ -2360,20 +2360,14 @@ object HproseInstance {
             val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
                 // Get provider IP for the user with retry logic (returns full IP:port without protocol, e.g., "115.192.224.7:8081")
                 getProviderIP(userId).let { providerIP ->
-                    if (providerIP != null) {
-                        // getProviderIP returns IP:port without protocol, add http:// prefix
-                        "http://$providerIP"
-                    } else {
-                        Timber.tag("getUser").w("Failed to get provider IP for userId: $userId, cannot determine baseUrl")
-                        null
-                    }
+                    "http://$providerIP"
                 }
             } else {
                 baseUrl
             }
 
             // If we couldn't determine a valid baseUrl, return null
-            if (finalBaseUrl.isNullOrEmpty()) {
+            if (finalBaseUrl.isEmpty()) {
                 Timber.tag("getUser").w("Cannot fetch user $userId: no valid baseUrl available")
                 return null
             }
@@ -2461,7 +2455,6 @@ object HproseInstance {
 
                     // Check if resolved IP:port is the same as current IP:port (redirect loop prevention)
                     // ip:8081 is different from ip:8082, so only exact match (IP:port) is a redirect loop
-                    // getProviderIPWithRetry returns IP:port without protocol (e.g., "115.192.224.7:8081")
                     val currentBaseUrlString = user.baseUrl ?: ""
                     val normalizedCurrentIp = currentBaseUrlString.removePrefix("http://")
                     
@@ -2470,7 +2463,6 @@ object HproseInstance {
                         throw Exception("Redirect loop detected - resolved IP:port same as current IP:port: $providerIP")
                     }
                     
-                    // getProviderIPWithRetry returns IP:port without protocol, add http:// prefix
                     val resolvedUrl = "http://$providerIP"
                     user.baseUrl = resolvedUrl
                     user.clearHproseService()
