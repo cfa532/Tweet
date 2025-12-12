@@ -2696,28 +2696,22 @@ object HproseInstance {
             "mid" to mid
         )
 
-        return try {
+        try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             val ipArray = unwrapV2Response<List<String>>(rawResponse)
 
             // Only handle array of IP addresses
-            val ipAddresses = ipArray ?: emptyList()
-
-            if (ipAddresses.isEmpty()) {
+            val ipAddresses = ipArray ?: run {
                 Timber.tag("getProviderIP").w("No provider IPs returned for user $mid")
                 return null
             }
 
-            Timber.tag("getProviderIP").d("Received ${ipAddresses.size} IP address(es) for user $mid: $ipAddresses")
-
             // Try each IP address with health check
-            for ((index, ipAddress) in ipAddresses.withIndex()) {
-                Timber.tag("getProviderIP").d("Testing IP ${index + 1}/${ipAddresses.size}: $ipAddress")
-
+            for ((_, ipAddress) in ipAddresses.withIndex()) {
                 // Validate the IP address format by attempting to construct a URL
-                val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
                 val testURL = try {
-                    android.net.Uri.parse(testUrlString)
+                    val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
+                    testUrlString.toUri()
                 } catch (e: Exception) {
                     Timber.tag("getProviderIP").w("Skipping invalid IP format: $ipAddress")
                     continue
@@ -2759,9 +2753,9 @@ object HproseInstance {
                         for ((index, ipAddress) in retryIpAddresses.withIndex()) {
                             Timber.tag("getProviderIP").d("Entry IP retry - Testing IP ${index + 1}/${retryIpAddresses.size}: $ipAddress")
 
-                            val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
                             val testURL = try {
-                                android.net.Uri.parse(testUrlString)
+                                val testUrlString = if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
+                                testUrlString.toUri()
                             } catch (e: Exception) {
                                 Timber.tag("getProviderIP").w("Entry IP retry - Skipping invalid IP format: $ipAddress")
                                 continue
