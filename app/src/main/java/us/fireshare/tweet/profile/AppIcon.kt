@@ -66,58 +66,43 @@ fun UserAvatar(
     useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
-    val mid = user.avatar ?: ""
+    val avatarMid = user.avatar
 
-    // Use stable key based on avatar mid only - this ensures same avatar shares state across all instances
-    // This matches the iOS implementation approach
-    var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
+    // Watch user.avatar for changes - simple and direct
+    var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-    // Check cache immediately on composition - this is more efficient than checking in LaunchedEffect
-    LaunchedEffect(Unit) {
-        if (mid.isNotEmpty()) {
-            val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
+    // React to avatar changes
+    LaunchedEffect(avatarMid) {
+        if (!avatarMid.isNullOrEmpty()) {
+            // First, check if we have this avatar cached
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, avatarMid)
             if (cachedBitmap != null) {
+                // Use cached avatar immediately
                 loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
-            }
-        }
-    }
+            } else {
+                // Not cached, need to load it
+                val avatarUrl = getMediaUrl(avatarMid, user.baseUrl)
+                loadState = loadState.copy(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
-    LaunchedEffect(mid) {
-        val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
-
-        // Only update if the avatar URL has actually changed
-        if (loadState.avatarUrl != newAvatarUrl) {
-            loadState = loadState.copy(avatarUrl = newAvatarUrl)
-        }
-
-        if (mid.isNotEmpty() && loadState.bitmap == null) {
-            try {
-                // Only load if we don't already have a bitmap
-                if (!newAvatarUrl.isNullOrEmpty() && !loadState.isLoading) {
-                    loadState = loadState.copy(isLoading = true, hasError = false)
-
+                try {
                     ImageCacheManager.loadOriginalImageWithScope(
                         context = context,
-                        imageUrl = newAvatarUrl,
-                        mid = mid
+                        imageUrl = avatarUrl ?: "",
+                        mid = avatarMid
                     ) { downloadedBitmap ->
-                        if (downloadedBitmap == null) {
-                            loadState = loadState.copy(isLoading = false, hasError = true)
-                            Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
-                        } else {
+                        if (downloadedBitmap != null) {
                             loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                        } else {
+                            loadState = loadState.copy(isLoading = false, hasError = true)
                         }
                     }
-                } else if (newAvatarUrl.isNullOrEmpty()) {
-                    // No avatar URL available
+                } catch (e: Exception) {
                     loadState = loadState.copy(isLoading = false, hasError = true)
+                    Timber.e("UserAvatar - Error loading avatar: $e")
                 }
-            } catch (e: Exception) {
-                loadState = loadState.copy(isLoading = false, hasError = true)
-                Timber.e("UserAvatar - Error loading avatar: $e")
             }
-        } else if (mid.isEmpty()) {
-            // Reset state when no avatar
+        } else {
+            // No avatar
             loadState = AvatarLoadState()
         }
     }
@@ -164,7 +149,7 @@ fun UserAvatar(
         }
     } else {
         // Show default system icon with 50% gray color when avatar is null or empty
-        if (user.avatar.isNullOrEmpty() || mid.isEmpty()) {
+        if (user.avatar.isNullOrEmpty() || avatarMid.isNullOrEmpty()) {
             // Use manyone.png as default system icon
             Image(
                 painter = painterResource(id = R.drawable.manyone),
