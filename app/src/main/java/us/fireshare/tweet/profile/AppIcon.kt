@@ -66,15 +66,7 @@ fun UserAvatar(
     useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
-
-    // Track avatar changes even when user object reference stays the same
-    var currentAvatar by remember { mutableStateOf(user.avatar) }
-    val mid = currentAvatar ?: ""
-
-    // Update currentAvatar when user.avatar changes
-    LaunchedEffect(user.avatar) {
-        currentAvatar = user.avatar
-    }
+    val mid = user.avatar ?: ""
 
     // Use stable key based on avatar mid only - this ensures same avatar shares state across all instances
     // This matches the iOS implementation approach
@@ -90,7 +82,7 @@ fun UserAvatar(
         }
     }
 
-    LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
+    LaunchedEffect(mid) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
 
         // Only update if the avatar URL has actually changed
