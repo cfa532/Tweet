@@ -87,6 +87,11 @@ class TweetActivity : ComponentActivity() {
                 lifecycleScope.launch(IO) {
                     activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
+
+                // Resume incomplete uploads on app startup
+                lifecycleScope.launch(IO) {
+                    HproseInstance.resumeIncompleteUploads(this@TweetActivity)
+                }
             }
         }
 

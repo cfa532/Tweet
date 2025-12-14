@@ -86,6 +86,9 @@ class PlayTweetActivity : ComponentActivity() {
                     Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
                 }
 
+                // Resume incomplete uploads on app startup
+                HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
+
                 activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 
                 // Request notification permission on app startup

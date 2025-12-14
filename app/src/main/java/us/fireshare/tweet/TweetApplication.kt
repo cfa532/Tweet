@@ -41,7 +41,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
             Timber.tag("AppLifecycle").d("App came to foreground, refreshing appUser...")
             applicationScope.launch {
                 try {
-                    if (!HproseInstance.appUser.isGuest()) {
+                    // Only refresh if appUser is properly initialized (has baseUrl) and is not a guest
+                    if (!HproseInstance.appUser.isGuest() &&
+                        !HproseInstance.appUser.baseUrl.isNullOrBlank()) {
                         val refreshedUser = HproseInstance.fetchUser(
                             HproseInstance.appUser.mid,
                             baseUrl = "",  // Force IP re-resolution
@@ -53,6 +55,8 @@ class TweetApplication : Application(), ComponentCallbacks2 {
                         } else {
                             Timber.tag("AppLifecycle").w("Failed to refresh appUser on foreground")
                         }
+                    } else {
+                        Timber.tag("AppLifecycle").d("Skipping appUser refresh - user is guest or not initialized (baseUrl: ${HproseInstance.appUser.baseUrl})")
                     }
                 } catch (e: Exception) {
                     Timber.tag("AppLifecycle").e(e, "Error refreshing appUser on foreground")
