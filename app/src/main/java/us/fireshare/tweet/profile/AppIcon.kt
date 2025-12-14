@@ -83,7 +83,7 @@ fun UserAvatar(
 
     LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
-        
+
         // Only update if the avatar URL has actually changed
         if (loadState.avatarUrl != newAvatarUrl) {
             loadState = loadState.copy(avatarUrl = newAvatarUrl)
@@ -94,7 +94,7 @@ fun UserAvatar(
                 // Only load if we don't already have a bitmap
                 if (!newAvatarUrl.isNullOrEmpty() && !loadState.isLoading) {
                     loadState = loadState.copy(isLoading = true, hasError = false)
-                    
+
                     ImageCacheManager.loadOriginalImageWithScope(
                         context = context,
                         imageUrl = newAvatarUrl,
