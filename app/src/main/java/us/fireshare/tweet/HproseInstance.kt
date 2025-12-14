@@ -2651,7 +2651,7 @@ object HproseInstance {
 
             // Validate the IP address format by attempting to construct a URL
             val testURL = try {
-                if (ipAddress.startsWith("http")) ipAddress else "http://$ipAddress"
+                if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
             } catch (e: Exception) {
                 continue
             }

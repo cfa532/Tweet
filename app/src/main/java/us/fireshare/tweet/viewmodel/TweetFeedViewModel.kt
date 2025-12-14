@@ -535,7 +535,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             .setInputData(data)
             .setBackoffCriteria(
                 BackoffPolicy.EXPONENTIAL,
-                10_000L, // 10 seconds
+                2_000L, // 2 seconds
                 java.util.concurrent.TimeUnit.MILLISECONDS
             )
             .build()
