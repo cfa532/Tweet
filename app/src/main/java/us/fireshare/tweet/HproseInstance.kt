@@ -2866,7 +2866,7 @@ object HproseInstance {
         var lastProgress = 0
         var lastMessage = "Starting video processing..."
         var consecutiveFailures = 0
-        val maxConsecutiveFailures = 10 // Allow more failures for long processing
+        val maxConsecutiveFailures = 3 // Maximum 3 retry attempts for polling failures
         val maxPollingTime = 2 * 60 * 60 * 1000L // 2 hours max polling time for very long videos
         val startTime = System.currentTimeMillis()
         
