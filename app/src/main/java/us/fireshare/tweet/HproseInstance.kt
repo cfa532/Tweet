@@ -2335,10 +2335,8 @@ object HproseInstance {
         // Check cache first (if not forcing refresh)
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
-            if (cachedUser != null && cachedUser.username != null && cachedUser.baseUrl != null) {
-                if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
-                    return cachedUser
-                } else if (cachedUser.hasExpired) {
+            if (cachedUser != null && cachedUser.username != null) {
+                if (cachedUser.hasExpired) {
                     // Start background refresh if not already running
                     val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
                         if (!ongoingUserUpdates.contains(userId)) {
@@ -2348,13 +2346,17 @@ object HproseInstance {
                             false
                         }
                     }
-                    
+
                     if (shouldStartBackgroundRefresh) {
-                        startBackgroundRefresh(userId, cachedUser, maxRetries, skipRetryAndBlacklist)
+                        startBackgroundRefresh(
+                            userId,
+                            cachedUser,
+                            maxRetries,
+                            skipRetryAndBlacklist
+                        )
                     }
-                    
-                    return cachedUser
                 }
+                return cachedUser
             }
         }
 

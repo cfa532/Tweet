@@ -20,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
@@ -65,8 +66,16 @@ fun UserAvatar(
     useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
-    val mid = user.avatar ?: ""
-    
+
+    // Track avatar changes even when user object reference stays the same
+    var currentAvatar by remember { mutableStateOf(user.avatar) }
+    val mid = currentAvatar ?: ""
+
+    // Update currentAvatar when user.avatar changes
+    LaunchedEffect(user.avatar) {
+        currentAvatar = user.avatar
+    }
+
     // Use stable key based on avatar mid only - this ensures same avatar shares state across all instances
     // This matches the iOS implementation approach
     var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
