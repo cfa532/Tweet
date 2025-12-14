@@ -68,21 +68,29 @@ fun UserAvatar(
     val context = LocalContext.current
     val mid = user.avatar ?: ""
 
-    // Use stable key based on avatar mid only - this ensures same avatar shares state across all instances
-    // This matches the iOS implementation approach
-    var loadState by remember(mid) { mutableStateOf(AvatarLoadState()) }
+    // Use stable key based on avatar mid and user ID to ensure cache invalidation when avatar is updated
+    // Include user.mid to detect when the same avatar mid is used by different users or when avatar content changes
+    var loadState by remember(mid, user.mid) { mutableStateOf(AvatarLoadState()) }
 
-    // Check cache immediately on composition - this is more efficient than checking in LaunchedEffect
-    LaunchedEffect(Unit) {
+    // Check cache immediately on composition and when user object changes
+    // Include user.hashCode() to detect when user data changes (including avatar updates)
+    LaunchedEffect(mid, user.hashCode()) {
         if (mid.isNotEmpty()) {
             val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
             if (cachedBitmap != null) {
                 loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
+            } else {
+                // If no cached bitmap but we have an avatar mid, trigger a reload
+                // This handles cases where cache was cleared but avatar should still load
+                loadState = loadState.copy(bitmap = null, isLoading = false, hasError = false)
             }
+        } else {
+            // Reset state when no avatar
+            loadState = AvatarLoadState()
         }
     }
 
-    LaunchedEffect(mid) {
+    LaunchedEffect(mid, user.hashCode()) {
         val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
 
         // Only update if the avatar URL has actually changed
