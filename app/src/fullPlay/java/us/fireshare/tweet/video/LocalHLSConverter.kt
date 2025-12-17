@@ -21,7 +21,8 @@ class LocalHLSConverter(private val context: Context) {
     companion object {
         private const val TAG = "LocalHLSConverter"
         private const val HLS_SEGMENT_DURATION = 10 // 10 seconds per segment
-        private const val HLS_PLAYLIST_SIZE = 3 // Keep 3 segments in playlist
+        // 0 = keep all segments for VOD playlists; we don't want sliding-window/live behavior here.
+        private const val HLS_PLAYLIST_SIZE = 0
     }
 
     /**
@@ -333,7 +334,7 @@ class LocalHLSConverter(private val context: Context) {
                 -max_interleave_delta 0
                 -max_muxing_queue_size 1024
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments+independent_segments+split_by_time
+                -hls_flags independent_segments
                 -hls_segment_type mpegts
                 -hls_segment_filename "$segmentPath"
                 -f hls "$outputPath"
@@ -358,7 +359,7 @@ class LocalHLSConverter(private val context: Context) {
                 -maxrate $bitrate
                 -metadata:s:v:0 rotate=0
                 -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags delete_segments+independent_segments+split_by_time
+                -hls_flags independent_segments
                 -hls_segment_type mpegts
                 -hls_segment_filename "$segmentPath"
                 -f hls "$outputPath"
