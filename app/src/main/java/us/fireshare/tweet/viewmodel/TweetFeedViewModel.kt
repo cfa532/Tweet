@@ -544,7 +544,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
         val workId = uploadRequest.id.toString()
-        
+
         // Take persistent URI permissions to survive app restarts and process changes
         attachments?.forEach { uri ->
             try {
@@ -555,6 +555,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").w("Failed to take persistable permission for URI: $uri")
             }
+        }
+
+        // Check if there are video attachments and show background upload message
+        val hasVideoAttachments = attachments?.any { uri ->
+            try {
+                val mimeType = context.contentResolver.getType(uri)
+                mimeType?.startsWith("video/") == true
+            } catch (e: Exception) {
+                false
+            }
+        } ?: false
+
+        if (hasVideoAttachments) {
+            // Show toast immediately informing user about background upload
+            Toast.makeText(
+                context,
+                context.getString(R.string.tweet_uploading_background),
+                Toast.LENGTH_SHORT
+            ).show()
         }
 
         // Save incomplete upload for potential resume
@@ -600,12 +619,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
+                            Timber.tag("TweetFeedViewModel").d("Received TweetUploaded notification for tweet: ${event.tweet.mid}, author: ${event.tweet.authorId}, current user: ${appUser.mid}")
+
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
 
                             // Show success toast if it's the current user's tweet
                             val context = notificationContextRef?.get()
                             if (tweetWithAuthor.authorId == appUser.mid && context != null) {
+                                Timber.tag("TweetFeedViewModel").d("Showing success toast for tweet: ${tweetWithAuthor.mid}")
                                 withContext(Main) {
                                     Toast.makeText(
                                         context,

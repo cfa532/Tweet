@@ -1686,7 +1686,10 @@ object HproseInstance {
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
+                        Timber.tag("HproseInstance").d("Posting TweetUploaded notification for tweet: ${updatedTweet.mid}, author: ${updatedTweet.authorId}")
                         TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
+                    } else {
+                        Timber.tag("HproseInstance").d("Skipping TweetUploaded notification for retweet: ${updatedTweet.mid}, original: ${tweet.originalTweetId}")
                     }
                     
                     // Refresh appUser from server to get updated tweetCount and other properties

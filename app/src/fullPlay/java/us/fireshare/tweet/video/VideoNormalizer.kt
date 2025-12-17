@@ -25,6 +25,12 @@ class VideoNormalizer(private val context: Context) {
 
     companion object {
         private const val TAG = "VideoNormalizer"
+
+        // Dynamic timeout constants (in milliseconds)
+        private const val MIN_TIMEOUT_MS = 5 * 60 * 1000L   // 5 minutes minimum
+        private const val MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000L  // 2 hours maximum
+        private const val BASE_PROCESSING_RATE_MS_PER_SECOND = 1500L  // 1.5 seconds processing per 1 second video
+        private const val FILE_SIZE_MULTIPLIER = 0.001  // Additional time per MB of file size
     }
 
     /**
@@ -66,6 +72,32 @@ class VideoNormalizer(private val context: Context) {
     }
 
     /**
+     * Calculate dynamic timeout based on video duration and file size
+     * @param videoDurationMs Video duration in milliseconds
+     * @param fileSizeBytes File size in bytes
+     * @return Timeout in milliseconds, clamped between MIN_TIMEOUT_MS and MAX_TIMEOUT_MS
+     */
+    private fun calculateDynamicTimeout(videoDurationMs: Long?, fileSizeBytes: Long): Long {
+        // Base timeout from video duration (1.5 seconds processing per 1 second video for normalization)
+        val durationBasedTimeout = videoDurationMs?.let { duration ->
+            val durationSeconds = duration / 1000.0
+            (durationSeconds * BASE_PROCESSING_RATE_MS_PER_SECOND).toLong()
+        } ?: (15 * 60 * 1000L) // 15 minutes fallback if duration unknown
+
+        // Additional time based on file size (0.001 ms per byte = ~1 second per MB)
+        val fileSizeBasedAddition = (fileSizeBytes * FILE_SIZE_MULTIPLIER).toLong()
+
+        // Total timeout
+        val totalTimeout = durationBasedTimeout + fileSizeBasedAddition
+
+        // Clamp between min and max
+        val finalTimeout = totalTimeout.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
+
+        Timber.tag(TAG).d("Dynamic timeout calculation: duration=${videoDurationMs}ms, fileSize=${fileSizeBytes}bytes, timeout=${finalTimeout}ms")
+        return finalTimeout
+    }
+
+    /**
      * Normalize video to standard MP4 format
      * @param inputUri Input video URI
      * @param outputFile Output file path
@@ -78,9 +110,32 @@ class VideoNormalizer(private val context: Context) {
         resampleTo720p: Boolean = false
     ): NormalizationResult = withContext(Dispatchers.IO) {
         try {
-            // Get video resolution
+            // Get video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
-            
+            val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+
+            // Calculate file size for timeout calculation
+            val fileSizeBytes = try {
+                context.contentResolver.openInputStream(inputUri)?.use { stream ->
+                    var size = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (stream.read(buffer).also { bytesRead = it } != -1) {
+                        size += bytesRead
+                    }
+                    size
+                } ?: 0L
+            } catch (e: Exception) {
+                Timber.tag(TAG).w("Could not calculate file size: ${e.message}")
+                0L
+            }
+
+            // Calculate dynamic timeout based on video duration and file size
+            val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
+
+            Timber.tag(TAG).d("Video normalization: resolution=$videoResolution, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
+            Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
+
             // Copy input file to a temporary location for FFmpeg processing
             val tempInputFile = File(context.cacheDir, "temp_normalize_input_${System.currentTimeMillis()}.mp4")
             try {
@@ -94,8 +149,8 @@ class VideoNormalizer(private val context: Context) {
                     resampleTo720p
                 )
                 
-                // Execute FFmpeg command asynchronously (10 minute timeout)
-                val success = withTimeout(10 * 60 * 1000L) {
+                // Execute FFmpeg command asynchronously (dynamic timeout)
+                val success = withTimeout(dynamicTimeoutMs) {
                     executeFFmpegAsync(ffmpegCommand, "normalization")
                 }
 

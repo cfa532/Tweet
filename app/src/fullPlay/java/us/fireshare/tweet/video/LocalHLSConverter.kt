@@ -29,6 +29,38 @@ class LocalHLSConverter(private val context: Context) {
         private const val HLS_SEGMENT_DURATION = 10 // 10 seconds per segment
         // 0 = keep all segments for VOD playlists; we don't want sliding-window/live behavior here.
         private const val HLS_PLAYLIST_SIZE = 0
+
+        // Dynamic timeout constants (in milliseconds)
+        private const val MIN_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes minimum
+        private const val MAX_TIMEOUT_MS = 3 * 60 * 60 * 1000L  // 3 hours maximum
+        private const val BASE_PROCESSING_RATE_MS_PER_SECOND = 2000L  // Conservative: 2 seconds processing per 1 second video
+        private const val FILE_SIZE_MULTIPLIER = 0.001  // Additional time per MB of file size
+    }
+
+    /**
+     * Calculate dynamic timeout based on video duration and file size
+     * @param videoDurationMs Video duration in milliseconds
+     * @param fileSizeBytes File size in bytes
+     * @return Timeout in milliseconds, clamped between MIN_TIMEOUT_MS and MAX_TIMEOUT_MS
+     */
+    private fun calculateDynamicTimeout(videoDurationMs: Long?, fileSizeBytes: Long): Long {
+        // Base timeout from video duration (conservative estimate: 2 seconds processing per 1 second video)
+        val durationBasedTimeout = videoDurationMs?.let { duration ->
+            val durationSeconds = duration / 1000.0
+            (durationSeconds * BASE_PROCESSING_RATE_MS_PER_SECOND).toLong()
+        } ?: (30 * 60 * 1000L) // 30 minutes fallback if duration unknown
+
+        // Additional time based on file size (0.001 ms per byte = ~1 second per MB)
+        val fileSizeBasedAddition = (fileSizeBytes * FILE_SIZE_MULTIPLIER).toLong()
+
+        // Total timeout
+        val totalTimeout = durationBasedTimeout + fileSizeBasedAddition
+
+        // Clamp between min and max
+        val finalTimeout = totalTimeout.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
+
+        Timber.tag(TAG).d("Dynamic timeout calculation: duration=${videoDurationMs}ms, fileSize=${fileSizeBytes}bytes, timeout=${finalTimeout}ms")
+        return finalTimeout
     }
 
     /**
@@ -70,11 +102,16 @@ class LocalHLSConverter(private val context: Context) {
                 Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB < 256MB, using 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             }
             
-            // Check video resolution to determine if we should use COPY codec
+            // Check video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
+            val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
             val shouldUseCopyCodec = shouldUseCopyCodec(videoResolution)
-            
-            Timber.tag(TAG).d("Video resolution: $videoResolution, using COPY codec: $shouldUseCopyCodec")
+
+            // Calculate dynamic timeout based on video duration and file size
+            val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
+
+            Timber.tag(TAG).d("Video resolution: $videoResolution, duration: ${videoDurationMs}ms, using COPY codec: $shouldUseCopyCodec")
+            Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
             
             // Ensure output directory exists
             if (!outputDir.exists()) {
@@ -99,8 +136,8 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper 720p dimensions based on aspect ratio
             val (width720, height720) = calculateActualResolution(720, videoResolution)
             
-            // Execute FFmpeg command for 720p with fallback (10 minute timeout)
-            val success720 = withTimeout(10 * 60 * 1000L) {
+            // Execute FFmpeg command for 720p with fallback (dynamic timeout)
+            val success720 = withTimeout(dynamicTimeoutMs) {
                 executeFFmpegWithFallback(
                     inputPath = tempInputFile.absolutePath,
                     outputPath = playlist720Path,
@@ -121,8 +158,8 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper lower resolution dimensions based on aspect ratio
             val (widthLower, heightLower) = calculateActualResolution(lowerResolution, videoResolution)
             
-            // Execute FFmpeg command for lower resolution with fallback (10 minute timeout)
-            val successLower = withTimeout(10 * 60 * 1000L) {
+            // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
+            val successLower = withTimeout(dynamicTimeoutMs) {
                 executeFFmpegWithFallback(
                     inputPath = tempInputFile.absolutePath,
                     outputPath = lowerResPlaylistPath,

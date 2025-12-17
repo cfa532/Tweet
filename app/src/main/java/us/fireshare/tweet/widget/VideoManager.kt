@@ -1013,4 +1013,33 @@ object VideoManager {
             null
         }
     }
+
+    /**
+     * Get video duration in milliseconds
+     * @param context Android context
+     * @param uri Video URI
+     * @return Duration in milliseconds, or null if extraction fails
+     */
+    fun getVideoDuration(context: Context, uri: Uri): Long? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+
+            retriever.release()
+
+            durationMs?.let {
+                Timber.tag("VideoManager").d("Video duration: ${it}ms (${it / 1000}s) for URI: $uri")
+                it
+            } ?: run {
+                Timber.tag("VideoManager").w("Could not extract video duration from URI: $uri")
+                null
+            }
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").e(e, "Error getting video duration for URI: $uri")
+            null
+        }
+    }
 }
