@@ -2,6 +2,7 @@ package us.fireshare.tweet
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.core.content.edit
@@ -3007,10 +3008,32 @@ object HproseInstance {
     }
     
     /**
-     * Remove incomplete upload from SharedPreferences
+     * Remove incomplete upload from SharedPreferences and release URI permissions
      */
     fun removeIncompleteUpload(context: Context, workId: String) {
+        // First get the upload data to release URI permissions
         val prefs = context.getSharedPreferences("incomplete_uploads", Context.MODE_PRIVATE)
+        val uploadJson = prefs.getString(workId, null)
+        if (uploadJson != null) {
+            try {
+                val upload = Gson().fromJson(uploadJson, IncompleteUpload::class.java)
+                // Release persistent URI permissions
+                upload.attachmentUris.forEach { uriString ->
+                    try {
+                        val uri = uriString.toUri()
+                        context.contentResolver.releasePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) {
+                        Timber.tag("HproseInstance").w("Failed to release permission for URI: $uriString")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").w("Failed to parse upload data for permission cleanup: $workId")
+            }
+        }
+
         prefs.edit { remove(workId) }
         Timber.tag("HproseInstance").d("Removed incomplete upload: $workId")
     }

@@ -1,6 +1,7 @@
 package us.fireshare.tweet.service
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import androidx.core.net.toUri
@@ -35,16 +36,42 @@ class UploadCommentWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val runAttemptCount = runAttemptCount
+
+        // Get attachment URIs early so we can clean them up
+        val attachmentUriStrings = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<String>()
+
+        // Clean up persistent URI permissions when done
+        val cleanupPermissions = {
+            attachmentUriStrings.forEach { uriString ->
+                try {
+                    val uri = uriString.toUri()
+                    applicationContext.contentResolver.releasePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("UploadCommentWorker").w("Failed to release permission for URI: $uriString")
+                }
+            }
+        }
+
         return try {
             // Prevent retries beyond the first one
             if (runAttemptCount > 1) {
                 Timber.tag("UploadCommentWorker").d("Maximum retry attempts reached (attempt $runAttemptCount), giving up")
                 TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed after maximum retries"))
+                cleanupPermissions()
                 return Result.failure()
             }
 
-            val tweetId = inputData.getString("tweetId") ?: return Result.failure()
-            val authorId = inputData.getString("authorId") ?: return Result.failure()
+            val tweetId = inputData.getString("tweetId") ?: run {
+                cleanupPermissions()
+                return Result.failure()
+            }
+            val authorId = inputData.getString("authorId") ?: run {
+                cleanupPermissions()
+                return Result.failure()
+            }
 
             // Force baseUrl refresh before retrying (matching iOS behavior)
             if (runAttemptCount >= 1) {
@@ -63,19 +90,22 @@ class UploadCommentWorker @AssistedInject constructor(
             }
             
             // Fetch the parent tweet using ID and author ID
-            val parentTweet = HproseInstance.fetchTweet(tweetId, authorId) ?: return Result.failure()
+            val parentTweet = HproseInstance.fetchTweet(tweetId, authorId) ?: run {
+                cleanupPermissions()
+                return Result.failure()
+            }
 
             // whether the comment is also posted as a tweet.
             val isChecked = inputData.getBoolean("isCheckedToTweet", false)
             val commentContent = inputData.getString("content")     // comment content
-            val attachmentUris = inputData.getStringArray("attachmentUris")?.toList() ?: emptyList<Uri>()
 
             val attachments = withContext(Dispatchers.IO) {
-                attachmentUris.mapNotNull { uri ->
+                attachmentUriStrings.mapNotNull { uriString ->
                     try {
+                        val uri = uriString.toUri()
                         Timber.tag("UploadCommentWorker").d("Starting upload for URI: $uri")
                         Timber.tag("UploadCommentWorker").d("Calling uploadToIPFS for URI: $uri")
-                        val result = uploadToIPFS(uri.toString().toUri())
+                        val result = uploadToIPFS(uri)
                         if (result != null) {
                             Timber.tag("UploadCommentWorker").d("Successfully uploaded attachment: ${result.mid}")
                         } else {
@@ -83,12 +113,12 @@ class UploadCommentWorker @AssistedInject constructor(
                         }
                         result
                     } catch (e: Exception) {
-                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uri")
+                        Timber.tag("UploadCommentWorker").e(e, "Error uploading attachment: $uriString")
                         null // Return null in case of error
                     }
                 }
             }
-            if (attachmentUris.size != attachments.size) {
+            if (attachmentUriStrings.size != attachments.size) {
                 Timber.tag("UploadCommentWorker").e("Attachments upload failure")
                 // Only show toast on final attempt
                 if (runAttemptCount >= 1) {
@@ -118,12 +148,14 @@ class UploadCommentWorker @AssistedInject constructor(
                         }
                     }
                 }
+                cleanupPermissions()
                 return Result.success()
             } else {
                 // Only show toast on final attempt
                 if (runAttemptCount >= 1) {
                     TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed"))
                 }
+                cleanupPermissions()
                 return Result.failure()
             }
         } catch (e: Exception) {
@@ -132,6 +164,7 @@ class UploadCommentWorker @AssistedInject constructor(
             if (runAttemptCount >= 1) {
                 TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed: ${e.message}"))
             }
+            cleanupPermissions()
             Result.failure()
         }
     }

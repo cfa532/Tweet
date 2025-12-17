@@ -3,7 +3,13 @@ package us.fireshare.tweet.video
 import android.content.Context
 import android.net.Uri
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.Statistics
+import com.arthenica.ffmpegkit.Log
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -93,17 +99,19 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper 720p dimensions based on aspect ratio
             val (width720, height720) = calculateActualResolution(720, videoResolution)
             
-            // Execute FFmpeg command for 720p with fallback
-            val success720 = executeFFmpegWithFallback(
-                inputPath = tempInputFile.absolutePath,
-                outputPath = playlist720Path,
-                width = width720,
-                height = height720,
-                bitrate = resolution720pBitrate,
-                audioBitrate = "128k",
-                shouldUseCopyCodec = shouldUseCopyCodec,
-                resolution = "720p"
-            )
+            // Execute FFmpeg command for 720p with fallback (10 minute timeout)
+            val success720 = withTimeout(10 * 60 * 1000L) {
+                executeFFmpegWithFallback(
+                    inputPath = tempInputFile.absolutePath,
+                    outputPath = playlist720Path,
+                    width = width720,
+                    height = height720,
+                    bitrate = resolution720pBitrate,
+                    audioBitrate = "128k",
+                    shouldUseCopyCodec = shouldUseCopyCodec,
+                    resolution = "720p"
+                )
+            }
 
             if (!success720) {
                 tempInputFile.delete()
@@ -113,17 +121,19 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper lower resolution dimensions based on aspect ratio
             val (widthLower, heightLower) = calculateActualResolution(lowerResolution, videoResolution)
             
-            // Execute FFmpeg command for lower resolution with fallback
-            val successLower = executeFFmpegWithFallback(
-                inputPath = tempInputFile.absolutePath,
-                outputPath = lowerResPlaylistPath,
-                width = widthLower,
-                height = heightLower,
-                bitrate = lowerResolutionBitrate,
-                audioBitrate = "128k",
-                shouldUseCopyCodec = shouldUseCopyCodec,
-                resolution = "${lowerResolution}p"
-            )
+            // Execute FFmpeg command for lower resolution with fallback (10 minute timeout)
+            val successLower = withTimeout(10 * 60 * 1000L) {
+                executeFFmpegWithFallback(
+                    inputPath = tempInputFile.absolutePath,
+                    outputPath = lowerResPlaylistPath,
+                    width = widthLower,
+                    height = heightLower,
+                    bitrate = lowerResolutionBitrate,
+                    audioBitrate = "128k",
+                    shouldUseCopyCodec = shouldUseCopyCodec,
+                    resolution = "${lowerResolution}p"
+                )
+            }
 
             if (!successLower) {
                 tempInputFile.delete()
@@ -173,10 +183,48 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
+     * Execute FFmpeg command asynchronously with real-time logging and progress tracking
+     */
+    private suspend fun executeFFmpegAsync(
+        command: String,
+        resolution: String
+    ): Boolean = suspendCancellableCoroutine { cont ->
+        Timber.tag(TAG).d("Starting async FFmpeg execution for $resolution")
+
+        val session = FFmpegKit.executeAsync(
+            command,
+            { completedSession: FFmpegSession ->
+                val rc = completedSession.returnCode
+                if (ReturnCode.isSuccess(rc)) {
+                    Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded")
+                    cont.resume(true)
+                } else {
+                    val logs = completedSession.allLogsAsString
+                    Timber.tag(TAG).e("FFmpeg $resolution failed (rc=$rc): $logs")
+                    cont.resume(false)
+                }
+            },
+            { log: Log ->
+                // Real-time log output from FFmpeg
+                Timber.tag(TAG).d("FFmpeg $resolution log: ${log.message}")
+            },
+            { stats: Statistics ->
+                // Real-time statistics/progress from FFmpeg
+                Timber.tag(TAG).d("FFmpeg $resolution stats: time=${stats.time}ms, size=${stats.size}B, bitrate=${stats.bitrate}bps, speed=${stats.speed}x")
+            }
+        )
+
+        cont.invokeOnCancellation {
+            Timber.tag(TAG).w("Cancelling FFmpeg execution for $resolution")
+            session.cancel()
+        }
+    }
+
+    /**
      * Execute FFmpeg command with fallback from COPY codec to libx264
      * If COPY codec fails, automatically retry with libx264 encoding
      */
-    private fun executeFFmpegWithFallback(
+    private suspend fun executeFFmpegWithFallback(
         inputPath: String,
         outputPath: String,
         width: Int,
@@ -199,10 +247,9 @@ class LocalHLSConverter(private val context: Context) {
 
         Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
 
-        val firstSession = FFmpegKit.execute(firstCommand)
-        val firstReturnCode = firstSession.returnCode
+        val firstSuccess = executeFFmpegAsync(firstCommand, "$resolution (first attempt)")
 
-        if (ReturnCode.isSuccess(firstReturnCode)) {
+        if (firstSuccess) {
             Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with first attempt")
             return true
         }
@@ -223,21 +270,18 @@ class LocalHLSConverter(private val context: Context) {
 
             Timber.tag(TAG).d("FFmpeg command for $resolution (fallback): $fallbackCommand")
 
-            val fallbackSession = FFmpegKit.execute(fallbackCommand)
-            val fallbackReturnCode = fallbackSession.returnCode
+            val fallbackSuccess = executeFFmpegAsync(fallbackCommand, "$resolution (libx264 fallback)")
 
-            if (ReturnCode.isSuccess(fallbackReturnCode)) {
+            if (fallbackSuccess) {
                 Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with libx264 fallback")
                 return true
             } else {
-                val logs = fallbackSession.allLogsAsString
-                Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 fallback: $logs")
+                Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 fallback")
                 return false
             }
         } else {
             // If libx264 failed, no fallback available
-            val logs = firstSession.allLogsAsString
-            Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264: $logs")
+            Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 (no fallback available)")
             return false
         }
     }

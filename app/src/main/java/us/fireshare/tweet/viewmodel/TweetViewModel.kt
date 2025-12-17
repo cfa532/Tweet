@@ -354,6 +354,18 @@ class TweetViewModel @AssistedInject constructor(
             "content" to content,   // content for new comment
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
         )
+        // Take persistent URI permissions to survive app restarts and process changes
+        attachments?.forEach { uri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                Timber.tag("TweetViewModel").w("Failed to take persistable permission for comment URI: $uri")
+            }
+        }
+
         val uploadRequest = OneTimeWorkRequest.Builder(UploadCommentWorker::class.java)
             .setInputData(data)
             .setBackoffCriteria(

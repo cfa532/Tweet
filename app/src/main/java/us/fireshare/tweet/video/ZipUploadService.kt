@@ -8,12 +8,14 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.utils.io.streams.asInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.User
 import java.io.File
+import java.io.FileInputStream
 
 /**
  * Service for uploading ZIP files containing HLS content to the /process-zip endpoint
@@ -70,38 +72,39 @@ class ZipUploadService(
 
             Timber.tag(TAG).d("Process-zip URL: $processZipURL")
 
-            // Read the zip file data
-            val zipData = zipFile.readBytes()
-            Timber.tag(TAG).d("Zip file size: ${zipData.size} bytes")
+            Timber.tag(TAG).d("Zip file size: ${zipFile.length()} bytes")
 
-            // Upload zip file and get job ID
-            val uploadResponse = httpClient.post(processZipURL) {
-                setBody(
-                    io.ktor.client.request.forms.MultiPartFormDataContent(
-                        io.ktor.client.request.forms.formData {
-                            // Add filename if provided
-                            append("filename", fileName)
+            // Upload zip file using buffered streaming to minimize memory usage
+            val uploadResponse = FileInputStream(zipFile).buffered(8192).use { bufferedInputStream ->
+                val response = httpClient.post(processZipURL) {
+                    setBody(
+                        io.ktor.client.request.forms.MultiPartFormDataContent(
+                            io.ktor.client.request.forms.formData {
+                                // Add filename if provided
+                                append("filename", fileName)
 
-                            // Add reference ID if provided
-                            referenceId?.let {
-                                append("referenceId", it)
-                            }
-
-                            // Add the zip file
-                            append(
-                                "zipFile",
-                                zipData,
-                                io.ktor.http.Headers.build {
-                                    append(
-                                        "Content-Disposition",
-                                        "filename=\"${fileName}.zip\""
-                                    )
-                                    append("Content-Type", "application/zip")
+                                // Add reference ID if provided
+                                referenceId?.let {
+                                    append("referenceId", it)
                                 }
-                            )
-                        }
+
+                                // Add the zip file using buffered streaming to minimize memory usage
+                                append(
+                                    "zipFile",
+                                    bufferedInputStream.asInput(),
+                                    io.ktor.http.Headers.build {
+                                        append(
+                                            "Content-Disposition",
+                                            "filename=\"${fileName}.zip\""
+                                        )
+                                        append("Content-Type", "application/zip")
+                                    }
+                                )
+                            }
+                        )
                     )
-                )
+                }
+                response
             }
 
             if (uploadResponse.status != HttpStatusCode.OK) {

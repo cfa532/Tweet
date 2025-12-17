@@ -1,6 +1,7 @@
 package us.fireshare.tweet.viewmodel
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
@@ -544,6 +545,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         workManager.enqueue(uploadRequest)
         val workId = uploadRequest.id.toString()
         
+        // Take persistent URI permissions to survive app restarts and process changes
+        attachments?.forEach { uri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").w("Failed to take persistable permission for URI: $uri")
+            }
+        }
+
         // Save incomplete upload for potential resume
         val incompleteUpload = HproseInstance.IncompleteUpload(
             workId = workId,

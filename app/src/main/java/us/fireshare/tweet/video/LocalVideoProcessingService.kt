@@ -82,6 +82,14 @@ class LocalVideoProcessingService(
                         
                         when (zipResult) {
                             is ZipCompressor.ZipCompressionResult.Success -> {
+                                // Clean up HLS directory immediately after ZIP creation to free disk space
+                                try {
+                                    Timber.tag(TAG).d("Cleaning up HLS directory after ZIP creation: ${hlsResult.outputDirectory.absolutePath}")
+                                    hlsResult.outputDirectory.deleteRecursively()
+                                } catch (e: Exception) {
+                                    Timber.tag(TAG).w("Failed to clean up HLS directory: ${e.message}")
+                                }
+
                                 // Upload zip to /process-zip endpoint and poll for completion
                                 val processingResult = zipUploadService.uploadZipFile(
                                     zipResult.zipFile,
@@ -92,9 +100,17 @@ class LocalVideoProcessingService(
                                 
                                 when (processingResult) {
                                     is ZipUploadService.ZipProcessingResult.Success -> {
+                                        // Clean up ZIP file after successful processing to free disk space
+                                        try {
+                                            Timber.tag(TAG).d("Cleaning up ZIP file after successful processing: ${zipResult.zipFile.absolutePath}")
+                                            zipResult.zipFile.delete()
+                                        } catch (e: Exception) {
+                                            Timber.tag(TAG).w("Failed to clean up ZIP file: ${e.message}")
+                                        }
+
                                         // Get aspect ratio for the result
                                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-                                        
+
                                         Timber.tag(TAG).d("HLS video processed: ${processingResult.cid}")
                                         VideoProcessingResult.Success(
                                             MimeiFileType(
