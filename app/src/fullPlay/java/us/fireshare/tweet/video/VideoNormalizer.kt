@@ -99,7 +99,8 @@ class VideoNormalizer(private val context: Context) {
                 -c:v libx264
                 -c:a aac
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -preset fast
+                -preset veryfast
+                -threads 4
                 -b:v $bitrate
                 -b:a 128k
                 -maxrate $bitrate
@@ -117,7 +118,8 @@ class VideoNormalizer(private val context: Context) {
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
-                -preset fast
+                -preset veryfast
+                -threads 4
                 -b:v $bitrate
                 -b:a 128k
                 -maxrate $bitrate

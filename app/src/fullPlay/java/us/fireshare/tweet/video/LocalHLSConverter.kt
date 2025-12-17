@@ -347,9 +347,9 @@ class LocalHLSConverter(private val context: Context) {
                 -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -b:v $bitrate
                 -b:a $audioBitrate
-                -preset fast
+                -preset veryfast
                 -tune zerolatency
-                -threads 2
+                -threads 4
                 -max_muxing_queue_size 1024
                 -fflags +genpts+igndts+flush_packets
                 -avoid_negative_ts make_zero
