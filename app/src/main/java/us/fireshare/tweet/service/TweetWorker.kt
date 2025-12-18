@@ -1,21 +1,24 @@
 package us.fireshare.tweet.service
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
+import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
+import us.fireshare.tweet.R
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -210,47 +213,35 @@ class UploadTweetWorker @AssistedInject constructor(
                 inputData.getStringArray("attachmentUris")?.toList() ?: emptyList()
             val isPrivate = inputData.getBoolean("isPrivate", false)
 
+            Timber.tag("UploadTweetWorker").d("Starting tweet upload - content: '${tweetContent ?: "empty"}', uris: ${attachmentUris.size}, private: $isPrivate")
+
             val powerManager =
                 applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Tweet:UploadWakeLockTag"
             )
-            wakeLock.acquire(10 * 60 * 1000L /*10 minutes*/)
+            wakeLock.acquire(3 * 60 * 60 * 1000L /*3 hours*/)
+
+            // Create foreground notification for long-running video processing
+            val notification = createForegroundNotification(applicationContext)
+            setForeground(ForegroundInfo(1, notification))
             try {
                 val attachments = mutableListOf<MimeiFileType>()
-                val uriPairs = attachmentUris.chunked(2)
-                for (pair in uriPairs) {
-                    val deferreds =
-                        mutableListOf<Deferred<MimeiFileType?>>()
-                    for (uriString in pair) {
-                        Timber.tag("UploadTweetWorker").d("Starting upload for URI: $uriString")
-                        val deferred = CoroutineScope(Dispatchers.IO).async {
-                            try {
-                                Timber.tag("UploadTweetWorker").d("Calling uploadToIPFS for URI: $uriString")
-                                val result = uploadToIPFS(uriString.toUri())
-                                if (result != null) {
-                                    Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment: ${result.mid}")
-                                } else {
-                                    Timber.tag("UploadTweetWorker").e("uploadToIPFS returned null for URI: $uriString")
-                                }
-                                result
-                            } catch (e: Exception) {
-                                Timber.tag("UploadTweetWorker")
-                                    .e(e, "Error uploading attachment: $uriString")
-                                null
-                            }
-                        }
-                        deferreds.add(deferred)
-                    }
-                    val results = deferreds.awaitAll()
-                    Timber.tag("UploadTweetWorker").d("Upload results for pair: ${results.map { it?.mid ?: "null" }}")
-                    results.forEach { result ->
+                Timber.tag("UploadTweetWorker").d("Processing ${attachmentUris.size} attachments sequentially")
+
+                for ((index, uriString) in attachmentUris.withIndex()) {
+                    Timber.tag("UploadTweetWorker").d("Processing attachment ${index + 1}/${attachmentUris.size}: ${uriString.takeLast(20)}")
+
+                    try {
+                        Timber.tag("UploadTweetWorker").d("Calling uploadToIPFS for URI: $uriString")
+                        val result = uploadToIPFS(uriString.toUri())
+
                         if (result != null) {
                             attachments.add(result)
-                            Timber.tag("UploadTweetWorker").d("Added attachment to list: ${result.mid}")
+                            Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment ${index + 1}: ${result.mid}")
                         } else {
-                            Timber.tag("UploadTweetWorker").e("Attachment upload failure in pair - null result")
+                            Timber.tag("UploadTweetWorker").e("uploadToIPFS returned null for attachment ${index + 1}: $uriString")
                             // Only show toast on final attempt and clean up incomplete upload
                             if (runAttemptCount >= 1) {
                                 TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
@@ -260,11 +251,26 @@ class UploadTweetWorker @AssistedInject constructor(
                             }
                             return Result.failure()
                         }
+                    } catch (e: Exception) {
+                        Timber.tag("UploadTweetWorker").e(e, "Error uploading attachment ${index + 1}: $uriString")
+                        // Only show toast on final attempt and clean up incomplete upload
+                        if (runAttemptCount >= 1) {
+                            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
+                            // Clean up incomplete upload tracking on final failure
+                            val workId = id.toString()
+                            HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                        }
+                        return Result.failure()
                     }
                 }
 
+                Timber.tag("UploadTweetWorker").d("ALL ATTACHMENTS PROCESSED SUCCESSFULLY")
+                Timber.tag("UploadTweetWorker").d("REACHED TWEET CREATION SECTION")
+                Timber.tag("UploadTweetWorker").d("Attachment upload summary: uris=${attachmentUris.size}, attachments=${attachments.size}")
+                Timber.tag("UploadTweetWorker").d("Attachments list: ${attachments.map { it.mid }}")
+
                 if (attachmentUris.size != attachments.size) {
-                    Timber.tag("UploadTweetWorker").e("Attachments upload failure")
+                    Timber.tag("UploadTweetWorker").e("Attachments upload failure - size mismatch")
                     // Only show toast on final attempt and clean up incomplete upload
                     if (runAttemptCount >= 1) {
                         TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachments upload failure"))
@@ -275,6 +281,10 @@ class UploadTweetWorker @AssistedInject constructor(
                     return Result.failure()
                 }
 
+                Timber.tag("UploadTweetWorker").d("All attachments uploaded successfully, proceeding to create tweet")
+
+                Timber.tag("UploadTweetWorker").d("Creating tweet with content: '${tweetContent ?: " "}', attachments: ${attachments.size}")
+
                 val tweet = Tweet(
                     mid = System.currentTimeMillis().toString(), // placeholder
                     authorId = appUser.mid,
@@ -283,15 +293,22 @@ class UploadTweetWorker @AssistedInject constructor(
                     isPrivate = isPrivate
                 )
 
-                HproseInstance.uploadTweet(tweet)?.let { _: Tweet ->
-                    Timber.tag("UploadTweetWorker").d(tweet.toString())
-                    
+                Timber.tag("UploadTweetWorker").d("Calling uploadTweet for tweet: ${tweet.mid}")
+                val uploadResult = HproseInstance.uploadTweet(tweet)
+                Timber.tag("UploadTweetWorker").d("uploadTweet returned: ${uploadResult?.mid ?: "null"}")
+
+                uploadResult?.let { uploadedTweet: Tweet ->
+                    Timber.tag("UploadTweetWorker").d("Tweet uploaded successfully: ${uploadedTweet.mid}")
+
                     // Remove incomplete upload from tracking since it completed successfully
                     val workId = id.toString()
                     HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                    
+
                     return Result.success()
                 }
+
+                // uploadTweet failed and returned null
+                Timber.tag("UploadTweetWorker").e("uploadTweet returned null - tweet upload failed")
                 // Only show toast on final attempt and clean up incomplete upload
                 if (runAttemptCount >= 1) {
                     TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))
@@ -303,6 +320,16 @@ class UploadTweetWorker @AssistedInject constructor(
             } finally {
                 wakeLock.release()
             }
+        } catch (e: OutOfMemoryError) {
+            Timber.tag("UploadTweetWorker").e(e, "OUT OF MEMORY ERROR during tweet upload")
+            // Only show toast on final attempt and clean up incomplete upload
+            if (runAttemptCount >= 1) {
+                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: Out of memory"))
+                // Clean up incomplete upload tracking on final failure
+                val workId = id.toString()
+                HproseInstance.removeIncompleteUpload(applicationContext, workId)
+            }
+            return Result.failure()
         } catch (e: Exception) {
             Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
             // Only show toast on final attempt and clean up incomplete upload
@@ -314,6 +341,32 @@ class UploadTweetWorker @AssistedInject constructor(
             }
             return Result.failure()
         }
+    }
+
+    private fun createForegroundNotification(context: Context): Notification {
+        val channelId = "video_upload_channel"
+        val channelName = "Video Upload"
+
+        // Create notification channel for Android 8.0+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                channelName,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows video upload progress"
+            }
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        return NotificationCompat.Builder(context, channelId)
+            .setContentTitle("Uploading Video")
+            .setContentText("Processing video for upload...")
+            .setSmallIcon(android.R.drawable.ic_menu_upload)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
     }
 }
 

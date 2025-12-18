@@ -86,8 +86,11 @@ class PlayTweetActivity : ComponentActivity() {
                     Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
                 }
 
-                // Resume incomplete uploads on app startup
-                HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
+                // Resume incomplete uploads on app startup (with 10s delay)
+                lifecycleScope.launch(IO) {
+                    kotlinx.coroutines.delay(10000) // 10 second delay
+                    HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
+                }
 
                 activityViewModel.isAppReady.value = true   // app ready. Show main page now.
 

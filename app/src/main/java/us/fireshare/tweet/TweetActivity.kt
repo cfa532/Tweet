@@ -88,8 +88,9 @@ class TweetActivity : ComponentActivity() {
                     activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
 
-                // Resume incomplete uploads on app startup
+                // Resume incomplete uploads on app startup (with 10s delay)
                 lifecycleScope.launch(IO) {
+                    kotlinx.coroutines.delay(10000) // 10 second delay
                     HproseInstance.resumeIncompleteUploads(this@TweetActivity)
                 }
             }

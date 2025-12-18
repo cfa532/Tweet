@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -532,8 +534,16 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
             "isPrivate" to isPrivate
         )
+        val constraints = Constraints.Builder()
+            .setRequiresCharging(false) // Allow running on battery
+            .setRequiredNetworkType(NetworkType.CONNECTED) // Require network
+            .setRequiresDeviceIdle(false) // Don't require device idle
+            .setRequiresStorageNotLow(false) // Allow when storage is low
+            .build()
+
         val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
             .setInputData(data)
+            .setConstraints(constraints)
             .setBackoffCriteria(
                 BackoffPolicy.EXPONENTIAL,
                 2_000L, // 2 seconds

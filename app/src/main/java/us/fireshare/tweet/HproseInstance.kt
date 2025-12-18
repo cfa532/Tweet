@@ -1666,6 +1666,8 @@ object HproseInstance {
     }
 
     suspend fun uploadTweet(tweet: Tweet): Tweet? {
+        Timber.tag("HproseInstance").d("uploadTweet called for tweet: ${tweet.mid}, content: '${tweet.content}', attachments: ${tweet.attachments?.size ?: 0}")
+
         val entry = "add_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -1683,6 +1685,8 @@ object HproseInstance {
                 if (newTweetId != null) {
                     // Create a new tweet with the updated mid
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
+
+                    Timber.tag("HproseInstance").d("Tweet uploaded successfully with new ID: ${newTweetId}")
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
@@ -1721,6 +1725,9 @@ object HproseInstance {
                 Timber.tag("uploadTweet").e("Upload failed: $errorMessage")
                 null
             }
+        } catch (e: OutOfMemoryError) {
+            Timber.tag("uploadTweet").e(e, "OUT OF MEMORY ERROR during tweet upload")
+            null
         } catch (e: Exception) {
             Timber.tag("uploadTweet").e("Upload exception: $e")
             null
