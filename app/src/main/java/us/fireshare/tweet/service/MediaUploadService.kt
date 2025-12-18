@@ -154,7 +154,9 @@ class MediaUploadService(
                 }
             } catch (e: Exception) {
                 Timber.tag(TAG).e("Video processing exception: ${e.message}")
-                return null
+                // Fall back to direct IPFS upload as progressive video
+                Timber.tag(TAG).d("Falling back to direct IPFS upload as progressive video")
+                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
         }
 
@@ -247,7 +249,9 @@ class MediaUploadService(
                     }
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
                         Timber.tag(TAG).e("HLS processing failed: ${result.message}")
-                        null
+                        // Fall back to normalization and IPFS upload
+                        Timber.tag(TAG).d("Falling back to MP4 normalization for IPFS upload")
+                        normalizeAndUploadVideo(uri, fileName, fileTimestamp, referenceId)
                     }
                 }
             } else {
@@ -257,7 +261,9 @@ class MediaUploadService(
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in local video processing")
-            null
+            // Fall back to direct IPFS upload as progressive video
+            Timber.tag(TAG).d("Falling back to direct IPFS upload due to processing error")
+            uploadToIPFSOriginal(uri, fileName ?: "video", fileTimestamp, referenceId, MediaType.Video)
         }
     }
 
@@ -318,7 +324,15 @@ class MediaUploadService(
                     }
                     is VideoNormalizer.NormalizationResult.Error -> {
                         Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
-                        null
+                        // Fall back to uploading original video as progressive video
+                        Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
+                        uploadToIPFSOriginal(
+                            uri,
+                            fileName,
+                            fileTimestamp,
+                            referenceId,
+                            MediaType.Video
+                        )
                     }
                 }
             } finally {

@@ -80,27 +80,14 @@ class LocalHLSConverter(private val context: Context) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
             
-            // Determine configuration based on file size
+            // Use standard configuration for all video sizes
             val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
-            val sizeThreshold256MB = 256.0
-            
-            val resolution720pBitrate: String
-            val lowerResolution: Int
-            val lowerResolutionBitrate: String
-            
-            if (fileSizeMB >= sizeThreshold256MB) {
-                // >= 256MB: 720p (1500kb) + 360p (750kb)
-                resolution720pBitrate = "1500k"
-                lowerResolution = 360
-                lowerResolutionBitrate = "750k"
-                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB >= 256MB, using 720p (1500k) + 360p (750k)")
-            } else {
-                // < 256MB: 720p (1500kb) + 480p (1000kb)
-                resolution720pBitrate = "1500k"
-                lowerResolution = 480
-                lowerResolutionBitrate = "1000k"
-                Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB < 256MB, using 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
-            }
+
+            val resolution720pBitrate = "1500k"
+            val lowerResolution = 480
+            val lowerResolutionBitrate = "1000k"
+
+            Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB, using 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             
             // Check video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
