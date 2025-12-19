@@ -72,39 +72,49 @@ class ZipUploadService(
 
             Timber.tag(TAG).d("Process-zip URL: $processZipURL")
 
-            Timber.tag(TAG).d("Zip file size: ${zipFile.length()} bytes")
+            val zipFileSize = zipFile.length()
+            Timber.tag(TAG).d("Zip file size: $zipFileSize bytes")
 
-            // Upload zip file using buffered streaming to minimize memory usage
-            val uploadResponse = FileInputStream(zipFile).buffered(8192).use { bufferedInputStream ->
-                val response = httpClient.post(processZipURL) {
-                    setBody(
-                        io.ktor.client.request.forms.MultiPartFormDataContent(
-                            io.ktor.client.request.forms.formData {
-                                // Add filename if provided
-                                append("filename", fileName)
+            // Upload zip file - read file as bytes to ensure reliable multipart form data
+            // For very large files, consider chunked upload in the future
+            // Current approach ensures server receives the file correctly
+            val zipFileBytes = try {
+                zipFile.readBytes()
+            } catch (e: OutOfMemoryError) {
+                Timber.tag(TAG).e(e, "Out of memory reading zip file, file size: $zipFileSize bytes")
+                return@withContext ZipProcessingResult.Error("File too large to upload: ${zipFileSize / (1024 * 1024)}MB")
+            }
+            
+            Timber.tag(TAG).d("Read ${zipFileBytes.size} bytes from zip file for upload")
 
-                                // Add reference ID if provided
-                                referenceId?.let {
-                                    append("referenceId", it)
-                                }
+            val uploadResponse = httpClient.post(processZipURL) {
+                setBody(
+                    io.ktor.client.request.forms.MultiPartFormDataContent(
+                        io.ktor.client.request.forms.formData {
+                            // Add filename if provided
+                            append("filename", fileName)
 
-                                // Add the zip file using buffered streaming to minimize memory usage
-                                append(
-                                    "zipFile",
-                                    bufferedInputStream.asInput(),
-                                    io.ktor.http.Headers.build {
-                                        append(
-                                            "Content-Disposition",
-                                            "form-data; name=\"zipFile\"; filename=\"${fileName}.zip\""
-                                        )
-                                        append("Content-Type", "application/zip")
-                                    }
-                                )
+                            // Add reference ID if provided
+                            referenceId?.let {
+                                append("referenceId", it)
                             }
-                        )
+
+                            // Append the zip file with proper Content-Disposition header
+                            // Using ByteArray ensures reliable multipart form data formatting
+                            append(
+                                "zipFile",
+                                zipFileBytes,
+                                io.ktor.http.Headers.build {
+                                    append(
+                                        io.ktor.http.HttpHeaders.ContentDisposition,
+                                        "form-data; name=\"zipFile\"; filename=\"${fileName}.zip\""
+                                    )
+                                    append(io.ktor.http.HttpHeaders.ContentType, "application/zip")
+                                }
+                            )
+                        }
                     )
-                }
-                response
+                )
             }
 
             if (uploadResponse.status != HttpStatusCode.OK) {
