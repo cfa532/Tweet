@@ -95,7 +95,7 @@ class ZipUploadService(
                                     io.ktor.http.Headers.build {
                                         append(
                                             "Content-Disposition",
-                                            "filename=\"${fileName}.zip\""
+                                            "form-data; name=\"zipFile\"; filename=\"${fileName}.zip\""
                                         )
                                         append("Content-Type", "application/zip")
                                     }
