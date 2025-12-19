@@ -98,20 +98,21 @@ class VideoNormalizer(private val context: Context) {
     }
 
     /**
-     * Normalize video to 720p and 1500k bitrate, but preserve original if any metric is lower
+     * Normalize video to 720p and 1000k bitrate, but preserve original if any metric is lower
      * This is used as a preprocessing step before routing to different upload paths
      * @param inputUri Input video URI
      * @param outputFile Output file path
      * @return NormalizationResult with output file or error
      */
-    suspend fun normalizeTo720p1500k(
+    suspend fun normalizeTo720p1000k(
         inputUri: Uri,
         outputFile: File
     ): NormalizationResult = withContext(Dispatchers.IO) {
         try {
-            // Get video resolution and duration for timeout calculation
+            // Get video resolution, duration, and bitrate for timeout calculation and bitrate preservation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+            val originalBitrateBps = VideoManager.getVideoBitrate(context, inputUri)
 
             // Calculate file size for timeout calculation
             val fileSizeBytes = try {
@@ -132,7 +133,18 @@ class VideoNormalizer(private val context: Context) {
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
-            Timber.tag(TAG).d("Normalize to 720p/1500k: resolution=$videoResolution, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
+            // Determine target bitrate: preserve original if lower than 1000k, otherwise use 1000k
+            val targetBitrateK = if (originalBitrateBps != null) {
+                val originalBitrateK = originalBitrateBps / 1000
+                val targetK = minOf(originalBitrateK, 1000)
+                Timber.tag(TAG).d("Original bitrate: ${originalBitrateK}k, target bitrate: ${targetK}k")
+                targetK
+            } else {
+                Timber.tag(TAG).w("Could not get original bitrate, defaulting to 1000k")
+                1000
+            }
+
+            Timber.tag(TAG).d("Normalize to 720p/${targetBitrateK}k: resolution=$videoResolution, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
             Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
 
             // Copy input file to a temporary location for FFmpeg processing
@@ -140,22 +152,23 @@ class VideoNormalizer(private val context: Context) {
             try {
                 copyUriToFile(inputUri, tempInputFile)
                 
-                // Build FFmpeg command - normalize to 720p/1500k but preserve if original is lower
-                val ffmpegCommand = buildNormalizeTo720p1500kCommand(
+                // Build FFmpeg command - normalize to 720p/targetBitrate but preserve if original is lower
+                val ffmpegCommand = buildNormalizeTo720p1000kCommand(
                     tempInputFile.absolutePath,
                     outputFile.absolutePath,
-                    videoResolution
+                    videoResolution,
+                    targetBitrateK
                 )
                 
                 // Execute FFmpeg command asynchronously (dynamic timeout)
                 val success = withTimeout(dynamicTimeoutMs) {
-                    executeFFmpegAsync(ffmpegCommand, "normalize to 720p/1500k")
+                    executeFFmpegAsync(ffmpegCommand, "normalize to 720p/1000k")
                 }
 
                 if (success) {
                     NormalizationResult.Success(outputFile)
                 } else {
-                    Timber.tag(TAG).e("Video normalization to 720p/1500k failed")
+                    Timber.tag(TAG).e("Video normalization to 720p/1000k failed")
                     NormalizationResult.Error("FFmpeg normalization failed")
                 }
             } finally {
@@ -165,19 +178,23 @@ class VideoNormalizer(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error during video normalization to 720p/1500k")
+            Timber.tag(TAG).e(e, "Error during video normalization to 720p/1000k")
             NormalizationResult.Error("Normalization error: ${e.message}")
         }
     }
 
     /**
-     * Build FFmpeg command for normalizing to 720p/1500k while preserving original if lower
+     * Build FFmpeg command for normalizing to 720p/targetBitrate while preserving original if lower
+     * @param targetBitrateK Target bitrate in kilobits per second (will use min of original and 1000k)
      */
-    private fun buildNormalizeTo720p1500kCommand(
+    private fun buildNormalizeTo720p1000kCommand(
         inputPath: String,
         outputPath: String,
-        videoResolution: Pair<Int, Int>?
+        videoResolution: Pair<Int, Int>?,
+        targetBitrateK: Int
     ): String {
+        val targetBitrateStr = "${targetBitrateK}k"
+        
         if (videoResolution == null) {
             // Default to 720p if resolution unknown
             return """
@@ -187,10 +204,10 @@ class VideoNormalizer(private val context: Context) {
                 -vf "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
                 -threads 4
-                -b:v 1500k
+                -b:v $targetBitrateStr
                 -b:a 128k
-                -maxrate 1500k
-                -bufsize 1500k
+                -maxrate $targetBitrateStr
+                -bufsize $targetBitrateStr
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -241,26 +258,26 @@ class VideoNormalizer(private val context: Context) {
                 -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
                 -threads 4
-                -b:v 1500k
+                -b:v $targetBitrateStr
                 -b:a 128k
-                -maxrate 1500k
-                -bufsize 1500k
+                -maxrate $targetBitrateStr
+                -bufsize $targetBitrateStr
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
-            // Keep original resolution but encode with 1500k bitrate
+            // Keep original resolution but encode with target bitrate (preserved if lower than 1500k)
             """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -preset veryfast
                 -threads 4
-                -b:v 1500k
+                -b:v $targetBitrateStr
                 -b:a 128k
-                -maxrate 1500k
-                -bufsize 1500k
+                -maxrate $targetBitrateStr
+                -bufsize $targetBitrateStr
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -403,16 +420,16 @@ class VideoNormalizer(private val context: Context) {
 
     /**
      * Get bitrate for a given resolution
-     * 720p: 1500k, other resolutions adjusted proportionally
+     * 720p: 1000k, 480p: 600k, 360p: 400k, other resolutions adjusted proportionally
      */
     private fun getBitrateForResolution(width: Int, height: Int): String {
         val maxDimension = maxOf(width, height)
         
         return when {
-            maxDimension >= 720 -> "1500k"  // 720p and above
-            maxDimension >= 480 -> "1000k"  // 480p
-            maxDimension >= 360 -> "750k"   // 360p
-            else -> "500k"                   // Lower resolutions
+            maxDimension >= 720 -> "1000k"  // 720p and above
+            maxDimension >= 480 -> "600k"   // 480p
+            maxDimension >= 360 -> "400k"   // 360p
+            else -> "300k"                   // Lower resolutions
         }
     }
 

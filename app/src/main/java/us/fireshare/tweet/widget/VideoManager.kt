@@ -1042,4 +1042,31 @@ object VideoManager {
             null
         }
     }
+
+    /**
+     * Get video bitrate (in bits per second) using MediaMetadataRetriever
+     * Returns null if bitrate cannot be extracted
+     */
+    fun getVideoBitrate(context: Context, uri: Uri): Int? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+
+            val bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                ?.toIntOrNull()
+
+            retriever.release()
+
+            bitrate?.let {
+                Timber.tag("VideoManager").d("Video bitrate: ${it}bps (${it / 1000}k) for URI: $uri")
+                it
+            } ?: run {
+                Timber.tag("VideoManager").w("Could not extract video bitrate from URI: $uri")
+                null
+            }
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").e(e, "Error getting video bitrate for URI: $uri")
+            null
+        }
+    }
 }

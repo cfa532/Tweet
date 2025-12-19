@@ -218,12 +218,12 @@ class MediaUploadService(
         return try {
             Timber.tag(TAG).d("Starting video processing with routing logic")
             
-            // Step 1: Normalize video to 720p/1500k (preserving original if lower)
+            // Step 1: Normalize video to 720p/1000k (preserving original if lower)
             val normalizer = VideoNormalizer(context)
             val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
             
             try {
-                val normalizationResult = normalizer.normalizeTo720p1500k(uri, normalizedFile)
+                val normalizationResult = normalizer.normalizeTo720p1000k(uri, normalizedFile)
                 
                 when (normalizationResult) {
                     is VideoNormalizer.NormalizationResult.Success -> {
