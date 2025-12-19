@@ -300,8 +300,8 @@
     <string name="downloading_file">Downloading file...</string>
     <string name="error_unknown_error">Unknown error</string>
     <string name="error_message_failed">Error: %s</string>
-    <string name="video_file_too_large">Video files must be smaller than 120MB</string>
-    <string name="files_too_large">Files must be smaller than 120MB</string>
+    <string name="video_file_too_large">Video files must be smaller than 512MB</string>
+    <string name="files_too_large">Files must be smaller than 512MB</string>
     <string name="camera_permission_required">Camera permission required</string>
     <string name="sending_attachment_background">Sending attachment in background...</string>
     <string name="message_failed_send_tap_error">Message failed to send - tap to see error details</string>
@@ -315,11 +315,11 @@
     <string name="copy_tweet_id">Copy tweet ID</string>
     
     <!-- File size warnings -->
-    <string name="file_size_warning">File size: %s (Max: 120MB)</string>
+    <string name="file_size_warning">File size: %s (Max: 512MB)</string>
     <string name="file_size_ok">File size: %s ✓</string>
     <string name="file_size_large_warning">Large file selected (%s) - upload may take longer</string>
     <string name="file_size_very_large_warning">Very large file (%s) - consider compressing before upload</string>
-    <string name="file_size_limit">120MB</string>
+    <string name="file_size_limit">512MB</string>
     <string name="file_size_large_threshold">50MB</string>
     <string name="file_size_very_large_threshold">100MB</string>
     

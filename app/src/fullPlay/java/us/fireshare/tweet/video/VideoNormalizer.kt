@@ -98,6 +98,177 @@ class VideoNormalizer(private val context: Context) {
     }
 
     /**
+     * Normalize video to 720p and 1500k bitrate, but preserve original if any metric is lower
+     * This is used as a preprocessing step before routing to different upload paths
+     * @param inputUri Input video URI
+     * @param outputFile Output file path
+     * @return NormalizationResult with output file or error
+     */
+    suspend fun normalizeTo720p1500k(
+        inputUri: Uri,
+        outputFile: File
+    ): NormalizationResult = withContext(Dispatchers.IO) {
+        try {
+            // Get video resolution and duration for timeout calculation
+            val videoResolution = VideoManager.getVideoResolution(context, inputUri)
+            val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+
+            // Calculate file size for timeout calculation
+            val fileSizeBytes = try {
+                context.contentResolver.openInputStream(inputUri)?.use { stream ->
+                    var size = 0L
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (stream.read(buffer).also { bytesRead = it } != -1) {
+                        size += bytesRead
+                    }
+                    size
+                } ?: 0L
+            } catch (e: Exception) {
+                Timber.tag(TAG).w("Could not calculate file size: ${e.message}")
+                0L
+            }
+
+            // Calculate dynamic timeout based on video duration and file size
+            val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
+
+            Timber.tag(TAG).d("Normalize to 720p/1500k: resolution=$videoResolution, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
+            Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
+
+            // Copy input file to a temporary location for FFmpeg processing
+            val tempInputFile = File(context.cacheDir, "temp_normalize_720p_${System.currentTimeMillis()}.mp4")
+            try {
+                copyUriToFile(inputUri, tempInputFile)
+                
+                // Build FFmpeg command - normalize to 720p/1500k but preserve if original is lower
+                val ffmpegCommand = buildNormalizeTo720p1500kCommand(
+                    tempInputFile.absolutePath,
+                    outputFile.absolutePath,
+                    videoResolution
+                )
+                
+                // Execute FFmpeg command asynchronously (dynamic timeout)
+                val success = withTimeout(dynamicTimeoutMs) {
+                    executeFFmpegAsync(ffmpegCommand, "normalize to 720p/1500k")
+                }
+
+                if (success) {
+                    NormalizationResult.Success(outputFile)
+                } else {
+                    Timber.tag(TAG).e("Video normalization to 720p/1500k failed")
+                    NormalizationResult.Error("FFmpeg normalization failed")
+                }
+            } finally {
+                // Clean up temp input file
+                if (tempInputFile.exists()) {
+                    tempInputFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error during video normalization to 720p/1500k")
+            NormalizationResult.Error("Normalization error: ${e.message}")
+        }
+    }
+
+    /**
+     * Build FFmpeg command for normalizing to 720p/1500k while preserving original if lower
+     */
+    private fun buildNormalizeTo720p1500kCommand(
+        inputPath: String,
+        outputPath: String,
+        videoResolution: Pair<Int, Int>?
+    ): String {
+        if (videoResolution == null) {
+            // Default to 720p if resolution unknown
+            return """
+                -i "$inputPath" 
+                -c:v libx264
+                -c:a aac
+                -vf "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2" 
+                -preset veryfast
+                -threads 4
+                -b:v 1500k
+                -b:a 128k
+                -maxrate 1500k
+                -bufsize 1500k
+                -movflags +faststart
+                -metadata:s:v:0 rotate=0
+                "$outputPath"
+            """.trimIndent().replace(Regex("\\s+"), " ")
+        }
+
+        val (width, height) = videoResolution
+        val isLandscape = width > height
+        
+        // Calculate 720p target dimensions
+        val (targetWidth, targetHeight) = if (isLandscape) {
+            val aspectRatio = width.toFloat() / height.toFloat()
+            val targetHeight = 720
+            val targetWidth = (720 * aspectRatio).toInt()
+            val evenWidth = if (targetWidth % 2 == 0) targetWidth else targetWidth - 1
+            val cappedWidth = if (evenWidth > 1280) 1280 else evenWidth
+            Pair(cappedWidth, targetHeight)
+        } else {
+            val aspectRatio = width.toFloat() / height.toFloat()
+            val targetWidth = 720
+            val targetHeight = (720 / aspectRatio).toInt()
+            val evenHeight = if (targetHeight % 2 == 0) targetHeight else targetHeight - 1
+            val cappedHeight = if (evenHeight > 1280) 1280 else evenHeight
+            Pair(targetWidth, cappedHeight)
+        }
+
+        // Determine if we need to scale (only if source is larger than 720p)
+        val needsScaling = if (isLandscape) {
+            width > targetWidth || height > targetHeight
+        } else {
+            width > targetWidth || height > targetHeight
+        }
+
+        // Use 1500k bitrate, but if original resolution is lower, we'll preserve it via scaling
+        val finalWidth = if (needsScaling) targetWidth else width
+        val finalHeight = if (needsScaling) targetHeight else height
+        
+        // Ensure dimensions are even
+        val evenWidth = if (finalWidth % 2 == 0) finalWidth else finalWidth - 1
+        val evenHeight = if (finalHeight % 2 == 0) finalHeight else finalHeight - 1
+
+        return if (needsScaling) {
+            // Scale down to 720p
+            """
+                -i "$inputPath" 
+                -c:v libx264
+                -c:a aac
+                -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
+                -preset veryfast
+                -threads 4
+                -b:v 1500k
+                -b:a 128k
+                -maxrate 1500k
+                -bufsize 1500k
+                -movflags +faststart
+                -metadata:s:v:0 rotate=0
+                "$outputPath"
+            """.trimIndent().replace(Regex("\\s+"), " ")
+        } else {
+            // Keep original resolution but encode with 1500k bitrate
+            """
+                -i "$inputPath" 
+                -c:v libx264
+                -c:a aac
+                -preset veryfast
+                -threads 4
+                -b:v 1500k
+                -b:a 128k
+                -maxrate 1500k
+                -bufsize 1500k
+                -movflags +faststart
+                -metadata:s:v:0 rotate=0
+                "$outputPath"
+            """.trimIndent().replace(Regex("\\s+"), " ")
+        }
+    }
+
+    /**
      * Normalize video to standard MP4 format
      * @param inputUri Input video URI
      * @param outputFile Output file path

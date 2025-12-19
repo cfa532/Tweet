@@ -69,13 +69,17 @@ class LocalHLSConverter(private val context: Context) {
      * @param outputDir Output directory for HLS files
      * @param fileName Original filename (without extension)
      * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
+     * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
+     * @param isNormalized If true, the input video is already normalized to 720p/1500k, so COPY can be used for 720p stream
      * @return Result containing the output directory path and success status
      */
     suspend fun convertToHLS(
         inputUri: Uri,
         outputDir: File,
         fileName: String,
-        fileSizeBytes: Long
+        fileSizeBytes: Long,
+        useRoute2: Boolean = false,
+        isNormalized: Boolean = false
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
@@ -84,20 +88,22 @@ class LocalHLSConverter(private val context: Context) {
             val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
 
             val resolution720pBitrate = "1500k"
-            val lowerResolution = 480
-            val lowerResolutionBitrate = "1000k"
+            val (lowerResolution, lowerResolutionBitrate) = if (useRoute2) {
+                Pair(360, "750k")
+            } else {
+                Pair(480, "1000k")
+            }
 
-            Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB, using 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
+            Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB, using HLS route ${if (useRoute2) "2" else "1"}: 720p (1500k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             
             // Check video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
-            val shouldUseCopyCodec = shouldUseCopyCodec(videoResolution)
 
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
-            Timber.tag(TAG).d("Video resolution: $videoResolution, duration: ${videoDurationMs}ms, using COPY codec: $shouldUseCopyCodec")
+            Timber.tag(TAG).d("Video resolution: $videoResolution, duration: ${videoDurationMs}ms")
             Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
             
             // Ensure output directory exists
@@ -123,6 +129,29 @@ class LocalHLSConverter(private val context: Context) {
             // Calculate proper 720p dimensions based on aspect ratio
             val (width720, height720) = calculateActualResolution(720, videoResolution)
             
+            // For 720p HLS stream: if video is normalized to 720p/1500k, use COPY codec
+            // since the normalized video is already at 720p. The normalization ensures the video
+            // is at 720p (if original was >= 720p) or preserved if lower.
+            // COPY only works if the normalized video is exactly 720p (not lower).
+            val shouldUseCopyFor720p = if (isNormalized) {
+                // Normalized video is 720p/1500k, so COPY can be used for 720p stream
+                // Check if normalized resolution is exactly 720p (not lower)
+                val useCopy = videoResolution?.let { (width, height) ->
+                    // Check if resolution matches 720p (1280x720 for landscape, 720x1280 for portrait)
+                    val isLandscape = width > height
+                    if (isLandscape) {
+                        width == 1280 && height == 720
+                    } else {
+                        width == 720 && height == 1280
+                    }
+                } ?: false
+                Timber.tag(TAG).d("720p HLS stream (normalized input): using COPY codec = $useCopy (normalized resolution: $videoResolution)")
+                useCopy
+            } else {
+                // Original video, check resolution normally
+                shouldUseCopyCodecForResolution(videoResolution, 720)
+            }
+            
             // Execute FFmpeg command for 720p with fallback (dynamic timeout)
             val success720 = withTimeout(dynamicTimeoutMs) {
                 executeFFmpegWithFallback(
@@ -132,7 +161,7 @@ class LocalHLSConverter(private val context: Context) {
                     height = height720,
                     bitrate = resolution720pBitrate,
                     audioBitrate = "128k",
-                    shouldUseCopyCodec = shouldUseCopyCodec,
+                    shouldUseCopyCodec = shouldUseCopyFor720p,
                     resolution = "720p"
                 )
             }
@@ -154,7 +183,7 @@ class LocalHLSConverter(private val context: Context) {
                     height = heightLower,
                     bitrate = lowerResolutionBitrate,
                     audioBitrate = "128k",
-                    shouldUseCopyCodec = shouldUseCopyCodec,
+                    shouldUseCopyCodec = shouldUseCopyCodecForResolution(videoResolution, lowerResolution),
                     resolution = "${lowerResolution}p"
                 )
             }
@@ -346,31 +375,45 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Determine if COPY codec should be used based on video resolution
-     * For landscape videos: check if width <= 1280 AND height <= 720 (720p resolution)
-     * For portrait videos: check if width <= 720 AND height <= 1280 (720p resolution)
+     * Determine if COPY codec should be used based on video resolution and target resolution
+     * Use COPY if source resolution <= target resolution to preserve original quality and bitrate
      */
-    private fun shouldUseCopyCodec(videoResolution: Pair<Int, Int>?): Boolean {
+    private fun shouldUseCopyCodecForResolution(videoResolution: Pair<Int, Int>?, targetResolution: Int): Boolean {
         if (videoResolution == null) {
             Timber.tag(TAG).w("Video resolution is null, defaulting to normal conversion")
             return false
         }
-        
+
         val (width, height) = videoResolution
-        
+
         // Determine if video is landscape or portrait
         val isLandscape = width > height
-        
-        // Use COPY codec only if both dimensions are <= 720p resolution
-        // For landscape: width <= 1280 (720p width), height <= 720 (720p height)
-        // For portrait: width <= 720 (720p width), height <= 1280 (720p height)
-        val shouldUseCopy = if (isLandscape) {
-            width <= 1280 && height <= 720
-        } else {
-            width <= 720 && height <= 1280
+
+        // Calculate target dimensions for the given resolution
+        val (targetWidth, targetHeight) = when (targetResolution) {
+            720 -> if (isLandscape) Pair(1280, 720) else Pair(720, 1280)
+            480 -> if (isLandscape) Pair(854, 480) else Pair(480, 854)
+            360 -> if (isLandscape) Pair(640, 360) else Pair(360, 640)
+            else -> {
+                // Fallback for any other resolution - calculate based on 16:9 aspect ratio
+                val aspectRatio = if (isLandscape) 16.0/9.0 else 9.0/16.0
+                if (isLandscape) {
+                    Pair((targetResolution * aspectRatio).toInt(), targetResolution)
+                } else {
+                    Pair(targetResolution, (targetResolution / aspectRatio).toInt())
+                }
+            }
         }
-        
-        Timber.tag(TAG).d("Video resolution check: ${width}x${height}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
+
+        // Use COPY codec if source dimensions are <= target dimensions
+        // This preserves original resolution and bitrate when source is already at or below target quality
+        val shouldUseCopy = if (isLandscape) {
+            width <= targetWidth && height <= targetHeight
+        } else {
+            width <= targetWidth && height <= targetHeight
+        }
+
+        Timber.tag(TAG).d("Video resolution check for ${targetResolution}p: source=${width}x${height}, target=${targetWidth}x${targetHeight}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
         return shouldUseCopy
     }
 

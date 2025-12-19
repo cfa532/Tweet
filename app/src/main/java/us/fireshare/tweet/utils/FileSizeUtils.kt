@@ -10,7 +10,7 @@ object FileSizeUtils {
     private const val BYTES_PER_MB = BYTES_PER_KB * 1024
     private const val BYTES_PER_GB = BYTES_PER_MB * 1024
     
-    private const val MAX_FILE_SIZE = 120 * BYTES_PER_MB
+    private const val MAX_FILE_SIZE = 512 * BYTES_PER_MB
     private const val LARGE_FILE_THRESHOLD = 50 * BYTES_PER_MB
     private const val VERY_LARGE_FILE_THRESHOLD = 100 * BYTES_PER_MB
     

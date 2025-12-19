@@ -40,13 +40,17 @@ class LocalVideoProcessingService(
      * @param fileName Original filename
      * @param fileTimestamp File timestamp
      * @param referenceId Reference ID
+     * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
+     * @param isNormalized If true, the input video is already normalized to 720p/1500k
      * @return Result containing the processed file information
      */
     suspend fun processVideo(
         uri: Uri,
         fileName: String,
         fileTimestamp: Long,
-        referenceId: MimeiId?
+        referenceId: MimeiId?,
+        useRoute2: Boolean = false,
+        isNormalized: Boolean = false
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
             try {
                 // Create temporary directory for HLS conversion
@@ -72,7 +76,7 @@ class LocalVideoProcessingService(
                 
                 try {
                     // Convert video to HLS format
-                    val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName, fileSize)
+                    val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName, fileSize, useRoute2, isNormalized)
                 
                 when (hlsResult) {
                     is LocalHLSConverter.HLSConversionResult.Success -> {
