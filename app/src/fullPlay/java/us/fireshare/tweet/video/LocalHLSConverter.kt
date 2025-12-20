@@ -170,12 +170,11 @@ class LocalHLSConverter(private val context: Context) {
                 // Use fixed bitrate (always 1000k for 720p)
                 val target720pBitrate = resolution720pBitrate
                 
-                // For 720p HLS stream: use COPY codec if source resolution matches target (no scaling needed)
-                val shouldUseCopyFor720p = videoResolution?.let { (width, height) ->
-                    width == finalWidth720 && height == finalHeight720
-                } ?: false
+                // For 720p HLS stream: NEVER use COPY codec, always re-encode with libx264
+                // This ensures iOS/VideoJs compatibility settings (baseline profile, yuv420p, etc.) are always applied
+                val shouldUseCopyFor720p = false
                 
-                Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, COPY=${shouldUseCopyFor720p}, bitrate=${target720pBitrate}")
+                Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, COPY=${shouldUseCopyFor720p} (forced libx264 for compatibility), bitrate=${target720pBitrate}")
                 
                 // Execute FFmpeg command for 720p with fallback (dynamic timeout)
                 success720 = withTimeout(dynamicTimeoutMs) {
@@ -218,12 +217,12 @@ class LocalHLSConverter(private val context: Context) {
             // Use fixed bitrate (always calculated, never detected)
             val targetLowerBitrate = lowerResolutionBitrate
             
-            // For lower resolution HLS stream: use COPY codec if source resolution matches target (no scaling needed)
-            val shouldUseCopyForLower = videoResolution?.let { (width, height) ->
-                width == finalWidthLower && height == finalHeightLower
-            } ?: false
+            // For lower resolution HLS stream: NEVER use COPY codec, always re-encode with libx264
+            // This ensures iOS/VideoJs compatibility settings (baseline profile, yuv420p, etc.) are always applied
+            // Even if source resolution matches, we re-encode to guarantee playback compatibility
+            val shouldUseCopyForLower = false
             
-            Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, COPY=${shouldUseCopyForLower}, bitrate=${targetLowerBitrate}")
+            Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, COPY=${shouldUseCopyForLower} (forced libx264 for compatibility), bitrate=${targetLowerBitrate}")
             
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
             val successLower = withTimeout(dynamicTimeoutMs) {
