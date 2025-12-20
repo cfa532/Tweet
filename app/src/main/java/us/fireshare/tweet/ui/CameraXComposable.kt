@@ -54,6 +54,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.R
 import us.fireshare.tweet.utils.CameraXManager
+import java.util.Locale
 
 /**
  * Format duration in seconds to MM:SS format
@@ -61,7 +62,7 @@ import us.fireshare.tweet.utils.CameraXManager
 private fun formatDuration(seconds: Long): String {
     val minutes = seconds / 60
     val remainingSeconds = seconds % 60
-    return String.format("%02d:%02d", minutes, remainingSeconds)
+    return String.format(Locale.US, "%02d:%02d", minutes, remainingSeconds)
 }
 
 @Composable

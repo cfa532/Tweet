@@ -25,6 +25,7 @@ import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
+import java.util.Locale
 
 /**
  * Service for handling media upload operations including:
@@ -42,9 +43,7 @@ class MediaUploadService(
 
     companion object {
         private const val TAG = "MediaUploadService"
-        internal const val VIDEO_DIRECT_UPLOAD_THRESHOLD_BYTES = 50L * 1024 * 1024
         private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 32L * 1024 * 1024  // 32MB
-        private const val HLS_ROUTE_2_THRESHOLD_BYTES = 128L * 1024 * 1024  // 128MB
     }
 
     /**
@@ -138,11 +137,11 @@ class MediaUploadService(
         //    - < 128MB: HLS route 1 (720p + 480p)
         //    - >= 128MB: HLS route 2 (720p + 360p)
         if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
-            if (mediaType == MediaType.Video) {
-                return processVideoWithRouting(uri, fileName, fileTimestamp, referenceId)
+            return if (mediaType == MediaType.Video) {
+                processVideoWithRouting(uri, fileName, fileTimestamp, referenceId)
             } else {
                 // HLS_VIDEO type - already processed, upload directly
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.HLS_VIDEO)
+                uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.HLS_VIDEO)
             }
         }
 
@@ -246,7 +245,7 @@ class MediaUploadService(
                             val normalizedSize = normalizedFile.length()
                             val normalizedSizeMB = normalizedSize / (1024.0 * 1024.0)
                             
-                            Timber.tag(TAG).d("Normalized video size: ${String.format("%.1f", normalizedSizeMB)}MB (${normalizedSize} bytes)")
+                            Timber.tag(TAG).d("Normalized video size: ${String.format(Locale.US, "%.1f", normalizedSizeMB)}MB (${normalizedSize} bytes)")
                             
                             // Route based on normalized size
                             routeVideoBySize(
@@ -263,17 +262,6 @@ class MediaUploadService(
                             Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
                             // Fall back to uploading original video as progressive video
                             Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
-                            uploadToIPFSOriginal(
-                                uri,
-                                fileName,
-                                fileTimestamp,
-                                referenceId,
-                                MediaType.Video
-                            )
-                        }
-                        else -> {
-                            // This should never happen, but satisfy linter
-                            Timber.tag(TAG).e("Unknown normalization result type")
                             uploadToIPFSOriginal(
                                 uri,
                                 fileName,
@@ -329,7 +317,6 @@ class MediaUploadService(
         videoResolution: Pair<Int, Int>?,
         isNormalized: Boolean
     ): MimeiFileType? {
-        val fileSizeMB = fileSize / (1024.0 * 1024.0)
         val videoResolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
         
         return when {
@@ -529,17 +516,6 @@ class MediaUploadService(
                             MediaType.Video
                         )
                     }
-                    else -> {
-                        // This should never happen, but satisfy linter
-                        Timber.tag(TAG).e("Unknown normalization result type")
-                        uploadToIPFSOriginal(
-                            uri,
-                            fileName,
-                            fileTimestamp,
-                            referenceId,
-                            MediaType.Video
-                        )
-                    }
                 }
             } finally {
                 // Clean up normalized file
@@ -648,7 +624,7 @@ class MediaUploadService(
     suspend fun getFileSize(uri: Uri): Long? =
         withContext(Dispatchers.IO) {
             return@withContext try {
-                var fileSize: Long = 0L
+                var fileSize = 0L
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     val buffer = ByteArray(8192) // 8KB buffer
                     var bytesRead: Int

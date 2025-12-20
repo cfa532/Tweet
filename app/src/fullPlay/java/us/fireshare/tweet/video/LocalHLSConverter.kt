@@ -16,6 +16,7 @@ import timber.log.Timber
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 
 /**
  * Local HLS converter using FFmpeg Kit
@@ -97,7 +98,7 @@ class LocalHLSConverter(private val context: Context) {
                 Pair(480, "600k")  // 480p: 600k (fixed, not 750k)
             }
 
-            Timber.tag(TAG).d("File size ${String.format("%.1f", fileSizeMB)}MB, using HLS route ${if (useRoute2) "2" else "1"}: 720p (1000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
+            Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB, using HLS route ${if (useRoute2) "2" else "1"}: 720p (1000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             
             // Check video resolution, duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
