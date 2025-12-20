@@ -75,19 +75,9 @@ class ZipUploadService(
 
             val zipFileSize = zipFile.length()
             Timber.tag(TAG).d("Zip file size: $zipFileSize bytes")
+            Timber.tag(TAG).d("Initiating streaming upload to: $processZipURL")
 
-            // Upload zip file - read file as bytes to ensure reliable multipart form data
-            // For very large files, consider chunked upload in the future
-            // Current approach ensures server receives the file correctly
-            val zipFileBytes = try {
-                zipFile.readBytes()
-            } catch (e: OutOfMemoryError) {
-                Timber.tag(TAG).e(e, "Out of memory reading zip file, file size: $zipFileSize bytes")
-                return@withContext ZipProcessingResult.Error("File too large to upload: ${zipFileSize / (1024 * 1024)}MB")
-            }
-            
-            Timber.tag(TAG).d("Read ${zipFileBytes.size} bytes from zip file for upload")
-
+            // Use streaming for memory efficiency - doesn't load entire file into memory
             val uploadResponse = httpClient.submitFormWithBinaryData(
                 url = processZipURL,
                 formData = io.ktor.client.request.forms.formData {
@@ -99,10 +89,10 @@ class ZipUploadService(
                         append("referenceId", it)
                     }
 
-                    // Append the zip file using ChannelProvider for proper multipart encoding
+                    // Stream the zip file directly without loading into memory
                     append(
                         "zipFile",
-                        zipFileBytes,
+                        zipFile.inputStream().asInput(),
                         io.ktor.http.Headers.build {
                             append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"${zipFile.name}\"")
                             append(io.ktor.http.HttpHeaders.ContentType, "application/zip")
@@ -110,6 +100,8 @@ class ZipUploadService(
                     )
                 }
             )
+            
+            Timber.tag(TAG).d("Upload completed, response status: ${uploadResponse.status}")
 
             if (uploadResponse.status != HttpStatusCode.OK) {
                 Timber.tag(TAG).e("Upload failed with HTTP status: ${uploadResponse.status}")

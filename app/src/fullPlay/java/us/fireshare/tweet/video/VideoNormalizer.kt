@@ -231,12 +231,17 @@ class VideoNormalizer(private val context: Context) {
         
         if (videoResolution == null || resolutionValue == null) {
             // Default to 720p if resolution unknown
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             return """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -vf "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -b:v $targetBitrateStr
                 -b:a 128k
@@ -273,12 +278,17 @@ class VideoNormalizer(private val context: Context) {
             }
             
             // Scale down to 720p
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             return """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -b:v $targetBitrateStr
                 -b:a 128k
@@ -294,12 +304,17 @@ class VideoNormalizer(private val context: Context) {
             val evenWidth = if (width % 2 == 0) width else width - 1
             val evenHeight = if (height % 2 == 0) height else height - 1
             
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             return """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -b:v $targetBitrateStr
                 -b:a 128k
@@ -408,12 +423,17 @@ class VideoNormalizer(private val context: Context) {
             // Determine bitrate based on resolution
             val bitrate = getBitrateForResolution(targetWidth, targetHeight)
             
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -b:v $bitrate
                 -b:a 128k
@@ -428,11 +448,16 @@ class VideoNormalizer(private val context: Context) {
             // Determine bitrate based on original resolution
             val bitrate = getBitrateForResolution(width, height)
             
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
                 -preset veryfast
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -b:v $bitrate
                 -b:a 128k

@@ -528,6 +528,7 @@ class LocalHLSConverter(private val context: Context) {
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
             // Use normal conversion with scaling and encoding, enhanced for better stream compatibility
+            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
             """
                 -i "$inputPath" 
                 -c:v libx264
@@ -537,6 +538,10 @@ class LocalHLSConverter(private val context: Context) {
                 -b:a $audioBitrate
                 -preset veryfast
                 -tune zerolatency
+                -profile:v baseline
+                -pix_fmt yuv420p
+                -g 30
+                -level 3.1
                 -threads 4
                 -max_muxing_queue_size 1024
                 -fflags +genpts+igndts+flush_packets
