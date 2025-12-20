@@ -1069,4 +1069,28 @@ object VideoManager {
             null
         }
     }
+
+    /**
+     * Calculate video resolution value for normalization/routing purposes
+     * Resolution is defined as:
+     * - Landscape (width >= height): Resolution = HEIGHT (e.g., 1280×720 = 720p)
+     * - Portrait (height > width): Resolution = WIDTH (e.g., 720×1280 = 720p)
+     * 
+     * @param videoResolution Pair of (width, height) from getVideoResolution
+     * @return Resolution value in pixels, or null if resolution is invalid
+     */
+    fun getVideoResolutionValue(videoResolution: Pair<Int, Int>?): Int? {
+        if (videoResolution == null) return null
+        
+        val (width, height) = videoResolution
+        if (width <= 0 || height <= 0) return null
+        
+        // Landscape: resolution = HEIGHT
+        // Portrait: resolution = WIDTH
+        return if (width >= height) {
+            height // Landscape
+        } else {
+            width // Portrait
+        }
+    }
 }

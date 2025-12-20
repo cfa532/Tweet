@@ -18,7 +18,10 @@ class LocalHLSConverter(private val context: Context) {
         inputUri: Uri,
         outputDir: File,
         fileName: String,
-        fileSizeBytes: Long
+        fileSizeBytes: Long,
+        useRoute2: Boolean = false,
+        isNormalized: Boolean = false,
+        shouldCreateDualVariant: Boolean = true
     ): HLSConversionResult {
         // Mini version should never call this
         return HLSConversionResult.Error("FFmpeg not available in mini version")

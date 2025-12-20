@@ -41,7 +41,8 @@ class LocalVideoProcessingService(
      * @param fileTimestamp File timestamp
      * @param referenceId Reference ID
      * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
-     * @param isNormalized If true, the input video is already normalized to 720p/1500k
+     * @param isNormalized If true, the input video is already normalized to 720p/1000k
+     * @param shouldCreateDualVariant If true, create dual variant (720p + 480p), otherwise single variant (480p only)
      * @return Result containing the processed file information
      */
     suspend fun processVideo(
@@ -50,7 +51,8 @@ class LocalVideoProcessingService(
         fileTimestamp: Long,
         referenceId: MimeiId?,
         useRoute2: Boolean = false,
-        isNormalized: Boolean = false
+        isNormalized: Boolean = false,
+        shouldCreateDualVariant: Boolean = true
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
             try {
                 // Create temporary directory for HLS conversion
@@ -76,7 +78,7 @@ class LocalVideoProcessingService(
                 
                 try {
                     // Convert video to HLS format
-                    val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName, fileSize, useRoute2, isNormalized)
+                    val hlsResult = hlsConverter.convertToHLS(uri, tempDir, fileName, fileSize, useRoute2, isNormalized, shouldCreateDualVariant)
                 
                 when (hlsResult) {
                     is LocalHLSConverter.HLSConversionResult.Success -> {
@@ -130,15 +132,24 @@ class LocalVideoProcessingService(
                                     is ZipUploadService.ZipProcessingResult.Error -> {
                                         VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
                                     }
+                                    else -> {
+                                        VideoProcessingResult.Error("Unknown processing result type")
+                                    }
                                 }
                             }
                             is ZipCompressor.ZipCompressionResult.Error -> {
                                 VideoProcessingResult.Error("Compression failed: ${zipResult.message}")
                             }
+                            else -> {
+                                VideoProcessingResult.Error("Unknown compression result type")
+                            }
                         }
                     }
                     is LocalHLSConverter.HLSConversionResult.Error -> {
                         VideoProcessingResult.Error("HLS conversion failed: ${hlsResult.message}")
+                    }
+                    else -> {
+                        VideoProcessingResult.Error("Unknown HLS conversion result type")
                     }
                 }
             } finally {

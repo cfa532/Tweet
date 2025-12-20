@@ -98,8 +98,14 @@ class VideoNormalizer(private val context: Context) {
     }
 
     /**
-     * Normalize video to 720p and 1000k bitrate, but preserve original if any metric is lower
-     * This is used as a preprocessing step before routing to different upload paths
+     * Normalize video with proportional bitrate calculation:
+     * - If resolution > 720p: Normalize to 720p with 1000k bitrate
+     * - If resolution ≤ 720p: Keep original resolution with proportional bitrate (1000k × resolution/720)
+     * 
+     * Resolution detection:
+     * - Landscape (width >= height): Resolution = HEIGHT
+     * - Portrait (height > width): Resolution = WIDTH
+     * 
      * @param inputUri Input video URI
      * @param outputFile Output file path
      * @return NormalizationResult with output file or error
@@ -109,10 +115,10 @@ class VideoNormalizer(private val context: Context) {
         outputFile: File
     ): NormalizationResult = withContext(Dispatchers.IO) {
         try {
-            // Get video resolution, duration, and bitrate for timeout calculation and bitrate preservation
+            // Get video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
-            val originalBitrateBps = VideoManager.getVideoBitrate(context, inputUri)
+            val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
 
             // Calculate file size for timeout calculation
             val fileSizeBytes = try {
@@ -133,18 +139,24 @@ class VideoNormalizer(private val context: Context) {
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
-            // Determine target bitrate: preserve original if lower than 1000k, otherwise use 1000k
-            val targetBitrateK = if (originalBitrateBps != null) {
-                val originalBitrateK = originalBitrateBps / 1000
-                val targetK = minOf(originalBitrateK, 1000)
-                Timber.tag(TAG).d("Original bitrate: ${originalBitrateK}k, target bitrate: ${targetK}k")
-                targetK
+            // Calculate target bitrate based on resolution
+            // Formula: bitrate = 1000k × (resolution / 720)
+            // If resolution > 720p, normalize to 720p with 1000k
+            // If resolution ≤ 720p, keep original resolution with proportional bitrate
+            val targetBitrateK = if (resolutionValue != null && resolutionValue > 720) {
+                // Resolution > 720p: normalize to 720p with 1000k
+                1000
+            } else if (resolutionValue != null) {
+                // Resolution ≤ 720p: proportional bitrate
+                val calculatedBitrate = (1000.0 * resolutionValue / 720.0).toInt()
+                calculatedBitrate
             } else {
-                Timber.tag(TAG).w("Could not get original bitrate, defaulting to 1000k")
+                // Fallback if resolution unknown
+                Timber.tag(TAG).w("Could not determine resolution, defaulting to 1000k")
                 1000
             }
 
-            Timber.tag(TAG).d("Normalize to 720p/${targetBitrateK}k: resolution=$videoResolution, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
+            Timber.tag(TAG).d("Normalization: resolution=$videoResolution (${resolutionValue}p), target bitrate=${targetBitrateK}k, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
             Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
 
             // Copy input file to a temporary location for FFmpeg processing
@@ -152,20 +164,36 @@ class VideoNormalizer(private val context: Context) {
             try {
                 copyUriToFile(inputUri, tempInputFile)
                 
-                // Build FFmpeg command - normalize to 720p/targetBitrate but preserve if original is lower
+                // Build FFmpeg command - normalize to 720p/targetBitrate or keep original with proportional bitrate
                 val ffmpegCommand = buildNormalizeTo720p1000kCommand(
                     tempInputFile.absolutePath,
                     outputFile.absolutePath,
                     videoResolution,
+                    resolutionValue,
                     targetBitrateK
                 )
                 
+                // Create dynamic operation description based on actual target
+                val operationDescription = if (resolutionValue != null && resolutionValue > 720) {
+                    "normalize to 720p/${targetBitrateK}k"
+                } else if (resolutionValue != null) {
+                    "normalize to ${resolutionValue}p/${targetBitrateK}k"
+                } else {
+                    "normalize to 720p/${targetBitrateK}k"
+                }
+                
                 // Execute FFmpeg command asynchronously (dynamic timeout)
                 val success = withTimeout(dynamicTimeoutMs) {
-                    executeFFmpegAsync(ffmpegCommand, "normalize to 720p/1000k")
+                    executeFFmpegAsync(ffmpegCommand, operationDescription)
                 }
 
                 if (success) {
+                    // Get actual output resolution for logging
+                    val outputResolution = VideoManager.getVideoResolution(context, Uri.fromFile(outputFile))
+                    val outputResolutionValue = VideoManager.getVideoResolutionValue(outputResolution)
+                    val (outputWidth, outputHeight) = outputResolution ?: Pair(0, 0)
+                    
+                    Timber.tag(TAG).d("Normalized to ${outputWidth}×${outputHeight} (${outputResolutionValue}p) with ${targetBitrateK}k bitrate")
                     NormalizationResult.Success(outputFile)
                 } else {
                     Timber.tag(TAG).e("Video normalization to 720p/1000k failed")
@@ -184,18 +212,24 @@ class VideoNormalizer(private val context: Context) {
     }
 
     /**
-     * Build FFmpeg command for normalizing to 720p/targetBitrate while preserving original if lower
-     * @param targetBitrateK Target bitrate in kilobits per second (will use min of original and 1000k)
+     * Build FFmpeg command for normalizing video:
+     * - If resolution > 720p: Scale to 720p with 1000k bitrate
+     * - If resolution ≤ 720p: Keep original resolution with proportional bitrate
+     * 
+     * @param videoResolution Pair of (width, height)
+     * @param resolutionValue Resolution value (HEIGHT for landscape, WIDTH for portrait)
+     * @param targetBitrateK Target bitrate in kilobits per second (calculated proportionally)
      */
     private fun buildNormalizeTo720p1000kCommand(
         inputPath: String,
         outputPath: String,
         videoResolution: Pair<Int, Int>?,
+        resolutionValue: Int?,
         targetBitrateK: Int
     ): String {
         val targetBitrateStr = "${targetBitrateK}k"
         
-        if (videoResolution == null) {
+        if (videoResolution == null || resolutionValue == null) {
             // Default to 720p if resolution unknown
             return """
                 -i "$inputPath" 
@@ -215,47 +249,35 @@ class VideoNormalizer(private val context: Context) {
         }
 
         val (width, height) = videoResolution
-        val isLandscape = width > height
+        val isLandscape = width >= height
         
-        // Calculate 720p target dimensions
-        val (targetWidth, targetHeight) = if (isLandscape) {
-            val aspectRatio = width.toFloat() / height.toFloat()
-            val targetHeight = 720
-            val targetWidth = (720 * aspectRatio).toInt()
-            val evenWidth = if (targetWidth % 2 == 0) targetWidth else targetWidth - 1
-            val cappedWidth = if (evenWidth > 1280) 1280 else evenWidth
-            Pair(cappedWidth, targetHeight)
-        } else {
-            val aspectRatio = width.toFloat() / height.toFloat()
-            val targetWidth = 720
-            val targetHeight = (720 / aspectRatio).toInt()
-            val evenHeight = if (targetHeight % 2 == 0) targetHeight else targetHeight - 1
-            val cappedHeight = if (evenHeight > 1280) 1280 else evenHeight
-            Pair(targetWidth, cappedHeight)
-        }
-
-        // Determine if we need to scale (only if source is larger than 720p)
-        val needsScaling = if (isLandscape) {
-            width > targetWidth || height > targetHeight
-        } else {
-            width > targetWidth || height > targetHeight
-        }
-
-        // Use 1500k bitrate, but if original resolution is lower, we'll preserve it via scaling
-        val finalWidth = if (needsScaling) targetWidth else width
-        val finalHeight = if (needsScaling) targetHeight else height
+        // If resolution > 720p, scale to 720p; otherwise keep original
+        val shouldScaleTo720p = resolutionValue > 720
         
-        // Ensure dimensions are even
-        val evenWidth = if (finalWidth % 2 == 0) finalWidth else finalWidth - 1
-        val evenHeight = if (finalHeight % 2 == 0) finalHeight else finalHeight - 1
-
-        return if (needsScaling) {
+        if (shouldScaleTo720p) {
+            // Calculate 720p target dimensions
+            val (targetWidth, targetHeight) = if (isLandscape) {
+                val aspectRatio = width.toFloat() / height.toFloat()
+                val targetHeight = 720
+                val targetWidth = (720 * aspectRatio).toInt()
+                val evenWidth = if (targetWidth % 2 == 0) targetWidth else targetWidth - 1
+                val cappedWidth = if (evenWidth > 1280) 1280 else evenWidth
+                Pair(cappedWidth, targetHeight)
+            } else {
+                val aspectRatio = width.toFloat() / height.toFloat()
+                val targetWidth = 720
+                val targetHeight = (720 / aspectRatio).toInt()
+                val evenHeight = if (targetHeight % 2 == 0) targetHeight else targetHeight - 1
+                val cappedHeight = if (evenHeight > 1280) 1280 else evenHeight
+                Pair(targetWidth, cappedHeight)
+            }
+            
             // Scale down to 720p
-            """
+            return """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
-                -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
+                -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
                 -threads 4
                 -b:v $targetBitrateStr
@@ -267,11 +289,16 @@ class VideoNormalizer(private val context: Context) {
                 "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
-            // Keep original resolution but encode with target bitrate (preserved if lower than 1500k)
-            """
+            // Keep original resolution but encode with proportional bitrate
+            // Ensure dimensions are even
+            val evenWidth = if (width % 2 == 0) width else width - 1
+            val evenHeight = if (height % 2 == 0) height else height - 1
+            
+            return """
                 -i "$inputPath" 
                 -c:v libx264
                 -c:a aac
+                -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -preset veryfast
                 -threads 4
                 -b:v $targetBitrateStr

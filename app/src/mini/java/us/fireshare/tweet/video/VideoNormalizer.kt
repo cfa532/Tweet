@@ -23,6 +23,14 @@ class VideoNormalizer(private val context: Context) {
         return NormalizationResult.Error("FFmpeg not available in mini version")
     }
     
+    suspend fun normalizeTo720p1000k(
+        inputUri: Uri,
+        outputFile: File
+    ): NormalizationResult {
+        // Mini version should never call this
+        return NormalizationResult.Error("FFmpeg not available in mini version")
+    }
+    
     /**
      * Result of video normalization
      */
