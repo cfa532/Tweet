@@ -129,16 +129,31 @@ class LocalHLSConverter(private val context: Context) {
             val tempInputFile = File(outputDir, "temp_input.mp4")
             copyUriToFile(inputUri, tempInputFile)
 
-            // Create resolution-specific directories
-            val dir720 = File(outputDir, "720p")
-            val lowerResDir = File(outputDir, "${lowerResolution}p")
-            dir720.mkdirs()
-            lowerResDir.mkdirs()
-
-            // Create master playlist and individual resolution playlists in their folders
-            val masterPlaylistPath = File(outputDir, "master.m3u8").absolutePath
-            val playlist720Path = File(dir720, "playlist.m3u8").absolutePath
-            val lowerResPlaylistPath = File(lowerResDir, "playlist.m3u8").absolutePath
+            // For single resolution: put playlist and segments at root level
+            // For dual resolution: use subdirectories with master playlist
+            val masterPlaylistPath = if (shouldCreateDualVariant) {
+                File(outputDir, "master.m3u8").absolutePath
+            } else {
+                null // No master playlist for single resolution
+            }
+            
+            val (playlist720Path, lowerResPlaylistPath) = if (shouldCreateDualVariant) {
+                // Dual variant: use subdirectories
+                val dir720 = File(outputDir, "720p")
+                val lowerResDir = File(outputDir, "${lowerResolution}p")
+                dir720.mkdirs()
+                lowerResDir.mkdirs()
+                Pair(
+                    File(dir720, "playlist.m3u8").absolutePath,
+                    File(lowerResDir, "playlist.m3u8").absolutePath
+                )
+            } else {
+                // Single resolution: playlist at root level, no 720p directory
+                Pair(
+                    "", // No 720p path needed
+                    File(outputDir, "playlist.m3u8").absolutePath
+                )
+            }
 
             // Convert 720p only if shouldCreate720p is true
             var finalWidth720 = 0
@@ -234,7 +249,8 @@ class LocalHLSConverter(private val context: Context) {
                     bitrate = targetLowerBitrate,
                     audioBitrate = "128k",
                     shouldUseCopyCodec = shouldUseCopyForLower,
-                    resolution = "${lowerResolution}p"
+                    resolution = "${lowerResolution}p",
+                    segmentsAtRoot = !shouldCreateDualVariant // For single resolution, segments go at root level
                 )
             }
 
@@ -246,11 +262,9 @@ class LocalHLSConverter(private val context: Context) {
             // Clean up temporary input file
             tempInputFile.delete()
 
-            // Conversions succeeded, create master playlist
-            Timber.tag(TAG).d("Multi-resolution HLS conversion completed successfully")
-            
-            // Create master playlist manually to ensure proper structure
-            if (shouldCreate720p) {
+            // Create master playlist only for dual variant
+            if (shouldCreateDualVariant && shouldCreate720p) {
+                Timber.tag(TAG).d("Dual-resolution HLS conversion completed successfully")
                 createMasterPlaylist(
                     outputDir, 
                     finalWidth720, 
@@ -262,24 +276,20 @@ class LocalHLSConverter(private val context: Context) {
                     targetLowerBitrate
                 )
             } else {
-                // Create single-resolution master playlist (only lower resolution)
-                createSingleResolutionMasterPlaylist(
-                    outputDir,
-                    finalWidthLower,
-                    finalHeightLower,
-                    lowerResolution,
-                    targetLowerBitrate
-                )
+                // Single resolution: no master playlist needed
+                Timber.tag(TAG).d("Single-resolution HLS conversion completed successfully")
             }
             
             // Verify that required files were created
-            val masterFile = File(masterPlaylistPath)
-            val playlist720File = File(playlist720Path)
             val lowerResPlaylistFile = File(lowerResPlaylistPath)
             
-            if (shouldCreate720p) {
+            if (shouldCreateDualVariant && shouldCreate720p) {
+                // Dual variant: verify master playlist, 720p playlist, and lower res playlist
+                val masterFile = File(masterPlaylistPath!!)
+                val playlist720File = File(playlist720Path)
+                
                 if (masterFile.exists() && playlist720File.exists() && lowerResPlaylistFile.exists()) {
-                    Timber.tag(TAG).d("HLS conversion successful - all required files created")
+                    Timber.tag(TAG).d("HLS conversion successful - all dual variant files created")
                     Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")
                     Timber.tag(TAG).d("720p playlist: ${playlist720File.absolutePath}")
                     Timber.tag(TAG).d("${lowerResolution}p playlist: ${lowerResPlaylistFile.absolutePath}")
@@ -292,15 +302,14 @@ class LocalHLSConverter(private val context: Context) {
                     HLSConversionResult.Error("Required HLS files not created")
                 }
             } else {
-                if (masterFile.exists() && lowerResPlaylistFile.exists()) {
+                // Single resolution: only verify the single playlist at root level
+                if (lowerResPlaylistFile.exists()) {
                     Timber.tag(TAG).d("HLS conversion successful - single resolution files created")
-                    Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")
-                    Timber.tag(TAG).d("${lowerResolution}p playlist: ${lowerResPlaylistFile.absolutePath}")
+                    Timber.tag(TAG).d("Playlist: ${lowerResPlaylistFile.absolutePath}")
                     HLSConversionResult.Success(outputDir)
                 } else {
                     Timber.tag(TAG).e("Required HLS files not created")
-                    Timber.tag(TAG).e("Master exists: ${masterFile.exists()}")
-                    Timber.tag(TAG).e("${lowerResolution}p playlist exists: ${lowerResPlaylistFile.exists()}")
+                    Timber.tag(TAG).e("Playlist exists: ${lowerResPlaylistFile.exists()}")
                     HLSConversionResult.Error("Required HLS files not created")
                 }
             }
@@ -360,7 +369,8 @@ class LocalHLSConverter(private val context: Context) {
         bitrate: String,
         audioBitrate: String,
         shouldUseCopyCodec: Boolean,
-        resolution: String
+        resolution: String,
+        segmentsAtRoot: Boolean = false
     ): Boolean {
         // First, try with the recommended codec (COPY if applicable, libx264 otherwise)
         val firstCommand = buildSingleResolutionFFmpegCommand(
@@ -370,7 +380,8 @@ class LocalHLSConverter(private val context: Context) {
             height = height,
             bitrate = bitrate,
             audioBitrate = audioBitrate,
-            useCopyPreset = shouldUseCopyCodec
+            useCopyPreset = shouldUseCopyCodec,
+            segmentsAtRoot = segmentsAtRoot
         )
 
         Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
@@ -385,7 +396,7 @@ class LocalHLSConverter(private val context: Context) {
         // If COPY codec failed and we should have used it, try libx264 fallback
         if (shouldUseCopyCodec) {
             Timber.tag(TAG).w("COPY codec failed for $resolution, falling back to libx264")
-            
+
             val fallbackCommand = buildSingleResolutionFFmpegCommand(
                 inputPath = inputPath,
                 outputPath = outputPath,
@@ -393,7 +404,8 @@ class LocalHLSConverter(private val context: Context) {
                 height = height,
                 bitrate = bitrate,
                 audioBitrate = audioBitrate,
-                useCopyPreset = false // Force libx264
+                useCopyPreset = false, // Force libx264
+                segmentsAtRoot = segmentsAtRoot
             )
 
             Timber.tag(TAG).d("FFmpeg command for $resolution (fallback): $fallbackCommand")
@@ -504,7 +516,8 @@ class LocalHLSConverter(private val context: Context) {
         height: Int,
         bitrate: String,
         audioBitrate: String,
-        useCopyPreset: Boolean = false
+        useCopyPreset: Boolean = false,
+        segmentsAtRoot: Boolean = false
     ): String {
         // Extract directory from outputPath to create absolute path for segments
         val outputDir = File(outputPath).parent ?: ""
