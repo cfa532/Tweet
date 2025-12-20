@@ -71,7 +71,7 @@ class LocalHLSConverter(private val context: Context) {
      * @param fileName Original filename (without extension)
      * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
      * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
-     * @param isNormalized If true, the input video is already normalized to 720p/1000k (currently unused, kept for API compatibility)
+     * @param isNormalized If true, the input video is already normalized to 720p/1000k, use COPY codec for 720p
      * @param shouldCreateDualVariant If true, create dual variant (720p + 480p), otherwise single variant (480p only)
      * @return Result containing the output directory path and success status
      */
@@ -81,7 +81,7 @@ class LocalHLSConverter(private val context: Context) {
         fileName: String,
         fileSizeBytes: Long,
         useRoute2: Boolean = false,
-        @Suppress("UNUSED_PARAMETER") isNormalized: Boolean = false,
+        isNormalized: Boolean = false,
         shouldCreateDualVariant: Boolean = true
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
@@ -185,11 +185,15 @@ class LocalHLSConverter(private val context: Context) {
                 // Use fixed bitrate (always 1000k for 720p)
                 val target720pBitrate = resolution720pBitrate
                 
-                // For 720p HLS stream: NEVER use COPY codec, always re-encode with libx264
-                // This ensures iOS/VideoJs compatibility settings (baseline profile, yuv420p, etc.) are always applied
-                val shouldUseCopyFor720p = false
+                // For 720p HLS stream: Use COPY codec if video is already normalized to 720p/1000k
+                // If not normalized, re-encode with libx264 to ensure iOS/VideoJs compatibility settings
+                val shouldUseCopyFor720p = isNormalized && videoResolutionValue == 720
                 
-                Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, COPY=${shouldUseCopyFor720p} (forced libx264 for compatibility), bitrate=${target720pBitrate}")
+                if (shouldUseCopyFor720p) {
+                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (video already normalized to 720p/1000k)")
+                } else {
+                    Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, re-encoding with libx264 for compatibility, bitrate=${target720pBitrate}")
+                }
                 
                 // Execute FFmpeg command for 720p with fallback (dynamic timeout)
                 success720 = withTimeout(dynamicTimeoutMs) {
@@ -232,12 +236,11 @@ class LocalHLSConverter(private val context: Context) {
             // Use fixed bitrate (always calculated, never detected)
             val targetLowerBitrate = lowerResolutionBitrate
             
-            // For lower resolution HLS stream: NEVER use COPY codec, always re-encode with libx264
+            // For lower resolution HLS stream: Always re-encode with libx264 (downscale from source)
             // This ensures iOS/VideoJs compatibility settings (baseline profile, yuv420p, etc.) are always applied
-            // Even if source resolution matches, we re-encode to guarantee playback compatibility
             val shouldUseCopyForLower = false
             
-            Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, COPY=${shouldUseCopyForLower} (forced libx264 for compatibility), bitrate=${targetLowerBitrate}")
+            Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264 (downscale), bitrate=${targetLowerBitrate}")
             
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
             val successLower = withTimeout(dynamicTimeoutMs) {
