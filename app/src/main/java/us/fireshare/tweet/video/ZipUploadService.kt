@@ -3,6 +3,7 @@ package us.fireshare.tweet.video
 import android.content.Context
 import com.google.gson.Gson
 import io.ktor.client.HttpClient
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -87,51 +88,51 @@ class ZipUploadService(
             
             Timber.tag(TAG).d("Read ${zipFileBytes.size} bytes from zip file for upload")
 
-            val uploadResponse = httpClient.post(processZipURL) {
-                setBody(
-                    io.ktor.client.request.forms.MultiPartFormDataContent(
-                        io.ktor.client.request.forms.formData {
-                            // Add filename if provided
-                            append("filename", fileName)
+            val uploadResponse = httpClient.submitFormWithBinaryData(
+                url = processZipURL,
+                formData = io.ktor.client.request.forms.formData {
+                    // Add filename if provided
+                    append("filename", fileName)
 
-                            // Add reference ID if provided
-                            referenceId?.let {
-                                append("referenceId", it)
-                            }
+                    // Add reference ID if provided
+                    referenceId?.let {
+                        append("referenceId", it)
+                    }
 
-                            // Append the zip file with proper Content-Disposition header
-                            // Using ByteArray ensures reliable multipart form data formatting
-                            append(
-                                "zipFile",
-                                zipFileBytes,
-                                io.ktor.http.Headers.build {
-                                    append(
-                                        io.ktor.http.HttpHeaders.ContentDisposition,
-                                        "form-data; name=\"zipFile\"; filename=\"${fileName}.zip\""
-                                    )
-                                    append(io.ktor.http.HttpHeaders.ContentType, "application/zip")
-                                }
-                            )
+                    // Append the zip file using ChannelProvider for proper multipart encoding
+                    append(
+                        "zipFile",
+                        zipFileBytes,
+                        io.ktor.http.Headers.build {
+                            append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"${zipFile.name}\"")
+                            append(io.ktor.http.HttpHeaders.ContentType, "application/zip")
                         }
                     )
-                )
-            }
+                }
+            )
 
             if (uploadResponse.status != HttpStatusCode.OK) {
+                Timber.tag(TAG).e("Upload failed with HTTP status: ${uploadResponse.status}")
                 throw Exception("Upload failed with status: ${uploadResponse.status}")
             }
 
             val uploadResponseText = uploadResponse.bodyAsText()
+            Timber.tag(TAG).d("Upload response: $uploadResponseText")
+            
             val uploadResponseData = Gson().fromJson(uploadResponseText, Map::class.java)
             
             val success = uploadResponseData?.get("success") as? Boolean
             if (success != true) {
                 val errorMessage = uploadResponseData?.get("message") as? String ?: "Upload failed"
+                Timber.tag(TAG).e("Upload failed: $errorMessage")
                 throw Exception(errorMessage)
             }
 
             val jobId = uploadResponseData["jobId"] as? String
-                ?: throw Exception("No job ID in response")
+            if (jobId == null) {
+                Timber.tag(TAG).e("No job ID in response: $uploadResponseText")
+                throw Exception("No job ID in response")
+            }
             
             Timber.tag(TAG).d("Upload started, job ID: $jobId")
 
@@ -177,15 +178,25 @@ class ZipUploadService(
                 if (statusResponse.status == HttpStatusCode.NotFound) {
                     // Job ID not found - cancel immediately without retry
                     Timber.tag(TAG).e("Job ID not found: $jobId")
-                    throw Exception("Job ID not found: $jobId")
+                    return@withContext ZipProcessingResult.Error("Job ID not found: $jobId")
                 }
                 
                 if (statusResponse.status != HttpStatusCode.OK) {
+                    Timber.tag(TAG).e("Status check failed with HTTP status: ${statusResponse.status}")
                     throw Exception("Status check failed with status: ${statusResponse.status}")
                 }
 
                 val statusResponseText = statusResponse.bodyAsText()
-                val statusData = Gson().fromJson(statusResponseText, Map::class.java)
+                Timber.tag(TAG).d("Status response raw: $statusResponseText")
+                
+                val statusData = try {
+                    Gson().fromJson(statusResponseText, Map::class.java)
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Failed to parse status response as JSON")
+                    throw Exception("Failed to parse status response: ${e.message}")
+                }
+                
+                Timber.tag(TAG).d("Status response parsed. Keys: ${statusData?.keys?.joinToString()}")
                 
                 val success = statusData?.get("success") as? Boolean
                 if (success != true) {
@@ -202,6 +213,8 @@ class ZipUploadService(
                 val status = statusData["status"] as? String
                 val progress = (statusData["progress"] as? Number)?.toInt() ?: 0
                 val message = statusData["message"] as? String ?: "Processing..."
+                
+                Timber.tag(TAG).d("Parsed values - status: $status, progress: $progress, message: $message")
 
                 // Log progress updates
                 if (progress != lastProgress || message != lastMessage) {
@@ -212,15 +225,38 @@ class ZipUploadService(
 
                 when (status) {
                     "completed" -> {
-                        val cid = statusData["cid"] as? String
-                            ?: throw Exception("No CID in completion response")
+                        Timber.tag(TAG).d("Status is 'completed', checking for CID...")
                         
-                        Timber.tag(TAG).d("Zip processing completed successfully: $cid")
+                        // Log all values in statusData for debugging
+                        Timber.tag(TAG).d("All status data: $statusData")
+                        
+                        // Try multiple possible field names for CID (case variations)
+                        val cidFromLowercase = statusData["cid"]
+                        val cidFromUppercase = statusData["CID"]
+                        val cidFromCapitalized = statusData["Cid"]
+                        
+                        Timber.tag(TAG).d("CID candidates - cid: $cidFromLowercase, CID: $cidFromUppercase, Cid: $cidFromCapitalized")
+                        
+                        val cid = cidFromLowercase as? String
+                            ?: cidFromUppercase as? String
+                            ?: cidFromCapitalized as? String
+                            ?: statusData["ipfsCid"] as? String
+                            ?: statusData["ipfs_cid"] as? String
+                        
+                        if (cid == null) {
+                            Timber.tag(TAG).e("No CID in completion response. Response: $statusResponseText")
+                            Timber.tag(TAG).e("Available keys: ${statusData.keys.joinToString()}")
+                            Timber.tag(TAG).e("Status data type: ${statusData.javaClass.name}")
+                            return@withContext ZipProcessingResult.Error("No CID in completion response")
+                        }
+                        
+                        Timber.tag(TAG).d("Zip processing completed successfully with CID: $cid")
                         return@withContext ZipProcessingResult.Success(cid)
                     }
                     "failed" -> {
                         val errorMessage = statusData["message"] as? String ?: "Zip processing failed"
-                        throw Exception(errorMessage)
+                        Timber.tag(TAG).e("Zip processing failed: $errorMessage")
+                        return@withContext ZipProcessingResult.Error(errorMessage)
                     }
                     "uploading", "processing" -> {
                         // Continue polling
@@ -228,17 +264,19 @@ class ZipUploadService(
                     }
                     else -> {
                         // Unknown status, continue polling
+                        Timber.tag(TAG).w("Unknown status: $status, continuing to poll...")
                         kotlinx.coroutines.delay(3000)
                     }
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).w("Error polling status: ${e.message}")
+                Timber.tag(TAG).w(e, "Error polling status: ${e.message}")
                 kotlinx.coroutines.delay(5000) // Wait 5 seconds before retry
             }
         }
         
         // If we exit the loop, it means we timed out
-        ZipProcessingResult.Error("Zip processing timeout after ${maxPollingTime / 1000 / 60} minutes")
+        Timber.tag(TAG).e("Zip processing timeout after ${maxPollingTime / 1000 / 60} minutes for job: $jobId")
+        return@withContext ZipProcessingResult.Error("Zip processing timeout after ${maxPollingTime / 1000 / 60} minutes")
     }
 
     /**
