@@ -92,13 +92,11 @@ class LocalHLSConverter(private val context: Context) {
             // Use standard configuration for all video sizes
             val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
 
-            // Fixed bitrates (always calculated, never detected)
+            // Calculate bitrates proportionally based on 720p = 1000k
             val resolution720pBitrate = "1000k"
-            val (lowerResolution, lowerResolutionBitrate) = if (useRoute2) {
-                Pair(360, "500k")  // 360p: 500k
-            } else {
-                Pair(480, "600k")  // 480p: 600k (fixed, not 750k)
-            }
+            val lowerResolution = if (useRoute2) 360 else 480
+            // Formula: bitrate = (1000 * resolution / 720)
+            val lowerResolutionBitrate = "${(1000 * lowerResolution / 720)}k"
 
             Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB, using HLS route ${if (useRoute2) "2" else "1"}: 720p (1000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
             

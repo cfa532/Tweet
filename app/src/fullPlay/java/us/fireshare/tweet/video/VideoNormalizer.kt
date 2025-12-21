@@ -472,17 +472,21 @@ class VideoNormalizer(private val context: Context) {
 
     /**
      * Get bitrate for a given resolution
-     * 720p: 1000k, 480p: 600k, 360p: 400k, other resolutions adjusted proportionally
+     * Calculates bitrate proportionally based on 720p = 1000k
      */
     private fun getBitrateForResolution(width: Int, height: Int): String {
         val maxDimension = maxOf(width, height)
         
-        return when {
-            maxDimension >= 720 -> "1000k"  // 720p and above
-            maxDimension >= 480 -> "600k"   // 480p
-            maxDimension >= 360 -> "400k"   // 360p
-            else -> "300k"                   // Lower resolutions
+        // Base: 720p = 1000k
+        // Formula: bitrate = (1000 * resolution / 720)
+        val proportionalBitrate = if (maxDimension >= 720) {
+            1000  // 720p and above
+        } else {
+            // Calculate proportional bitrate for resolutions < 720p
+            (1000 * maxDimension / 720).coerceAtLeast(300)  // Minimum 300k
         }
+        
+        return "${proportionalBitrate}k"
     }
 
     /**
