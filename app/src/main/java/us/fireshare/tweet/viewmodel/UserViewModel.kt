@@ -252,7 +252,7 @@ class UserViewModel @AssistedInject constructor(
             // For now, user avatar can only be image.
             HproseInstance.uploadToIPFS(
                 uri,
-                referenceId = appUser.mid
+                referenceId = null  // appUser.mid, avoid a backend bug for now.
             )?.let {
                 HproseInstance.setUserAvatar(appUser, it.mid)?.let { avatar ->  // Update appUser's avatar
                     // Clear the old avatar from cache if it exists

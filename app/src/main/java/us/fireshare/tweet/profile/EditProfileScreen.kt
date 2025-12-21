@@ -419,7 +419,7 @@ fun EditProfileScreen(
                     }
                 }
                 OutlinedTextField(
-                    value = name ?: "",
+                    value = name,
                     onValueChange = { viewModel.onNameChange(it) },
                     label = { Text(stringResource(R.string.name)) },
                     modifier = Modifier
@@ -429,7 +429,7 @@ fun EditProfileScreen(
                     singleLine = true
                 )
                 OutlinedTextField(
-                    value = profile ?: "",
+                    value = profile,
                     onValueChange = { viewModel.onProfileChange(it) },
                     label = { Text(stringResource(R.string.profile)) },
                     modifier = Modifier

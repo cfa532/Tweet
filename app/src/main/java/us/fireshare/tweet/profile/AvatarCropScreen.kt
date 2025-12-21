@@ -152,7 +152,6 @@ fun AvatarCropScreen(
                                     viewModel.viewModelScope.launch(Dispatchers.Main) {
                                         try {
                                             // Show cropping message and ensure UI updates
-                                            isCropping = true
                                             // Force recomposition with multiple yields and delay
                                             repeat(3) {
                                                 yield()
@@ -180,7 +179,6 @@ fun AvatarCropScreen(
                                             }
                                             
                                             // Clear cropping state and update UI
-                                            isCropping = false
                                             yield()
                                             
                                             // Notify that upload is starting BEFORE navigating
