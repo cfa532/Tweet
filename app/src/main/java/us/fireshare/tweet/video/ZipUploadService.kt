@@ -5,8 +5,6 @@ import com.google.gson.Gson
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.streams.asInput
@@ -16,7 +14,6 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.User
 import java.io.File
-import java.io.FileInputStream
 
 /**
  * Service for uploading ZIP files containing HLS content to the /process-zip endpoint
@@ -43,7 +40,6 @@ class ZipUploadService(
     suspend fun uploadZipFile(
         zipFile: File,
         fileName: String,
-        fileTimestamp: Long,
         referenceId: MimeiId?
     ): ZipProcessingResult = withContext(Dispatchers.IO) {
         try {
@@ -131,9 +127,7 @@ class ZipUploadService(
             // Poll for progress and completion
             return@withContext pollZipProcessingStatus(
                 jobId = jobId,
-                baseUrl = "$scheme://$host:$cloudDrivePort",
-                fileName = fileName,
-                fileTimestamp = fileTimestamp
+                baseUrl = "$scheme://$host:$cloudDrivePort"
             )
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during zip upload")
@@ -145,15 +139,11 @@ class ZipUploadService(
      * Poll the status of zip processing job
      * @param jobId Job ID returned from upload
      * @param baseUrl Base URL for status endpoint
-     * @param fileName Original filename
-     * @param fileTimestamp File timestamp
      * @return Result containing the final CID or error
      */
     suspend fun pollZipProcessingStatus(
         jobId: String,
-        baseUrl: String,
-        fileName: String,
-        fileTimestamp: Long
+        baseUrl: String
     ): ZipProcessingResult = withContext(Dispatchers.IO) {
         val statusURL = "$baseUrl/process-zip/status/$jobId"
         var lastProgress = 0

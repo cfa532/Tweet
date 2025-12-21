@@ -21,8 +21,8 @@ import java.io.File
  */
 class LocalVideoProcessingService(
     private val context: Context,
-    private val httpClient: HttpClient,
-    private val appUser: User
+    httpClient: HttpClient,
+    appUser: User
 ) {
 
     companion object {
@@ -61,7 +61,7 @@ class LocalVideoProcessingService(
                 // Calculate file size before conversion
                 val fileSize = withContext(Dispatchers.IO) {
                     try {
-                        var size: Long = 0L
+                        var size = 0L
                         context.contentResolver.openInputStream(uri)?.use { inputStream ->
                             val buffer = ByteArray(8192) // 8KB buffer
                             var bytesRead: Int
@@ -100,7 +100,6 @@ class LocalVideoProcessingService(
                                 val processingResult = zipUploadService.uploadZipFile(
                                     zipResult.zipFile,
                                     fileName,
-                                    fileTimestamp,
                                     referenceId
                                 )
                                 
@@ -132,24 +131,15 @@ class LocalVideoProcessingService(
                                     is ZipUploadService.ZipProcessingResult.Error -> {
                                         VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
                                     }
-                                    else -> {
-                                        VideoProcessingResult.Error("Unknown processing result type")
-                                    }
                                 }
                             }
                             is ZipCompressor.ZipCompressionResult.Error -> {
                                 VideoProcessingResult.Error("Compression failed: ${zipResult.message}")
                             }
-                            else -> {
-                                VideoProcessingResult.Error("Unknown compression result type")
-                            }
                         }
                     }
                     is LocalHLSConverter.HLSConversionResult.Error -> {
                         VideoProcessingResult.Error("HLS conversion failed: ${hlsResult.message}")
-                    }
-                    else -> {
-                        VideoProcessingResult.Error("Unknown HLS conversion result type")
                     }
                 }
             } finally {
