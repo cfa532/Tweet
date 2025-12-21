@@ -185,14 +185,17 @@ class LocalHLSConverter(private val context: Context) {
                 // Use fixed bitrate (always 1000k for 720p)
                 val target720pBitrate = resolution720pBitrate
                 
-                // For 720p HLS stream: Use COPY codec if video is already normalized to 720p/1000k
-                // If not normalized, re-encode with libx264 to ensure iOS/VideoJs compatibility settings
-                val shouldUseCopyFor720p = isNormalized && videoResolutionValue == 720
+                    // For 720p HLS stream: Use COPY codec if video is already normalized AND dimensions match exactly
+                // If no scaling is needed (dimensions match), use COPY to save processing time and preserve quality
+                // If not normalized or dimensions don't match, re-encode with libx264
+                val shouldUseCopyFor720p = isNormalized && 
+                    finalWidth720 == videoResolution?.first && 
+                    finalHeight720 == videoResolution?.second
                 
                 if (shouldUseCopyFor720p) {
-                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (video already normalized to 720p/1000k)")
+                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (video already normalized to ${finalWidth720}x${finalHeight720}/${target720pBitrate}, no scaling needed)")
                 } else {
-                    Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, re-encoding with libx264 for compatibility, bitrate=${target720pBitrate}")
+                    Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, re-encoding with libx264, bitrate=${target720pBitrate}")
                 }
                 
                 // Execute FFmpeg command for 720p with fallback (dynamic timeout)
@@ -236,11 +239,18 @@ class LocalHLSConverter(private val context: Context) {
             // Use fixed bitrate (always calculated, never detected)
             val targetLowerBitrate = lowerResolutionBitrate
             
-            // For lower resolution HLS stream: Always re-encode with libx264 (downscale from source)
-            // This ensures iOS/VideoJs compatibility settings (baseline profile, yuv420p, etc.) are always applied
-            val shouldUseCopyForLower = false
+            // For lower resolution HLS stream: Use COPY codec if video is already normalized AND dimensions match exactly
+            // If no scaling is needed (dimensions match), use COPY to save processing time and preserve quality
+            // If not normalized or dimensions don't match, re-encode with libx264 (downscale from source)
+            val shouldUseCopyForLower = isNormalized && 
+                finalWidthLower == videoResolution?.first && 
+                finalHeightLower == videoResolution?.second
             
-            Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264 (downscale), bitrate=${targetLowerBitrate}")
+            if (shouldUseCopyForLower) {
+                Timber.tag(TAG).d("${lowerResolution}p HLS stream: Using COPY codec (video already normalized to ${finalWidthLower}x${finalHeightLower}/${targetLowerBitrate}, no scaling needed)")
+            } else {
+                Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264, bitrate=${targetLowerBitrate}")
+            }
             
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
             val successLower = withTimeout(dynamicTimeoutMs) {
