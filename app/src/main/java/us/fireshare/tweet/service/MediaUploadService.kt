@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -218,6 +219,12 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
+            // Mini version: Skip FFmpeg processing, upload directly to IPFS
+            if (BuildConfig.IS_MINI_VERSION) {
+                Timber.tag(TAG).d("Mini version detected: Uploading video directly without local processing")
+                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
+            }
+            
             Timber.tag(TAG).d("Starting video processing with new normalization and routing algorithm")
             
             // Use LocalVideoProcessingService which implements the complete algorithm:
@@ -256,6 +263,12 @@ class MediaUploadService(
         videoResolution: Pair<Int, Int>?,
         isNormalized: Boolean
     ): MimeiFileType? {
+        // Safety check: Mini version should never call this method
+        if (BuildConfig.IS_MINI_VERSION) {
+            Timber.tag(TAG).w("Mini version attempted to call routeVideoBySize - uploading directly")
+            return uploadToIPFSOriginal(videoUri, fileName, fileTimestamp, referenceId, MediaType.Video)
+        }
+        
         val videoResolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
         
         return when {
@@ -335,6 +348,12 @@ class MediaUploadService(
         useRoute2: Boolean = false
     ): MimeiFileType? {
         return try {
+            // Safety check: Mini version should never call this method
+            if (BuildConfig.IS_MINI_VERSION) {
+                Timber.tag(TAG).w("Mini version attempted to call processVideoLocally - uploading directly")
+                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
+            }
+            
             // Check if conversion server is available
             val serverAvailable = isConversionServerAvailable()
             
@@ -388,6 +407,12 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
+            // Safety check: Mini version should never call this method (no FFmpeg)
+            if (BuildConfig.IS_MINI_VERSION) {
+                Timber.tag(TAG).w("Mini version attempted to call normalizeAndUploadVideo - uploading directly")
+                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
+            }
+            
             Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
             
             // Check if video resolution is > 720p
