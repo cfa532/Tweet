@@ -218,78 +218,17 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            Timber.tag(TAG).d("Starting video processing with routing logic")
+            Timber.tag(TAG).d("Starting video processing with new normalization and routing algorithm")
             
-            // Step 1: Check video resolution to determine if normalization is needed
-            val videoResolution = VideoManager.getVideoResolution(context, uri)
-            val videoResolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
-            val originalFileSize = getFileSize(uri) ?: 0L
+            // Use LocalVideoProcessingService which implements the complete algorithm:
+            // 1. Resolution Detection: Landscape (width ≥ height) = HEIGHT, Portrait (width < height) = WIDTH
+            // 2. Video Normalization: >720p → 720p@1500k, ≤720p → original@proportional bitrate
+            // 3. Routing After Normalization: ≤32MB → progressive, >32MB → HLS
+            // 4. HLS Variant Selection: >480p → dual (720p + 480p), ≤480p → single (480p only)
+            // 5. HLS Segment Creation with COPY Encoder: preserves native quality when possible
+            val useRoute2 = false // Always use route 1 (720p + 480p) for dual variant
+            processVideoLocally(uri, fileName, fileTimestamp, referenceId, useRoute2)
             
-            Timber.tag(TAG).d("Video resolution: $videoResolution (${videoResolutionValue}p), original size: ${originalFileSize / (1024.0 * 1024.0)}MB")
-            
-            // Step 2: Determine if normalization is needed
-            val needsNormalization = videoResolutionValue != null && videoResolutionValue > 720
-            
-            if (needsNormalization) {
-                // Video > 720p: Normalize first, then route based on normalized size
-                Timber.tag(TAG).d("Video > 720p, normalizing to 720p/1000k first")
-                val normalizer = VideoNormalizer(context)
-                val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
-                
-                try {
-                    val normalizationResult = normalizer.normalizeTo720p1000k(uri, normalizedFile)
-                    
-                    when (normalizationResult) {
-                        is VideoNormalizer.NormalizationResult.Success -> {
-                            // Check normalized video size
-                            val normalizedSize = normalizedFile.length()
-                            val normalizedSizeMB = normalizedSize / (1024.0 * 1024.0)
-                            
-                            Timber.tag(TAG).d("Normalized video size: ${String.format(Locale.US, "%.1f", normalizedSizeMB)}MB (${normalizedSize} bytes)")
-                            
-                            // Route based on normalized size
-                            routeVideoBySize(
-                                videoUri = Uri.fromFile(normalizedFile),
-                                fileName = fileName,
-                                fileTimestamp = fileTimestamp,
-                                referenceId = referenceId,
-                                fileSize = normalizedSize,
-                                videoResolution = VideoManager.getVideoResolution(context, Uri.fromFile(normalizedFile)),
-                                isNormalized = true
-                            )
-                        }
-                        is VideoNormalizer.NormalizationResult.Error -> {
-                            Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
-                            // Fall back to uploading original video as progressive video
-                            Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
-                            uploadToIPFSOriginal(
-                                uri,
-                                fileName,
-                                fileTimestamp,
-                                referenceId,
-                                MediaType.Video
-                            )
-                        }
-                    }
-                } finally {
-                    // Clean up normalized file
-                    if (normalizedFile.exists()) {
-                        normalizedFile.delete()
-                    }
-                }
-            } else {
-                // Video ≤ 720p: Skip normalization, use original file size for routing
-                Timber.tag(TAG).d("Video ≤ 720p, skipping normalization, using original file size for routing")
-                routeVideoBySize(
-                    videoUri = uri,
-                    fileName = fileName,
-                    fileTimestamp = fileTimestamp,
-                    referenceId = referenceId,
-                    fileSize = originalFileSize,
-                    videoResolution = videoResolution,
-                    isNormalized = false
-                )
-            }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in video processing with routing")
             // Fall back to direct IPFS upload as progressive video
@@ -371,20 +310,12 @@ class MediaUploadService(
                 }
             }
             else -> {
-                // > 32MB: HLS conversion based on resolution
-                // Route based on resolution:
-                // - Resolution > 480p: Dual variant (720p + 480p)
-                // - Resolution ≤ 480p: Single variant (480p only)
+                // > 32MB: HLS conversion
+                // Normalization and variant selection are now handled automatically in processVideo
                 val useRoute2 = false // Always use route 1 (720p + 480p) for dual variant
-                val shouldCreateDualVariant = videoResolutionValue != null && videoResolutionValue > 480
                 
-                if (shouldCreateDualVariant) {
-                    Timber.tag(TAG).d("Video > 32MB and resolution > 480p (${videoResolutionValue}p), using HLS dual variant (720p + 480p)")
-                } else {
-                    Timber.tag(TAG).d("Video > 32MB and resolution ≤ 480p (${videoResolutionValue}p), using HLS single variant (480p only)")
-                }
-                
-                processVideoLocally(videoUri, fileName, fileTimestamp, referenceId, useRoute2 = useRoute2, isNormalized = isNormalized, shouldCreateDualVariant = shouldCreateDualVariant)
+                Timber.tag(TAG).d("Video > 32MB, routing to HLS conversion")
+                processVideoLocally(videoUri, fileName, fileTimestamp, referenceId, useRoute2 = useRoute2)
             }
         }
     }
@@ -395,17 +326,13 @@ class MediaUploadService(
      * 1. Check if cloudDrivePort is valid and conversion server is available
      * 2. If available: convert to HLS, compress, and upload to /process-zip
      * 3. If not available: normalize to mp4 (resample to 720p if > 720p) and upload to IPFS
-     * 
-     * @param shouldCreateDualVariant If true, create dual variant (720p + 480p), otherwise single variant (480p only)
      */
     private suspend fun processVideoLocally(
         uri: Uri,
         fileName: String?,
         fileTimestamp: Long,
         referenceId: MimeiId?,
-        useRoute2: Boolean = false,
-        isNormalized: Boolean = false,
-        shouldCreateDualVariant: Boolean = true
+        useRoute2: Boolean = false
     ): MimeiFileType? {
         return try {
             // Check if conversion server is available
@@ -413,16 +340,14 @@ class MediaUploadService(
             
             if (serverAvailable) {
                 // Use HLS conversion and upload to process-zip endpoint
-                Timber.tag(TAG).d("Processing video via HLS conversion server (route ${if (useRoute2) "2" else "1"}, normalized: $isNormalized, dual variant: $shouldCreateDualVariant)")
+                Timber.tag(TAG).d("Processing video via HLS conversion server (route ${if (useRoute2) "2" else "1"})")
                 val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
                 val result = localProcessingService.processVideo(
                     uri = uri,
                     fileName = fileName ?: "video",
                     fileTimestamp = fileTimestamp,
                     referenceId = referenceId,
-                    useRoute2 = useRoute2,
-                    isNormalized = isNormalized,
-                    shouldCreateDualVariant = shouldCreateDualVariant
+                    useRoute2 = useRoute2
                 )
                 
                 when (result) {

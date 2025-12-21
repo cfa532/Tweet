@@ -71,8 +71,9 @@ class LocalHLSConverter(private val context: Context) {
      * @param fileName Original filename (without extension)
      * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
      * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
-     * @param isNormalized If true, the input video is already normalized to 720p/1000k, use COPY codec for 720p
+     * @param isNormalized If true, the input video is already normalized
      * @param shouldCreateDualVariant If true, create dual variant (720p + 480p), otherwise single variant (480p only)
+     * @param normalizedResolution The resolution to which the video was normalized (null if not normalized)
      * @return Result containing the output directory path and success status
      */
     suspend fun convertToHLS(
@@ -82,7 +83,8 @@ class LocalHLSConverter(private val context: Context) {
         fileSizeBytes: Long,
         useRoute2: Boolean = false,
         isNormalized: Boolean = false,
-        shouldCreateDualVariant: Boolean = true
+        shouldCreateDualVariant: Boolean = true,
+        normalizedResolution: Int? = null
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
@@ -185,15 +187,15 @@ class LocalHLSConverter(private val context: Context) {
                 // Use fixed bitrate (always 1000k for 720p)
                 val target720pBitrate = resolution720pBitrate
                 
-                    // For 720p HLS stream: Use COPY codec if video is already normalized AND dimensions match exactly
-                // If no scaling is needed (dimensions match), use COPY to save processing time and preserve quality
-                // If not normalized or dimensions don't match, re-encode with libx264
+                // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
+                // This preserves native quality without upscaling
                 val shouldUseCopyFor720p = isNormalized && 
-                    finalWidth720 == videoResolution?.first && 
-                    finalHeight720 == videoResolution?.second
+                    normalizedResolution != null && 
+                    normalizedResolution > 480 && 
+                    normalizedResolution <= 720
                 
                 if (shouldUseCopyFor720p) {
-                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (video already normalized to ${finalWidth720}x${finalHeight720}/${target720pBitrate}, no scaling needed)")
+                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, >480p and ≤720p, preserving native quality)")
                 } else {
                     Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, re-encoding with libx264, bitrate=${target720pBitrate}")
                 }
@@ -239,15 +241,14 @@ class LocalHLSConverter(private val context: Context) {
             // Use fixed bitrate (always calculated, never detected)
             val targetLowerBitrate = lowerResolutionBitrate
             
-            // For lower resolution HLS stream: Use COPY codec if video is already normalized AND dimensions match exactly
-            // If no scaling is needed (dimensions match), use COPY to save processing time and preserve quality
-            // If not normalized or dimensions don't match, re-encode with libx264 (downscale from source)
+            // For lower resolution HLS stream: Use COPY codec if normalized resolution is ≤480p
+            // This preserves native quality without upscaling
             val shouldUseCopyForLower = isNormalized && 
-                finalWidthLower == videoResolution?.first && 
-                finalHeightLower == videoResolution?.second
+                normalizedResolution != null && 
+                normalizedResolution <= lowerResolution
             
             if (shouldUseCopyForLower) {
-                Timber.tag(TAG).d("${lowerResolution}p HLS stream: Using COPY codec (video already normalized to ${finalWidthLower}x${finalHeightLower}/${targetLowerBitrate}, no scaling needed)")
+                Timber.tag(TAG).d("${lowerResolution}p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, ≤${lowerResolution}p, preserving native quality)")
             } else {
                 Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264, bitrate=${targetLowerBitrate}")
             }
