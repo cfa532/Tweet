@@ -29,7 +29,7 @@ class VideoNormalizer(private val context: Context) {
         // Bitrate constants for video normalization
         private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
         private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
-        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality
+        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps for quality
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 5 * 60 * 1000L   // 5 minutes minimum

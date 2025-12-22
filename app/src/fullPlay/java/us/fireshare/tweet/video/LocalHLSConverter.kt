@@ -104,11 +104,11 @@ class LocalHLSConverter(private val context: Context) {
 
             // Calculate bitrates using proportional algorithm (consistent with server and iOS)
             // High quality bitrate depends on source resolution:
-            // - >720p: normalize to 720p @ 1500k
+            // - >720p: normalize to 720p @ 1000k
             // - =720p: 720p @ 1000k (base reference)
             // - <720p: original resolution @ proportional bitrate based on pixel count
             val highQualityBitrate = when {
-                videoResolutionValue != null && videoResolutionValue > 720 -> 1500
+                videoResolutionValue != null && videoResolutionValue > 720 -> 1000
                 videoResolutionValue == 720 -> REFERENCE_720P_BITRATE
                 videoResolutionValue != null && videoResolutionValue < 720 && videoResolution != null -> {
                     val (width, height) = videoResolution
