@@ -238,6 +238,57 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
+     * Load a page of cached tweets and merge them with the existing tweets StateFlow.
+     * This function loads tweets from the cache without making network calls.
+     * 
+     * @param pageNumber The page number to load (0-indexed)
+     * @return List of cached tweets loaded (as Tweet? to match fetchTweets signature)
+     */
+    suspend fun loadCachedTweetsPage(pageNumber: Int): List<Tweet?> {
+        return try {
+            Timber.tag("loadCachedTweetsPage").d("Loading cached tweets page $pageNumber for user: ${user.value.mid}")
+            
+            // Load cached tweets for this page
+            val cachedTweets = loadCachedTweetsByAuthor(
+                user.value.mid, 
+                pageNumber * TW_CONST.PAGE_SIZE, 
+                TW_CONST.PAGE_SIZE
+            )
+            
+            // Update _tweets with cached tweets
+            _tweets.update { currentTweets ->
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                
+                // Get pinned tweet IDs to exclude them from regular tweets list
+                val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+                val tweetsWithoutPinned = newCachedTweets.filterNot { 
+                    pinnedTweetIds.contains(it.mid) 
+                }
+                
+                if (tweetsWithoutPinned.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + tweetsWithoutPinned)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    Timber.tag("loadCachedTweetsPage").d("Merged ${tweetsWithoutPinned.size} new cached tweets, total: ${mergedTweets.size}")
+                    mergedTweets
+                } else {
+                    Timber.tag("loadCachedTweetsPage").d("No new cached tweets to merge")
+                    currentTweets
+                }
+            }
+            
+            Timber.tag("loadCachedTweetsPage").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}, page: $pageNumber")
+            
+            // Return cached tweets as nullable list to match fetchTweets signature
+            cachedTweets.map { it as Tweet? }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedTweetsPage").e(e, "Error loading cached tweets page $pageNumber for user: ${user.value.mid}")
+            emptyList()
+        }
+    }
+
+    /**
      * Whether the tweet is pinned to top list.
      * */
     fun hasPinned(tweet: Tweet): Boolean {

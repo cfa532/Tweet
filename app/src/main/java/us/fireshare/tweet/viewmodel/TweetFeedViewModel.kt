@@ -145,6 +145,52 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         fetchTweets(pageNumber)
     }
 
+    /**
+     * Load a page of cached tweets and merge them with the existing tweets StateFlow.
+     * This function loads tweets from the cache without making network calls.
+     * Useful for quickly showing content while offline or before network requests complete.
+     * 
+     * @param pageNumber The page number to load (0-indexed)
+     * @param pageSize The number of tweets per page (defaults to TW_CONST.PAGE_SIZE)
+     * @return List of cached tweets loaded (as Tweet? to match fetchTweets signature)
+     */
+    suspend fun loadCachedTweetsPage(
+        pageNumber: Int,
+        pageSize: Int = TW_CONST.PAGE_SIZE
+    ): List<Tweet?> {
+        return try {
+            Timber.tag("loadCachedTweetsPage").d("Loading cached tweets page $pageNumber for mainfeed")
+            
+            // Load cached tweets for this page (mainfeed tweets are cached by appUser.mid)
+            val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
+            
+            // Merge cached tweets with existing tweets
+            _tweets.update { currentTweets ->
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                
+                if (newCachedTweets.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + newCachedTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    Timber.tag("loadCachedTweetsPage").d("Merged ${newCachedTweets.size} new cached tweets, total: ${mergedTweets.size}")
+                    mergedTweets
+                } else {
+                    Timber.tag("loadCachedTweetsPage").d("No new cached tweets to merge")
+                    currentTweets
+                }
+            }
+            
+            Timber.tag("loadCachedTweetsPage").d("Loaded ${cachedTweets.size} cached tweets for mainfeed, page: $pageNumber")
+            
+            // Return cached tweets as nullable list to match fetchTweets signature
+            cachedTweets.map { it as Tweet? }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedTweetsPage").e(e, "Error loading cached tweets page $pageNumber for mainfeed")
+            emptyList()
+        }
+    }
+
     private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
         val startTime = System.currentTimeMillis()
         Timber.tag("TweetFeedViewModel").d("Waiting for appUser.baseUrl to be available (timeout: ${timeoutMillis}ms)")
@@ -170,10 +216,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
+        Timber.tag("MainFeed-fetchTweets").d("🔄 fetchTweets called for page $pageNumber (pageSize: $pageSize)")
+        val startTime = System.currentTimeMillis()
+        
         /**
          * Show cached tweets before loading from net.
          * */
+        Timber.tag("MainFeed-fetchTweets").d("📦 Loading cached tweets from local storage...")
+        val cachedLoadStart = System.currentTimeMillis()
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
+        val cachedLoadTime = System.currentTimeMillis() - cachedLoadStart
+        Timber.tag("MainFeed-fetchTweets").d("✅ Loaded ${cachedTweets.size} cached tweets in ${cachedLoadTime}ms")
 
         if (appUser.isGuest()) {
             // For guest users: call getTweetsByUser() to fetch tweets
@@ -196,6 +249,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
+            Timber.tag("MainFeed-fetchTweets").d("👤 Regular user: merging ${cachedTweets.size} cached tweets with current list")
+            val beforeMerge = _tweets.value.size
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
                 val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
@@ -209,20 +264,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     currentTweets
                 }
             }
+            val afterMerge = _tweets.value.size
+            Timber.tag("MainFeed-fetchTweets").d("📊 Tweet list size: $beforeMerge -> $afterMerge (cached merge done in ${System.currentTimeMillis() - startTime}ms)")
 
             /**
              * Load tweet feed from network
              * */
+            Timber.tag("MainFeed-fetchTweets").d("🌐 Starting network call to getTweetFeed...")
+            val networkStartTime = System.currentTimeMillis()
             val tweetsWithNulls = HproseInstance.getTweetFeed(
                 appUser,
                 pageNumber,
                 pageSize,
             )
+            val networkTime = System.currentTimeMillis() - networkStartTime
+            Timber.tag("MainFeed-fetchTweets").d("✅ Network returned ${tweetsWithNulls.size} tweets in ${networkTime}ms")
 
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
 
             // Always merge new tweets with existing ones, never replace
+            val beforeNetworkMerge = _tweets.value.size
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
                 val trulyNewTweets = validTweets.filter { it.mid !in currentTweetIds }
@@ -236,6 +298,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     currentTweets
                 }
             }
+            val afterNetworkMerge = _tweets.value.size
+            val totalTime = System.currentTimeMillis() - startTime
+            Timber.tag("MainFeed-fetchTweets").d("🏁 fetchTweets completed: $beforeNetworkMerge -> $afterNetworkMerge tweets, total time: ${totalTime}ms (cached: ${cachedLoadTime}ms, network: ${networkTime}ms)")
 
             /**
              * Check for new tweets of followings when page number is 0
