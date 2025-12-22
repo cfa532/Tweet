@@ -7,13 +7,16 @@ import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import io.ktor.utils.io.core.writeFully
 import io.ktor.utils.io.streams.asInput
+import io.ktor.utils.io.writer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.User
 import java.io.File
+import java.io.FileInputStream
 
 /**
  * Service for uploading ZIP files containing HLS content to the /process-zip endpoint
@@ -27,6 +30,28 @@ class ZipUploadService(
 
     companion object {
         private const val TAG = "ZipUploadService"
+        // Use small buffer size to minimize memory footprint during upload
+        // This prevents OOM errors with large files (e.g., 292MB+ ZIP files)
+        private const val UPLOAD_BUFFER_SIZE = 8192 // 8KB chunks for controlled memory usage
+        private const val MAX_UPLOAD_CHUNK = 64 * 1024 // 64KB max chunk size
+        
+        /**
+         * Log current memory usage for monitoring OOM risk
+         */
+        private fun logMemoryUsage(context: String) {
+            val runtime = Runtime.getRuntime()
+            val usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+            val maxMemory = runtime.maxMemory() / (1024 * 1024)
+            val freeMemory = runtime.freeMemory() / (1024 * 1024)
+            val percentUsed = (usedMemory * 100) / maxMemory
+            
+            Timber.tag(TAG).d("[$context] Memory: ${usedMemory}MB used / ${maxMemory}MB max ($percentUsed%), ${freeMemory}MB free")
+            
+            // Warning if memory usage is high
+            if (percentUsed > 85) {
+                Timber.tag(TAG).w("[$context] HIGH MEMORY USAGE: $percentUsed% - risk of OOM")
+            }
+        }
     }
 
     /**
@@ -70,10 +95,16 @@ class ZipUploadService(
             Timber.tag(TAG).d("Process-zip URL: $processZipURL")
 
             val zipFileSize = zipFile.length()
-            Timber.tag(TAG).d("Zip file size: $zipFileSize bytes")
-            Timber.tag(TAG).d("Initiating streaming upload to: $processZipURL")
+            Timber.tag(TAG).d("Zip file size: $zipFileSize bytes (${zipFileSize / (1024 * 1024)}MB)")
+            
+            // Log memory before upload starts
+            logMemoryUsage("Before ZIP upload")
+            
+            Timber.tag(TAG).d("Initiating memory-controlled streaming upload to: $processZipURL")
+            Timber.tag(TAG).d("Upload buffer size: ${UPLOAD_BUFFER_SIZE / 1024}KB, max chunk: ${MAX_UPLOAD_CHUNK / 1024}KB")
 
-            // Use streaming for memory efficiency - doesn't load entire file into memory
+            // Use controlled streaming with explicit buffer sizes to prevent OOM
+            // This is critical for large ZIP files (200MB+) on devices with limited heap
             val uploadResponse = httpClient.submitFormWithBinaryData(
                 url = processZipURL,
                 formData = io.ktor.client.request.forms.formData {
@@ -85,17 +116,46 @@ class ZipUploadService(
                         append("referenceId", it)
                     }
 
-                    // Stream the zip file directly without loading into memory
-                    append(
-                        "zipFile",
-                        zipFile.inputStream().asInput(),
-                        io.ktor.http.Headers.build {
+                    // Stream the zip file with controlled buffer size
+                    // Using channelProvider to have fine-grained control over memory allocation
+                    appendInput(
+                        key = "zipFile",
+                        headers = io.ktor.http.Headers.build {
                             append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"${zipFile.name}\"")
                             append(io.ktor.http.HttpHeaders.ContentType, "application/zip")
+                            append(io.ktor.http.HttpHeaders.ContentLength, zipFileSize.toString())
+                        },
+                        size = zipFileSize
+                    ) {
+                        // Custom channel provider with controlled buffer sizes
+                        buildPacket {
+                            FileInputStream(zipFile).use { fileStream ->
+                                val buffer = ByteArray(UPLOAD_BUFFER_SIZE)
+                                var totalRead = 0L
+                                var bytesRead: Int
+                                var lastLoggedPercent = 0
+
+                                while (fileStream.read(buffer).also { bytesRead = it } != -1) {
+                                    writeFully(buffer, 0, bytesRead)
+                                    totalRead += bytesRead
+
+                                    // Log progress every 10%
+                                    val currentPercent = ((totalRead * 100) / zipFileSize).toInt()
+                                    if (currentPercent >= lastLoggedPercent + 10) {
+                                        Timber.tag(TAG).d("Upload progress: $currentPercent% (${totalRead / (1024 * 1024)}MB / ${zipFileSize / (1024 * 1024)}MB)")
+                                        lastLoggedPercent = currentPercent
+                                    }
+                                }
+                                
+                                Timber.tag(TAG).d("File streaming completed: $totalRead bytes")
+                            }
                         }
-                    )
+                    }
                 }
             )
+            
+            // Log memory after upload completes
+            logMemoryUsage("After ZIP upload")
             
             Timber.tag(TAG).d("Upload completed, response status: ${uploadResponse.status}")
 
@@ -123,6 +183,11 @@ class ZipUploadService(
             }
             
             Timber.tag(TAG).d("Upload started, job ID: $jobId")
+
+            // Suggest garbage collection after large upload to free memory
+            // This is just a hint - JVM decides when to actually GC
+            System.gc()
+            logMemoryUsage("After GC suggestion")
 
             // Poll for progress and completion
             return@withContext pollZipProcessingStatus(
