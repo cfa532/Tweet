@@ -77,16 +77,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 waitForAppUser()
                 if (appUser.baseUrl != null) {
                     // BaseUrl available, try to load tweets from server
-                    // refresh() calls fetchTweets() which sets initState = false right after cached tweets are loaded
-                    // This allows UI to render immediately while server fetch continues
                     refresh(0)
                 } else {
                     // BaseUrl not available, load cached tweets only
                     Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, loading cached tweets only")
                     loadCachedTweetsOnly()
-                    if (initState.value) {
-                        initState.value = false
-                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization, loading cached tweets")
@@ -97,10 +92,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     Timber.tag("TweetFeedViewModel").e(cacheError, "Failed to load cached tweets")
                     _tweets.value = emptyList()
                 }
-                // Hide loading spinner even on error
-                if (initState.value) {
-                    initState.value = false
-                }
+            } finally {
+                initState.value = false
             }
         }
     }
@@ -215,13 +208,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 } else {
                     currentTweets
                 }
-            }
-            
-            // For page 0 (initial load), hide loading spinner immediately after cached tweets are loaded
-            // This allows UI to render cached content while server fetch continues
-            if (pageNumber == 0 && initState.value) {
-                initState.value = false
-                Timber.tag("TweetFeedViewModel").d("Cached tweets rendered, hiding loading spinner. Server fetch will continue in background.")
             }
 
             /**

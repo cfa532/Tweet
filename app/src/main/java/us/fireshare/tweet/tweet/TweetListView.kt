@@ -198,16 +198,13 @@ fun TweetListView(
                 return@LaunchedEffect
             }
 
-            // Initialize with 2 pages only (matching server initial load behavior)
-            // This prevents rendering all cached tweets at once and ensures proper ordering
+            // Initialize with enough data (at least 4 tweets) - with timeout protection
             var localServerDepleted = false
             var pageToLoad = 0
-            val maxInitialPages = 2 // Only load 2 pages initially
             val startTime = System.currentTimeMillis()
             val maxInitializationTime = 10000L // 10 seconds timeout
 
             while (!localServerDepleted &&
-                pageToLoad < maxInitialPages &&
                 (System.currentTimeMillis() - startTime) < maxInitializationTime
             ) {
 
@@ -241,10 +238,10 @@ fun TweetListView(
                     pageToLoad++
 
                     Timber.tag("TweetListView")
-                        .d("Loaded page ${pageToLoad - 1}: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
+                        .d("Page $pageToLoad: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
 
                     // Add small delay to prevent overwhelming the main thread
-                    if (pageToLoad > 0 && pageToLoad < maxInitialPages) {
+                    if (pageToLoad > 0) {
                         delay(100)
                     }
 
