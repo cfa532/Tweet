@@ -71,7 +71,7 @@ fun BottomNavigationBar(
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
     var showUpgradeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Items list - must depend on badgeCount to update when badge changes
     val items = remember(badgeCount) {
@@ -178,7 +178,7 @@ fun BottomNavigationBar(
                                 // Use a coroutine scope for guest warning
                                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
                                     .launch {
-                                        guestWarning(context, navController)
+                                        guestWarning(context, navController, guestReminderText)
                                     }
                                 return@clickable
                             }

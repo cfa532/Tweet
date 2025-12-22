@@ -110,6 +110,9 @@ fun ReplyEditorBox(
         showCamera = true
     }
 
+    // Capture string resources at composable level
+    val cameraPermissionRequiredText = stringResource(R.string.camera_permission_required)
+    
     // Request camera permission
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -117,7 +120,7 @@ fun ReplyEditorBox(
         if (isGranted) {
             openCamera()
         } else {
-            Toast.makeText(context, context.getString(R.string.camera_permission_required), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, cameraPermissionRequiredText, Toast.LENGTH_SHORT).show()
         }
     }
 

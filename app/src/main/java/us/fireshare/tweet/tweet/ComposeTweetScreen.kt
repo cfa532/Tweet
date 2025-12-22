@@ -2,6 +2,8 @@ package us.fireshare.tweet.tweet
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -55,8 +57,9 @@ fun ComposeTweetScreen(
     navController: NavHostController
 ) {
     val context = LocalContext.current
+    val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     // Capture string resources at composable level to avoid Android Studio warnings
     val filesTooLargeText = stringResource(R.string.files_too_large)
 

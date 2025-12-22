@@ -652,11 +652,12 @@ fun AdvancedImageViewer(
                                 .clickable {
                                     loadState.bitmap?.let { bitmap ->
                                         val success = saveImageToGallery(context, bitmap)
-                                        if (success) {
-                                            Toast.makeText(context, context.getString(R.string.image_saved_to_gallery), Toast.LENGTH_SHORT).show()
+                                        val message = if (success) {
+                                            context.getString(R.string.image_saved_to_gallery)
                                         } else {
-                                            Toast.makeText(context, context.getString(R.string.failed_to_save_image), Toast.LENGTH_SHORT).show()
+                                            context.getString(R.string.failed_to_save_image)
                                         }
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     showMenu = false
                                 }
@@ -1184,8 +1185,8 @@ fun ImageViewer(
                                     Toast.LENGTH_SHORT
                                 ).show()
                             } else {
-                                Toast.makeText(context, context.getString(R.string.failed_to_save_image), Toast.LENGTH_SHORT)
-                                    .show()
+                                val failedMessage = context.getString(R.string.failed_to_save_image)
+                                Toast.makeText(context, failedMessage, Toast.LENGTH_SHORT).show()
                             }
                         }
                         showMenu = false

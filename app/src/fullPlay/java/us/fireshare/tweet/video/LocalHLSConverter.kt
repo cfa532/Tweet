@@ -92,7 +92,8 @@ class LocalHLSConverter(private val context: Context) {
         try {
             Timber.tag(TAG).d("========== SECOND PASS (HLS Segmentation) ==========")
             Timber.tag(TAG).d("Starting HLS conversion for: $fileName")
-            Timber.tag(TAG).d("Input is normalized: $isNormalized (resolution: ${normalizedResolution}p)")
+            Timber.tag(TAG)
+                .d("Input is normalized: $isNormalized (resolution: ${normalizedResolution}p)")
 
             // Check video resolution, duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
@@ -114,8 +115,12 @@ class LocalHLSConverter(private val context: Context) {
                     val (width, height) = videoResolution
                     val pixelCount = width * height
                     val REFERENCE_720P_PIXELS = 921600
-                    maxOf(MIN_BITRATE, ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt())
+                    maxOf(
+                        MIN_BITRATE,
+                        ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                    )
                 }
+
                 else -> REFERENCE_720P_BITRATE  // fallback if resolution unknown
             }
 
@@ -139,34 +144,44 @@ class LocalHLSConverter(private val context: Context) {
                     Pair(targetWidth, targetHeight)
                 }
                 val lowerPixelCount = lowerWidth * lowerHeight
-                val calculatedBitrate = ((lowerPixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
-                Timber.tag(TAG).d("Lower variant pixel-based calculation: ${lowerWidth}×${lowerHeight} (${lowerPixelCount} pixels) = ${calculatedBitrate}k")
+                val calculatedBitrate =
+                    ((lowerPixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                Timber.tag(TAG)
+                    .d("Lower variant pixel-based calculation: ${lowerWidth}×${lowerHeight} (${lowerPixelCount} pixels) = ${calculatedBitrate}k")
                 maxOf(MIN_BITRATE, calculatedBitrate)
             } else {
                 // Fallback if resolution unknown
-                maxOf(MIN_BITRATE, ((lowerResolution * lowerResolution).toDouble() / REFERENCE_720P_PIXELS * REFERENCE_720P_BITRATE).toInt())
+                maxOf(
+                    MIN_BITRATE,
+                    ((lowerResolution * lowerResolution).toDouble() / REFERENCE_720P_PIXELS * REFERENCE_720P_BITRATE).toInt()
+                )
             }
 
             Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB")
-            Timber.tag(TAG).d("High quality: ${videoResolutionValue}p @ ${highQualityBitrate}k, Lower: 480p @ ${lowerResolutionBitrate}k")
+            Timber.tag(TAG)
+                .d("High quality: ${videoResolutionValue}p @ ${highQualityBitrate}k, Lower: 480p @ ${lowerResolutionBitrate}k")
 
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
-            Timber.tag(TAG).d("Video resolution: $videoResolution (${videoResolutionValue}p), duration: ${videoDurationMs}ms")
-            Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
-            
+            Timber.tag(TAG)
+                .d("Video resolution: $videoResolution (${videoResolutionValue}p), duration: ${videoDurationMs}ms")
+            Timber.tag(TAG)
+                .d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
+
             // Determine if we should create 720p variant based on source resolution (matches iOS logic)
             // - If source resolution > 480p: create dual variant (720p + 480p)
             // - Otherwise: create single variant (480p only)
             val shouldCreate720p = videoResolutionValue != null && videoResolutionValue > 480
-            
+
             if (shouldCreate720p) {
-                Timber.tag(TAG).d("Source resolution ${videoResolutionValue}p > 480p: creating dual variant (720p + 480p)")
+                Timber.tag(TAG)
+                    .d("Source resolution ${videoResolutionValue}p > 480p: creating dual variant (720p + 480p)")
             } else {
-                Timber.tag(TAG).d("Source resolution ${videoResolutionValue}p ≤ 480p: creating single variant (480p only)")
+                Timber.tag(TAG)
+                    .d("Source resolution ${videoResolutionValue}p ≤ 480p: creating single variant (480p only)")
             }
-            
+
             // Ensure output directory exists
             if (!outputDir.exists()) {
                 outputDir.mkdirs()
@@ -179,7 +194,7 @@ class LocalHLSConverter(private val context: Context) {
             // Always create master.m3u8 for both single and dual variants
             // This matches iOS behavior and provides consistent HLS structure
             val masterPlaylistPath = File(outputDir, "master.m3u8").absolutePath
-            
+
             val (playlist720Path, lowerResPlaylistPath) = if (shouldCreate720p) {
                 // Dual variant: use subdirectories
                 val dir720 = File(outputDir, "720p")
@@ -202,46 +217,52 @@ class LocalHLSConverter(private val context: Context) {
             var finalWidth720 = 0
             var finalHeight720 = 0
             var success720 = false
-            
+
             if (shouldCreate720p) {
                 // Calculate proper 720p dimensions based on aspect ratio
-                val (targetWidth720, targetHeight720) = calculateActualResolution(720, videoResolution)
-                
+                val (targetWidth720, targetHeight720) = calculateActualResolution(
+                    720,
+                    videoResolution
+                )
+
                 // Never increase resolution: if source is lower than 720p, keep original resolution
                 // Use resolution value (HEIGHT for landscape, WIDTH for portrait) for comparison
                 val (w720, h720) = videoResolution?.let { (width, height) ->
                     val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution) ?: 0
-                    
+
                     if (resolutionValue < 720) {
                         // Source is lower than 720p, keep original resolution (no upscaling)
-                        Timber.tag(TAG).d("Source resolution ${width}x${height} (${resolutionValue}p) is lower than 720p, keeping original resolution")
+                        Timber.tag(TAG)
+                            .d("Source resolution ${width}x${height} (${resolutionValue}p) is lower than 720p, keeping original resolution")
                         Pair(width, height)
                     } else {
                         // Source is >= 720p, use calculated 720p dimensions
                         Pair(targetWidth720, targetHeight720)
                     }
                 } ?: Pair(targetWidth720, targetHeight720)
-                
+
                 finalWidth720 = w720
                 finalHeight720 = h720
-                
+
                 // Use calculated high quality bitrate (proportional algorithm)
                 val target720pBitrate = "${highQualityBitrate}k"
-                
-            // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
-            // This preserves native quality without upscaling (matches iOS logic)
-            val shouldUseCopyFor720p = isNormalized && 
-                normalizedResolution != null && 
-                normalizedResolution > 480 && 
-                normalizedResolution <= 720
-                
+
+                // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
+                // This preserves native quality without upscaling (matches iOS logic)
+                val shouldUseCopyFor720p = isNormalized &&
+                        normalizedResolution != null &&
+                        normalizedResolution > 480 &&
+                        normalizedResolution <= 720
+
                 if (shouldUseCopyFor720p) {
-                    Timber.tag(TAG).d("========== 720p VARIANT: COPY CODEC (No Re-encoding) ==========")
+                    Timber.tag(TAG)
+                        .d("========== 720p VARIANT: COPY CODEC (No Re-encoding) ==========")
                     Timber.tag(TAG).d("  Video already normalized to ${normalizedResolution}p")
                     Timber.tag(TAG).d("  Target: ${normalizedResolution}p (no scaling needed)")
                     Timber.tag(TAG).d("  Method: COPY codec - preserves standardized quality")
                     Timber.tag(TAG).d("  No second normalization - just segmenting for HLS")
-                    Timber.tag(TAG).d("==============================================================")
+                    Timber.tag(TAG)
+                        .d("==============================================================")
                 } else {
                     Timber.tag(TAG).d("========== 720p VARIANT: RE-ENCODING (libx264) ==========")
                     Timber.tag(TAG).d("  Source: ${videoResolution} (${videoResolutionValue}p)")
@@ -250,7 +271,7 @@ class LocalHLSConverter(private val context: Context) {
                     Timber.tag(TAG).d("  Bitrate: ${target720pBitrate}")
                     Timber.tag(TAG).d("==========================================================")
                 }
-                
+
                 // Execute FFmpeg command for 720p with fallback (dynamic timeout)
                 success720 = withTimeout(dynamicTimeoutMs) {
                     executeFFmpegWithFallback(
@@ -272,32 +293,36 @@ class LocalHLSConverter(private val context: Context) {
             }
 
             // Calculate proper lower resolution dimensions based on aspect ratio
-            val (targetWidthLower, targetHeightLower) = calculateActualResolution(lowerResolution, videoResolution)
-            
+            val (targetWidthLower, targetHeightLower) = calculateActualResolution(
+                lowerResolution,
+                videoResolution
+            )
+
             // Never increase resolution: if source is lower than target, keep original resolution
             // Use resolution value (HEIGHT for landscape, WIDTH for portrait) for comparison
             val (finalWidthLower, finalHeightLower) = videoResolution?.let { (width, height) ->
                 val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution) ?: 0
-                
+
                 if (resolutionValue < lowerResolution) {
                     // Source is lower than target resolution, keep original resolution (no upscaling)
-                    Timber.tag(TAG).d("Source resolution ${width}x${height} (${resolutionValue}p) is lower than ${lowerResolution}p, keeping original resolution")
+                    Timber.tag(TAG)
+                        .d("Source resolution ${width}x${height} (${resolutionValue}p) is lower than ${lowerResolution}p, keeping original resolution")
                     Pair(width, height)
                 } else {
                     // Source is >= target resolution, use calculated target dimensions
                     Pair(targetWidthLower, targetHeightLower)
                 }
             } ?: Pair(targetWidthLower, targetHeightLower)
-            
+
             // Use calculated lower bitrate (proportional algorithm)
             val targetLowerBitrate = "${lowerResolutionBitrate}k"
-            
+
             // For 480p HLS stream: Use COPY codec if normalized resolution is ≤480p
             // This preserves native quality without upscaling (matches iOS logic)
-            val shouldUseCopyForLower = isNormalized && 
-                normalizedResolution != null && 
-                normalizedResolution <= 480
-            
+            val shouldUseCopyForLower = isNormalized &&
+                    normalizedResolution != null &&
+                    normalizedResolution <= 480
+
             if (shouldUseCopyForLower) {
                 Timber.tag(TAG).d("========== 480p VARIANT: COPY CODEC (No Re-encoding) ==========")
                 Timber.tag(TAG).d("  Video already normalized to ${normalizedResolution}p")
@@ -313,7 +338,7 @@ class LocalHLSConverter(private val context: Context) {
                 Timber.tag(TAG).d("  Bitrate: ${targetLowerBitrate}")
                 Timber.tag(TAG).d("==========================================================")
             }
-            
+
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
             val successLower = withTimeout(dynamicTimeoutMs) {
                 executeFFmpegWithFallback(
@@ -339,7 +364,8 @@ class LocalHLSConverter(private val context: Context) {
 
             // Create master playlist for both single and dual variants
             if (shouldCreate720p) {
-                Timber.tag(TAG).d("Dual variant HLS conversion completed successfully (720p + 480p)")
+                Timber.tag(TAG)
+                    .d("Dual variant HLS conversion completed successfully (720p + 480p)")
                 createMasterPlaylist(
                     outputDir,
                     finalWidth720,
@@ -351,7 +377,8 @@ class LocalHLSConverter(private val context: Context) {
                 )
             } else {
                 // Single variant: create master playlist pointing to root-level playlist.m3u8
-                Timber.tag(TAG).d("Single variant HLS conversion completed successfully (480p only)")
+                Timber.tag(TAG)
+                    .d("Single variant HLS conversion completed successfully (480p only)")
                 createSingleVariantMasterPlaylist(
                     outputDir,
                     finalWidthLower,
@@ -359,15 +386,15 @@ class LocalHLSConverter(private val context: Context) {
                     "${lowerResolutionBitrate}k"
                 )
             }
-            
+
             // Verify that required files were created
             val masterFile = File(masterPlaylistPath)
             val lowerResPlaylistFile = File(lowerResPlaylistPath)
-            
+
             if (shouldCreate720p) {
                 // Dual variant: verify master playlist, 720p playlist, and 480p playlist
                 val playlist720File = File(playlist720Path)
-                
+
                 if (masterFile.exists() && playlist720File.exists() && lowerResPlaylistFile.exists()) {
                     Timber.tag(TAG).d("HLS conversion successful - all dual variant files created")
                     Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")

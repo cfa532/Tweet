@@ -1,6 +1,8 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +24,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.fetchUser
@@ -46,9 +47,16 @@ fun ProfileTopBarButton(
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val context = LocalContext.current
     val followOperationFailed by appUserViewModel.followOperationFailed.collectAsState()
+    
+    // Capture string resources at composable level
+    val followOperationFailedText = stringResource(R.string.follow_operation_failed)
+    val loginFollowText = stringResource(R.string.login_follow)
+    val editText = stringResource(R.string.edit)
+    val unfollowText = stringResource(R.string.unfollow)
 
     // Use local boolean state for immediate UI feedback
     var localIsFollowing by remember { mutableStateOf(false) }
@@ -63,7 +71,7 @@ fun ProfileTopBarButton(
         if (followOperationFailed == user.mid) {
             Toast.makeText(
                 context,
-                context.getString(R.string.follow_operation_failed),
+                followOperationFailedText,
                 Toast.LENGTH_LONG
             ).show()
             // Reset the failure signal
@@ -87,7 +95,7 @@ fun ProfileTopBarButton(
         text = buttonText,
         onClick = {
             when (buttonText) {
-                context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
+                editText -> navController.navigate(ProfileEditor)
                 else -> {
                     if (!appUser.isGuest()) {
                         // Optimistically update followingList and enqueue worker
@@ -123,7 +131,7 @@ fun ProfileTopBarButton(
                             }
                         )
                     } else {
-                        Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, loginFollowText, Toast.LENGTH_LONG).show()
                         // Navigate to login after a short delay
                         viewModel.viewModelScope.launch {
                             kotlinx.coroutines.delay(500)
@@ -133,7 +141,7 @@ fun ProfileTopBarButton(
                 }
             }
         },
-        textColor = if (buttonText == context.getString(R.string.unfollow)) {
+        textColor = if (buttonText == unfollowText) {
             MaterialTheme.colorScheme.onError
         } else {
             MaterialTheme.colorScheme.onPrimary
@@ -141,7 +149,7 @@ fun ProfileTopBarButton(
         textStyle = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .background(
-                color = if (buttonText == context.getString(R.string.unfollow)) {
+                color = if (buttonText == unfollowText) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.primary

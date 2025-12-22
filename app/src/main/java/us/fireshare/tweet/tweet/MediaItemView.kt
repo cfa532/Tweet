@@ -405,6 +405,7 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     downloadManager.enqueue(request)
 
-    Toast.makeText(context, context.getString(R.string.downloading_file), Toast.LENGTH_SHORT).show()
+    val downloadingMessage = context.getString(R.string.downloading_file)
+    Toast.makeText(context, downloadingMessage, Toast.LENGTH_SHORT).show()
 }
 

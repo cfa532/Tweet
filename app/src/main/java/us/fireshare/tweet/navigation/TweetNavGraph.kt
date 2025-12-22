@@ -68,15 +68,16 @@ fun TweetNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
+    val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            LocalActivity.current as ComponentActivity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
+            activity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
         ) { factory ->
             factory.create(appUser.mid)
         }
-    // Use the singleton TweetFeedViewModel from AppModule
-    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    // Use activity-scoped TweetFeedViewModel to ensure single instance across the app
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
     
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()

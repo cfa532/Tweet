@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import us.fireshare.tweet.R
 import us.fireshare.tweet.ui.CameraXPreview
@@ -25,6 +26,7 @@ fun CameraHandler(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val cameraPermissionRequiredText = stringResource(R.string.camera_permission_required)
 
     // Camera permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -33,7 +35,7 @@ fun CameraHandler(
         if (isGranted) {
             // Permission granted, camera will be shown by parent state
         } else {
-            Toast.makeText(context, context.getString(R.string.camera_permission_required), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, cameraPermissionRequiredText, Toast.LENGTH_SHORT).show()
             onDismiss() // Dismiss if permission denied
         }
     }

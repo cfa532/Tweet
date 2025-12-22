@@ -827,7 +827,8 @@ fun ChatInput(
             if (isFileSizeValid(it)) {
                 viewModel.selectedAttachment.value = it
             } else {
-                Toast.makeText(context, context.getString(R.string.video_file_too_large), Toast.LENGTH_LONG).show()
+                val videoTooLargeMessage = context.getString(R.string.video_file_too_large)
+                Toast.makeText(context, videoTooLargeMessage, Toast.LENGTH_LONG).show()
             }
         }
     }

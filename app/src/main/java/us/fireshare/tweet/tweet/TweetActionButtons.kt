@@ -47,8 +47,8 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import androidx.compose.ui.text.font.FontFamily
-suspend fun guestWarning(context: Context, navController: NavController? = null) {
-    Toast.makeText(context, context.getString(R.string.guest_reminder), Toast.LENGTH_LONG).show()
+suspend fun guestWarning(context: Context, navController: NavController? = null, message: String) {
+    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     // Navigate to login after a short delay
     delay(1000)
     navController?.navigate(NavTweet.Login)
@@ -67,11 +67,12 @@ fun CommentButton(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
+                guestWarning(context, navController, guestReminderText)
             }
             return@IconButton
         }
@@ -113,11 +114,12 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val errorMessage = stringResource(R.string.tweet_failed)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
+                guestWarning(context, navController, guestReminderText)
             }
         } else {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -162,11 +164,12 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()
     val appUserViewModel = sharedViewModel.appUserViewModel
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
+                guestWarning(context, navController, guestReminderText)
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -203,11 +206,12 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()
     val appUserViewModel = sharedViewModel.appUserViewModel
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
             viewModel.viewModelScope.launch {
-                guestWarning(context, navController)
+                guestWarning(context, navController, guestReminderText)
             }
         } else
             viewModel.viewModelScope.launch(Dispatchers.IO) {
@@ -243,12 +247,13 @@ fun ShareButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isSharing by viewModel.isSharing.collectAsState()
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(
         onClick = {
             if (appUser.isGuest()) {
                 viewModel.viewModelScope.launch {
-                    guestWarning(context, navController)
+                    guestWarning(context, navController, guestReminderText)
                 }
             } else
                 scope.launch(Dispatchers.IO) {

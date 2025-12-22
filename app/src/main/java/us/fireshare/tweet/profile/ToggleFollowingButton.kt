@@ -1,6 +1,8 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,8 +46,13 @@ fun ToggleFollowingButton(
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     var localFollowState by remember { mutableStateOf(isFollowing) }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val followOperationFailed by appUserViewModel.followOperationFailed.collectAsState()
+    
+    // Capture string resources at composable level
+    val followOperationFailedText = stringResource(R.string.follow_operation_failed)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Update local state when followings change
     LaunchedEffect(followings) {
@@ -57,7 +64,7 @@ fun ToggleFollowingButton(
         if (followOperationFailed == userId) {
             Toast.makeText(
                 context,
-                context.getString(R.string.follow_operation_failed),
+                followOperationFailedText,
                 Toast.LENGTH_LONG
             ).show()
             // Reset the failure signal
@@ -70,7 +77,7 @@ fun ToggleFollowingButton(
         onClick = {
             if (appUser.isGuest()) {
                 appUserViewModel.viewModelScope.launch {
-                    guestWarning(context, navController)
+                    guestWarning(context, navController, guestReminderText)
                 }
                 return@DebouncedButton
             }

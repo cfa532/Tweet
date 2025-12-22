@@ -1,5 +1,7 @@
 package us.fireshare.tweet.ui.components
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -66,8 +68,9 @@ fun ComposeTopAppBar(
                 var isLoading by remember { mutableStateOf(false) }
                 val coroutineScope = rememberCoroutineScope()
                 val context = LocalContext.current
+                val activity = LocalActivity.current as ComponentActivity
                 val sharedViewModel: SharedViewModel = hiltViewModel()
-                val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+                val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
 
                 LaunchedEffect(Unit) {
                     tweetFeedViewModel.startListeningToNotifications(context)

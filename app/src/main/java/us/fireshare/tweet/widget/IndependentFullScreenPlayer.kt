@@ -3,6 +3,8 @@ package us.fireshare.tweet.widget
 import android.app.Activity
 import android.content.Context
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -510,8 +512,9 @@ private fun fetchTweetsFromScreenContext(
  */
 @Composable
 private fun fetchTweetsFromFeed(currentTweet: Tweet): List<Tweet> {
-    // Get TweetFeedViewModel from the current composition
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    // Get activity-scoped TweetFeedViewModel to ensure single instance
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val tweets by tweetFeedViewModel.tweets.collectAsState()
     
     Timber.d("IndependentFullScreenPlayer - Fetched ${tweets.size} tweets from feed")
