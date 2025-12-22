@@ -31,6 +31,10 @@ class LocalHLSConverter(private val context: Context) {
         // 0 = keep all segments for VOD playlists; we don't want sliding-window/live behavior here.
         private const val HLS_PLAYLIST_SIZE = 0
 
+        // Base bitrate for 720p video (in kbps) - used for proportional bitrate calculations
+        private const val REFERENCE_720P_BITRATE = 1000
+        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps
+
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes minimum
         private const val MAX_TIMEOUT_MS = 3 * 60 * 60 * 1000L  // 3 hours maximum
@@ -66,13 +70,14 @@ class LocalHLSConverter(private val context: Context) {
 
     /**
      * Convert video to HLS format with multiple resolutions
+     * Matches iOS behavior: automatically decides between dual variant (720p + 480p) or single variant (480p only)
+     * based on source video resolution
+     * 
      * @param inputUri Input video URI
      * @param outputDir Output directory for HLS files
      * @param fileName Original filename (without extension)
      * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
-     * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
      * @param isNormalized If true, the input video is already normalized
-     * @param shouldCreateDualVariant If true, create dual variant (720p + 480p), otherwise single variant (480p only)
      * @param normalizedResolution The resolution to which the video was normalized (null if not normalized)
      * @return Result containing the output directory path and success status
      */
@@ -81,29 +86,67 @@ class LocalHLSConverter(private val context: Context) {
         outputDir: File,
         fileName: String,
         fileSizeBytes: Long,
-        useRoute2: Boolean = false,
         isNormalized: Boolean = false,
-        shouldCreateDualVariant: Boolean = true,
         normalizedResolution: Int? = null
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
             Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
-            
-            // Use standard configuration for all video sizes
-            val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
 
-            // Calculate bitrates proportionally based on 720p = 1000k
-            val resolution720pBitrate = "1000k"
-            val lowerResolution = if (useRoute2) 360 else 480
-            // Formula: bitrate = (1000 * resolution / 720)
-            val lowerResolutionBitrate = "${(1000 * lowerResolution / 720)}k"
-
-            Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB, using HLS route ${if (useRoute2) "2" else "1"}: 720p (1000k) + ${lowerResolution}p (${lowerResolutionBitrate})")
-            
             // Check video resolution, duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoResolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+
+            // Use standard configuration for all video sizes
+            val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
+
+            // Calculate bitrates using proportional algorithm (consistent with server and iOS)
+            // High quality bitrate depends on source resolution:
+            // - >720p: normalize to 720p @ 1500k
+            // - =720p: 720p @ 1000k (base reference)
+            // - <720p: original resolution @ proportional bitrate based on pixel count
+            val highQualityBitrate = when {
+                videoResolutionValue != null && videoResolutionValue > 720 -> 1500
+                videoResolutionValue == 720 -> REFERENCE_720P_BITRATE
+                videoResolutionValue != null && videoResolutionValue < 720 && videoResolution != null -> {
+                    val (width, height) = videoResolution
+                    val pixelCount = width * height
+                    val REFERENCE_720P_PIXELS = 921600
+                    maxOf(MIN_BITRATE, ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt())
+                }
+                else -> REFERENCE_720P_BITRATE  // fallback if resolution unknown
+            }
+
+            // Lower variant: always 480p (matches iOS)
+            val lowerResolution = 480
+            // Lower variant bitrate: proportional to REFERENCE_720P_BITRATE based on actual pixel count (min 500k)
+            // Calculate actual dimensions based on aspect ratio, then use pixel count
+            val REFERENCE_720P_PIXELS = 921600
+            val lowerResolutionBitrate = if (videoResolution != null) {
+                val (width, height) = videoResolution
+                val aspectRatio = width.toFloat() / height.toFloat()
+                val (lowerWidth, lowerHeight) = if (aspectRatio < 1.0f) {
+                    // Portrait: scale to target width
+                    val targetWidth = minOf(width, lowerResolution)
+                    val targetHeight = (targetWidth / aspectRatio).toInt()
+                    Pair(targetWidth, targetHeight)
+                } else {
+                    // Landscape: scale to target height
+                    val targetHeight = minOf(height, lowerResolution)
+                    val targetWidth = (targetHeight * aspectRatio).toInt()
+                    Pair(targetWidth, targetHeight)
+                }
+                val lowerPixelCount = lowerWidth * lowerHeight
+                val calculatedBitrate = ((lowerPixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                Timber.tag(TAG).d("Lower variant pixel-based calculation: ${lowerWidth}×${lowerHeight} (${lowerPixelCount} pixels) = ${calculatedBitrate}k")
+                maxOf(MIN_BITRATE, calculatedBitrate)
+            } else {
+                // Fallback if resolution unknown
+                maxOf(MIN_BITRATE, ((lowerResolution * lowerResolution).toDouble() / REFERENCE_720P_PIXELS * REFERENCE_720P_BITRATE).toInt())
+            }
+
+            Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB")
+            Timber.tag(TAG).d("High quality: ${videoResolutionValue}p @ ${highQualityBitrate}k, Lower: 480p @ ${lowerResolutionBitrate}k")
 
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
@@ -111,13 +154,15 @@ class LocalHLSConverter(private val context: Context) {
             Timber.tag(TAG).d("Video resolution: $videoResolution (${videoResolutionValue}p), duration: ${videoDurationMs}ms")
             Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
             
-            // Determine if we should create 720p variant:
-            // - If shouldCreateDualVariant is true and source resolution > lowerResolution: create 720p
-            // - Otherwise: skip 720p (single variant only)
-            val shouldCreate720p = shouldCreateDualVariant && videoResolutionValue != null && videoResolutionValue > lowerResolution
+            // Determine if we should create 720p variant based on source resolution (matches iOS logic)
+            // - If source resolution > 480p: create dual variant (720p + 480p)
+            // - Otherwise: create single variant (480p only)
+            val shouldCreate720p = videoResolutionValue != null && videoResolutionValue > 480
             
-            if (!shouldCreate720p) {
-                Timber.tag(TAG).d("Source resolution (${videoResolution?.first}x${videoResolution?.second}, ${videoResolutionValue}p) is not higher than ${lowerResolution}p or dual variant disabled, skipping 720p creation")
+            if (shouldCreate720p) {
+                Timber.tag(TAG).d("Source resolution ${videoResolutionValue}p > 480p: creating dual variant (720p + 480p)")
+            } else {
+                Timber.tag(TAG).d("Source resolution ${videoResolutionValue}p ≤ 480p: creating single variant (480p only)")
             }
             
             // Ensure output directory exists
@@ -129,26 +174,22 @@ class LocalHLSConverter(private val context: Context) {
             val tempInputFile = File(outputDir, "temp_input.mp4")
             copyUriToFile(inputUri, tempInputFile)
 
-            // For single resolution: put playlist and segments at root level
-            // For dual resolution: use subdirectories with master playlist
-            val masterPlaylistPath = if (shouldCreateDualVariant) {
-                File(outputDir, "master.m3u8").absolutePath
-            } else {
-                null // No master playlist for single resolution
-            }
+            // Always create master.m3u8 for both single and dual variants
+            // This matches iOS behavior and provides consistent HLS structure
+            val masterPlaylistPath = File(outputDir, "master.m3u8").absolutePath
             
-            val (playlist720Path, lowerResPlaylistPath) = if (shouldCreateDualVariant) {
+            val (playlist720Path, lowerResPlaylistPath) = if (shouldCreate720p) {
                 // Dual variant: use subdirectories
                 val dir720 = File(outputDir, "720p")
-                val lowerResDir = File(outputDir, "${lowerResolution}p")
+                val dir480 = File(outputDir, "480p")
                 dir720.mkdirs()
-                lowerResDir.mkdirs()
+                dir480.mkdirs()
                 Pair(
                     File(dir720, "playlist.m3u8").absolutePath,
-                    File(lowerResDir, "playlist.m3u8").absolutePath
+                    File(dir480, "playlist.m3u8").absolutePath
                 )
             } else {
-                // Single resolution: playlist at root level, no 720p directory
+                // Single variant: playlist at root level
                 Pair(
                     "", // No 720p path needed
                     File(outputDir, "playlist.m3u8").absolutePath
@@ -182,15 +223,15 @@ class LocalHLSConverter(private val context: Context) {
                 finalWidth720 = w720
                 finalHeight720 = h720
                 
-                // Use fixed bitrate (always 1000k for 720p)
-                val target720pBitrate = resolution720pBitrate
+                // Use calculated high quality bitrate (proportional algorithm)
+                val target720pBitrate = "${highQualityBitrate}k"
                 
-                // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
-                // This preserves native quality without upscaling
-                val shouldUseCopyFor720p = isNormalized && 
-                    normalizedResolution != null && 
-                    normalizedResolution > 480 && 
-                    normalizedResolution <= 720
+            // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
+            // This preserves native quality without upscaling (matches iOS logic)
+            val shouldUseCopyFor720p = isNormalized && 
+                normalizedResolution != null && 
+                normalizedResolution > 480 && 
+                normalizedResolution <= 720
                 
                 if (shouldUseCopyFor720p) {
                     Timber.tag(TAG).d("720p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, >480p and ≤720p, preserving native quality)")
@@ -236,19 +277,19 @@ class LocalHLSConverter(private val context: Context) {
                 }
             } ?: Pair(targetWidthLower, targetHeightLower)
             
-            // Use fixed bitrate (always calculated, never detected)
-            val targetLowerBitrate = lowerResolutionBitrate
+            // Use calculated lower bitrate (proportional algorithm)
+            val targetLowerBitrate = "${lowerResolutionBitrate}k"
             
-            // For lower resolution HLS stream: Use COPY codec if normalized resolution is ≤480p
-            // This preserves native quality without upscaling
+            // For 480p HLS stream: Use COPY codec if normalized resolution is ≤480p
+            // This preserves native quality without upscaling (matches iOS logic)
             val shouldUseCopyForLower = isNormalized && 
                 normalizedResolution != null && 
-                normalizedResolution <= lowerResolution
+                normalizedResolution <= 480
             
             if (shouldUseCopyForLower) {
-                Timber.tag(TAG).d("${lowerResolution}p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, ≤${lowerResolution}p, preserving native quality)")
+                Timber.tag(TAG).d("480p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, ≤480p, preserving native quality)")
             } else {
-                Timber.tag(TAG).d("${lowerResolution}p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264, bitrate=${targetLowerBitrate}")
+                Timber.tag(TAG).d("480p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264, bitrate=${targetLowerBitrate}")
             }
             
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)
@@ -261,67 +302,74 @@ class LocalHLSConverter(private val context: Context) {
                     bitrate = targetLowerBitrate,
                     audioBitrate = "128k",
                     shouldUseCopyCodec = shouldUseCopyForLower,
-                    resolution = "${lowerResolution}p",
-                    segmentsAtRoot = !shouldCreateDualVariant // For single resolution, segments go at root level
+                    resolution = "480p",
+                    segmentsAtRoot = !shouldCreate720p // For single variant, segments go at root level
                 )
             }
 
             if (!successLower) {
                 tempInputFile.delete()
-                return@withContext HLSConversionResult.Error("FFmpeg ${lowerResolution}p conversion failed with both COPY and libx264")
+                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed with both COPY and libx264")
             }
 
             // Clean up temporary input file
             tempInputFile.delete()
 
-            // Create master playlist only for dual variant
-            if (shouldCreateDualVariant && shouldCreate720p) {
-                Timber.tag(TAG).d("Dual-resolution HLS conversion completed successfully")
+            // Create master playlist for both single and dual variants
+            if (shouldCreate720p) {
+                Timber.tag(TAG).d("Dual variant HLS conversion completed successfully (720p + 480p)")
                 createMasterPlaylist(
-                    outputDir, 
-                    finalWidth720, 
-                    finalHeight720, 
-                    finalWidthLower, 
+                    outputDir,
+                    finalWidth720,
+                    finalHeight720,
+                    finalWidthLower,
                     finalHeightLower,
-                    resolution720pBitrate,
-                    lowerResolution,
-                    targetLowerBitrate
+                    "${highQualityBitrate}k",
+                    "${lowerResolutionBitrate}k"
                 )
             } else {
-                // Single resolution: no master playlist needed
-                Timber.tag(TAG).d("Single-resolution HLS conversion completed successfully")
+                // Single variant: create master playlist pointing to root-level playlist.m3u8
+                Timber.tag(TAG).d("Single variant HLS conversion completed successfully (480p only)")
+                createSingleVariantMasterPlaylist(
+                    outputDir,
+                    finalWidthLower,
+                    finalHeightLower,
+                    "${lowerResolutionBitrate}k"
+                )
             }
             
             // Verify that required files were created
+            val masterFile = File(masterPlaylistPath)
             val lowerResPlaylistFile = File(lowerResPlaylistPath)
             
-            if (shouldCreateDualVariant && shouldCreate720p) {
-                // Dual variant: verify master playlist, 720p playlist, and lower res playlist
-                val masterFile = File(masterPlaylistPath!!)
+            if (shouldCreate720p) {
+                // Dual variant: verify master playlist, 720p playlist, and 480p playlist
                 val playlist720File = File(playlist720Path)
                 
                 if (masterFile.exists() && playlist720File.exists() && lowerResPlaylistFile.exists()) {
                     Timber.tag(TAG).d("HLS conversion successful - all dual variant files created")
                     Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")
                     Timber.tag(TAG).d("720p playlist: ${playlist720File.absolutePath}")
-                    Timber.tag(TAG).d("${lowerResolution}p playlist: ${lowerResPlaylistFile.absolutePath}")
+                    Timber.tag(TAG).d("480p playlist: ${lowerResPlaylistFile.absolutePath}")
                     HLSConversionResult.Success(outputDir)
                 } else {
                     Timber.tag(TAG).e("Required HLS files not created")
                     Timber.tag(TAG).e("Master exists: ${masterFile.exists()}")
                     Timber.tag(TAG).e("720p playlist exists: ${playlist720File.exists()}")
-                    Timber.tag(TAG).e("${lowerResolution}p playlist exists: ${lowerResPlaylistFile.exists()}")
+                    Timber.tag(TAG).e("480p playlist exists: ${lowerResPlaylistFile.exists()}")
                     HLSConversionResult.Error("Required HLS files not created")
                 }
             } else {
-                // Single resolution: only verify the single playlist at root level
-                if (lowerResPlaylistFile.exists()) {
-                    Timber.tag(TAG).d("HLS conversion successful - single resolution files created")
-                    Timber.tag(TAG).d("Playlist: ${lowerResPlaylistFile.absolutePath}")
+                // Single variant: verify master playlist and single playlist at root level
+                if (masterFile.exists() && lowerResPlaylistFile.exists()) {
+                    Timber.tag(TAG).d("HLS conversion successful - single variant files created")
+                    Timber.tag(TAG).d("Master playlist: ${masterFile.absolutePath}")
+                    Timber.tag(TAG).d("480p playlist: ${lowerResPlaylistFile.absolutePath}")
                     HLSConversionResult.Success(outputDir)
                 } else {
                     Timber.tag(TAG).e("Required HLS files not created")
-                    Timber.tag(TAG).e("Playlist exists: ${lowerResPlaylistFile.exists()}")
+                    Timber.tag(TAG).e("Master exists: ${masterFile.exists()}")
+                    Timber.tag(TAG).e("480p playlist exists: ${lowerResPlaylistFile.exists()}")
                     HLSConversionResult.Error("Required HLS files not created")
                 }
             }
@@ -584,66 +632,67 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Create master playlist file for videoPreview compatibility
-     * videoPreview expects master.m3u8 in root with folder-based structure
+     * Create master playlist file for dual variant (720p + 480p)
+     * Matches iOS behavior with fixed 480p lower variant
      */
     private fun createMasterPlaylist(
         outputDir: File, 
         width720: Int, 
         height720: Int, 
-        widthLower: Int, 
-        heightLower: Int,
+        width480: Int, 
+        height480: Int,
         resolution720pBitrate: String,
-        lowerResolution: Int,
-        lowerResolutionBitrate: String
+        resolution480pBitrate: String
     ) {
-        // Convert bitrate strings (e.g., "3000k") to bandwidth integers (e.g., 3000000)
-        val bandwidth720p = resolution720pBitrate.replace("k", "").toIntOrNull() ?: 2000
-        val bandwidthLower = lowerResolutionBitrate.replace("k", "").toIntOrNull() ?: 1000
+        // Convert bitrate strings (e.g., "1000k") to bandwidth integers (e.g., 1000000)
+        val bandwidth720p = resolution720pBitrate.replace("k", "").toIntOrNull() ?: 1000
+        val bandwidth480p = resolution480pBitrate.replace("k", "").toIntOrNull() ?: 500
         
-        // Create master.m3u8 with calculated resolution references
+        // Create master.m3u8 with dual variant structure
         val masterPlaylistContent = """
             #EXTM3U
             #EXT-X-VERSION:3
             #EXT-X-STREAM-INF:BANDWIDTH=${bandwidth720p * 1000},RESOLUTION=${width720}x${height720}
             720p/playlist.m3u8
-            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidthLower * 1000},RESOLUTION=${widthLower}x${heightLower}
-            ${lowerResolution}p/playlist.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidth480p * 1000},RESOLUTION=${width480}x${height480}
+            480p/playlist.m3u8
         """.trimIndent()
 
         val masterFile = File(outputDir, "master.m3u8")
         masterFile.writeText(masterPlaylistContent)
         
-        Timber.tag(TAG).d("Created master playlist: ${masterFile.absolutePath}")
-        Timber.tag(TAG).d("720p resolution: ${width720}x${height720} (${resolution720pBitrate}), ${lowerResolution}p resolution: ${widthLower}x${heightLower} (${lowerResolutionBitrate})")
+        Timber.tag(TAG).d("Created dual variant master playlist: ${masterFile.absolutePath}")
+        Timber.tag(TAG).d("720p: ${width720}x${height720} @ ${resolution720pBitrate}, 480p: ${width480}x${height480} @ ${resolution480pBitrate}")
     }
 
     /**
-     * Create single-resolution master playlist (only lower resolution variant)
+     * Create single variant master playlist (480p only)
+     * For single variant, playlist.m3u8 is at root level (not in subdirectory)
+     * Matches iOS behavior
      */
-    private fun createSingleResolutionMasterPlaylist(
+    private fun createSingleVariantMasterPlaylist(
         outputDir: File,
-        widthLower: Int,
-        heightLower: Int,
-        lowerResolution: Int,
-        lowerResolutionBitrate: String
+        width480: Int,
+        height480: Int,
+        resolution480pBitrate: String
     ) {
-        // Convert bitrate string (e.g., "600k") to bandwidth integer (e.g., 600000)
-        val bandwidthLower = lowerResolutionBitrate.replace("k", "").toIntOrNull() ?: 1000
+        // Convert bitrate string (e.g., "500k") to bandwidth integer (e.g., 500000)
+        val bandwidth480p = resolution480pBitrate.replace("k", "").toIntOrNull() ?: 500
         
-        // Create master.m3u8 with single resolution
+        // Create master.m3u8 pointing to root-level playlist.m3u8
+        // Matches iOS behavior: master.m3u8 and playlist.m3u8 both at root
         val masterPlaylistContent = """
             #EXTM3U
             #EXT-X-VERSION:3
-            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidthLower * 1000},RESOLUTION=${widthLower}x${heightLower}
-            ${lowerResolution}p/playlist.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=${bandwidth480p * 1000},RESOLUTION=${width480}x${height480}
+            playlist.m3u8
         """.trimIndent()
 
         val masterFile = File(outputDir, "master.m3u8")
         masterFile.writeText(masterPlaylistContent)
         
-        Timber.tag(TAG).d("Created single-resolution master playlist: ${masterFile.absolutePath}")
-        Timber.tag(TAG).d("${lowerResolution}p resolution: ${widthLower}x${heightLower} (${lowerResolutionBitrate})")
+        Timber.tag(TAG).d("Created single variant master playlist: ${masterFile.absolutePath}")
+        Timber.tag(TAG).d("480p: ${width480}x${height480} @ ${resolution480pBitrate}")
     }
 
     /**

@@ -25,6 +25,11 @@ class VideoNormalizer(private val context: Context) {
 
     companion object {
         private const val TAG = "VideoNormalizer"
+        
+        // Bitrate constants for video normalization
+        private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
+        private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
+        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 5 * 60 * 1000L   // 5 minutes minimum
@@ -139,21 +144,23 @@ class VideoNormalizer(private val context: Context) {
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
-            // Calculate target bitrate based on resolution
-            // Formula: bitrate = 1000k × (resolution / 720)
+            // Calculate target bitrate based on pixel count
+            // Formula: bitrate = (pixel_count / REFERENCE_720P_PIXELS) * 1000k
             // If resolution > 720p, normalize to 720p with 1000k
             // If resolution ≤ 720p, keep original resolution with proportional bitrate
             val targetBitrateK = if (resolutionValue != null && resolutionValue > 720) {
-                // Resolution > 720p: normalize to 720p with 1000k
-                1000
-            } else if (resolutionValue != null) {
-                // Resolution ≤ 720p: proportional bitrate
-                val calculatedBitrate = (1000.0 * resolutionValue / 720.0).toInt()
-                calculatedBitrate
+                // Resolution > 720p: normalize to 720p with reference bitrate
+                REFERENCE_720P_BITRATE
+            } else if (resolutionValue != null && videoResolution != null) {
+                // Resolution ≤ 720p: proportional bitrate based on pixel count
+                val (width, height) = videoResolution
+                val pixelCount = width * height
+                val calculatedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                calculatedBitrate.coerceAtLeast(MIN_BITRATE)
             } else {
                 // Fallback if resolution unknown
-                Timber.tag(TAG).w("Could not determine resolution, defaulting to 1000k")
-                1000
+                Timber.tag(TAG).w("Could not determine resolution, defaulting to ${REFERENCE_720P_BITRATE}k")
+                REFERENCE_720P_BITRATE
             }
 
             Timber.tag(TAG).d("Normalization: resolution=$videoResolution (${resolutionValue}p), target bitrate=${targetBitrateK}k, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
@@ -472,20 +479,22 @@ class VideoNormalizer(private val context: Context) {
 
     /**
      * Get bitrate for a given resolution
-     * Calculates bitrate proportionally based on 720p = 1000k
+     * Calculates bitrate proportionally based on pixel count (720p = 921,600 pixels = 1000k)
+     * Minimum bitrate: 500k for quality
      */
     private fun getBitrateForResolution(width: Int, height: Int): String {
-        val maxDimension = maxOf(width, height)
-        
-        // Base: 720p = 1000k
-        // Formula: bitrate = (1000 * resolution / 720)
-        val proportionalBitrate = if (maxDimension >= 720) {
-            1000  // 720p and above
+        val pixelCount = width * height
+
+        // Base: 720p = REFERENCE_720P_BITRATE
+        // Formula: bitrate = (pixel_count / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE
+        val proportionalBitrate = if (pixelCount >= REFERENCE_720P_PIXELS) {
+            REFERENCE_720P_BITRATE  // 720p and above
         } else {
             // Calculate proportional bitrate for resolutions < 720p
-            (1000 * maxDimension / 720).coerceAtLeast(300)  // Minimum 300k
+            // Enforce minimum bitrate for quality
+            ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt().coerceAtLeast(MIN_BITRATE)
         }
-        
+
         return "${proportionalBitrate}k"
     }
 

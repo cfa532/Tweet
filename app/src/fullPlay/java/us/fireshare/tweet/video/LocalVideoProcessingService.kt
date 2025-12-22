@@ -31,9 +31,15 @@ class LocalVideoProcessingService(
     companion object {
         private const val TAG = "LocalVideoProcessingService"
         private const val TEMP_DIR_PREFIX = "hls_conversion_"
+        
+        // Bitrate constants
+        private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
+        private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
+        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality
+        
+        // Normalization constants
         private const val NORMALIZATION_THRESHOLD = 720 // Videos >720p get normalized to 720p
         private const val NORMALIZATION_HIGH_BITRATE = "1500k" // For videos >720p
-        private const val NORMALIZATION_BASE_BITRATE = 1000 // Base bitrate for proportional calculation
         private const val HLS_SIZE_THRESHOLD = 32 * 1024 * 1024L // 32MB in bytes
     }
 
@@ -43,19 +49,19 @@ class LocalVideoProcessingService(
 
     /**
      * Process video locally: normalize, route to progressive or HLS, compress, and upload
+     * Matches iOS behavior: automatically decides between dual variant (720p + 480p) or single variant (480p)
+     * 
      * @param uri Input video URI
      * @param fileName Original filename
      * @param fileTimestamp File timestamp
      * @param referenceId Reference ID
-     * @param useRoute2 If true, use HLS route 2 (720p + 360p), otherwise use route 1 (720p + 480p)
      * @return Result containing the processed file information
      */
     suspend fun processVideo(
         uri: Uri,
         fileName: String,
         fileTimestamp: Long,
-        referenceId: MimeiId?,
-        useRoute2: Boolean = false
+        referenceId: MimeiId?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
             try {
                 // Create temporary directory for processing
@@ -125,24 +131,15 @@ class LocalVideoProcessingService(
                         Timber.tag(TAG).d("Routing to HLS conversion (size >32MB)")
                     }
                     
-                    // Step 3: Determine HLS variant selection based on normalized resolution
-                    val shouldCreateDualVariant = if (normalizedResolution != null) {
-                        normalizedResolution > 480
-                    } else {
-                        true // Default to dual variant if resolution unknown
-                    }
-                    
-                    Timber.tag(TAG).d("HLS variant selection: ${if (shouldCreateDualVariant) "dual (720p + 480p)" else "single (480p only)"}")
-                    
-                    // Step 4: Convert video to HLS format
+                    // Step 3: Convert video to HLS format
+                    // Variant selection (dual vs single) is automatically determined based on resolution
+                    // Matches iOS logic: >480p → dual variant (720p + 480p), ≤480p → single variant (480p)
                     val hlsResult = hlsConverter.convertToHLS(
                         processUri, 
                         tempDir, 
                         fileName, 
                         normalizedSize, 
-                        useRoute2, 
-                        isNormalized, 
-                        shouldCreateDualVariant,
+                        isNormalized,
                         normalizedResolution
                     )
                 
@@ -262,14 +259,24 @@ class LocalVideoProcessingService(
     /**
      * Calculate normalization parameters based on video resolution
      * Returns: Pair(targetResolution, targetBitrate)
+     * Uses pixel-based proportional bitrate calculation for consistency
      */
-    private fun calculateNormalizationParams(resolution: Int): Pair<Int, String> {
+    private fun calculateNormalizationParams(resolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, String> {
         return if (resolution > NORMALIZATION_THRESHOLD) {
             // Videos >720p: normalize to 720p @ 1500k bitrate
             Pair(NORMALIZATION_THRESHOLD, NORMALIZATION_HIGH_BITRATE)
         } else {
-            // Videos ≤720p: normalize at original resolution @ proportional bitrate
-            val proportionalBitrate = (NORMALIZATION_BASE_BITRATE * resolution / 720)
+            // Videos ≤720p: normalize at original resolution @ proportional bitrate based on pixel count
+            val proportionalBitrate = if (videoResolution != null) {
+                val (width, height) = videoResolution
+                val pixelCount = width * height
+                // Pixel-based calculation: bitrate = (pixelCount / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE
+                val calculatedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                maxOf(MIN_BITRATE, calculatedBitrate)
+            } else {
+                // Fallback to resolution-based if dimensions unknown
+                maxOf(MIN_BITRATE, (REFERENCE_720P_BITRATE * resolution / 720))
+            }
             Pair(resolution, "${proportionalBitrate}k")
         }
     }
@@ -295,10 +302,10 @@ class LocalVideoProcessingService(
             
             Timber.tag(TAG).d("Detected resolution: ${resolution}p (${videoResolution?.first}x${videoResolution?.second})")
             
-            // Calculate normalization parameters
-            val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution)
+            // Calculate normalization parameters with pixel-based bitrate
+            val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution)
             
-            Timber.tag(TAG).d("Normalization params: target=${targetResolution}p, bitrate=$targetBitrate")
+            Timber.tag(TAG).d("Normalization params: target=${targetResolution}p, bitrate=$targetBitrate (pixel-based)")
             
             // If already at target resolution, check if we need to normalize bitrate
             if (resolution <= NORMALIZATION_THRESHOLD && resolution == targetResolution) {
