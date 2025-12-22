@@ -247,9 +247,15 @@ object HproseInstance {
                         // For debug builds, always use BuildConfig.APP_ID to ensure correct APP_ID
                         // For release builds, use the server's mid value
                         val serverMid = paramMap["mid"]?.toString()
-                        // Release builds: Use server's mid value
-                        _appId = serverMid ?: BuildConfig.APP_ID
-                        Timber.tag("initAppEntry").d("Release build: Using server mid: $_appId")
+                        
+                        _appId = if (BuildConfig.DEBUG) {
+                            // Debug builds: Always use BuildConfig.APP_ID
+                            BuildConfig.APP_ID
+                        } else {
+                            // Release builds: Use server's mid value
+                            serverMid ?: BuildConfig.APP_ID
+                        }
+                        Timber.tag("initAppEntry").d("Build type: ${if (BuildConfig.DEBUG) "DEBUG" else "RELEASE"}, Using APP_ID: $_appId")
 
                         /**
                          * The code above makes a call to base URL of the app, get a html page
