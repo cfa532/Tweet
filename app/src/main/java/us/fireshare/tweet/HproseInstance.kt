@@ -817,12 +817,32 @@ object HproseInstance {
         
         repeat(maxRetries) { attempt ->
             try {
-                val userId = getUserId(username) ?: return Pair(
-                    null,
-                    context.getString(R.string.login_getuserid_fail)
-                )
-                val user =
-                    fetchUser(userId, "") ?: return Pair(null, context.getString(R.string.login_getuser_fail))
+                // Get user ID - retry if this fails
+                val userId = getUserId(username)
+                if (userId == null) {
+                    lastError = context.getString(R.string.login_getuserid_fail)
+                    Timber.tag("Login").w("getUserId failed for username: $username (attempt ${attempt + 1}/$maxRetries)")
+                    // Don't return yet, let retry logic handle it
+                    if (attempt == maxRetries - 1) {
+                        // Last attempt failed
+                        return Pair(null, lastError)
+                    }
+                    throw Exception("getUserId returned null")
+                }
+                
+                // Fetch user - retry if this fails  
+                val user = fetchUser(userId, "", maxRetries = 1)
+                if (user == null) {
+                    lastError = context.getString(R.string.login_getuser_fail)
+                    Timber.tag("Login").w("fetchUser failed for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
+                    // Don't return yet, let retry logic handle it
+                    if (attempt == maxRetries - 1) {
+                        // Last attempt failed
+                        return Pair(null, lastError)
+                    }
+                    throw Exception("fetchUser returned null")
+                }
+                
                 val entry = "login"
                 val params = mapOf(
                     "aid" to appId,
@@ -844,6 +864,7 @@ object HproseInstance {
                         if (userData != null) {
                             user.from(userData)
                         }
+                        Timber.tag("Login").d("Login successful for user: ${user.username}")
                         return Pair(user, null)
                     } else {
                         val errorMsg = response["reason"] as? String ?: response["message"] as? String ?: applicationContext.getString(R.string.error_unknown_occurred)
