@@ -90,7 +90,9 @@ class LocalHLSConverter(private val context: Context) {
         normalizedResolution: Int? = null
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
-            Timber.tag(TAG).d("Starting multi-resolution HLS conversion for: $fileName")
+            Timber.tag(TAG).d("========== SECOND PASS (HLS Segmentation) ==========")
+            Timber.tag(TAG).d("Starting HLS conversion for: $fileName")
+            Timber.tag(TAG).d("Input is normalized: $isNormalized (resolution: ${normalizedResolution}p)")
 
             // Check video resolution, duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
@@ -234,9 +236,19 @@ class LocalHLSConverter(private val context: Context) {
                 normalizedResolution <= 720
                 
                 if (shouldUseCopyFor720p) {
-                    Timber.tag(TAG).d("720p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, >480p and ≤720p, preserving native quality)")
+                    Timber.tag(TAG).d("========== 720p VARIANT: COPY CODEC (No Re-encoding) ==========")
+                    Timber.tag(TAG).d("  Video already normalized to ${normalizedResolution}p")
+                    Timber.tag(TAG).d("  Target: ${normalizedResolution}p (no scaling needed)")
+                    Timber.tag(TAG).d("  Method: COPY codec - preserves standardized quality")
+                    Timber.tag(TAG).d("  No second normalization - just segmenting for HLS")
+                    Timber.tag(TAG).d("==============================================================")
                 } else {
-                    Timber.tag(TAG).d("720p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidth720}x${finalHeight720}, re-encoding with libx264, bitrate=${target720pBitrate}")
+                    Timber.tag(TAG).d("========== 720p VARIANT: RE-ENCODING (libx264) ==========")
+                    Timber.tag(TAG).d("  Source: ${videoResolution} (${videoResolutionValue}p)")
+                    Timber.tag(TAG).d("  Target: ${finalWidth720}x${finalHeight720}")
+                    Timber.tag(TAG).d("  Method: libx264 re-encoding")
+                    Timber.tag(TAG).d("  Bitrate: ${target720pBitrate}")
+                    Timber.tag(TAG).d("==========================================================")
                 }
                 
                 // Execute FFmpeg command for 720p with fallback (dynamic timeout)
@@ -287,9 +299,19 @@ class LocalHLSConverter(private val context: Context) {
                 normalizedResolution <= 480
             
             if (shouldUseCopyForLower) {
-                Timber.tag(TAG).d("480p HLS stream: Using COPY codec (normalized to ${normalizedResolution}p, ≤480p, preserving native quality)")
+                Timber.tag(TAG).d("========== 480p VARIANT: COPY CODEC (No Re-encoding) ==========")
+                Timber.tag(TAG).d("  Video already normalized to ${normalizedResolution}p")
+                Timber.tag(TAG).d("  Target: ${normalizedResolution}p (no scaling needed)")
+                Timber.tag(TAG).d("  Method: COPY codec - preserves standardized quality")
+                Timber.tag(TAG).d("  No second normalization - just segmenting for HLS")
+                Timber.tag(TAG).d("==============================================================")
             } else {
-                Timber.tag(TAG).d("480p HLS stream: source=${videoResolution} (${videoResolutionValue}p), target=${finalWidthLower}x${finalHeightLower}, re-encoding with libx264, bitrate=${targetLowerBitrate}")
+                Timber.tag(TAG).d("========== 480p VARIANT: RE-ENCODING (libx264) ==========")
+                Timber.tag(TAG).d("  Source: ${videoResolution} (${videoResolutionValue}p)")
+                Timber.tag(TAG).d("  Target: ${finalWidthLower}x${finalHeightLower}")
+                Timber.tag(TAG).d("  Method: libx264 re-encoding")
+                Timber.tag(TAG).d("  Bitrate: ${targetLowerBitrate}")
+                Timber.tag(TAG).d("==========================================================")
             }
             
             // Execute FFmpeg command for lower resolution with fallback (dynamic timeout)

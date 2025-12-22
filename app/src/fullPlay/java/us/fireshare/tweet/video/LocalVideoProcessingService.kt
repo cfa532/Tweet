@@ -291,6 +291,28 @@ class LocalVideoProcessingService(
         tempDir: File
     ): NormalizationResult = withContext(Dispatchers.IO) {
         try {
+            Timber.tag(TAG).d("========== FIRST NORMALIZATION (Standardization) ==========")
+            
+            // Get original video file size
+            val originalFileSize = withContext(Dispatchers.IO) {
+                try {
+                    var size = 0L
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            size += bytesRead
+                        }
+                    }
+                    size
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Failed to calculate original file size")
+                    0L
+                }
+            }
+            
+            Timber.tag(TAG).d("Original video: ${originalFileSize / (1024 * 1024)}MB")
+            
             // Get video resolution
             val videoResolution = VideoManager.getVideoResolution(context, uri)
             val resolution = detectResolution(videoResolution)
@@ -305,12 +327,15 @@ class LocalVideoProcessingService(
             // Calculate normalization parameters with pixel-based bitrate
             val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution)
             
-            Timber.tag(TAG).d("Normalization params: target=${targetResolution}p, bitrate=$targetBitrate (pixel-based)")
+            Timber.tag(TAG).d("Standardization target: ${targetResolution}p @ $targetBitrate (pixel-based proportional bitrate)")
             
             // If already at target resolution, check if we need to normalize bitrate
             if (resolution <= NORMALIZATION_THRESHOLD && resolution == targetResolution) {
-                // For videos ≤720p, we still normalize to ensure consistent bitrate
-                Timber.tag(TAG).d("Video is ≤720p, normalizing to ensure consistent bitrate")
+                // For videos ≤720p, we still normalize to ensure consistent bitrate and format
+                // This is necessary for fair 32MB size comparison later
+                Timber.tag(TAG).d("Video ≤720p at target resolution, standardizing format/bitrate for 32MB comparison")
+            } else if (resolution > NORMALIZATION_THRESHOLD) {
+                Timber.tag(TAG).d("Video >720p, downscaling to 720p for standardization")
             }
             
             // Create normalized video file
@@ -356,19 +381,34 @@ class LocalVideoProcessingService(
                 "${normalizedFile.absolutePath}"
             """.trimIndent().replace(Regex("\\s+"), " ")
             
-            Timber.tag(TAG).d("Normalizing video: ${targetWidth}x${targetHeight} @ $targetBitrate")
-            Timber.tag(TAG).d("FFmpeg normalization command: $command")
+            Timber.tag(TAG).d("Executing standardization: ${targetWidth}x${targetHeight} @ $targetBitrate")
+            Timber.tag(TAG).d("FFmpeg command: $command")
             
             // Execute FFmpeg
+            val startTime = System.currentTimeMillis()
             val session = FFmpegKit.execute(command)
             val returnCode = session.returnCode
+            val duration = System.currentTimeMillis() - startTime
             
             // Clean up temp input file
             tempInputFile.delete()
             
             if (ReturnCode.isSuccess(returnCode)) {
                 val normalizedSize = normalizedFile.length()
-                Timber.tag(TAG).d("Normalization successful: ${normalizedSize / (1024 * 1024)}MB")
+                val sizeDiff = normalizedSize - originalFileSize
+                val sizeChangePercent = if (originalFileSize > 0) {
+                    ((sizeDiff.toFloat() / originalFileSize) * 100).toInt()
+                } else 0
+                
+                Timber.tag(TAG).d("FIRST NORMALIZATION SUCCESS:")
+                Timber.tag(TAG).d("  Original: ${originalFileSize / (1024 * 1024)}MB")
+                Timber.tag(TAG).d("  Normalized: ${normalizedSize / (1024 * 1024)}MB ($sizeChangePercent%)")
+                Timber.tag(TAG).d("  Resolution: ${targetWidth}x${targetHeight} (${targetResolution}p)")
+                Timber.tag(TAG).d("  Bitrate: $targetBitrate (standardized)")
+                Timber.tag(TAG).d("  Duration: ${duration}ms")
+                Timber.tag(TAG).d("  Purpose: Unified format for 32MB routing decision")
+                Timber.tag(TAG).d("========================================================")
+                
                 NormalizationResult.Success(
                     uri = Uri.fromFile(normalizedFile),
                     file = normalizedFile,
