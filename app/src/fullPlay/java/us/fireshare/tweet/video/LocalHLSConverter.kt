@@ -33,7 +33,7 @@ class LocalHLSConverter(private val context: Context) {
 
         // Base bitrate for 720p video (in kbps) - used for proportional bitrate calculations
         private const val REFERENCE_720P_BITRATE = 1000
-        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps
+        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps (reduced from 500k)
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes minimum

@@ -129,8 +129,6 @@ class ZipCompressor {
         } finally {
             zipOutputStream.closeEntry()
         }
-
-        Timber.tag(TAG).d("Added file to zip: $entryPath (${file.length()} bytes)")
     }
 
     /**

@@ -35,7 +35,7 @@ class LocalVideoProcessingService(
         // Bitrate constants
         private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
         private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
-        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality
+        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps (reduced from 500k to avoid inflating low-bitrate videos)
         
         // Normalization constants
         private const val NORMALIZATION_THRESHOLD = 720 // Videos >720p get normalized to 720p

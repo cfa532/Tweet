@@ -3132,8 +3132,19 @@ object HproseInstance {
                     if (info != null) {
                         when (info.state) {
                             WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
-                                Timber.tag("HproseInstance").d("Skipping resume: work ${upload.workId} is ${info.state}")
-                                continue
+                                // Check if work has been stuck for more than 10 minutes
+                                val staleThresholdMs = 10 * 60 * 1000L // 10 minutes
+                                val ageMs = System.currentTimeMillis() - upload.timestamp
+                                
+                                if (ageMs > staleThresholdMs) {
+                                    Timber.tag("HproseInstance").w("Work ${upload.workId} stuck in ${info.state} for ${ageMs / 1000}s, cancelling and resuming")
+                                    // Cancel the stuck work
+                                    WorkManager.getInstance(context).cancelWorkById(uuid)
+                                    // Let it proceed to resume logic below
+                                } else {
+                                    Timber.tag("HproseInstance").d("Skipping resume: work ${upload.workId} is ${info.state} (age: ${ageMs / 1000}s)")
+                                    continue
+                                }
                             }
                             WorkInfo.State.SUCCEEDED -> {
                                 Timber.tag("HproseInstance").d("Cleaning up: work ${upload.workId} already SUCCEEDED")
@@ -3237,6 +3248,40 @@ object HproseInstance {
                 removeIncompleteUpload(context, upload.workId)
             }
         }
+    }
+    
+    /**
+     * Clear all stuck/stale uploads (useful for debugging or cleanup)
+     * Cancels WorkManager jobs and removes incomplete upload tracking
+     */
+    fun clearStuckUploads(context: Context) {
+        val incompleteUploads = getIncompleteUploads(context)
+        if (incompleteUploads.isEmpty()) {
+            Timber.tag("HproseInstance").d("No incomplete uploads to clear")
+            return
+        }
+        
+        Timber.tag("HproseInstance").d("Clearing ${incompleteUploads.size} stuck uploads")
+        
+        for (upload in incompleteUploads) {
+            try {
+                // Cancel WorkManager job
+                try {
+                    val uuid = UUID.fromString(upload.workId)
+                    WorkManager.getInstance(context).cancelWorkById(uuid)
+                    Timber.tag("HproseInstance").d("Cancelled work: ${upload.workId}")
+                } catch (e: Exception) {
+                    Timber.tag("HproseInstance").w("Could not cancel work ${upload.workId}: $e")
+                }
+                
+                // Remove from tracking
+                removeIncompleteUpload(context, upload.workId)
+            } catch (e: Exception) {
+                Timber.tag("HproseInstance").e("Error clearing upload ${upload.workId}: $e")
+            }
+        }
+        
+        Timber.tag("HproseInstance").d("Cleared all stuck uploads")
     }
 }
 
