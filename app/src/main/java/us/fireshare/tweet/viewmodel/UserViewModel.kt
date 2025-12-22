@@ -198,15 +198,17 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Refresh user data with retry logic
-     * Always forces refresh from server (skips cache)
-     * Passes empty string for baseUrl to force IP re-resolution (matching iOS fetchUser behavior)
+     * Matches iOS ProfileView.refreshProfileData() behavior:
+     * - Passes empty baseUrl to force fresh IP resolution and skip cache
+     * - Does NOT use forceRefresh=true (relies on empty baseUrl logic)
+     * - Does NOT remove cached user before fetching
      */
     private suspend fun refreshUserWithRetry(maxRetries: Int = 3) {
         repeat(maxRetries) { attempt ->
             try {
-                // Force refresh from server, skip cache
-                // Pass empty string to force IP re-resolution
-                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = true)
+                // Pass empty baseUrl to force IP re-resolution and skip cache (matching iOS)
+                // fetchUser will skip cache when baseUrl is empty and fetch from server
+                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = false)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     _user.value = refreshedUser
                     return // Success, exit retry loop

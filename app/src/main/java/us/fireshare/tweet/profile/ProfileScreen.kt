@@ -109,11 +109,10 @@ fun ProfileScreen(
     LaunchedEffect(Unit) {
         // Always refresh user from server when profile screen is opened
         // This ensures we have the latest user data including updated baseUrl/IP
+        // Matches iOS ProfileView.refreshProfileData() behavior
         withContext(Dispatchers.IO) {
             Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
-            // Invalidate cache first to force fresh fetch from server
-            TweetCacheManager.removeCachedUser(userId)
-            // Refresh user data from server with empty baseUrl to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+            // Refresh user data from server (matching iOS - no cache removal, relies on fetchUser logic)
             viewModel.refreshUserData()
         }
     }

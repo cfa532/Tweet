@@ -2347,7 +2347,13 @@ object HproseInstance {
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null && cachedUser.username != null) {
-                if (cachedUser.hasExpired) {
+                // Matching iOS behavior: only return cached user if baseUrl parameter is not empty
+                // This ensures that when ProfileScreen calls fetchUser with empty baseUrl,
+                // it always fetches fresh data from server (like iOS ProfileView)
+                if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
+                    // Return valid cached user only if baseUrl parameter is provided
+                    return cachedUser
+                } else if (cachedUser.hasExpired) {
                     // Start background refresh if not already running
                     val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
                         if (!ongoingUserUpdates.contains(userId)) {
@@ -2366,8 +2372,10 @@ object HproseInstance {
                             skipRetryAndBlacklist
                         )
                     }
+                    // Return stale cached user while background refresh is running
+                    return cachedUser
                 }
-                return cachedUser
+                // If baseUrl is empty, fall through to fetch from server
             }
         }
 
