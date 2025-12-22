@@ -117,12 +117,15 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Initial load of tweets of an user. Execute only once.
+     * Loads cached tweets immediately to show in UI, then fetches from server in background.
      * */
     suspend fun initLoad() {
         try {
             Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
 
-            // Load first page (page 0) which includes pinned tweets
+            // Load first page (page 0) which includes pinned tweets and cached tweets
+            // getTweets() will set initState = false right after cached tweets are loaded
+            // This allows UI to render immediately while server fetch continues
             val page0Tweets = getTweets(0)
             
             // Check if page 0 indicates server depletion
@@ -160,8 +163,10 @@ class UserViewModel @AssistedInject constructor(
                 .d("Initial load completed. Pinned tweets: ${pinnedTweets.value.size}, Regular tweets: ${tweets.value.size}")
         } catch (e: Exception) {
             Timber.tag("initLoad").e(e, "Error during initial load for user: ${user.value.mid}")
-        } finally {
-            initState.value = false
+            // Even on error, hide loading spinner if we have any cached content
+            if (initState.value) {
+                initState.value = false
+            }
         }
     }
 
@@ -865,6 +870,13 @@ class UserViewModel @AssistedInject constructor(
             }
             
             Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
+            
+            // For page 0 (initial load), hide loading spinner immediately after cached tweets are loaded
+            // This allows UI to render cached content while server fetch continues
+            if (pageNumber == 0 && initState.value) {
+                initState.value = false
+                Timber.tag("getTweets").d("Cached tweets rendered, hiding loading spinner. Server fetch will continue in background.")
+            }
             
             // If network is available, fetch more tweets from server
             if (user.value.baseUrl != null && appUser.baseUrl != null) {
