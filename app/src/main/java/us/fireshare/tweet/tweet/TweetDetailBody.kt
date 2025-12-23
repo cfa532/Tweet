@@ -75,6 +75,8 @@ import us.fireshare.tweet.widget.SelectableText
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
+    parentTweetId: String? = null,
+    parentAuthorId: String? = null,
     onExpandReply: (() -> Unit)? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
@@ -240,7 +242,12 @@ fun TweetDetailBody(
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
-                        ShareButton(viewModel)
+                        ShareButton(
+                            viewModel = viewModel,
+                            parentTweetId = parentTweetId,
+                            parentAuthorId = parentAuthorId,
+                            isInDetailView = true
+                        )
                     }
                 }
             }

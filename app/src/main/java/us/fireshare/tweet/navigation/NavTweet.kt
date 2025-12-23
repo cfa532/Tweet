@@ -24,7 +24,9 @@ sealed interface NavTweet {
     @Serializable
     data class TweetDetail(
         val authorId: MimeiId,
-        val tweetId: MimeiId
+        val tweetId: MimeiId,
+        val parentTweetId: MimeiId? = null,
+        val parentAuthorId: MimeiId? = null
     ) : NavTweet
 
     @Serializable

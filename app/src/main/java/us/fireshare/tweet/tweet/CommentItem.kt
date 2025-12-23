@@ -83,7 +83,16 @@ fun CommentItem(
 
     Column(
         modifier = Modifier
-            .clickable { navController.navigate(NavTweet.TweetDetail(comment.authorId, comment.mid)) }
+            .clickable { 
+                navController.navigate(
+                    NavTweet.TweetDetail(
+                        authorId = comment.authorId,
+                        tweetId = comment.mid,
+                        parentTweetId = parentTweetViewModel?.tweetState?.value?.mid,
+                        parentAuthorId = parentTweetViewModel?.tweetState?.value?.authorId
+                    )
+                )
+            }
             .padding(horizontal = 4.dp)
             .heightIn(max = 80000.dp) // Limit individual comment height
     ) {
@@ -165,7 +174,12 @@ fun CommentItem(
             LikeButton(viewModel)
             BookmarkButton(viewModel)
             Spacer(modifier = Modifier.width(40.dp))
-            ShareButton(viewModel)
+            // Pass parent tweet info to ShareButton for comments
+            ShareButton(
+                viewModel = viewModel,
+                parentTweetId = parentTweetViewModel?.tweetState?.value?.mid,
+                parentAuthorId = parentTweetViewModel?.tweetState?.value?.authorId
+            )
         }
     }
 }

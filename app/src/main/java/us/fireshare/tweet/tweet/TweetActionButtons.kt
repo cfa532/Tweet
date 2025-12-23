@@ -242,7 +242,13 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
 }
 
 @Composable
-fun ShareButton(viewModel: TweetViewModel, color: Color? = null) {
+fun ShareButton(
+    viewModel: TweetViewModel,
+    color: Color? = null,
+    parentTweetId: String? = null,
+    parentAuthorId: String? = null,
+    isInDetailView: Boolean = false
+) {
     val navController = LocalNavController.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -257,7 +263,7 @@ fun ShareButton(viewModel: TweetViewModel, color: Color? = null) {
                 }
             } else
                 scope.launch(Dispatchers.IO) {
-                    viewModel.shareTweet(context)
+                    viewModel.shareTweet(context, parentTweetId, parentAuthorId, isInDetailView)
                 }
         },
         enabled = !isSharing

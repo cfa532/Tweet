@@ -78,7 +78,9 @@ import us.fireshare.tweet.widget.ImageCacheManager
 fun TweetDetailScreen(
     authorId: String,
     tweetId: String,
-    parentEntry: NavBackStackEntry
+    parentEntry: NavBackStackEntry,
+    parentTweetId: String? = null,
+    parentAuthorId: String? = null
 ) {
     // Use activity scope to ensure same ViewModel instance is shared with TweetItem
     val activity = LocalActivity.current as ComponentActivity
@@ -392,6 +394,8 @@ fun TweetDetailScreen(
                     TweetDetailBody(
                         viewModel = viewModel,
                         parentEntry = parentEntry,
+                        parentTweetId = parentTweetId,
+                        parentAuthorId = parentAuthorId,
                         onExpandReply = { }
                     )
                     HorizontalDivider(

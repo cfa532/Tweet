@@ -136,7 +136,13 @@ fun TweetNavGraph(
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()
-                TweetDetailScreen(args.authorId, args.tweetId, navBackStackEntry)
+                TweetDetailScreen(
+                    authorId = args.authorId,
+                    tweetId = args.tweetId,
+                    parentEntry = navBackStackEntry,
+                    parentTweetId = args.parentTweetId,
+                    parentAuthorId = args.parentAuthorId
+                )
             }
             composable<NavTweet.ComposeTweet> {
                 ComposeTweetScreen(navController)

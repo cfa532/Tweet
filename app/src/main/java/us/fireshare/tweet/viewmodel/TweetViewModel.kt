@@ -380,9 +380,17 @@ class TweetViewModel @AssistedInject constructor(
         // No need to observe work status - UI will update via notification system
     }
 
-    suspend fun shareTweet(context: Context) {
+    suspend fun shareTweet(
+        context: Context,
+        parentTweetId: String? = null,
+        parentAuthorId: String? = null,
+        isInDetailView: Boolean = false
+    ) {
         _isSharing.value = true
         try {
+            // Use current tweet state (which has loaded content) instead of constructor parameter
+            val currentTweet = tweetState.value
+            
             /**
              * Call to checkUpgrade() also returns a map of environmental variables,
              * which includes environment variables of the App.
@@ -391,35 +399,65 @@ class TweetViewModel @AssistedInject constructor(
             if (map == null) {
                 return
             }
-            // Use appUser.domainToShare if available, otherwise fall back to checkUpgrade domain
-            val domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                appUser.domainToShare!!
+            
+            // Build the share link based on context (similar to iOS implementation)
+            val deepLink = if (isInDetailView) {
+                // In detail view: use author's baseUrl with entry format
+                val baseUrlString = currentTweet.author?.baseUrl ?: appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+                if (parentTweetId != null && parentAuthorId != null) {
+                    // Comment in detail view: entry format with query parameters in hash
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
+                } else {
+                    // Regular tweet in detail view: entry format
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                }
+            } else if (parentTweetId != null && parentAuthorId != null) {
+                // Comment in feed/list: traditional format with query parameters
+                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                    appUser.domainToShare!!
+                } else {
+                    map["domain"] ?: return
+                }
+                // Ensure domain has http:// protocol prefix
+                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                    domain = "http://$domain"
+                }
+                "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
             } else {
-                map["domain"] ?: run {
-                    return
+                // In feed/grid: use traditional format
+                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                    appUser.domainToShare!!
+                } else {
+                    map["domain"] ?: return
+                }
+                // Ensure domain has http:// protocol prefix
+                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                    domain = "http://$domain"
+                }
+                if (BuildConfig.IS_PLAY_VERSION) {
+                    "http://${BuildConfig.PLAY_SHARE_DOMAIN}/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                } else {
+                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}"
                 }
             }
-        val deepLink = if (BuildConfig.IS_PLAY_VERSION) {
-            "http://gplay.fireshare.us/tweet/${tweet.mid}/${tweet.authorId}"
-        } else {
-            "http://$domain/tweet/${tweet.mid}/${tweet.authorId}"
-        }
 
         // Generate share content based on tweet title, content, or attachment types
         val shareContent = when {
-            !tweet.title.isNullOrBlank() -> {
-                val title = tweet.title!!.trim()
+            !currentTweet.title.isNullOrBlank() -> {
+                val title = currentTweet.title!!.trim()
                 if (title.length <= 40) title else "${title.take(40)}..."
             }
-            !tweet.content.isNullOrBlank() -> {
-                val content = tweet.content!!.replace("\n", " ").trim()
+            !currentTweet.content.isNullOrBlank() -> {
+                val content = currentTweet.content!!.replace("\n", " ").trim()
                 if (content.length <= 40) content else "${content.take(40)}..."
             }
             else -> {
                 // No title or content, compose from first 3 attachment types
-                composeAttachmentTypeText(tweet)
+                composeAttachmentTypeText(currentTweet)
             }
         }
+        
+        Timber.tag("SHARE").d("Share content for tweet ${currentTweet.mid}: title='${currentTweet.title}', content='${currentTweet.content?.take(50)}', shareContent='$shareContent'")
 
         val textToShare = if (shareContent.isNotEmpty()) {
             "$shareContent\n\n$deepLink"
@@ -564,7 +602,7 @@ class TweetViewModel @AssistedInject constructor(
         }
         
         // Fall back to app user's base URL
-        return appUser.baseUrl ?: "https://fireshare.us"
+        return appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
     }
     
     /**

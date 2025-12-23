@@ -86,6 +86,7 @@ android {
             // DEBUG BUILD CONFIG - Different from release
             buildConfigField("String", "BASE_URL", "\"twbe.fireshare.us\"")
             buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")  // DEBUG APP_ID
+            buildConfigField("String", "APP_ID_HASH", "\"5yOO4xP1QjAXhHpJtKMyIETVMxU\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
@@ -105,6 +106,7 @@ android {
             // RELEASE BUILD CONFIG - Different from debug
             buildConfigField("String", "BASE_URL", "\"tweet.fireshare.us\"")
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")  // RELEASE APP_ID
+            buildConfigField("String", "APP_ID_HASH", "\"h5U5jxPr2p2tg2kMr8UeyRMNIJ_\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
@@ -121,6 +123,7 @@ android {
             // No override - will use defaultConfig versionCode
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
         }
         
         create("mini") {
@@ -129,6 +132,7 @@ android {
             versionCode = 68  // Mini version code. Must be smaller than full version's code
             buildConfigField("Boolean", "IS_MINI_VERSION", "true")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
         }
         
         create("play") {
@@ -137,6 +141,7 @@ android {
             versionCode = 88  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
             // Play version is based on full version but with different settings
         }
     }
