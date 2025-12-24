@@ -55,10 +55,9 @@ class ChatSessionRepository @Inject constructor(
         message: ChatMessage,
         hasNews: Boolean
     ): ChatMessage {
-        // Always use the deterministic sessionId for consistency
-        // The sessionId should be the same regardless of message direction
-        val sessionId = ChatSession.generateDeterministicSessionId(userId, receiptId)
-        Timber.tag("ChatSessionRepository").d("updateChatSessionWithMessage: Using deterministic sessionId=$sessionId (userId=$userId, receiptId=$receiptId)")
+        // Use receiptId as sessionId (the receiver's mid)
+        val sessionId = receiptId
+        Timber.tag("ChatSessionRepository").d("updateChatSessionWithMessage: Using receiptId as sessionId=$sessionId (userId=$userId, receiptId=$receiptId)")
         
         // Check if message already exists to avoid duplicate inserts
         val existingEntity = chatMessageDao.getMessageByMessageId(message.id)
@@ -114,16 +113,7 @@ class ChatSessionRepository @Inject constructor(
         }
         
         if (existingSession == null) {
-            // Session doesn't exist with the correct deterministic sessionId
-            // Check if there's an old session with the same receiptId (wrong sessionId) and delete it
-            @Suppress("DEPRECATION")
-            val oldSession = chatSessionDao.getSession(userId, receiptId)
-            if (oldSession != null && oldSession.id != sessionId) {
-                Timber.tag("ChatSessionRepository").d("Found old session with wrong sessionId: ${oldSession.id}, deleting it")
-                chatSessionDao.deleteSession(oldSession.id)
-            }
-            
-            // Create new session with correct deterministic sessionId
+            // Create new session
             val newSession = ChatSessionEntity(
                 id = sessionId,
                 timestamp = messageEntity.timestamp,
@@ -169,9 +159,28 @@ class ChatSessionRepository @Inject constructor(
 
     /**
      * Get or create session ID for a conversation
+     * SessionId is simply the receiptId (receiver's mid)
      */
     suspend fun getOrCreateSessionId(userId: String, receiptId: String): String {
-        return ChatSession.getOrCreateSession(userId, receiptId, chatSessionDao)
+        // Use receiptId as sessionId
+        val sessionId = receiptId
+        
+        // Check if session exists, if not create it
+        val existingSession = chatSessionDao.getSessionById(sessionId)
+        if (existingSession == null) {
+            val newSession = ChatSessionEntity(
+                id = sessionId,
+                timestamp = System.currentTimeMillis(),
+                userId = userId,
+                receiptId = receiptId,
+                hasNews = false,
+                lastMessageId = 0 // Will be updated when first message is added
+            )
+            chatSessionDao.insertSession(newSession)
+            Timber.tag("ChatSessionRepository").d("Created new session with receiptId as sessionId: $sessionId")
+        }
+        
+        return sessionId
     }
 
     /**
