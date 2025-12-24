@@ -129,8 +129,12 @@ fun ChatScreen(
         }
     }
 
+    // Reload messages from database when screen appears (in case ViewModel was recreated)
     LaunchedEffect(key1 = Unit) {
-        // get unread messages from network
+        // Always reload messages from database when screen appears to ensure they're displayed
+        // This handles the case where ViewModel was recreated or messages were cleared
+        viewModel.reloadMessagesFromDatabase()
+        // Then get unread messages from network
         viewModel.fetchNewMessage()
     }
     
@@ -1011,6 +1015,17 @@ private fun formatTimestamp(timestamp: Long): String {
     }
 }
 
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
+    }
+}
+
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
@@ -1104,25 +1119,62 @@ fun ChatMediaPreview(
             }
 
             else -> {
-                // For other file types, show a file icon with filename
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = stringResource(R.string.file_attachment),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = attachment.fileName ?: stringResource(R.string.unknown_file),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                // Check if this is a document type
+                val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(attachment)
+                if (isDocumentType(inferredType)) {
+                    // Show documents using DocumentAttachmentsView
+                    // Separate documents from media if there are multiple attachments
+                    val documentAttachments = attachments.filter { 
+                        val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                        isDocumentType(type)
+                    }
+                    val mediaAttachments = attachments.filter { 
+                        val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                        !isDocumentType(type)
+                    }
+                    
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        // Show media attachments first if any
+                        if (mediaAttachments.isNotEmpty()) {
+                            ChatMediaPreview(
+                                attachments = mediaAttachments,
+                                onImageClick = onImageClick,
+                                onVideoClick = onVideoClick
+                            )
+                        }
+                        
+                        // Show document attachments
+                        if (documentAttachments.isNotEmpty()) {
+                            us.fireshare.tweet.widget.DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = appUser.baseUrl,
+                                maxDocuments = null // Show all documents in chat
+                            )
+                        }
+                    }
+                } else {
+                    // For unknown file types, show a file icon with filename
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = stringResource(R.string.file_attachment),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = attachment.fileName ?: stringResource(R.string.unknown_file),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }

@@ -105,6 +105,7 @@ class ChatViewModel @AssistedInject constructor(
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        Timber.tag("ChatViewModel").d("sendTextMessage: Using sessionId=$sessionId for message, appUser=${appUser.mid}, receipt=$receiptId")
 
         val message = ChatMessage(
             receiptId = receiptId,
@@ -118,6 +119,7 @@ class ChatViewModel @AssistedInject constructor(
         try {
             // Add message to UI immediately for instant feedback
             _chatMessages.value += message
+            Timber.tag("ChatViewModel").d("sendTextMessage: Inserting message to DB: id=${message.id}, sessionId=${message.sessionId}")
             chatRepository.insertMessage(message)
             
             // Update ChatSession immediately so ChatListView reflects the change
@@ -330,6 +332,17 @@ class ChatViewModel @AssistedInject constructor(
         // update session flag to false, means it is read.
         chatSessionRepository.updateExistingChatSession(appUser.mid, receiptId, hasNews = false)
         return messages.map { it.toChatMessage() }
+    }
+
+    /**
+     * Reload messages from database (public method for screen re-entry)
+     */
+    suspend fun reloadMessagesFromDatabase() {
+        val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loading from sessionId=$sessionId, appUser=${appUser.mid}, receipt=$receiptId")
+        val messages = loadLatestMessages(receiptId).sortedBy { it.timestamp }
+        _chatMessages.value = messages
+        Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loaded ${messages.size} messages from database")
     }
 
     /**

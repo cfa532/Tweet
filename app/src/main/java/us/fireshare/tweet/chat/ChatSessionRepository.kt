@@ -55,12 +55,10 @@ class ChatSessionRepository @Inject constructor(
         message: ChatMessage,
         hasNews: Boolean
     ): ChatMessage {
-        // For incoming messages, use authorId as sessionId; for outgoing, use receiptId
-        val sessionId = if (message.authorId != userId) {
-            message.authorId // Incoming message: use sender's ID as session ID
-        } else {
-            receiptId // Outgoing message: use recipient's ID as session ID
-        }
+        // Always use the deterministic sessionId for consistency
+        // The sessionId should be the same regardless of message direction
+        val sessionId = ChatSession.generateDeterministicSessionId(userId, receiptId)
+        Timber.tag("ChatSessionRepository").d("updateChatSessionWithMessage: Using deterministic sessionId=$sessionId (userId=$userId, receiptId=$receiptId)")
         
         // Check if message already exists to avoid duplicate inserts
         val existingEntity = chatMessageDao.getMessageByMessageId(message.id)
