@@ -102,20 +102,28 @@ class ChatSessionRepository @Inject constructor(
         messageEntity: ChatMessageEntity,
         hasNews: Boolean
     ) {
-        // Check if session exists, if not create it
+        // Check if session exists with the correct sessionId
         val existingSession = chatSessionDao.getSessionById(sessionId)
+        
+        // Get userId and receiptId from the message
+        val userId = appUser.mid
+        val receiptId = if (messageEntity.authorId == userId) {
+            messageEntity.receiptId // Outgoing message: receiptId is the recipient
+        } else {
+            messageEntity.authorId   // Incoming message: authorId is the sender (partner)
+        }
+        
         if (existingSession == null) {
-            // Session doesn't exist, create it
-            // Get userId and receiptId from the message
-            // For incoming messages: receiptId = authorId (the sender)
-            // For outgoing messages: receiptId = receiptId (the recipient)
-            val userId = appUser.mid
-            val receiptId = if (messageEntity.authorId == userId) {
-                messageEntity.receiptId // Outgoing message: receiptId is the recipient
-            } else {
-                messageEntity.authorId   // Incoming message: authorId is the sender (partner)
+            // Session doesn't exist with the correct deterministic sessionId
+            // Check if there's an old session with the same receiptId (wrong sessionId) and delete it
+            @Suppress("DEPRECATION")
+            val oldSession = chatSessionDao.getSession(userId, receiptId)
+            if (oldSession != null && oldSession.id != sessionId) {
+                Timber.tag("ChatSessionRepository").d("Found old session with wrong sessionId: ${oldSession.id}, deleting it")
+                chatSessionDao.deleteSession(oldSession.id)
             }
             
+            // Create new session with correct deterministic sessionId
             val newSession = ChatSessionEntity(
                 id = sessionId,
                 timestamp = messageEntity.timestamp,
