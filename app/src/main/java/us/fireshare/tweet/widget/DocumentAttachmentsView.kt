@@ -28,15 +28,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Web
-import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,9 +70,9 @@ import java.text.DecimalFormat
 @Composable
 fun DocumentAttachmentsView(
     documents: List<MimeiFileType>,
+    modifier: Modifier = Modifier,
     baseUrl: String? = null,
     maxDocuments: Int? = 2, // Limit to 2 documents in list view (like iOS)
-    modifier: Modifier = Modifier
 ) {
     if (documents.isEmpty()) return
 
@@ -251,7 +250,7 @@ private fun getDocumentIcon(type: MediaType): androidx.compose.ui.graphics.vecto
         MediaType.Zip -> Icons.Default.Archive
         MediaType.Txt -> Icons.Default.Description
         MediaType.Html -> Icons.Default.Web
-        else -> Icons.Filled.InsertDriveFile
+        else -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
 }
 
@@ -277,7 +276,7 @@ private fun truncateFileName(fileName: String, maxLength: Int = 30): String {
     if (fileName.length <= maxLength) return fileName
     val ellipsis = "..."
     val halfLength = (maxLength - ellipsis.length) / 2
-    val start = fileName.substring(0, halfLength)
+    val start = fileName.take(halfLength)
     val end = fileName.substring(fileName.length - halfLength)
     return "$start$ellipsis$end"
 }
@@ -477,34 +476,6 @@ private fun presentDocumentViewer(context: Context, file: File, onDismiss: () ->
         Toast.makeText(context, "Failed to open document", Toast.LENGTH_SHORT).show()
     } finally {
         onDismiss()
-    }
-}
-
-/**
- * Share document
- */
-private fun shareDocument(context: Context, file: File) {
-    try {
-        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                file
-            )
-        } else {
-            Uri.fromFile(file)
-        }
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = getMimeType(file.name)
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        context.startActivity(Intent.createChooser(intent, "Share document"))
-    } catch (e: Exception) {
-        Timber.e(e, "DocumentAttachmentsView: Failed to share document")
-        Toast.makeText(context, "Failed to share document", Toast.LENGTH_SHORT).show()
     }
 }
 
