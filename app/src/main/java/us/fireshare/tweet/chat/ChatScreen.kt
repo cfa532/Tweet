@@ -627,7 +627,9 @@ fun ChatItem(
             }
             
             // Message content in a column with two rows
+            // Limit width to leave space for avatar when sent by current user
             Column(
+                modifier = if (isSentByCurrentUser) Modifier.fillMaxWidth(0.85f) else Modifier.fillMaxWidth(),
                 horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
             ) {
                 // First row: Text content (if any) - hide placeholder text for attachments
@@ -658,25 +660,41 @@ fun ChatItem(
                 // Second row: Media preview grid (if attachments exist)
                 message.attachments?.let { attachments ->
                     if (attachments.isNotEmpty()) {
-                        Surface(
-                            color = if (isSending) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            shape = if (isLastMessageFromParty) {
-                                ChatBubbleShape(isSentByCurrentUser)
-                            } else {
-                                regularChatBubbleShape()
-                            },
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            // Simple media preview for chat messages
-                            ChatMediaPreview(
-                                attachments = attachments,
-                                onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
-                                onVideoClick = { onVideoClick(attachments.first()) }
+                        // Check if all attachments are documents
+                        val allDocuments = attachments.all { 
+                            val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                            isDocumentType(type)
+                        }
+                        
+                        if (allDocuments) {
+                            // Document messages: no background container
+                            us.fireshare.tweet.widget.DocumentAttachmentsView(
+                                documents = attachments,
+                                baseUrl = appUser.baseUrl,
+                                maxDocuments = null,
+                                modifier = Modifier.padding(4.dp)
                             )
+                        } else {
+                            // Media messages: keep background container
+                            Surface(
+                                color = if (isSending) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                                shape = if (isLastMessageFromParty) {
+                                    ChatBubbleShape(isSentByCurrentUser)
+                                } else {
+                                    regularChatBubbleShape()
+                                },
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                ChatMediaPreview(
+                                    attachments = attachments,
+                                    onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
+                                    onVideoClick = { onVideoClick(attachments.first()) }
+                                )
+                            }
                         }
                     }
                 }
