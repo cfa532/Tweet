@@ -38,8 +38,11 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import java.util.concurrent.TimeUnit
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -165,20 +168,51 @@ fun TweetItemBody(
                     )
                 }
 
-                // Media files
+                // Media files and documents
                 if (hasAttachments) {
                     // Stabilize attachments to prevent video recomposition
                     val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
                         tweet.attachments!!
                     }
-                    Surface(
+                    
+                    // Separate media (visual) from documents (like iOS)
+                    val mediaAttachments = remember(stableAttachments) {
+                        stableAttachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isMediaType(type)
+                        }
+                    }
+                    val documentAttachments = remember(stableAttachments) {
+                        stableAttachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isDocumentType(type)
+                        }
+                    }
+                    
+                    Column(
                         modifier = Modifier.fillMaxWidth()
                             .padding(top = 4.dp, end = 4.dp)
-                            .heightIn(min = 20.dp, max = 400.dp),
-                        tonalElevation = 4.dp,
-                        shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaGrid(stableAttachments, viewModel)
+                        // MediaGrid for images, videos, and audio (visual content)
+                        if (mediaAttachments.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth()
+                                    .heightIn(min = 20.dp, max = 400.dp),
+                                tonalElevation = 4.dp,
+                                shape = RoundedCornerShape(size = 8.dp)
+                            ) {
+                                MediaGrid(mediaAttachments, viewModel)
+                            }
+                        }
+                        
+                        // Document attachments vertically (below media) - limit to 2 in list
+                        if (documentAttachments.isNotEmpty()) {
+                            DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = tweet.author?.baseUrl,
+                                maxDocuments = 2 // Show at most 2 documents in tweet list
+                            )
+                        }
                     }
                 }
 
@@ -199,6 +233,27 @@ fun TweetItemBody(
                 }
             }
         }
+    }
+}
+
+/**
+ * Determines if a media type is visual content (should be in MediaGrid)
+ */
+private fun isMediaType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO, MediaType.Audio -> true
+        else -> false
+    }
+}
+
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
     }
 }
 

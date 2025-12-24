@@ -68,7 +68,9 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
+import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
@@ -151,16 +153,42 @@ fun TweetDetailBody(
 
                     if (! tweet.attachments.isNullOrEmpty()) {
                         val attachments = tweet.attachments!!
-                        val isAllAudio = attachments.all { it.type == MediaType.Audio }
-                        if (isAllAudio) {
-                            attachments.forEach {
-                                it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
+                        
+                        // Separate media (visual) from documents (like iOS)
+                        val mediaAttachments = attachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isMediaType(type)
+                        }
+                        val documentAttachments = attachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isDocumentType(type)
+                        }
+                        
+                        // Handle media attachments
+                        if (mediaAttachments.isNotEmpty()) {
+                            val isAllAudio = mediaAttachments.all { 
+                                val type = inferMediaTypeFromAttachment(it)
+                                type == MediaType.Audio 
                             }
-                            AudioPlayer(attachments)
-                        } else {
-                            AttachmentBrowser(
-                                mediaItems = attachments,
-                                viewModel = viewModel
+                            if (isAllAudio) {
+                                mediaAttachments.forEach {
+                                    it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
+                                }
+                                AudioPlayer(mediaAttachments)
+                            } else {
+                                AttachmentBrowser(
+                                    mediaItems = mediaAttachments,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                        
+                        // Handle document attachments (below media)
+                        if (documentAttachments.isNotEmpty()) {
+                            DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = tweet.author?.baseUrl,
+                                maxDocuments = null // Show all documents in detail view
                             )
                         }
                     }
@@ -327,6 +355,27 @@ fun AttachmentBrowser(
                 }
             }
         }
+    }
+}
+
+/**
+ * Determines if a media type is visual content (should be in MediaGrid)
+ */
+private fun isMediaType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO, MediaType.Audio -> true
+        else -> false
+    }
+}
+
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
     }
 }
 
