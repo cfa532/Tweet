@@ -66,7 +66,12 @@ object VideoManager {
     private var fullScreenPlayer: ExoPlayer? = null
     private var currentVideoUrl: String? = null
     private var autoReplayListener: Player.Listener? = null
+    private var hlsFallbackListener: HLSFallbackListener? = null
     private var currentFullScreenVideoMid: MimeiId? = null
+    
+    // ===== HLS FALLBACK LISTENER TRACKING =====
+    // Track HLS fallback listeners per player to allow proper cleanup
+    private val hlsFallbackListeners = ConcurrentHashMap<ExoPlayer, HLSFallbackListener>()
 
     // ===== CACHE MANAGEMENT =====
     private var videoCache: SimpleCache? = null
@@ -489,6 +494,7 @@ object VideoManager {
     /**
      * Load a video into the full screen player
      * Uses the same cache-aware data source factory as createExoPlayer for optimal performance
+     * For HLS videos: tries master.m3u8 first, then playlist.m3u8 if that fails
      */
     fun loadVideo(context: Context, videoUrl: String, videoType: MediaType? = null) {
         if (currentVideoUrl == videoUrl) {
@@ -501,6 +507,12 @@ object VideoManager {
 
         try {
             player.stop()
+            
+            // Remove any existing HLS fallback listener
+            hlsFallbackListeners[player]?.let { existingListener ->
+                player.removeListener(existingListener)
+                hlsFallbackListeners.remove(player)
+            }
             
             // Use the same cache-aware data source factory as createExoPlayer
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
@@ -519,6 +531,13 @@ object VideoManager {
 
             // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+            
+            // Add HLS fallback listener for HLS videos
+            if (videoType == MediaType.HLS_VIDEO) {
+                val fallbackListener = HLSFallbackListener(videoUrl, player, mediaSourceFactory)
+                player.addListener(fallbackListener)
+                hlsFallbackListeners[player] = fallbackListener
+            }
             
             // Create media source based on video type (same logic as createExoPlayer)
             val mediaSource = when (videoType) {
@@ -675,6 +694,19 @@ object VideoManager {
 
             // Use DefaultMediaSourceFactory backed by CacheDataSource which handles both HLS and progressive
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+            
+            // Remove any existing HLS fallback listener for this player
+            hlsFallbackListeners[player]?.let { existingListener ->
+                player.removeListener(existingListener)
+                hlsFallbackListeners.remove(player)
+            }
+            
+            // Add HLS fallback listener for HLS videos
+            if (videoType == MediaType.HLS_VIDEO) {
+                val fallbackListener = HLSFallbackListener(videoUrl, player, mediaSourceFactory)
+                player.addListener(fallbackListener)
+                hlsFallbackListeners[player] = fallbackListener
+            }
             
             val mediaSource = when (videoType) {
                 MediaType.HLS_VIDEO -> {
@@ -887,7 +919,7 @@ object VideoManager {
      * This allows seamless transition from preview to full-screen without losing position
      */
     fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
-        return videoPlayers[videoMid]?.also { player ->
+        return videoPlayers[videoMid]?.also {
             Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
             currentFullScreenVideoMid = videoMid
         }
@@ -897,7 +929,7 @@ object VideoManager {
      * Return video player from full-screen mode back to preview
      */
     fun returnFromFullScreen(videoMid: MimeiId) {
-        videoPlayers[videoMid]?.let { player ->
+        videoPlayers[videoMid]?.let {
             Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
             currentFullScreenVideoMid = null
         }
@@ -1091,6 +1123,45 @@ object VideoManager {
             height // Landscape
         } else {
             width // Portrait
+        }
+    }
+
+    /**
+     * Private listener class to handle HLS fallback from master.m3u8 to playlist.m3u8
+     * Tries master.m3u8 first, then playlist.m3u8 if that fails (sequential, not simultaneous)
+     */
+    private class HLSFallbackListener(
+        private val videoUrl: String,
+        private val player: ExoPlayer,
+        private val mediaSourceFactory: androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+    ) : Player.Listener {
+        private var hasTriedPlaylist = false
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            // Only handle HLS fallback once
+            if (!hasTriedPlaylist) {
+                hasTriedPlaylist = true
+                Timber.d("VideoManager - HLS master.m3u8 failed, trying playlist.m3u8 fallback for URL: $videoUrl")
+
+                // Construct playlist URL
+                val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                val playlistUrl = "${baseUrl}playlist.m3u8"
+
+                // Try playlist.m3u8 fallback
+                val fallbackMediaSource = mediaSourceFactory.createMediaSource(
+                    androidx.media3.common.MediaItem.fromUri(playlistUrl)
+                )
+                
+                // Set the fallback media source and prepare
+                player.setMediaSource(fallbackMediaSource)
+                player.prepare()
+                
+                Timber.d("VideoManager - Set fallback media source for playlist.m3u8: $playlistUrl")
+            } else {
+                // Final failure - no more fallbacks
+                Timber.e("VideoManager - All HLS attempts failed for URL: $videoUrl")
+                Timber.e("VideoManager - Final error: ${error.message}")
+            }
         }
     }
 }

@@ -691,12 +691,33 @@ fun MediaGrid(
                 }
             }
             4 -> {
+                // Use cached aspect ratios to determine grid aspect ratio
+                val ar0 = cachedAspectRatios[0]
+                val ar1 = cachedAspectRatios[1]
+                val ar2 = cachedAspectRatios[2]
+                val ar3 = cachedAspectRatios[3]
+                val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f && ar3 > 1f
+                val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f && ar3 < 1f
+                
+                val gridAspectRatio = when {
+                    allLandscape -> 1.618f
+                    allPortrait -> 0.8f
+                    else -> null // No specific aspect ratio for mixed orientations
+                }
+                
                 // Use improved lazy grid method for 4+ items with better loading optimization
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     state = gridState,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(
+                            if (gridAspectRatio != null) {
+                                Modifier.aspectRatio(gridAspectRatio)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .wrapContentWidth(Alignment.CenterHorizontally),
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -705,10 +726,12 @@ fun MediaGrid(
                         items = limitedMediaList,
                         key = { index, item -> "${item.mid}_$index" } // Stable key for better performance
                     ) { index, mediaItem ->
+                        // Use grid aspect ratio for items when all have same orientation, otherwise use square
+                        val itemAspectRatio = gridAspectRatio ?: 1f
                         MediaItemView(
                             limitedMediaList,
                             modifier = Modifier
-                                .aspectRatio(1f)
+                                .aspectRatio(itemAspectRatio)
                                 .clipToBounds()
                                 .clickable {
                                     val params = MediaViewerParams(
