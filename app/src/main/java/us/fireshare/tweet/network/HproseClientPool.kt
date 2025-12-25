@@ -24,7 +24,7 @@ object HproseClientPool {
     private const val TAG = "HproseClientPool"
     
     // Pool configuration
-    private const val DEFAULT_CLIENT_TIMEOUT = 300_000 // 5 minutes for regular operations
+    private const val DEFAULT_CLIENT_TIMEOUT = 30_000 // 30 seconds for regular operations
     private const val UPLOAD_CLIENT_TIMEOUT = 3_000_000 // 50 minutes for upload operations
     private const val MAX_CLIENTS_PER_TYPE = 50 // Prevent unbounded growth
     private const val CLIENT_CLEANUP_INTERVAL_MS = 300_000L // 5 minutes
