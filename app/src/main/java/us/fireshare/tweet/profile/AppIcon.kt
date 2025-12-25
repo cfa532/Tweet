@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.getMediaUrl
@@ -68,21 +70,29 @@ fun UserAvatar(
     val context = LocalContext.current
     val avatarMid = user.avatar
 
-    // Watch user.avatar for changes - simple and direct
+    // Watch user.avatar for changes - reset state when avatarMid changes
     var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-    // React to avatar changes
+    // React to avatar changes - reset state immediately when avatarMid changes
     LaunchedEffect(avatarMid) {
+        // Reset state immediately when avatar changes to clear old bitmap
+        loadState = AvatarLoadState()
+        
         if (!avatarMid.isNullOrEmpty()) {
-            // First, check if we have this avatar cached
-            val cachedBitmap = ImageCacheManager.getCachedImage(context, avatarMid)
+            // Check cache for original image (loadOriginalImageWithScope uses "${mid}_original" key)
+            val originalMid = "${avatarMid}_original"
+            val cachedBitmap = withContext(Dispatchers.IO) {
+                // Try original cache key first, then fallback to regular key
+                ImageCacheManager.getCachedImage(context, originalMid) 
+                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
+            }
             if (cachedBitmap != null) {
                 // Use cached avatar immediately
-                loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)
+                loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
             } else {
                 // Not cached, need to load it
                 val avatarUrl = getMediaUrl(avatarMid, user.baseUrl)
-                loadState = loadState.copy(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
+                loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
                 try {
                     ImageCacheManager.loadOriginalImageWithScope(
@@ -91,13 +101,13 @@ fun UserAvatar(
                         mid = avatarMid
                     ) { downloadedBitmap ->
                         if (downloadedBitmap != null) {
-                            loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                            loadState = AvatarLoadState(bitmap = downloadedBitmap, isLoading = false, hasError = false)
                         } else {
-                            loadState = loadState.copy(isLoading = false, hasError = true)
+                            loadState = AvatarLoadState(isLoading = false, hasError = true)
                         }
                     }
                 } catch (e: Exception) {
-                    loadState = loadState.copy(isLoading = false, hasError = true)
+                    loadState = AvatarLoadState(isLoading = false, hasError = true)
                     Timber.e("UserAvatar - Error loading avatar: $e")
                 }
             }

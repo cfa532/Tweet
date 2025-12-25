@@ -178,6 +178,9 @@ fun AvatarCropScreen(
                                                 bitmapToUri(context, croppedBitmap)
                                             }
                                             
+                                            // Capture application context before navigation for safety
+                                            val appContext = context.applicationContext
+                                            
                                             // Clear cropping state and update UI
                                             yield()
                                             
@@ -191,8 +194,15 @@ fun AvatarCropScreen(
                                             
                                             // Upload the avatar AFTER navigating (so spinner is visible)
                                             // Launch in separate coroutine to continue after navigation
+                                            Timber.tag("AvatarCropScreen").d("Launching updateAvatar coroutine with URI: $croppedUri")
                                             viewModel.viewModelScope.launch {
-                                                viewModel.updateAvatar(context, croppedUri)
+                                                try {
+                                                    Timber.tag("AvatarCropScreen").d("Calling viewModel.updateAvatar...")
+                                                    viewModel.updateAvatar(appContext, croppedUri)
+                                                    Timber.tag("AvatarCropScreen").d("updateAvatar completed")
+                                                } catch (e: Exception) {
+                                                    Timber.tag("AvatarCropScreen").e(e, "Error in updateAvatar coroutine: ${e.message}")
+                                                }
                                             }
                                         } catch (e: Exception) {
                                             Timber.e("Error during crop/upload: ${e.message}")

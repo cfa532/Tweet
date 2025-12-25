@@ -70,6 +70,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.viewmodel.UserViewModel
 
@@ -82,8 +83,8 @@ fun AppUserAvatar(
     isUploading: Boolean,
     uploadError: String?
 ) {
-    // Use appUser directly instead of ViewModel user data
-    val user = appUser
+    // Observe appUserState to react to changes
+    val user by appUserState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
     // Remember the previous avatar to show during upload transition
@@ -127,7 +128,10 @@ fun AppUserAvatar(
                     // Show current avatar after upload
                     user
                 }
-                UserAvatar(user = avatarToShow, size = 120)
+                // Use key to force recomposition when avatar changes
+                key(avatarToShow.avatar) {
+                    UserAvatar(user = avatarToShow, size = 120)
+                }
             }
             
             // Show uploading message overlay when uploading
@@ -210,6 +214,8 @@ fun EditProfileScreen(
     val focusRequester = remember { FocusRequester() }
     val activityViewModel: ActivityViewModel = hiltViewModel(LocalActivity.current as ComponentActivity)
     val domainToShareFocusRequester = remember { FocusRequester() }
+    // Observe appUserState to react to avatar changes
+    val appUser by appUserState.collectAsState()
     val username by viewModel.username
     val password by viewModel.password
     val confirm = remember { mutableStateOf(password) }

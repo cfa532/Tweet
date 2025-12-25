@@ -519,26 +519,40 @@ class MediaUploadService(
         val request = Gson().fromJson(json, Map::class.java).toMutableMap()
 
         try {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.use { stream ->
-                    while (stream.read(buffer).also { byteRead = it } != -1) {
-                        request["fsid"] = appUser.uploadService?.runMApp(
-                            "upload_ipfs",
-                            request.toMap(), listOf(buffer)
-                        )
-
-                        offset += byteRead
-                        request["offset"] = offset
+            Timber.tag(TAG).d("Starting file upload, opening input stream...")
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                Timber.tag(TAG).d("Input stream opened, starting upload loop...")
+                var chunkCount = 0
+                while (stream.read(buffer).also { byteRead = it } != -1) {
+                    chunkCount++
+                    if (chunkCount % 10 == 0) {
+                        Timber.tag(TAG).d("Upload progress: $chunkCount chunks, ${offset / 1024}KB uploaded")
                     }
+                    request["fsid"] = appUser.uploadService?.runMApp(
+                        "upload_ipfs",
+                        request.toMap(), listOf(buffer)
+                    )
+
+                    offset += byteRead
+                    request["offset"] = offset
                 }
+                Timber.tag(TAG).d("Upload loop completed: $chunkCount chunks, ${offset / 1024}KB total")
+            } ?: run {
+                Timber.tag(TAG).e("Failed to open input stream for URI: $uri")
+                return null
             }
             // Do not know the tweet mid yet, cannot add reference as 2nd argument.
             // Do it later when uploading tweet.
             request["finished"] = "true"
             referenceId?.let { request["referenceid"] = it }
 
+            Timber.tag(TAG).d("Calling final upload_ipfs to complete upload...")
             val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap())
-                ?: return null
+            Timber.tag(TAG).d("Final upload_ipfs returned: ${cid ?: "null"}")
+            if (cid == null) {
+                Timber.tag(TAG).e("Final upload_ipfs returned null")
+                return null
+            }
 
             // Calculate file size - use the offset which represents total bytes uploaded
             val fileSize = offset

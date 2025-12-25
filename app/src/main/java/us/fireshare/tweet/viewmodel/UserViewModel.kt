@@ -297,30 +297,94 @@ class UserViewModel @AssistedInject constructor(
 
 
     suspend fun updateAvatar(context: Context, uri: Uri) {
+        Timber.tag("updateAvatar").d("updateAvatar called with URI: $uri")
         isLoading.value = true
         try {
             // Store the old avatar ID to clear cache later
             val oldAvatarId = appUser.avatar
+            Timber.tag("updateAvatar").d("Current avatar ID: $oldAvatarId, starting upload...")
             
             // For now, user avatar can only be image.
-            HproseInstance.uploadToIPFS(
-                uri,
-                referenceId = null  // appUser.mid, avoid a backend bug for now.
-            )?.let {
-                HproseInstance.setUserAvatar(appUser, it.mid)?.let { avatar ->  // Update appUser's avatar
-                    // Clear the old avatar from cache if it exists
-                    oldAvatarId?.let { oldId ->
+            // Run upload on IO dispatcher to avoid blocking UI
+            Timber.tag("updateAvatar").d("Calling uploadToIPFS...")
+            val uploadResult = withContext(Dispatchers.IO) {
+                try {
+                    HproseInstance.uploadToIPFS(
+                        uri,
+                        referenceId = null  // appUser.mid, avoid a backend bug for now.
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("updateAvatar").e(e, "Exception during uploadToIPFS: ${e.message}")
+                    null
+                }
+            }
+            
+            Timber.tag("updateAvatar").d("uploadToIPFS returned: ${uploadResult?.mid ?: "null"}")
+            
+            if (uploadResult == null) {
+                Timber.tag("updateAvatar").e("Failed to upload avatar to IPFS")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.avatar_update_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            
+            Timber.tag("updateAvatar").d("Upload successful, CID: ${uploadResult.mid}, calling setUserAvatar...")
+            val avatarId = withContext(Dispatchers.IO) {
+                try {
+                    HproseInstance.setUserAvatar(appUser, uploadResult.mid)
+                } catch (e: Exception) {
+                    Timber.tag("updateAvatar").e(e, "Exception during setUserAvatar: ${e.message}")
+                    null
+                }
+            }
+            Timber.tag("updateAvatar").d("setUserAvatar returned: ${avatarId ?: "null"}")
+            if (avatarId == null) {
+                Timber.tag("updateAvatar").e("Failed to set user avatar on server")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.avatar_update_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            
+            // Update the user objects with new avatar FIRST (before clearing old cache)
+            appUser = appUser.copy(avatar = avatarId)
+            _user.value = user.value.copy(avatar = avatarId)
+            User.updateUserInstance(appUser)
+
+            // Save the updated user to cache
+            TweetCacheManager.saveUser(appUser)
+            
+            Timber.tag("updateAvatar").d("Avatar updated successfully: $avatarId, old: $oldAvatarId, new: $avatarId")
+            
+            // Clear the old avatar from cache AFTER updating (so UI sees new avatar ID immediately)
+            oldAvatarId?.let { oldId ->
+                if (oldId != avatarId) {  // Only clear if it's different
+                    withContext(Dispatchers.IO) {
                         us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, oldId)
                     }
-                    
-                    // Update the user objects with new avatar
-                    appUser = appUser.copy(avatar = avatar)
-                    _user.value = user.value.copy(avatar = avatar)
-                    User.updateUserInstance(appUser)
-
-                    // Save the updated user to cache
-                    TweetCacheManager.saveUser(appUser)
                 }
+            }
+            
+            // Preload the new avatar so it's ready for display
+            // Note: Preloading happens in background, UI will load it when needed
+            // The key is that appUserState has already been updated, so UserAvatar will see the new avatarMid
+        } catch (e: Exception) {
+            Timber.tag("updateAvatar").e(e, "Error updating avatar")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.avatar_update_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         } finally {
             isLoading.value = false
