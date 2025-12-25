@@ -2790,7 +2790,13 @@ object HproseInstance {
             }
             null
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("Error getting provider IPs for $mid at ${appUser.baseUrl}: $e")
+            // Unwrap UndeclaredThrowableException to get the actual cause
+            val actualException = if (e is java.lang.reflect.UndeclaredThrowableException) {
+                e.cause ?: e
+            } else {
+                e
+            }
+            Timber.tag("getProviderIP").e(actualException, "Error getting provider IPs for $mid at ${appUser.baseUrl}")
             null
         }
     }
@@ -2808,7 +2814,8 @@ object HproseInstance {
             val responseMap = rawResponse as? Map<String, Any>
             return responseMap?.get("success") == true
         } catch (e: Exception) {
-            Timber.tag("isServerHealthy").w("Health check exception for $hproseService: ${e.message}")
+            // Don't log hproseService as it's a proxy and toString() triggers RPC call
+            Timber.tag("isServerHealthy").w("Health check exception: ${e.message}")
             false
         }
     }

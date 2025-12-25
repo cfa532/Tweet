@@ -1037,7 +1037,6 @@ fun ImageViewer(
         // This prevents spinner from showing when image is already loaded
         val hasValidBitmap = loadState.bitmap != null && !loadState.bitmap!!.isRecycled
         if (hasValidBitmap) {
-            Timber.tag("ImageViewer").d("Rendering image: ${loadState.bitmap!!.width}x${loadState.bitmap!!.height}, hasError: ${loadState.hasError}, isLoading: ${loadState.isLoading}")
             if (isFullScreen) {
                 // Use SubsamplingScaleImageView for fullscreen with built-in zoom/pan operations
                 AndroidView(
@@ -1134,8 +1133,6 @@ fun ImageViewer(
                         // This ensures the Image composable updates when a new bitmap is loaded
                         key("${displayBitmap.width}_${displayBitmap.height}_${displayBitmap.hashCode()}") {
                             val imageBitmap = displayBitmap.asImageBitmap()
-                            Timber.tag("ImageViewer")
-                                .d("Rendering preview image: ${displayBitmap.width}x${displayBitmap.height}, inPreviewGrid: $inPreviewGrid")
                             Image(
                                 bitmap = imageBitmap,
                                 contentDescription = null,
