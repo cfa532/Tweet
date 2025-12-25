@@ -198,6 +198,9 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState()
         ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
+    
+    // Capture string resource at composable level to avoid context capture warnings
+    val deleteFailedMessage = stringResource(R.string.comment_delete_failed)
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
     LaunchedEffect(comment.mid) {
@@ -236,8 +239,6 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
 
                         // Delete comment with optimistic updates
                         parentTweetViewModel?.let { viewModel ->
-                            // Capture error message outside coroutine to avoid context capture
-                            val errorMessage = context.getString(R.string.comment_delete_failed)
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 try {
                                     viewModel.deleteComment(comment.mid, comment)
@@ -248,7 +249,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(
                                             context,
-                                            errorMessage,
+                                            deleteFailedMessage,
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }
