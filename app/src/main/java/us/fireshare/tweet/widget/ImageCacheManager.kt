@@ -490,9 +490,10 @@ object ImageCacheManager {
                     Timber.tag("ImageCacheManager").d("Duplicate request detected for $mid - waiting for existing download")
                     
                     // Wait for the download to complete and return the result
+                    // Increased timeout to 30 seconds to accommodate slow network downloads
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 50 && shouldContinue) { // Wait up to 5 seconds
+                    while (attempts < 300 && shouldContinue) { // Wait up to 30 seconds (300 * 100ms)
                         delay(100L)
                         attempts++
                         
@@ -543,6 +544,8 @@ object ImageCacheManager {
                     isRaceConditionDuplicate = downloadQueue.containsKey(originalMid)
                     if (!isRaceConditionDuplicate) {
                         downloadQueue[originalMid] = true
+                        // Track when download started for stuck download detection
+                        ongoingDownloads[originalMid] = System.currentTimeMillis()
                     }
                 }
                 
@@ -561,9 +564,10 @@ object ImageCacheManager {
                     semaphoreAcquired = false
                     
                     // Wait for the download to complete and return the result
+                    // Increased timeout to 30 seconds to accommodate slow network downloads
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 50 && shouldContinue) { // Wait up to 5 seconds
+                    while (attempts < 300 && shouldContinue) { // Wait up to 30 seconds (300 * 100ms)
                         delay(100L)
                         attempts++
                         
@@ -645,6 +649,7 @@ object ImageCacheManager {
                     synchronized(downloadQueueMutex) {
                         downloadQueue.remove(originalMid)
                         downloadPriorityQueue.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
                         // Don't remove downloadResults immediately - let other waiting requests get the result
                     }
                     
@@ -969,8 +974,15 @@ object ImageCacheManager {
         
         synchronized(downloadQueueMutex) {
             val stuckDownloads = downloadQueue.keys.filter { mid ->
-                val timestamp = resultTimestamps[mid] ?: 0L
-                timestamp < thirtySecondsAgo
+                // Check when download started (ongoingDownloads) not when it completed (resultTimestamps)
+                val startTimestamp = ongoingDownloads[mid]
+                if (startTimestamp != null) {
+                    // Download is actively running - check if it's been too long
+                    startTimestamp < thirtySecondsAgo
+                } else {
+                    // No start timestamp - something is wrong, consider it stuck
+                    true
+                }
             }
             
             if (stuckDownloads.isNotEmpty()) {
@@ -980,6 +992,7 @@ object ImageCacheManager {
                     downloadResults.remove(mid)
                     downloadPriorityQueue.remove(mid)
                     resultTimestamps.remove(mid)
+                    ongoingDownloads.remove(mid)
                 }
             }
         }
