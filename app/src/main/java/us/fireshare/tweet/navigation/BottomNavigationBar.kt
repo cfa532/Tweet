@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.ActivityViewModel
 import us.fireshare.tweet.BuildConfig
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
@@ -67,6 +67,8 @@ fun BottomNavigationBar(
     navController: NavController,
     selectedIndex: Int = 100
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val activityViewModel = hiltViewModel<ActivityViewModel>()
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
     var showUpgradeDialog by remember { mutableStateOf(false) }

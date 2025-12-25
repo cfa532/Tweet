@@ -25,6 +25,9 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -98,8 +101,14 @@ object HproseInstance {
     private lateinit var applicationContext: Application
     lateinit var preferenceHelper: PreferenceHelper
     
-    // Private backing field for appUser
-    private var _appUser: User = getInstance(TW_CONST.GUEST_ID)
+    // Private backing field for appUser StateFlow
+    private val _appUserState = MutableStateFlow<User>(getInstance(TW_CONST.GUEST_ID))
+    
+    /**
+     * StateFlow for observing appUser changes.
+     * Others can collect this flow to observe when the app user changes.
+     */
+    val appUserState: StateFlow<User> = _appUserState.asStateFlow()
     
     // Lazy initialization of MediaUploadService
     private val mediaUploadService: MediaUploadService by lazy {
@@ -111,14 +120,16 @@ object HproseInstance {
      * When accessed, automatically checks if the user has expired (30 minutes)
      * and refreshes from server if needed, similar to other user objects.
      * Includes deduplication to prevent concurrent refresh requests.
+     * 
+     * For observing changes, use appUserState.collect {} instead.
      */
     var appUser: User
         get() {
-            return _appUser
+            return _appUserState.value
         }
         set(value) {
-            val oldBaseUrl = _appUser.baseUrl
-            _appUser = value
+            val oldBaseUrl = _appUserState.value.baseUrl
+            _appUserState.value = value
             // If baseUrl changed from null to a valid value, trigger tweet feed refresh
             if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
                 Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")

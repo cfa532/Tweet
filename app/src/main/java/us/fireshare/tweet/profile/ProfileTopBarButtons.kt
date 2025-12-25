@@ -25,7 +25,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TweetCacheManager
@@ -43,6 +43,8 @@ fun ProfileTopBarButton(
     navController: NavHostController,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior?
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()

@@ -49,7 +49,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
@@ -70,6 +70,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
 

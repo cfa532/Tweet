@@ -16,11 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.AppIcon
@@ -33,6 +35,9 @@ fun MainTopAppBar(
     onScrollToTop: (() -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
+    
     CenterAlignedTopAppBar(
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.topAppBarColors(

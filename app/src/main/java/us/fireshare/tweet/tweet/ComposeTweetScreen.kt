@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.ui.components.ActionButtonsRow
@@ -56,6 +57,8 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 fun ComposeTweetScreen(
     navController: NavHostController
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val context = LocalContext.current
     val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
