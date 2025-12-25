@@ -67,15 +67,19 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val avatarMid = user.avatar
+    
+    System.out.println("👤👤👤 UserAvatar recomposed - userId: ${user.mid}, username: ${user.username}, avatar: $avatarMid, baseUrl: ${user.baseUrl}")
 
     // Watch user.avatar for changes - simple and direct
     var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
     // React to avatar changes
     LaunchedEffect(avatarMid) {
+        System.out.println("👤 LaunchedEffect triggered - avatarMid: $avatarMid")
         if (!avatarMid.isNullOrEmpty()) {
             // First, check if we have this avatar cached
             val cachedBitmap = ImageCacheManager.getCachedImage(context, avatarMid)
+            System.out.println("👤 Cache check result - cachedBitmap: ${if (cachedBitmap != null) "EXISTS" else "NULL"}")
             if (cachedBitmap != null) {
                 // Use cached avatar immediately
                 loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false, hasError = false)

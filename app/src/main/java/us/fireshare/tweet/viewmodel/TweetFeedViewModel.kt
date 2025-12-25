@@ -140,8 +140,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh(pageNumber: Int = 0) {
-        if (!appUser.isGuest())
-            TweetCacheManager.saveUser(appUser)
+        // Don't save appUser here - it gets saved after network initialization with full data
         fetchTweets(pageNumber)
     }
 

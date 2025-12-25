@@ -129,7 +129,9 @@ object HproseInstance {
         }
         set(value) {
             val oldBaseUrl = _appUserState.value.baseUrl
+            System.out.println("🔔🔔🔔 appUser setter called - userId: ${value.mid}, username: ${value.username}, avatar: ${value.avatar}, baseUrl: ${value.baseUrl}")
             _appUserState.value = value
+            System.out.println("🔔 StateFlow updated - _appUserState.value.avatar: ${_appUserState.value.avatar}")
             // If baseUrl changed from null to a valid value, trigger tweet feed refresh
             if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
                 Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")
@@ -327,32 +329,44 @@ object HproseInstance {
             Timber.tag("initAppEntry")
                 .d("Always refreshing appUser's baseUrl on app start for userId: $userId")
 
+            // FIRST: Load cached user immediately so UI has data to display
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            if (cachedUser != null) {
+                System.out.println("🌟🌟🌟 Loading cached user FIRST - username: ${cachedUser.username}, avatar: ${cachedUser.avatar}")
+                // Copy all fields from cached user to appUser
+                appUser.from(cachedUser)
+                // Temporarily set baseUrl to the resolved IP
+                appUser.baseUrl = "http://$entryIP"
+                // Update the StateFlow to trigger UI recomposition immediately
+                appUser = appUser
+                System.out.println("🌟 appUser updated with cached data - appUser.username: ${appUser.username}, appUser.avatar: ${appUser.avatar}")
+                Timber.tag("initAppEntry")
+                    .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+            } else {
+                System.out.println("🌟 No cached user found, will wait for network fetch")
+                // No cached user, just set baseUrl for now
+                appUser.baseUrl = "http://$entryIP"
+                appUser = appUser
+            }
+
+            // THEN: Try to fetch fresh data from network in the background
             // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
             // forceRefresh ensures fresh data from server without needing to clear cache
             val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
+            System.out.println("🌟🌟🌟 fetchUser returned - userId: ${refreshedUser?.mid}, username: ${refreshedUser?.username}, avatar: ${refreshedUser?.avatar}")
             val refreshedBaseUrl = refreshedUser?.baseUrl
             if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
                 // Use the refreshed user's baseUrl
+                System.out.println("🌟 About to update appUser with refreshed network data")
                 appUser = refreshedUser
+                System.out.println("🌟 After assignment - appUser.avatar: ${appUser.avatar}")
                 TweetCacheManager.saveUser(refreshedUser)
                 Timber.tag("initAppEntry")
                     .d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
             } else {
-                // Network fetch failed, try to load cached user
+                // Network fetch failed, but we already have cached data loaded above
                 Timber.tag("initAppEntry")
-                    .w("User fetch failed, attempting to load cached user for userId: $userId")
-                val cachedUser = TweetCacheManager.getCachedUser(userId)
-                if (cachedUser != null) {
-                    // Use cached user but update baseUrl to the resolved IP
-                    appUser.baseUrl = "http://$entryIP"
-                    Timber.tag("initAppEntry")
-                        .d("✅ Loaded cached user with resolved IP baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
-                } else {
-                    // No cached user found, fall back to bestIp with current userId
-                    Timber.tag("initAppEntry")
-                        .w("No cached user found, using resolved IP: $entryIP")
-                    appUser.baseUrl = "http://$entryIP"
-                }
+                    .w("User fetch failed, continuing with cached user data")
             }
             User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
             Timber.tag("initAppEntry")
@@ -1566,10 +1580,12 @@ object HproseInstance {
         return@withContext try {
             // Load tweets cached for mainfeed (uid = appUser.mid)
             val userId = appUser.mid
+            println("🚨🚨🚨 loadCachedTweets CALLED - userId: $userId, startRank: $startRank, count: $count")
             Timber.tag("loadCachedTweets").d("Loading cached tweets for mainfeed user: $userId")
             
             dao.getCachedTweetsByUser(userId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
+                println("🚨 Processing tweet: ${tweet.mid}, authorId: ${tweet.authorId}")
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
                 if (tweet.authorId.isEmpty()) {
@@ -1583,7 +1599,9 @@ object HproseInstance {
                 }
                 
                 // Always populate author from user cache (author field is not serialized with tweet)
+                println("🚨 About to call getCachedUser for authorId: ${tweet.authorId}")
                 tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                println("🚨 getCachedUser returned: ${tweet.author?.username ?: "NULL"}, avatar: ${tweet.author?.avatar}")
                 
                 // If no cached user found, create a skeleton user object as placeholder for offline loading
                 if (tweet.author == null) {

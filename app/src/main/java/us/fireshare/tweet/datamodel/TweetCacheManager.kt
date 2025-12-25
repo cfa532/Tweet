@@ -154,11 +154,13 @@ object TweetCacheManager {
      * Also updates the StateFlow so all observers are notified of the change.
      */
     fun saveUser(user: User) {
+        println("💾💾💾 saveUser CALLED - userId: ${user.mid}, username: ${user.username}, avatar: ${user.avatar}, identityHash: ${System.identityHashCode(user)}")
         Timber.tag("TweetCacheManager").d("=== SAVING USER TO CACHE === userId: ${user.mid}, username: ${user.username}")
         try {
             synchronized(userCacheLock) {
                 val currentTime = System.currentTimeMillis()
                 
+                println("💾 About to overwrite memory cache with user: ${System.identityHashCode(user)}")
                 // Update memory cache
                 userMemoryCache[user.mid] = user
                 userCacheTimestamps[user.mid] = currentTime
@@ -187,15 +189,24 @@ object TweetCacheManager {
      * since they share the same timestamp, so we clear both immediately.
      */
     fun getCachedUser(userId: MimeiId): User? {
-        Timber.tag("TweetCacheManager").d("=== GETTING CACHED USER === userId: $userId")
+        println("⭐⭐⭐ TweetCacheManager.getCachedUser CALLED for userId: $userId")
+        println("⭐ Step 1: After println")
         return try {
+            println("⭐ Step 2: Inside try block")
             // Check memory cache first
             val memoryUser = synchronized(userCacheLock) {
+                println("⭐ Step 3: Inside synchronized block")
                 userMemoryCache[userId]
             }
+            println("⭐ Step 4: memoryUser = ${memoryUser?.username ?: "NULL"}, avatar = ${memoryUser?.avatar}")
 
+            println("⭐ Step 5: Checking if memoryUser exists")
             memoryUser?.let { user ->
+                println("⭐ Step 6: memoryUser exists, checking expiration")
                 if (!isUserExpired(user)) {
+                    println("⭐ Step 7: User NOT expired, returning from memory")
+                    println("⭐ Step 7a: user.mid=${user.mid}, user.username=${user.username}, user.avatar=${user.avatar}")
+                    println("⭐ Step 7b: About to return user object: ${System.identityHashCode(user)}")
                     Timber.tag("TweetCacheManager").d("✅ MEMORY CACHE HIT: userId: $userId, username: ${user.username}")
                     return user
                 } else {
@@ -206,20 +217,26 @@ object TweetCacheManager {
                 }
             }
 
+            println("⭐ Step 8: No memory cache, checking database")
             // Check database cache (only if not found in memory)
             Timber.tag("TweetCacheManager").d("🔍 CHECKING DATABASE CACHE: userId: $userId")
             val dbCachedUser = HproseInstance.dao.getCachedUser(userId)
+            println("⭐ Step 9: dbCachedUser = ${if (dbCachedUser != null) "EXISTS" else "NULL"}")
             dbCachedUser?.let { cachedUser ->
                 val user = cachedUser.user
+                println("⭐ Step 9a: DB user.mid=${user.mid}, user.username=${user.username}, user.avatar=${user.avatar}")
                 val cacheAge = System.currentTimeMillis() - cachedUser.timestamp.time
+                println("⭐ Step 9b: cacheAge=${cacheAge}ms")
                 
                 if (cacheAge < USER_CACHE_EXPIRATION_TIME) {
                     // Cache is still valid, add to memory cache for faster access
+                    println("⭐ Step 9c: Cache valid, adding to memory. user.avatar=${user.avatar}")
                     Timber.tag("TweetCacheManager").d("✅ DATABASE CACHE HIT: userId: $userId, username: ${user.username}, cacheAge: ${cacheAge}ms")
                     synchronized(userCacheLock) {
                         userMemoryCache[userId] = user
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
                     }
+                    println("⭐ Step 9d: Returning user from DB: ${System.identityHashCode(user)}")
                     return user
                 } else {
                     // Cache is expired, remove from database cache
@@ -228,10 +245,13 @@ object TweetCacheManager {
                 }
             }
 
+            println("⭐ Step 10: No cache found, returning null")
             // User not found in cache or was expired and removed
             Timber.tag("TweetCacheManager").d("❌ CACHE MISS: userId: $userId not found in any cache")
             null
         } catch (e: Exception) {
+            println("⭐⭐⭐ EXCEPTION in getCachedUser: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
             Timber.tag("TweetCacheManager").e("❌ ERROR RETRIEVING CACHED USER: userId: $userId, error: $e")
             null
         }

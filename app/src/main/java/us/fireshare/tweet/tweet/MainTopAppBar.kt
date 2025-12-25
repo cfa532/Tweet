@@ -38,6 +38,8 @@ fun MainTopAppBar(
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
     
+    System.out.println("📱📱📱 MainTopAppBar recomposed - appUser.mid: ${appUser.mid}, username: ${appUser.username}, avatar: ${appUser.avatar}")
+    
     CenterAlignedTopAppBar(
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.topAppBarColors(
