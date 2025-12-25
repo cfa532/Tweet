@@ -129,9 +129,7 @@ object HproseInstance {
         }
         set(value) {
             val oldBaseUrl = _appUserState.value.baseUrl
-            System.out.println("🔔🔔🔔 appUser setter called - userId: ${value.mid}, username: ${value.username}, avatar: ${value.avatar}, baseUrl: ${value.baseUrl}")
             _appUserState.value = value
-            System.out.println("🔔 StateFlow updated - _appUserState.value.avatar: ${_appUserState.value.avatar}")
             // If baseUrl changed from null to a valid value, trigger tweet feed refresh
             if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
                 Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")
@@ -332,18 +330,15 @@ object HproseInstance {
             // FIRST: Load cached user immediately so UI has data to display
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null) {
-                System.out.println("🌟🌟🌟 Loading cached user FIRST - username: ${cachedUser.username}, avatar: ${cachedUser.avatar}")
                 // Copy all fields from cached user to appUser
                 appUser.from(cachedUser)
                 // Temporarily set baseUrl to the resolved IP
                 appUser.baseUrl = "http://$entryIP"
                 // Update the StateFlow to trigger UI recomposition immediately
                 appUser = appUser
-                System.out.println("🌟 appUser updated with cached data - appUser.username: ${appUser.username}, appUser.avatar: ${appUser.avatar}")
                 Timber.tag("initAppEntry")
                     .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
             } else {
-                System.out.println("🌟 No cached user found, will wait for network fetch")
                 // No cached user, just set baseUrl for now
                 appUser.baseUrl = "http://$entryIP"
                 appUser = appUser
@@ -353,13 +348,10 @@ object HproseInstance {
             // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
             // forceRefresh ensures fresh data from server without needing to clear cache
             val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
-            System.out.println("🌟🌟🌟 fetchUser returned - userId: ${refreshedUser?.mid}, username: ${refreshedUser?.username}, avatar: ${refreshedUser?.avatar}")
             val refreshedBaseUrl = refreshedUser?.baseUrl
             if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
                 // Use the refreshed user's baseUrl
-                System.out.println("🌟 About to update appUser with refreshed network data")
                 appUser = refreshedUser
-                System.out.println("🌟 After assignment - appUser.avatar: ${appUser.avatar}")
                 TweetCacheManager.saveUser(refreshedUser)
                 Timber.tag("initAppEntry")
                     .d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
