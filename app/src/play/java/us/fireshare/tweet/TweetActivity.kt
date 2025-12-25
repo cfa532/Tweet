@@ -214,6 +214,21 @@ class PlayActivityViewModel: ViewModel() {
     fun loadEntryUrls() {
         viewModelScope.launch(IO) {
             try {
+                // Wait for appUser.baseUrl to be available
+                val startTime = System.currentTimeMillis()
+                val timeoutMillis = 10000L
+                Timber.tag("loadEntryUrls").d("Waiting for appUser.baseUrl to be available (timeout: ${timeoutMillis}ms)")
+                while (appUser.baseUrl.isNullOrBlank() && System.currentTimeMillis() - startTime < timeoutMillis) {
+                    delay(1000)
+                }
+                val elapsed = System.currentTimeMillis() - startTime
+                if (appUser.baseUrl.isNullOrBlank()) {
+                    Timber.tag("loadEntryUrls").w("Timeout waiting for appUser.baseUrl after ${elapsed}ms, skipping loadEntryUrls")
+                    return@launch
+                } else {
+                    Timber.tag("loadEntryUrls").d("appUser.baseUrl became available after ${elapsed}ms: ${appUser.baseUrl}")
+                }
+                
                 // check for mimei of available App entry Urls. Update records in
                 // preference each time the app is run.
                 val mid = BuildConfig.ENTRY_URLS

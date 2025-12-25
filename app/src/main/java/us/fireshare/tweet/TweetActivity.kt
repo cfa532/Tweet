@@ -308,10 +308,25 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     fun loadEntryUrls() {
         viewModelScope.launch(IO) {
             try {
+                // Wait for appUser.baseUrl to be available
+                val startTime = System.currentTimeMillis()
+                val timeoutMillis = 10000L
+                Timber.tag("loadEntryUrls").d("Waiting for appUser.baseUrl to be available (timeout: ${timeoutMillis}ms)")
+                while (HproseInstance.appUser.baseUrl.isNullOrBlank() && System.currentTimeMillis() - startTime < timeoutMillis) {
+                    delay(1000)
+                }
+                val elapsed = System.currentTimeMillis() - startTime
+                if (HproseInstance.appUser.baseUrl.isNullOrBlank()) {
+                    Timber.tag("loadEntryUrls").w("Timeout waiting for appUser.baseUrl after ${elapsed}ms, skipping loadEntryUrls")
+                    return@launch
+                } else {
+                    Timber.tag("loadEntryUrls").d("appUser.baseUrl became available after ${elapsed}ms: ${HproseInstance.appUser.baseUrl}")
+                }
+                
                 // check for mimei of available App entry Urls. Update records in
                 // preference each time the app is run.
                 val mid = BuildConfig.ENTRY_URLS
-                HproseInstance.getProviderIP(mid).let { ip ->
+                HproseInstance.getProviderIP(mid)?.let { ip ->
                     val response = HproseInstance.httpClient.get("http://$ip/mm/$mid")
                     if (response.status == HttpStatusCode.OK) {
                         val newUrls = response.bodyAsText().split(System.lineSeparator())
@@ -327,6 +342,8 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     } else {
                         Timber.tag("loadEntryUrls").w("Failed to fetch entry URLs: HTTP ${response.status}")
                     }
+                } ?: run {
+                    Timber.tag("loadEntryUrls").w("Could not get provider IP for entry URLs mid: $mid")
                 }
             } catch (e: Exception) {
                 Timber.tag("loadEntryUrls").e(e, "Error loading entry URLs")

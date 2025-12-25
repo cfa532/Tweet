@@ -29,14 +29,34 @@ class PreferenceHelper(context: Context) {
         }
     }
 
+    /**
+     * Helper function to ensure URL has http:// prefix
+     */
+    private fun ensureHttpPrefix(url: String): String {
+        val trimmed = url.trim()
+        return when {
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.isNotEmpty() -> "http://$trimmed"
+            else -> trimmed
+        }
+    }
+
     fun setAppUrls(urls: Set<String>) {
-        val urlsString = urls.filter { it.isNotEmpty() }.joinToString(",") { it }
+        // Ensure all URLs have http:// prefix before saving
+        val normalizedUrls = urls.map { ensureHttpPrefix(it) }.filter { it.isNotEmpty() }
+        val urlsString = normalizedUrls.joinToString(",")
         sharedPreferences.edit() { putString("custom_urls", urlsString) }
     }
+    
     fun getAppUrls(): Set<String> {
         val urlsString = sharedPreferences.getString("custom_urls", "") ?: ""
         return if (urlsString.isNotEmpty()) {
-            urlsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            // Ensure all loaded URLs have http:// prefix
+            urlsString.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .map { ensureHttpPrefix(it) }
+                .toSet()
         } else {
             // First-time initialization: use BASE_URL to fetch HTML page
             setOf("http://${BuildConfig.BASE_URL}")

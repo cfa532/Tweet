@@ -1182,8 +1182,6 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded bitmap with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
             } else {
                 Timber.tag("ImageCacheManager")
@@ -1258,8 +1256,6 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded bitmap from file with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
             }
             bitmap

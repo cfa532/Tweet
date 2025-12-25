@@ -89,7 +89,7 @@ android {
             buildConfigField("String", "APP_ID_HASH", "\"5yOO4xP1QjAXhHpJtKMyIETVMxU\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
-            buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
+            buildConfigField("String", "ENTRY_URLS", "\"VQ3xCeguhlAF1jY7zfn-HM_Vrad\"")
         }
         release {
             signingConfig = signingConfigs.getByName("release")

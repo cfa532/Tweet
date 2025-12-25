@@ -2790,7 +2790,7 @@ object HproseInstance {
             }
             null
         } catch (e: Exception) {
-            Timber.tag("getProviderIP").e("Error getting provider IPs for user $mid at ${appUser.baseUrl}: $e")
+            Timber.tag("getProviderIP").e("Error getting provider IPs for $mid at ${appUser.baseUrl}: $e")
             null
         }
     }
