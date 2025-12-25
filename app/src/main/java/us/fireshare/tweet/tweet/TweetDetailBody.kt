@@ -62,6 +62,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -83,6 +84,13 @@ fun TweetDetailBody(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
+    
+    // Observe author changes reactively via StateFlow
+    // This ensures the tweet detail updates when user data becomes available
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
+    }
+    val author by authorStateFlow.collectAsState()
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -103,7 +111,6 @@ fun TweetDetailBody(
                     horizontalArrangement = Arrangement.Start,
                     modifier = Modifier.padding(bottom = 4.dp)
                 ) {
-                    val author = tweet.author
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
@@ -115,7 +122,7 @@ fun TweetDetailBody(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
-                        text = "@${author?.username}",
+                        text = "@${author?.username ?: "unknown"}",
                         modifier = Modifier.padding(horizontal = 0.dp),
                         style = MaterialTheme.typography.labelMedium
                     )

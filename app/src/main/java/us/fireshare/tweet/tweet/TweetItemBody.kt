@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
@@ -58,10 +59,12 @@ fun TweetItemBody(
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
 
-    // Optimize: Use derivedStateOf to avoid unnecessary recomposition
-    val author by remember(tweet.author) {
-        derivedStateOf { tweet.author }
+    // Observe author changes reactively via StateFlow
+    // This ensures all tweets from the same author update when user data becomes available
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
+    val author by authorStateFlow.collectAsState()
 
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }

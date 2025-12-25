@@ -86,6 +86,10 @@ object ImageCacheManager {
     // Mutex to prevent race conditions in download queue
     private val downloadQueueMutex = Any()
     
+    // Deduplication: Track ongoing downloads to prevent duplicate requests
+    // Maps image mid to the timestamp when download started
+    private val ongoingDownloads = ConcurrentHashMap<String, Long>()
+    
     // Pause/resume mechanism
     private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
     private val pausedDownloadMutex = Any()
@@ -200,7 +204,35 @@ object ImageCacheManager {
         }
 
     /**
+     * Wait for concurrent download to complete with timeout
+     * @return Cached image if download completed, null otherwise
+     */
+    private suspend fun waitForConcurrentDownload(context: Context, mid: String): Bitmap? {
+        val maxWaitTime = 15000L // 15 seconds
+        val startTime = System.currentTimeMillis()
+        
+        while (true) {
+            delay(100) // Check every 100ms
+            
+            if (System.currentTimeMillis() - startTime > maxWaitTime) {
+                Timber.tag("ImageCacheManager").w("Timeout waiting for concurrent download: $mid")
+                return null
+            }
+            
+            val isStillDownloading = synchronized(downloadQueueMutex) {
+                ongoingDownloads.contains(mid)
+            }
+            
+            if (!isStillDownloading) {
+                // Download completed, try to get from cache
+                return getCachedImage(context, mid)
+            }
+        }
+    }
+
+    /**
      * Download and cache image from URL with improved error handling and retry logic
+     * Includes deduplication to prevent multiple concurrent downloads of the same image
      */
     suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
@@ -209,9 +241,20 @@ object ImageCacheManager {
                 // Check if already cached first
                 getCachedImage(context, mid)?.let { return@withContext it }
 
-                // Check if already downloading this image
-                if (downloadQueue.containsKey(mid)) {
-                    return@withContext null
+                // Deduplication: Check if already downloading this image
+                val shouldProceed = synchronized(downloadQueueMutex) {
+                    if (ongoingDownloads.contains(mid)) {
+                        false // Another thread is downloading
+                    } else {
+                        ongoingDownloads[mid] = System.currentTimeMillis()
+                        true // This thread will download
+                    }
+                }
+
+                if (!shouldProceed) {
+                    // Wait for the concurrent download to complete
+                    Timber.tag("ImageCacheManager").d("Image $mid already downloading, waiting for completion")
+                    return@withContext waitForConcurrentDownload(context, mid)
                 }
 
                 // Acquire semaphore to limit concurrent downloads
@@ -246,6 +289,10 @@ object ImageCacheManager {
 
                 } finally {
                     downloadQueue.remove(mid)
+                    // Remove from ongoing downloads to signal completion
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
                     activeInvisibleDownloads--
                     if (semaphoreAcquired) {
                         downloadSemaphore.release()
@@ -263,6 +310,8 @@ object ImageCacheManager {
                             downloadQueue.remove(mid)
                             activeInvisibleDownloads--
                         }
+                        // Remove from ongoing downloads
+                        ongoingDownloads.remove(mid)
                     }
                     
                     // Release the download slot only if we acquired it and haven't released it yet
@@ -274,6 +323,10 @@ object ImageCacheManager {
                     Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
                 } else {
                     Timber.tag("ImageCacheManager").d("Error in downloadAndCacheImage: $e")
+                    // Remove from ongoing downloads on error too
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
                 }
                 null
             }

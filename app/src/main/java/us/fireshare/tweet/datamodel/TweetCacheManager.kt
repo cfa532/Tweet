@@ -1,6 +1,9 @@
 package us.fireshare.tweet.datamodel
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -27,6 +30,10 @@ object TweetCacheManager {
     private val userMemoryCache = mutableMapOf<String, User>()
     private val userCacheTimestamps = mutableMapOf<String, Long>()
     private val userCacheLock = Any()
+    
+    // StateFlows for reactive user updates - allows UI to observe user changes
+    private val userStateFlows = mutableMapOf<String, MutableStateFlow<User?>>()
+    private val userStateFlowsLock = Any()
 
     /**
      * Save or update a tweet in cache
@@ -122,7 +129,29 @@ object TweetCacheManager {
     }
 
     /**
+     * Get or create a StateFlow for observing a specific user.
+     * This allows UI components to reactively update when user data changes.
+     */
+    fun getUserStateFlow(userId: MimeiId): StateFlow<User?> {
+        synchronized(userStateFlowsLock) {
+            val existingFlow = userStateFlows[userId]
+            if (existingFlow != null) {
+                return existingFlow.asStateFlow()
+            }
+            
+            // Create new StateFlow with current cached user (or null)
+            val currentUser = synchronized(userCacheLock) {
+                userMemoryCache[userId]
+            }
+            val newFlow = MutableStateFlow<User?>(currentUser)
+            userStateFlows[userId] = newFlow
+            return newFlow.asStateFlow()
+        }
+    }
+
+    /**
      * Save a user to cache (runs database operations on background thread)
+     * Also updates the StateFlow so all observers are notified of the change.
      */
     fun saveUser(user: User) {
         Timber.tag("TweetCacheManager").d("=== SAVING USER TO CACHE === userId: ${user.mid}, username: ${user.username}")
@@ -138,6 +167,12 @@ object TweetCacheManager {
                 // Update database cache with timestamp
                 HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user, Date(currentTime)))
                 Timber.tag("TweetCacheManager").d("💾 USER SAVED TO DATABASE CACHE: userId: ${user.mid}")
+            }
+            
+            // Update StateFlow to notify observers
+            synchronized(userStateFlowsLock) {
+                userStateFlows[user.mid]?.value = user
+                Timber.tag("TweetCacheManager").d("📡 USER STATEFLOW UPDATED: userId: ${user.mid}")
             }
         } catch (e: Exception) {
             Timber.tag("TweetCacheManager").e("❌ ERROR SAVING USER TO CACHE: userId: ${user.mid}, error: $e")
@@ -223,6 +258,11 @@ object TweetCacheManager {
 
             // Remove from database cache
             HproseInstance.dao.deleteCachedUser(userId)
+            
+            // Update StateFlow to notify observers that user is no longer available
+            synchronized(userStateFlowsLock) {
+                userStateFlows[userId]?.value = null
+            }
 
             Timber.d("User completely removed from cache (memory + database): $userId")
         } catch (e: Exception) {
@@ -243,6 +283,12 @@ object TweetCacheManager {
 
             // Clear database cache using bulk delete
             HproseInstance.dao.clearAllCachedUsers()
+            
+            // Clear all StateFlows
+            synchronized(userStateFlowsLock) {
+                userStateFlows.values.forEach { it.value = null }
+                userStateFlows.clear()
+            }
         } catch (e: Exception) {
             Timber.e("Error clearing cached users: $e")
         }

@@ -55,6 +55,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -79,7 +80,13 @@ fun CommentItem(
     ) { factory ->
         factory.create(comment)
     }
-    val author = comment.author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+    
+    // Observe author changes reactively via StateFlow
+    // This ensures all comments from the same author update when user data becomes available
+    val authorStateFlow = remember(comment.authorId) {
+        TweetCacheManager.getUserStateFlow(comment.authorId)
+    }
+    val author by authorStateFlow.collectAsState(initial = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
 
     Column(
         modifier = Modifier
@@ -103,7 +110,7 @@ fun CommentItem(
             IconButton(onClick = {
                 navController.navigate(NavTweet.UserProfile(comment.authorId)) }
             ) {
-                UserAvatar(user = author, size = 32)
+                UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 32)
             }
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -119,12 +126,12 @@ fun CommentItem(
                         modifier = Modifier.padding(bottom = 0.dp, top = 2.dp),
                     ) {
                         Text(
-                            text = author.name ?: "No One",
+                            text = author?.name ?: "No One",
                             modifier = Modifier.padding(horizontal = 0.dp),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Text(
-                            text = "@${author.username}",
+                            text = "@${author?.username ?: "unknown"}",
                             modifier = Modifier.padding(horizontal = 2.dp),
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -177,8 +184,8 @@ fun CommentItem(
             // Pass parent tweet info to ShareButton for comments
             ShareButton(
                 viewModel = viewModel,
-                parentTweetId = parentTweetViewModel?.tweetState?.value?.mid,
-                parentAuthorId = parentTweetViewModel?.tweetState?.value?.authorId
+                parentTweetId = parentTweetViewModel?.tweetState?.collectAsState()?.value?.mid,
+                parentAuthorId = parentTweetViewModel?.tweetState?.collectAsState()?.value?.authorId
             )
         }
     }
@@ -229,6 +236,8 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
 
                         // Delete comment with optimistic updates
                         parentTweetViewModel?.let { viewModel ->
+                            // Capture error message outside coroutine to avoid context capture
+                            val errorMessage = context.getString(R.string.comment_delete_failed)
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 try {
                                     viewModel.deleteComment(comment.mid, comment)
@@ -239,7 +248,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(
                                             context,
-                                            context.getString(R.string.comment_delete_failed),
+                                            errorMessage,
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }
