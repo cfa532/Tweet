@@ -457,7 +457,12 @@ object ImageCacheManager {
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 clearMemoryCache()
                 return@withContext null
+            } catch (e: java.net.SocketTimeoutException) {
+                // Timeout is expected on slow networks, log without stack trace
+                Timber.tag("ImageCacheManager").d("Image download timeout for $imageUrl")
+                return@withContext null
             } catch (e: Exception) {
+                // Log other exceptions with stack trace for debugging
                 Timber.tag("ImageCacheManager").w(e, "Error downloading original image from $imageUrl")
                 return@withContext null
             } finally {

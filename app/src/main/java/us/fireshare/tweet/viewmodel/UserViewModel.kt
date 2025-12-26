@@ -924,7 +924,9 @@ class UserViewModel @AssistedInject constructor(
         startListeningToNotifications()
         
         if (userId != TW_CONST.GUEST_ID) {
-            viewModelScope.launch(IO) {
+            // Use applicationScope to prevent cancellation during app initialization
+            // This ensures user data loading completes even if composition is cancelled
+            us.fireshare.tweet.TweetApplication.applicationScope.launch(IO) {
                 // If this is the app user, use local data first to avoid stale server data after updates
                 val initialUser = if (userId == appUser.mid) {
                     appUser

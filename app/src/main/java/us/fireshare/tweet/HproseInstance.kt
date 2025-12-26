@@ -2860,8 +2860,8 @@ object HproseInstance {
                         // Validate the IP address format by attempting to construct a URL
                         val testURL = if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
                         
-                        // Perform health check on this IP using HTTP HEAD
-                        val isHealthy = isServerHealthyViaHead(testURL)
+                        // Perform health check on this IP using HTTP HEAD (uses cache)
+                        val isHealthy = isServerHealthy(testURL)
                         
                         // Cache the result
                         cacheIPHealth(ipAddress, isHealthy)
@@ -2940,7 +2940,9 @@ object HproseInstance {
                 null
             }
         } else {
-            return if (! isServerHealthy(appUser.hproseService)) {
+            // Check if appUser's server is healthy (uses 30-min cache)
+            val appUserBaseUrl = appUser.baseUrl ?: return null
+            return if (! isServerHealthy(appUserBaseUrl)) {
                 try {
                     val entryIP = findEntryIP()
                     Timber.tag("getProviderIP").d("Found entry IP: $entryIP, retrying with entry IP client")
@@ -3004,37 +3006,36 @@ object HproseInstance {
     /**
      * Check if a server is healthy by making an HTTP HEAD request
      * This is a lightweight check that only verifies the server is alive
+     * Uses the IP health cache to avoid repeated checks
      * @param url The server URL to check
      * @return true if server responds to HEAD request, false otherwise
      */
-    private suspend fun isServerHealthyViaHead(url: String): Boolean {
+    private suspend fun isServerHealthy(url: String): Boolean {
+        // Check cache first to avoid repeated health checks
+        val cachedHealth = getCachedHealth(url)
+        if (cachedHealth != null) {
+            return cachedHealth
+        }
+        
+        // Not in cache, perform actual health check
         return try {
             val response = healthCheckHttpClient.head(url)
             // Consider 2xx and 3xx responses as healthy
-            response.status.value in 200..399
+            val isHealthy = response.status.value in 200..399
+            // Cache the result
+            cacheIPHealth(url, isHealthy)
+            isHealthy
         } catch (e: Exception) {
-            Timber.tag("isServerHealthy").w("Health check (HEAD) exception for $url: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Check if a server is healthy by making a simple HTTP request
-     * This version is kept for backward compatibility where HproseService is used
-     */
-    private suspend fun isServerHealthy(hproseService: HproseService?): Boolean {
-        // For hproseService health check, we now extract the base URL and use HEAD request
-        return try {
-            // Extract base URL from hproseService if possible
-            val baseUrl = hproseService?.toString()?.let { serviceStr ->
-                // Try to extract URL from proxy string representation
-                // This is a fallback - ideally we'd have direct access to the URL
-                appUser.baseUrl
-            } ?: return false
-            
-            isServerHealthyViaHead(baseUrl)
-        } catch (e: Exception) {
-            Timber.tag("isServerHealthy").w("Health check exception: ${e.message}")
+            // Only log at debug level for expected network failures (timeout, unreachable)
+            val message = e.message ?: e.toString()
+            if (message.contains("timeout", ignoreCase = true) || 
+                message.contains("unreachable", ignoreCase = true)) {
+                Timber.tag("isServerHealthy").d("Health check failed for $url: ${e.message}")
+            } else {
+                Timber.tag("isServerHealthy").w("Health check (HEAD) exception for $url: ${e.message}")
+            }
+            // Cache the failure
+            cacheIPHealth(url, false)
             false
         }
     }
