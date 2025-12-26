@@ -24,6 +24,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -2766,33 +2768,79 @@ object HproseInstance {
     }
 
     /**
-     * Try each IP address in the list until a healthy one is found
+     * Try each IP address in the list in parallel until a healthy one is found
+     * Returns the first healthy IP immediately without waiting for others
      * @param ipAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
      * @return First healthy IP address, or null if none found
      */
-    private suspend fun tryIpAddresses(ipAddresses: List<String>, logPrefix: String = ""): String? {
-        for ((index, ipAddress) in ipAddresses.withIndex()) {
-            if (logPrefix.isNotEmpty()) {
-                Timber.tag("getProviderIP").d("$logPrefix - Testing IP ${index + 1}/${ipAddresses.size}: $ipAddress")
-            }
+    private suspend fun tryIpAddresses(ipAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
+        if (ipAddresses.isEmpty()) {
+            return@coroutineScope null
+        }
 
-            // Validate the IP address format by attempting to construct a URL
-            val testURL = try {
-                if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
-            } catch (e: Exception) {
+        if (logPrefix.isNotEmpty()) {
+            Timber.tag("getProviderIP").d("$logPrefix - Testing ${ipAddresses.size} IPs in parallel")
+        }
+
+        // Create async jobs for all IP health checks
+        val healthCheckJobs = ipAddresses.mapIndexed { index, ipAddress ->
+            async(Dispatchers.IO) {
+                try {
+                    // Validate the IP address format by attempting to construct a URL
+                    val testURL = if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
+                    
+                    // Perform health check on this IP
+                    val isHealthy = isServerHealthy(HproseClientPool.getRegularClient(testURL))
+                    
+                    if (isHealthy) {
+                        if (logPrefix.isNotEmpty()) {
+                            Timber.tag("getProviderIP").d("$logPrefix - IP ${index + 1}/${ipAddresses.size} ($ipAddress) is healthy")
+                        }
+                        ipAddress
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    // Health check failed for this IP
+                    null
+                }
+            }
+        }
+
+        // Find the first healthy IP - check jobs in order but they all run in parallel
+        var firstHealthy: String? = null
+        for ((index, job) in healthCheckJobs.withIndex()) {
+            if (firstHealthy != null) {
+                // Already found a healthy IP, cancel remaining jobs
+                job.cancel()
                 continue
             }
-
-            // Perform health check on this IP
-            val isHealthy = isServerHealthy(HproseClientPool.getRegularClient(testURL))
-            if (isHealthy) {
-                return ipAddress
-            } else {
+            
+            try {
+                val result = job.await()
+                if (result != null) {
+                    firstHealthy = result
+                    // Cancel all remaining jobs
+                    healthCheckJobs.drop(index + 1).forEach { remainingJob ->
+                        remainingJob.cancel()
+                    }
+                    break
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Job was cancelled, continue to next
+                continue
+            } catch (e: Exception) {
+                // Job failed, continue to next
                 continue
             }
         }
-        return null
+
+        if (logPrefix.isNotEmpty() && firstHealthy == null) {
+            Timber.tag("getProviderIP").d("$logPrefix - No healthy IPs found among ${ipAddresses.size} addresses")
+        }
+
+        firstHealthy
     }
 
     /**
