@@ -56,7 +56,6 @@ fun AppIcon() {
  * UserAvatar displays user avatar with fallback to initials
  * @param user User object containing avatar information
  * @param size Size of the avatar in dp
- * @param enableLongPress Whether to enable long press functionality
  * @param onClick Optional click handler
  */
 @Composable
@@ -100,10 +99,10 @@ fun UserAvatar(
                         imageUrl = avatarUrl ?: "",
                         mid = avatarMid
                     ) { bitmap ->
-                        if (bitmap != null && !bitmap.isRecycled) {
-                            loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
+                        loadState = if (bitmap != null && !bitmap.isRecycled) {
+                            AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
                         } else {
-                            loadState = AvatarLoadState(isLoading = false, hasError = true)
+                            AvatarLoadState(isLoading = false, hasError = true)
                         }
                     }
                 } catch (e: Exception) {

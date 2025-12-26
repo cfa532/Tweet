@@ -2857,8 +2857,33 @@ object HproseInstance {
                             return@async if (cachedHealth) ipAddress else null
                         }
 
-                        // Validate the IP address format by attempting to construct a URL
-                        val testURL = if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
+                        // Construct URL with proper IPv6 bracket wrapping
+                        val testURL = if (ipAddress.startsWith("http")) {
+                            ipAddress.trim()
+                        } else {
+                            val trimmedIP = ipAddress.trim()
+                            // Check if this is an IPv6 address that needs bracket wrapping
+                            // IPv6 addresses contain colons and don't already have brackets
+                            if (trimmedIP.contains(":") && !trimmedIP.startsWith("[")) {
+                                // Extract IP and port if present
+                                val lastColonIndex = trimmedIP.lastIndexOf(":")
+                                val potentialPort = trimmedIP.substring(lastColonIndex + 1)
+                                
+                                // Check if the part after last colon looks like a port (8000-8999)
+                                val portNumber = potentialPort.toIntOrNull()
+                                if (portNumber != null && portNumber in 8000..8999) {
+                                    // Has port - wrap IP part in brackets
+                                    val ipPart = trimmedIP.substring(0, lastColonIndex)
+                                    "http://[$ipPart]:$portNumber"
+                                } else {
+                                    // No port or doesn't look like port - wrap entire address
+                                    "http://[$trimmedIP]"
+                                }
+                            } else {
+                                // IPv4 or already formatted
+                                "http://$trimmedIP"
+                            }
+                        }
                         
                         // Perform health check on this IP using HTTP HEAD (uses cache)
                         val isHealthy = isServerHealthy(testURL)
