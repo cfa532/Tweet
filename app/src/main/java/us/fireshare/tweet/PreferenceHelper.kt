@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.datamodel.TW_CONST
 
 class PreferenceHelper(context: Context) {
@@ -50,17 +51,21 @@ class PreferenceHelper(context: Context) {
     
     fun getAppUrls(): Set<String> {
         val urlsString = sharedPreferences.getString("custom_urls", "") ?: ""
-        return if (urlsString.isNotEmpty()) {
+        
+        val urls = if (urlsString.isNotEmpty()) {
             // Ensure all loaded URLs have http:// prefix
             urlsString.split(",")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .map { ensureHttpPrefix(it) }
-                .toSet()
+                .toMutableSet()
         } else {
-            // First-time initialization: use BASE_URL to fetch HTML page
-            setOf("http://${BuildConfig.BASE_URL}")
+            mutableSetOf<String>()
         }
+        
+        // Always add BASE_URL to the set
+        urls.add("http://${BuildConfig.BASE_URL}")
+        return urls
     }
 
     fun setSpeakerMute(isMuted: Boolean) {
