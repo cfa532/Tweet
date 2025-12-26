@@ -150,10 +150,7 @@ object ImageCacheManager {
             val bitmapSize = try {
                 bitmap.byteCount
             } catch (_: Exception) {
-                // If bitmap is already recycled, we can't get the size
-                // This is fine, just log it for debugging
-                Timber.tag("ImageCacheManager").d("Could not get byteCount for removed bitmap: $mid")
-                0
+                0 // Bitmap already recycled
             }
             currentMemoryUsage.addAndGet(-bitmapSize)
         }
@@ -169,7 +166,6 @@ object ImageCacheManager {
                 val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
                 return@withContext if (file.exists()) file else null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in getCachedImageFile: $e")
                 null
             }
         }
@@ -185,11 +181,8 @@ object ImageCacheManager {
                     if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                         return@withContext bitmap
                     } else {
-                        // Remove invalid bitmap from cache with proper memory tracking
+                        // Remove invalid bitmap from cache
                         removeFromMemoryCache(mid)
-                        if (bitmap.isRecycled) {
-                            Timber.tag("ImageCacheManager").w("Found recycled bitmap in cache for: $mid")
-                        }
                     }
                 }
 
@@ -201,21 +194,17 @@ object ImageCacheManager {
                         if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                             addToMemoryCache(mid, bitmap)
                             return@withContext bitmap
-                        } else if (bitmap != null && bitmap.isRecycled) {
-                            Timber.tag("ImageCacheManager").w("Loaded recycled bitmap from disk for: $mid")
                         }
                     } catch (e: OutOfMemoryError) {
-                        Timber.tag("ImageCacheManager")
-                            .d("OutOfMemoryError loading cached image: $e")
+                        Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError loading cached image")
                         clearMemoryCache()
                         return@withContext null
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").d("Error loading cached image: $e")
+                        // Ignore decode errors
                     }
                 }
                 null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in getCachedImage: $e")
                 null
             }
         }
@@ -232,7 +221,6 @@ object ImageCacheManager {
             delay(100) // Check every 100ms
             
             if (System.currentTimeMillis() - startTime > maxWaitTime) {
-                Timber.tag("ImageCacheManager").w("Timeout waiting for concurrent download: $mid")
                 return null
             }
             
@@ -268,11 +256,10 @@ object ImageCacheManager {
                     }
                 }
 
-                if (!shouldProceed) {
-                    // Wait for the concurrent download to complete
-                    Timber.tag("ImageCacheManager").d("Image $mid already downloading, waiting for completion")
-                    return@withContext waitForConcurrentDownload(context, mid)
-                }
+            if (!shouldProceed) {
+                // Wait for the concurrent download to complete
+                return@withContext waitForConcurrentDownload(context, mid)
+            }
 
                 // Acquire semaphore to limit concurrent downloads
                 downloadSemaphore.acquire()
@@ -294,8 +281,6 @@ object ImageCacheManager {
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
-                            Timber.tag("ImageCacheManager")
-                                .d("Download attempt $attempt failed for $mid: $e")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
                                 delay(1000L * attempt) // Exponential backoff
                             }
@@ -317,27 +302,19 @@ object ImageCacheManager {
             } catch (e: Exception) {
                 // Handle cancellation by cleaning up download queue
                 if (e is kotlinx.coroutines.CancellationException) {
-                    Timber.tag("ImageCacheManager").d("Download cancelled for $mid - cleaning up")
-                    
                     // Clean up download queue and release resources
                     synchronized(downloadQueueMutex) {
                         if (downloadQueue.containsKey(mid)) {
                             downloadQueue.remove(mid)
                             activeInvisibleDownloads--
                         }
-                        // Remove from ongoing downloads
                         ongoingDownloads.remove(mid)
                     }
                     
-                    // Release the download slot only if we acquired it and haven't released it yet
                     if (semaphoreAcquired) {
                         downloadSemaphore.release()
                     }
-                    
-                    Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
                 } else {
-                    Timber.tag("ImageCacheManager").d("Error in downloadAndCacheImage: $e")
-                    // Remove from ongoing downloads on error too
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
                     }
@@ -364,7 +341,6 @@ object ImageCacheManager {
                 val response = okHttpClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
-                    Timber.tag("ImageCacheManager").d("Failed to download image: HTTP ${response.code}")
                     response.close()
                     return@withContext null
                 }
@@ -376,17 +352,13 @@ object ImageCacheManager {
 
                 if (bitmap != null && !bitmap.isRecycled) {
                     return@withContext bitmap
-                } else {
-                    Timber.tag("ImageCacheManager")
-                        .d("Failed to decode image from URL: $imageUrl")
-                    return@withContext null
                 }
+                return@withContext null
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError downloading image: $e")
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading image")
                 clearMemoryCache()
                 return@withContext null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error downloading image: $e")
                 return@withContext null
             } finally {
                 inputStream?.close()
@@ -409,7 +381,6 @@ object ImageCacheManager {
             try {
                 // Check if download is paused before starting
                 if (isDownloadPaused(mid)) {
-                    Timber.tag("ImageCacheManager").d("Download paused for $mid, skipping")
                     return@withContext null
                 }
                 
@@ -424,31 +395,21 @@ object ImageCacheManager {
                     .header("Cache-Control", "no-cache")
                     .build()
 
-                val startTime = System.currentTimeMillis()
                 val response = client.newCall(request).execute()
-                val connectTime = System.currentTimeMillis() - startTime
-                
-                Timber.tag("ImageCacheManager").d("🔗 Connected to server in ${connectTime}ms for $mid")
 
                 if (!response.isSuccessful) {
-                    Timber.tag("ImageCacheManager").d("Failed to download original image: HTTP ${response.code}")
                     response.close()
                     return@withContext null
                 }
 
                 inputStream = response.body.byteStream()
 
-                // Read the image data with progress logging
-                val downloadStartTime = System.currentTimeMillis()
+                // Read the image data
                 val imageData = inputStream.readBytes()
-                val downloadTime = System.currentTimeMillis() - downloadStartTime
                 response.close()
-                
-                Timber.tag("ImageCacheManager").d("📦 Downloaded ${imageData.size / 1024}KB in ${downloadTime}ms for $mid")
                 
                 // Check if download was paused during reading
                 if (isDownloadPaused(mid)) {
-                    Timber.tag("ImageCacheManager").d("Download paused during read for $mid, aborting")
                     return@withContext null
                 }
                 
@@ -461,17 +422,16 @@ object ImageCacheManager {
                         }
                         val preview = BitmapFactory.decodeByteArray(imageData, 0, imageData.size, previewOptions)
                         if (preview != null && !preview.isRecycled) {
-                            Timber.tag("ImageCacheManager").d("🔍 Progressive: Showing preview for $mid")
                             withContext(Dispatchers.Main) {
                                 try {
                                     onProgressiveLoad(preview)
                                 } catch (e: Exception) {
-                                    Timber.tag("ImageCacheManager").d("Error in progressive callback: $e")
+                                    // Ignore callback errors
                                 }
                             }
                         }
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").d("Failed to decode progressive preview: $e")
+                        // Ignore preview decode errors
                     }
                 }
                 
@@ -489,11 +449,8 @@ object ImageCacheManager {
 
                 if (bitmap != null && !bitmap.isRecycled) {
                     return@withContext bitmap
-                } else {
-                    Timber.tag("ImageCacheManager")
-                        .d("Failed to decode original image from URL: $imageUrl")
-                    return@withContext null
                 }
+                return@withContext null
             } catch (e: OutOfMemoryError) {
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 clearMemoryCache()
@@ -550,7 +507,6 @@ object ImageCacheManager {
                 // Atomically check if downloading and mark as downloading to prevent race conditions
                 val shouldDownload = synchronized(downloadQueueMutex) {
                     if (downloadQueue.containsKey(originalMid)) {
-                        Timber.tag("ImageCacheManager").d("🔄 Dedup: $mid already downloading, waiting for result")
                         false // Already downloading, wait for result
                     } else {
                         // Mark as downloading immediately to prevent other threads from starting
@@ -582,13 +538,8 @@ object ImageCacheManager {
                 }
                 
                 // This thread won - it will perform the download
-                Timber.tag("ImageCacheManager").d("⬇️ Winner: $mid will download (visible=$isVisible)")
-                
-                // Acquire semaphore
-                Timber.tag("ImageCacheManager").d("⏳ Acquiring semaphore for $mid (available=${downloadSemaphore.availablePermits})")
                 downloadSemaphore.acquire()
                 semaphoreAcquired = true
-                Timber.tag("ImageCacheManager").d("✅ Semaphore acquired for $mid, starting download")
                 
                 // Track priority for monitoring
                 if (isVisible) {
@@ -606,7 +557,6 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            Timber.tag("ImageCacheManager").d("📥 Downloading $mid (attempt $attempt)")
                             bitmap = performDownloadOriginalProgressive(imageUrl, originalMid, context, onProgressiveLoad)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Store original bitmap in memory cache with original key
@@ -615,35 +565,27 @@ object ImageCacheManager {
                                 downloadResults[originalMid] = bitmap
                                 resultTimestamps[originalMid] = System.currentTimeMillis()
                                 
-                                Timber.tag("ImageCacheManager").d("✅ Download complete for $mid, stored in cache")
-                                
                                 // Clean up old results periodically to prevent memory buildup
                                 if (downloadResults.size > 50) {
                                     cleanupOldResults()
                                 }
                                 
                                 return@withContext bitmap
-                            } else {
-                                Timber.tag("ImageCacheManager").w("⚠️ Download returned null/recycled bitmap for $mid")
                             }
                         } catch (e: Exception) {
                             val isTimeout = e is java.net.SocketTimeoutException
-                            val errorType = if (isTimeout) "⏱️ Timeout" else "❌ Error"
-                            Timber.tag("ImageCacheManager")
-                                .w("$errorType: Download attempt $attempt failed for $mid: ${e.message}")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
                                 // For timeouts, retry immediately; for other errors, use backoff
                                 val delayMs = if (isTimeout) 100L else (1000L * attempt)
-                                Timber.tag("ImageCacheManager").d("⏳ Retrying in ${delayMs}ms...")
                                 delay(delayMs)
+                            } else {
+                                Timber.tag("ImageCacheManager").w("Download failed for $mid: ${e.message}")
                             }
                         }
                     }
 
                     // All attempts failed
-                    Timber.tag("ImageCacheManager").e("💥 All download attempts failed for $mid after $attempt tries")
-                    // Don't store null in ConcurrentHashMap (not allowed)
-                    // Waiting requests will timeout or get null from missing entry
+                    Timber.tag("ImageCacheManager").w("All download attempts failed for $mid")
                     return@withContext null
 
                 } finally {
@@ -794,8 +736,6 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             try {
                 if (bitmap.isRecycled) {
-                    Timber.tag("ImageCacheManager")
-                        .w("Attempting to cache recycled bitmap for: $mid")
                     return@withContext
                 }
 
@@ -824,14 +764,14 @@ object ImageCacheManager {
                             out.write(byteArray)
                         }
                     } catch (e: IOException) {
-                        Timber.tag("ImageCacheManager").d("Error saving image to disk: $e")
+                        // Ignore disk write errors
                     }
                 }
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError caching image: $e")
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError caching image")
                 clearMemoryCache()
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error caching image: $e")
+                // Ignore other caching errors
             }
         }
 
@@ -865,11 +805,10 @@ object ImageCacheManager {
 
             return resized
         } catch (e: OutOfMemoryError) {
-            Timber.tag("ImageCacheManager").d("OutOfMemoryError compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError compressing bitmap")
             clearMemoryCache()
             return null
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error compressing bitmap: $e")
             return null
         }
     }
@@ -914,16 +853,15 @@ object ImageCacheManager {
                     try {
                         onComplete(result)
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").d("Error in callback: $e")
+                        // Ignore callback errors
                     }
                 }
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in loadOriginalImageWithScope: $e")
                 withContext(Dispatchers.Main) {
                     try {
                         onComplete(null)
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").d("Error in error callback: $e")
+                        // Ignore callback errors
                     }
                 }
             } finally {
@@ -1107,15 +1045,11 @@ object ImageCacheManager {
                     bitmap.recycle()
                 }
                 return correctedBitmap
-            } else {
-                Timber.tag("ImageCacheManager")
-                    .d("Failed to decode bitmap from stream - bitmap: $bitmap, recycled: ${bitmap?.isRecycled}, dimensions: ${bitmap?.width}x${bitmap?.height}")
+                }
+                null
+            } catch (e: Exception) {
+                null
             }
-            null
-        } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error decoding bitmap with orientation: $e")
-            null
-        }
     }
 
     /**
@@ -1132,8 +1066,6 @@ object ImageCacheManager {
             BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, options)
             
             if (options.outWidth <= 0 || options.outHeight <= 0) {
-                Timber.tag("ImageCacheManager")
-                    .d("Invalid image dimensions: ${options.outWidth}x${options.outHeight}")
                 return null
             }
 
@@ -1153,12 +1085,9 @@ object ImageCacheManager {
                 }
                 correctedBitmap
             } else {
-                Timber.tag("ImageCacheManager")
-                    .d("Failed to decode original bitmap from byte array - bitmap: $bitmap, recycled: ${bitmap?.isRecycled}, dimensions: ${bitmap?.width}x${bitmap?.height}")
                 null
             }
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error decoding original bitmap from byte array: $e")
             null
         }
     }
@@ -1184,8 +1113,6 @@ object ImageCacheManager {
             }
             bitmap
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager")
-                .d("Error decoding bitmap from file with orientation: $e")
             null
         }
     }
@@ -1205,7 +1132,6 @@ object ImageCacheManager {
 
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from byte array: $e")
             bitmap
         }
     }
@@ -1223,7 +1149,6 @@ object ImageCacheManager {
 
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from file: $e")
             bitmap
         }
     }
@@ -1234,59 +1159,23 @@ object ImageCacheManager {
     private fun applyOrientationMatrix(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()
         when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> {
-                matrix.postRotate(90f)
-                Timber.tag("ImageCacheManager").d("Applying 90 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_ROTATE_180 -> {
-                matrix.postRotate(180f)
-                Timber.tag("ImageCacheManager").d("Applying 180 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_ROTATE_270 -> {
-                matrix.postRotate(270f)
-                Timber.tag("ImageCacheManager").d("Applying 270 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
-                matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying horizontal flip")
-            }
-
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
-                matrix.postScale(1f, -1f)
-                Timber.tag("ImageCacheManager").d("Applying vertical flip")
-            }
-
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.postRotate(90f)
                 matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying transpose")
             }
-
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.postRotate(270f)
                 matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying transverse")
             }
-
-            else -> {
-                // No rotation needed
-                return bitmap
-            }
+            else -> return bitmap // No rotation needed
         }
 
         // Create new bitmap with applied transformation
-        val rotatedBitmap = Bitmap.createBitmap(
-            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-        )
-
-        if (rotatedBitmap != bitmap) {
-            Timber.tag("ImageCacheManager")
-                .d("Created rotated bitmap: ${rotatedBitmap.width}x${rotatedBitmap.height}")
-        }
-
-        return rotatedBitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 }
