@@ -361,27 +361,30 @@ private fun CroppingInterface(
                         setDoubleTapZoomDuration(300)
                         setDoubleTapZoomScale(2f)
                         setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
+                        isZoomEnabled = true  // Explicitly enable zoom
+                        isPanEnabled = true   // Explicitly enable pan
                         imageView = this
                         
-                        // Set scale limits immediately
-                        val fittedScale = minOf(
+                        // Set scale to fill screen (use maxOf to ensure at least one dimension fills)
+                        val fillScale = maxOf(
                             context.resources.displayMetrics.widthPixels.toFloat() / bitmap.width,
                             context.resources.displayMetrics.heightPixels.toFloat() / bitmap.height
                         )
-                        val minScale = fittedScale * 0.5f
-                        val maxScale = fittedScale * 3f
-                        setMinScale(minScale)
-                        setMaxScale(maxScale)
+                        val minScale = fillScale * 0.1f  // Allow zooming out to 10% of fill
+                        val maxScale = fillScale * 3f  // Allow zooming up to 3x
                         
                         // Set scale limits after image is loaded
                         setOnImageEventListener(object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                             override fun onImageLoaded() {
                                 super.onImageLoaded()
                                 post {
-                                    // Set initial scale to fit screen
-                                    setScaleAndCenter(fittedScale, null)
+                                    // Set scale limits
+                                    setMinScale(minScale)
+                                    setMaxScale(maxScale)
+                                    // Set initial scale to fill screen
+                                    setScaleAndCenter(fillScale, null)
                                     
-                                    Timber.d("AvatarCrop: Image loaded - fitted scale: $fittedScale, min: $minScale, max: $maxScale (view: ${width}x${height}, bitmap: ${bitmap.width}x${bitmap.height})")
+                                    Timber.d("AvatarCrop: Image loaded - fill scale: $fillScale, min: $minScale, max: $maxScale (view: ${width}x${height}, bitmap: ${bitmap.width}x${bitmap.height})")
                                 }
                             }
                         })
