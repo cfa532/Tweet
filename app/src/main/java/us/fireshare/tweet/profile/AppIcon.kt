@@ -77,6 +77,7 @@ fun UserAvatar(
     LaunchedEffect(avatarMid) {
         // Reset state immediately when avatar changes to clear old bitmap
         loadState = AvatarLoadState()
+        Timber.tag("UserAvatar").d("Avatar changed to: $avatarMid")
         
         if (!avatarMid.isNullOrEmpty()) {
             // Check cache for original image (loadOriginalImageWithScope uses "${mid}_original" key)
@@ -88,9 +89,11 @@ fun UserAvatar(
             }
             if (cachedBitmap != null) {
                 // Use cached avatar immediately
+                Timber.tag("UserAvatar").d("Found cached avatar for: $avatarMid")
                 loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
             } else {
                 // Not cached, need to load it
+                Timber.tag("UserAvatar").d("Avatar not cached, loading from server: $avatarMid")
                 val avatarUrl = getMediaUrl(avatarMid, user.baseUrl)
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 

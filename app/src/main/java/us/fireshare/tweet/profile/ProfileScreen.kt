@@ -42,6 +42,8 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -99,38 +101,19 @@ fun ProfileScreen(
     val activity = context as? Activity
     activity?.let { OrientationManager.lockToPortrait(it) }
 
-    LaunchedEffect(Unit) {
-        // load tweets only when user profile screen is opened.
-        withContext(Dispatchers.IO) {
-            viewModel.initLoad()
-        }
+    // Load tweets when screen opens
+    LaunchedEffect(userId) {
+        viewModel.initLoad()
     }
 
-    LaunchedEffect(Unit) {
-        // Always refresh user from server when profile screen is opened
-        // This ensures we have the latest user data including updated baseUrl/IP
-        // Matches iOS ProfileView.refreshProfileData() behavior
-        withContext(Dispatchers.IO) {
-            Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
-            // Refresh user data from server (matching iOS - no cache removal, relies on fetchUser logic)
-            viewModel.refreshUserData()
-        }
+    // Refresh user data when screen opens
+    LaunchedEffect(userId) {
+        Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
+        viewModel.refreshUserData()
     }
 
-    // Refresh user data when returning to ProfileScreen (e.g., after editing profile)
-    // Only refresh when actually returning to this screen, not when navigating away
-    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val previousRoute = remember { mutableStateOf<String?>(null) }
-    
-    LaunchedEffect(currentRoute) {
-        if (previousRoute.value != null && previousRoute.value != currentRoute && currentRoute?.contains("UserProfile") == true) {
-            // Only refresh when returning to this profile screen from another screen
-            withContext(Dispatchers.IO) {
-                viewModel.refreshUserData()
-            }
-        }
-        previousRoute.value = currentRoute
-    }
+    // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens
+    // and when exiting profile editor, appUserState is already updated by the save operation.
 
 
 

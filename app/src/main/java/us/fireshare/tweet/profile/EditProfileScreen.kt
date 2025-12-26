@@ -86,26 +86,6 @@ fun AppUserAvatar(
     // Observe appUserState to react to changes
     val user by appUserState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    
-    // Remember the previous avatar to show during upload transition
-    val previousAvatar = remember { mutableStateOf<String?>(user.avatar) }
-    
-    // Capture avatar when upload starts
-    LaunchedEffect(isUploading, isLoading) {
-        if (isUploading || isLoading) {
-            // Capture current avatar when upload starts
-            if (previousAvatar.value == null || previousAvatar.value != user.avatar) {
-                previousAvatar.value = user.avatar
-            }
-        }
-    }
-    
-    // Update previous avatar when upload completes and new avatar is loaded
-    LaunchedEffect(user.avatar) {
-        if (!isUploading && !isLoading) {
-            previousAvatar.value = user.avatar
-        }
-    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -120,17 +100,10 @@ fun AppUserAvatar(
                     .clip(CircleShape)
                     .clickable(onClick = onAvatarClick)
             ) {
-                // Show avatar - use previous avatar during upload to avoid showing default
-                val avatarToShow = if (isUploading || isLoading) {
-                    // Show previous avatar during upload transition
-                    user.copy(avatar = previousAvatar.value)
-                } else {
-                    // Show current avatar after upload
-                    user
-                }
+                // Always show current user.avatar - UserAvatar will handle loading
                 // Use key to force recomposition when avatar changes
-                key(avatarToShow.avatar) {
-                    UserAvatar(user = avatarToShow, size = 120)
+                key(user.avatar) {
+                    UserAvatar(user = user, size = 120)
                 }
             }
             

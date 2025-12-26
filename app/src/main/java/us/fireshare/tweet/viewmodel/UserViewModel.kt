@@ -210,7 +210,14 @@ class UserViewModel @AssistedInject constructor(
                 // fetchUser will skip cache when baseUrl is empty and fetch from server
                 val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = false)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    _user.value = refreshedUser
+                    // Prevent downgrading the avatar if we recently updated it locally
+                    // This handles server consistency issues where get_user might return old data for a short time
+                    if (userId == appUser.mid && appUser.avatar != null && refreshedUser.avatar != appUser.avatar) {
+                        Timber.tag("refreshUserWithRetry").d("Server returned old avatar CID: ${refreshedUser.avatar}, keeping local: ${appUser.avatar}")
+                        _user.value = refreshedUser.copy(avatar = appUser.avatar)
+                    } else {
+                        _user.value = refreshedUser
+                    }
                     return // Success, exit retry loop
                 } else {
                     Timber.tag("refreshUserWithRetry").w("Failed to fetch valid user data for $userId (attempt ${attempt + 1})")
@@ -355,24 +362,47 @@ class UserViewModel @AssistedInject constructor(
                 return
             }
             
-            // Update the user objects with new avatar FIRST (before clearing old cache)
-            appUser = appUser.copy(avatar = avatarId)
-            _user.value = user.value.copy(avatar = avatarId)
-            User.updateUserInstance(appUser)
+            // Update the user objects with new avatar (on Main thread for immediate UI update)
+            withContext(Dispatchers.Main) {
+                val updatedAppUser = appUser.copy(avatar = avatarId)
+                appUser = updatedAppUser
+                _user.value = user.value.copy(avatar = avatarId)
+                User.updateUserInstance(updatedAppUser)
 
-            // Save the updated user to cache
-            TweetCacheManager.saveUser(appUser)
+                // Save the updated user to cache
+                TweetCacheManager.saveUser(updatedAppUser)
+                Timber.tag("updateAvatar").d("State updated on Main thread, new avatar ID: $avatarId")
+            }
             
-            Timber.tag("updateAvatar").d("Avatar updated successfully: $avatarId, old: $oldAvatarId, new: $avatarId")
+            // Cache the new avatar locally immediately so it shows up without a download
+            // This prevents the old avatar from "reappearing" while waiting for server sync
+            try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                        if (bitmap != null) {
+                            Timber.tag("updateAvatar").d("Caching new avatar locally for CID: $avatarId")
+                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, avatarId, bitmap)
+                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, "${avatarId}_original", bitmap)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("updateAvatar").e(e, "Failed to cache new avatar locally")
+            }
             
-            // Clear the old avatar from cache AFTER updating (so UI sees new avatar ID immediately)
+            // Clear old avatar cache (both regular and "_original" keys used by UserAvatar)
             oldAvatarId?.let { oldId ->
                 if (oldId != avatarId) {  // Only clear if it's different
                     withContext(Dispatchers.IO) {
+                        Timber.tag("updateAvatar").d("Clearing old avatar cache: $oldId")
                         us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, oldId)
+                        us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, "${oldId}_original")
                     }
                 }
             }
+            
+            Timber.tag("updateAvatar").d("Avatar updated successfully: $avatarId, old: $oldAvatarId")
             
             // Preload the new avatar so it's ready for display
             // Note: Preloading happens in background, UI will load it when needed
@@ -895,16 +925,21 @@ class UserViewModel @AssistedInject constructor(
         
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch(IO) {
-                val loadedUser =
+                // If this is the app user, use local data first to avoid stale server data after updates
+                val initialUser = if (userId == appUser.mid) {
+                    appUser
+                } else {
                     fetchUser(userId, maxRetries = 2) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-                _user.value = loadedUser
+                }
+                
+                _user.value = initialUser
 
                 // Initialize count variables from user data
-                _bookmarksCount.value = loadedUser.bookmarksCount
-                _favoritesCount.value = loadedUser.favoritesCount
-                _followersCount.value = loadedUser.followersCount
-                _followingsCount.value = loadedUser.followingCount
-                _tweetCount.value = loadedUser.tweetCount
+                _bookmarksCount.value = initialUser.bookmarksCount
+                _favoritesCount.value = initialUser.favoritesCount
+                _followersCount.value = initialUser.followersCount
+                _followingsCount.value = initialUser.followingCount
+                _tweetCount.value = initialUser.tweetCount
 
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
