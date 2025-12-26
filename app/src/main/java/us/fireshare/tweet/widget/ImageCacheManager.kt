@@ -485,17 +485,22 @@ object ImageCacheManager {
                 // Check if original image is already cached first
                 getCachedImage(context, originalMid)?.let { return@withContext it }
 
-                // Check if already downloading this image FIRST (before acquiring slots) - with mutex
-                var isDuplicate = false
-                synchronized(downloadQueueMutex) {
-                    isDuplicate = downloadQueue.containsKey(originalMid)
+                // Atomically check if downloading and mark as downloading to prevent race conditions
+                val shouldDownload = synchronized(downloadQueueMutex) {
+                    if (downloadQueue.containsKey(originalMid)) {
+                        Timber.tag("ImageCacheManager").d("🔄 Dedup: $mid already downloading, waiting for result")
+                        false // Already downloading, wait for result
+                    } else {
+                        // Mark as downloading immediately to prevent other threads from starting
+                        downloadQueue[originalMid] = true
+                        downloadPriorityQueue[originalMid] = isVisible
+                        ongoingDownloads[originalMid] = System.currentTimeMillis()
+                        true // This thread will download
+                    }
                 }
                 
-                if (isDuplicate) {
-                    Timber.tag("ImageCacheManager").d("Duplicate request detected for $mid - waiting for existing download")
-                    
-                    // Wait for the download to complete and return the result
-                    // Increased timeout to 30 seconds to accommodate slow network downloads
+                if (!shouldDownload) {
+                    // Another thread is downloading, wait for the result
                     var attempts = 0
                     var shouldContinue = true
                     while (attempts < 300 && shouldContinue) { // Wait up to 30 seconds (300 * 100ms)
@@ -511,26 +516,10 @@ object ImageCacheManager {
                     cleanupOldResults()
                     
                     // Return the result if available
-                    val result = downloadResults[originalMid]
-                    if (result != null) {
-                        Timber.tag("ImageCacheManager").d("Got result from existing download for $mid")
-                        return@withContext result
-                    } else {
-                        Timber.tag("ImageCacheManager").d("No result from existing download for $mid, proceeding with new download")
-                        // Continue with new download attempt
-                    }
+                    return@withContext downloadResults[originalMid]
                 }
                 
-                // Add to priority queue
-                downloadPriorityQueue[originalMid] = isVisible
-                
-                // Use simple priority system - visible images get immediate priority
-                val currentQueued = downloadQueue.size
-                val priority = if (isVisible) "HIGH" else "LOW"
-                
-                Timber.tag("ImageCacheManager").d("Requesting download slot for $mid (priority: $priority, queued: $currentQueued)")
-                
-                // Simple semaphore acquisition
+                // This thread will perform the download - acquire semaphore
                 downloadSemaphore.acquire()
                 semaphoreAcquired = true
                 
@@ -540,62 +529,6 @@ object ImageCacheManager {
                 } else {
                     activeInvisibleDownloads++
                 }
-                
-                Timber.tag("ImageCacheManager").d("Acquired download slot for $mid (priority: $priority, queued: ${downloadQueue.size})")
-                
-                // Double-check after acquiring slot (race condition protection) - with mutex
-                var isRaceConditionDuplicate = false
-                synchronized(downloadQueueMutex) {
-                    isRaceConditionDuplicate = downloadQueue.containsKey(originalMid)
-                    if (!isRaceConditionDuplicate) {
-                        downloadQueue[originalMid] = true
-                        // Track when download started for stuck download detection
-                        ongoingDownloads[originalMid] = System.currentTimeMillis()
-                    }
-                }
-                
-                if (isRaceConditionDuplicate) {
-                    Timber.tag("ImageCacheManager").d("Race condition detected for $mid - waiting for existing download")
-                    
-                    // Update priority counters
-                    if (isVisible) {
-                        activeVisibleDownloads--
-                    } else {
-                        activeInvisibleDownloads--
-                    }
-                    
-                    // Release semaphore immediately for race condition case
-                    downloadSemaphore.release()
-                    semaphoreAcquired = false
-                    
-                    // Wait for the download to complete and return the result
-                    // Increased timeout to 30 seconds to accommodate slow network downloads
-                    var attempts = 0
-                    var shouldContinue = true
-                    while (attempts < 300 && shouldContinue) { // Wait up to 30 seconds (300 * 100ms)
-                        delay(100L)
-                        attempts++
-                        
-                        synchronized(downloadQueueMutex) {
-                            shouldContinue = downloadQueue.containsKey(originalMid)
-                        }
-                    }
-                    
-                    // Clean up old results before checking
-                    cleanupOldResults()
-                    
-                    // Return the result if available
-                    val result = downloadResults[originalMid]
-                    if (result != null) {
-                        Timber.tag("ImageCacheManager").d("Got result from race condition download for $mid")
-                        return@withContext result
-                    } else {
-                        Timber.tag("ImageCacheManager").d("No result from race condition download for $mid")
-                        return@withContext null
-                    }
-                }
-                
-                Timber.tag("ImageCacheManager").d("Starting download for $mid (queued: ${downloadQueue.size})")
                 
                 // Remove artificial delays for visible images to improve loading speed
                 // Only add minimal delay for invisible images to avoid overwhelming server
@@ -661,9 +594,6 @@ object ImageCacheManager {
                     downloadSemaphore.release()
                     semaphoreAcquired = false
                     
-                    val priority = if (wasVisible) "HIGH" else "LOW"
-                    Timber.tag("ImageCacheManager").d("Completed download for $mid (priority: $priority, queued: ${downloadQueue.size})")
-                    
                     // Clean up download results after a delay to allow other requests to get the result
                     GlobalScope.launch {
                         delay(10000L) // Increased delay to 10 seconds
@@ -675,7 +605,6 @@ object ImageCacheManager {
                 // Handle cancellation by cleaning up download queue
                 if (e is kotlinx.coroutines.CancellationException) {
                     val originalMid = "${mid}_original"
-                    Timber.tag("ImageCacheManager").d("Download cancelled for $mid - cleaning up")
                     
                     // Clean up download queue and release resources
                     synchronized(downloadQueueMutex) {
@@ -701,8 +630,6 @@ object ImageCacheManager {
                         downloadSemaphore.release()
                         semaphoreAcquired = false
                     }
-                    
-                    Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
                 } else {
                     Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
                 }
@@ -730,7 +657,6 @@ object ImageCacheManager {
     fun pauseDownload(mid: String) {
         synchronized(pausedDownloadMutex) {
             pausedDownloads[mid] = true
-            Timber.tag("ImageCacheManager").d("Paused download for $mid")
         }
     }
     
@@ -740,7 +666,6 @@ object ImageCacheManager {
     fun resumeDownload(mid: String) {
         synchronized(pausedDownloadMutex) {
             pausedDownloads.remove(mid)
-            Timber.tag("ImageCacheManager").d("Resumed download for $mid")
         }
     }
     
@@ -763,15 +688,12 @@ object ImageCacheManager {
                 
                 synchronized(pausedDownloadMutex) {
                     if (pausedDownloads.isNotEmpty()) {
-                        Timber.tag("ImageCacheManager").d("Found ${pausedDownloads.size} paused downloads, attempting to resume")
-                        
                         // Resume paused downloads if we have available slots
                         if (downloadSemaphore.availablePermits > 0) {
                             val pausedMids = pausedDownloads.keys.toList()
                             for (mid in pausedMids) {
                                 if (downloadSemaphore.availablePermits > 0) {
                                     pausedDownloads.remove(mid)
-                                    Timber.tag("ImageCacheManager").d("Auto-resumed paused download for $mid")
                                 } else {
                                     break // No more slots available
                                 }
@@ -941,7 +863,6 @@ object ImageCacheManager {
         val downloadsToCancel = activeDownloadsByContext[contextKey]
         
         if (downloadsToCancel != null) {
-            Timber.tag("ImageCacheManager").d("Cancelling ${downloadsToCancel.size} image loading operations for context: $contextKey")
             // Remove from download queue to prevent new downloads
             downloadsToCancel.forEach { mid ->
                 downloadQueue.remove(mid)
@@ -990,7 +911,6 @@ object ImageCacheManager {
             }
             
             if (stuckDownloads.isNotEmpty()) {
-                Timber.tag("ImageCacheManager").w("Cleaning up ${stuckDownloads.size} stuck downloads")
                 stuckDownloads.forEach { mid ->
                     downloadQueue.remove(mid)
                     downloadResults.remove(mid)
