@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import timber.log.Timber
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -128,19 +129,13 @@ fun FollowingItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    // Proactively load user data for every user ID
-    LaunchedEffect(userId) {
-        withContext(IO) {
-            viewModel.getUser()
-        }
-    }
-
-    // Retry loading if the user data failed to load (user is guest)
+    // Retry loading only if user data is completely missing (guest with no username)
+    // The ViewModel already loads user data in its init block, so we only retry on failure
     LaunchedEffect(user) {
-        if (user.isGuest()) {
-            withContext(IO) {
-                viewModel.getUser()
-            }
+        if (user.isGuest() && user.username.isNullOrEmpty()) {
+            Timber.tag("FollowingItem").d("Retrying user load for userId: $userId")
+            // Launch in viewModelScope to prevent cancellation on scroll
+            viewModel.retryLoadUser()
         }
     }
 

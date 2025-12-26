@@ -454,11 +454,11 @@ object ImageCacheManager {
                     return@withContext null
                 }
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError downloading original image: $e")
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 clearMemoryCache()
                 return@withContext null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error downloading original image: $e")
+                Timber.tag("ImageCacheManager").w(e, "Error downloading original image from $imageUrl")
                 return@withContext null
             } finally {
                 inputStream?.close()
@@ -630,9 +630,8 @@ object ImageCacheManager {
                         }
                     }
 
-                    // Store failure result for waiting requests
-                    downloadResults[originalMid] = null
-                    resultTimestamps[originalMid] = System.currentTimeMillis()
+                    // Don't store null in ConcurrentHashMap (not allowed)
+                    // Waiting requests will timeout or get null from missing entry
                     return@withContext null
 
                 } finally {
@@ -700,7 +699,7 @@ object ImageCacheManager {
                     
                     Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
                 } else {
-                    Timber.tag("ImageCacheManager").d("Error in loadOriginalImage: $e")
+                    Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
                 }
                 null
             }

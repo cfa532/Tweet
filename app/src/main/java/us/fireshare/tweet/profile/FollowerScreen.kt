@@ -129,20 +129,13 @@ fun FollowerItem(
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
 
-    // Proactively load user data for every user ID
-    LaunchedEffect(userId) {
-        Timber.tag("FollowerItem").d("Loading user data for userId: $userId")
-        withContext(IO) {
-            viewModel.getUser()
-        }
-    }
-
-    // Retry loading if the user data failed to load (user is guest)
+    // Retry loading only if user data is completely missing (guest with no username)
+    // The ViewModel already loads user data in its init block, so we only retry on failure
     LaunchedEffect(user) {
-        if (user.isGuest()) {
-            withContext(IO) {
-                viewModel.getUser()
-            }
+        if (user.isGuest() && user.username.isNullOrEmpty()) {
+            Timber.tag("FollowerItem").d("Retrying user load for userId: $userId")
+            // Launch in viewModelScope to prevent cancellation on scroll
+            viewModel.retryLoadUser()
         }
     }
 

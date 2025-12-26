@@ -967,6 +967,18 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
+     * Retry loading user data in viewModelScope
+     * This prevents cancellation when composition leaves (e.g., scrolling)
+     */
+    fun retryLoadUser() {
+        viewModelScope.launch(IO) {
+            fetchUser(userId, maxRetries = 2)?.let {
+                _user.value = it
+            }
+        }
+    }
+
+    /**
      * Refresh user data from appUser if this is the current user.
      * This ensures that when appUser is updated (e.g., after favorite toggle),
      * this ViewModel gets the updated data.
@@ -1069,7 +1081,6 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun loadPinnedTweets() {
         try {
-            Timber.tag("loadPinnedTweets").d("Loading pinned tweets for user: ${user.value.mid}")
 
             // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
             val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(user.value)
@@ -1185,12 +1196,6 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 _pinnedTweets.value = validPinnedTweets
-
-                Timber.tag("loadPinnedTweets")
-                    .d("Updated pinned tweets list with ${_pinnedTweets.value.size} valid tweets: ${validPinnedTweets.map { it.mid }}")
-                
-                Timber.tag("loadPinnedTweets")
-                    .d("Pinned tweets state after update: ${_pinnedTweets.value}")
             } else {
                 // Clear pinned tweets if none found
                 _pinnedTweets.value = emptyList()
