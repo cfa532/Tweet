@@ -272,7 +272,7 @@ private fun ProfileContentWithTweetListView(
             viewModel.removeTweetFromAllLists(tweetId)
         },
         headerContent = headerContent,
-        restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
+        restoreScrollPosition = true, // Remember scroll position when navigating back to profile
         context = if (userId == appUser.mid) "appUserProfile" else "userProfile",
         isInitialLoading = initState // Pass the initialization state to delay videolist creation
     )
