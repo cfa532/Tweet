@@ -46,10 +46,13 @@ object ImageCacheManager {
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
-    private const val READ_TIMEOUT = 10000 // 10 seconds - faster timeout for stuck downloads
+    private const val READ_TIMEOUT = 20000 // 20 seconds - IPFS can be slow, give it more time
     private const val MAX_CONCURRENT_DOWNLOADS = 24 // Increased for faster parallel loading
-    private const val MAX_RETRY_ATTEMPTS = 1 // Reduced retries - fail fast and move on
+    private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
     private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
+    
+    // Separate timeout for avatar images (smaller, should be faster)
+    private const val AVATAR_READ_TIMEOUT = 15000 // 15 seconds for avatars
 
     // Coroutine scope for image loading that can be cancelled when screen is disposed
     private val imageLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -73,6 +76,20 @@ object ImageCacheManager {
         ))
         .connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
         .readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(true)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+    
+    // Separate client for avatars with shorter timeout
+    private val avatarHttpClient = OkHttpClient.Builder()
+        .connectionPool(ConnectionPool(
+            maxIdleConnections = MAX_CONCURRENT_DOWNLOADS,
+            keepAliveDuration = 5,
+            timeUnit = TimeUnit.MINUTES
+        ))
+        .connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .followRedirects(true)
         .followSslRedirects(true)
@@ -396,6 +413,10 @@ object ImageCacheManager {
                     return@withContext null
                 }
                 
+                // Use appropriate client based on URL (avatar vs regular image)
+                val isAvatar = imageUrl.contains("/avatar/") || mid.contains("avatar")
+                val client = if (isAvatar) avatarHttpClient else okHttpClient
+                
                 val request = Request.Builder()
                     .url(imageUrl)
                     .header("User-Agent", "TweetApp/1.0")
@@ -403,7 +424,11 @@ object ImageCacheManager {
                     .header("Cache-Control", "no-cache")
                     .build()
 
-                val response = okHttpClient.newCall(request).execute()
+                val startTime = System.currentTimeMillis()
+                val response = client.newCall(request).execute()
+                val connectTime = System.currentTimeMillis() - startTime
+                
+                Timber.tag("ImageCacheManager").d("🔗 Connected to server in ${connectTime}ms for $mid")
 
                 if (!response.isSuccessful) {
                     Timber.tag("ImageCacheManager").d("Failed to download original image: HTTP ${response.code}")
@@ -413,9 +438,13 @@ object ImageCacheManager {
 
                 inputStream = response.body.byteStream()
 
-                // Read the image data
+                // Read the image data with progress logging
+                val downloadStartTime = System.currentTimeMillis()
                 val imageData = inputStream.readBytes()
+                val downloadTime = System.currentTimeMillis() - downloadStartTime
                 response.close()
+                
+                Timber.tag("ImageCacheManager").d("📦 Downloaded ${imageData.size / 1024}KB in ${downloadTime}ms for $mid")
                 
                 // Check if download was paused during reading
                 if (isDownloadPaused(mid)) {
@@ -469,10 +498,15 @@ object ImageCacheManager {
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 clearMemoryCache()
                 return@withContext null
-            } catch (_: java.net.SocketTimeoutException) {
-                // Timeout is expected on slow networks, log without stack trace
-                Timber.tag("ImageCacheManager").d("Image download timeout for $imageUrl")
-                return@withContext null
+            } catch (e: java.net.SocketTimeoutException) {
+                // Timeout - let caller handle retry logic
+                val timeoutType = if (e.message?.contains("connect") == true) "connection" else "read"
+                Timber.tag("ImageCacheManager").w("⏱️ Image download $timeoutType timeout for $imageUrl")
+                throw e // Re-throw to allow retry logic to handle it
+            } catch (e: java.io.IOException) {
+                // Network errors - let caller retry
+                Timber.tag("ImageCacheManager").w("🌐 Network error downloading image from $imageUrl: ${e.message}")
+                throw e // Re-throw to allow retry logic to handle it
             } catch (e: Exception) {
                 // Log other exceptions with stack trace for debugging
                 Timber.tag("ImageCacheManager").w(e, "Error downloading original image from $imageUrl")
@@ -593,11 +627,15 @@ object ImageCacheManager {
                                 Timber.tag("ImageCacheManager").w("⚠️ Download returned null/recycled bitmap for $mid")
                             }
                         } catch (e: Exception) {
+                            val isTimeout = e is java.net.SocketTimeoutException
+                            val errorType = if (isTimeout) "⏱️ Timeout" else "❌ Error"
                             Timber.tag("ImageCacheManager")
-                                .w("❌ Download attempt $attempt failed for $mid: ${e.message}")
+                                .w("$errorType: Download attempt $attempt failed for $mid: ${e.message}")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
-                                // Shorter backoff for faster retries
-                                delay(500L * attempt) // 500ms - fail fast
+                                // For timeouts, retry immediately; for other errors, use backoff
+                                val delayMs = if (isTimeout) 100L else (1000L * attempt)
+                                Timber.tag("ImageCacheManager").d("⏳ Retrying in ${delayMs}ms...")
+                                delay(delayMs)
                             }
                         }
                     }
