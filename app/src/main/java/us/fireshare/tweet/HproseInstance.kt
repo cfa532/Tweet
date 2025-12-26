@@ -1255,8 +1255,12 @@ object HproseInstance {
             }
         }
         return try {
-            val response =
+            val response = try {
                 user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, userId: ${user.mid}")
+                throw e
+            }
 
             // Check success status first
             val success = response?.get("success") as? Boolean
@@ -1338,7 +1342,12 @@ object HproseInstance {
 
             Timber.tag("getTweetsByUser")
                 .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
-            val response = user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val response = try {
+                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("getTweetsByUser").e(e, "Exception calling runMApp for getTweetsByUser, userId: ${user.mid}")
+                throw e
+            }
 
             // Check success status first
             val success = response?.get("success") as? Boolean
@@ -1449,7 +1458,12 @@ object HproseInstance {
                 "appuserid" to appUser.mid
             )
 
-            val rawResponse = author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val rawResponse = try {
+                author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("fetchTweet").e(e, "Exception calling runMApp for fetchTweet, tweetId: $tweetId, authorId: $authorId")
+                throw e
+            }
             val tweetData = unwrapV2Response<Map<String, Any>>(rawResponse)
             tweetData?.let {
                 // Record successful access
@@ -1528,7 +1542,12 @@ object HproseInstance {
                 "userid" to authorId,
                 "hostid" to (author.hostIds?.first() ?: "")
             )
-            val rawResponse = author.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val rawResponse = try {
+                author.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("refreshTweet").e(e, "Exception calling runMApp for refresh_tweet, tweetId: $tweetId, authorId: $authorId")
+                throw e
+            }
             
             // Unwrap v2 response format: {success: true, data: result} or {success: false, message: "..."}
             val tweetData = if (rawResponse != null && rawResponse.containsKey("success")) {
@@ -1698,7 +1717,12 @@ object HproseInstance {
             "authorid" to originalTweet.authorId
         )
         return try {
-            val rawResponse = originalTweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            val rawResponse = try {
+                originalTweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("updateRetweetCount").e(e, "Exception calling runMApp for updateRetweetCount, tweetId: ${originalTweet.mid}")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             response?.let {
                 Tweet.from(it)
@@ -1721,8 +1745,12 @@ object HproseInstance {
             "tweet" to Json.encodeToString(tweet)
         )
         return try {
-            val rawResponse =
+            val rawResponse = try {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             if (response != null) {
                 val newTweetId = response["mid"] as? String
@@ -1792,8 +1820,12 @@ object HproseInstance {
             "hostid" to (parentTweet.author?.hostIds?.first() ?: "")
         )
         try {
-            val rawResponse =
+            val rawResponse = try {
                 parentTweet.author?.hproseService?.runMApp<Any>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("delComment").e(e, "Exception calling runMApp for delComment, tweetId: ${parentTweet.mid}, commentId: $commentId")
+                throw e
+            }
             val response = unwrapV2Response<Boolean>(rawResponse)
 
             if (response == true) {
@@ -1965,8 +1997,12 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         return try {
-            val rawResponse =
+            val rawResponse = try {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("toggleFavorite").e(e, "Exception calling runMApp for toggleFavorite, tweetId: ${tweet.mid}")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response != null) {
@@ -2016,8 +2052,12 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         return try {
-            val rawResponse =
+            val rawResponse = try {
                 tweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("toggleBookmark").e(e, "Exception calling runMApp for toggleBookmark, tweetId: ${tweet.mid}")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response != null) {
@@ -2075,7 +2115,12 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
         return try {
-            val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+            val rawResponse = try {
+                user.hproseService?.runMApp<Any>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("getUserTweetsByType").e(e, "Exception calling runMApp for getUserTweetsByType, userId: ${user.mid}, type: $type")
+                throw e
+            }
             val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
 
             response?.map { tweetJson ->
@@ -2120,8 +2165,12 @@ object HproseInstance {
             "tweetid" to tweetId
         )
         return try {
-            val rawResponse =
+            val rawResponse = try {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response == null) {
@@ -2210,7 +2259,12 @@ object HproseInstance {
             }
             
             Timber.tag("getComments()").d("Using author's baseUrl (${tweet.author?.baseUrl}) for tweet ${tweet.mid}")
-            val rawResponse = authorService.runMApp<Any>(entry, params)
+            val rawResponse = try {
+                authorService.runMApp<Any>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("getComments").e(e, "Exception calling runMApp for getComments, tweetId: ${tweet.mid}")
+                throw e
+            }
             val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
 
             response?.mapNotNull { tweetJson -> tweetJson?.let { Tweet.from(it) } }
@@ -2237,8 +2291,12 @@ object HproseInstance {
             "hostid" to (tweet.author?.hostIds?.first() ?: "")
         )
         return try {
-            val rawResponse =
+            val rawResponse = try {
                 appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            } catch (e: Exception) {
+                Timber.tag("uploadComment").e(e, "Exception calling runMApp for uploadComment, tweetId: ${tweet.mid}")
+                throw e
+            }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response != null) {
@@ -2529,7 +2587,12 @@ object HproseInstance {
         user.clearHproseService()
         
         // Retry with new baseUrl
-        val retryRawResponse = user.hproseService?.runMApp<Any>(entry, params)
+        val retryRawResponse = try {
+            user.hproseService?.runMApp<Any>(entry, params)
+        } catch (e: Exception) {
+            Timber.tag("updateUserFromServer").e(e, "Exception calling runMApp after redirect for userId: ${user.mid}")
+            throw e
+        }
         val retryResponse = if (retryRawResponse is Map<*, *>) {
             unwrapV2Response<Any>(retryRawResponse) ?: retryRawResponse
         } else {
