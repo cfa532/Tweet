@@ -45,10 +45,11 @@ object ImageCacheManager {
         150 * 1024 * 1024 // Reduced to 150MB for better memory management
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
-    private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - faster failure detection
-    private const val READ_TIMEOUT = 15000 // 15 seconds - allow for large files but not too long
-    private const val MAX_CONCURRENT_DOWNLOADS = 16 // Increase concurrent downloads for faster loading
-    private const val MAX_RETRY_ATTEMPTS = 2
+    private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
+    private const val READ_TIMEOUT = 10000 // 10 seconds - faster timeout for stuck downloads
+    private const val MAX_CONCURRENT_DOWNLOADS = 24 // Increased for faster parallel loading
+    private const val MAX_RETRY_ATTEMPTS = 1 // Reduced retries - fail fast and move on
+    private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
 
     // Coroutine scope for image loading that can be cancelled when screen is disposed
     private val imageLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -376,12 +377,14 @@ object ImageCacheManager {
         }
 
     /**
-     * Perform download for original quality images (no compression) using OkHttp
+     * Perform download for original quality images with progressive loading
+     * Shows low-quality preview first, then full quality
      */
-    private suspend fun performDownloadOriginal(
+    private suspend fun performDownloadOriginalProgressive(
         imageUrl: String,
         mid: String,
-        context: Context
+        context: Context,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null
     ): Bitmap? =
         withContext(Dispatchers.IO) {
             var inputStream: InputStream? = null
@@ -410,7 +413,7 @@ object ImageCacheManager {
 
                 inputStream = response.body.byteStream()
 
-                // Read the image data to check size
+                // Read the image data
                 val imageData = inputStream.readBytes()
                 response.close()
                 
@@ -420,7 +423,30 @@ object ImageCacheManager {
                     return@withContext null
                 }
                 
-                // Save original data directly (for original images, always save original data)
+                // Progressive loading: First decode low-quality preview (1/4 resolution)
+                if (onProgressiveLoad != null && imageData.size > 50 * 1024) { // Only for images > 50KB
+                    try {
+                        val previewOptions = BitmapFactory.Options().apply {
+                            inSampleSize = PROGRESSIVE_SAMPLE_SIZE // 1/4 resolution
+                            inPreferredConfig = Bitmap.Config.RGB_565
+                        }
+                        val preview = BitmapFactory.decodeByteArray(imageData, 0, imageData.size, previewOptions)
+                        if (preview != null && !preview.isRecycled) {
+                            Timber.tag("ImageCacheManager").d("🔍 Progressive: Showing preview for $mid")
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    onProgressiveLoad(preview)
+                                } catch (e: Exception) {
+                                    Timber.tag("ImageCacheManager").d("Error in progressive callback: $e")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("ImageCacheManager").d("Failed to decode progressive preview: $e")
+                    }
+                }
+                
+                // Save original data directly
                 val dir = File(context.cacheDir, CACHE_DIR)
                 if (!dir.exists()) dir.mkdirs()
                 val file = File(dir, "$mid.jpg")
@@ -429,7 +455,7 @@ object ImageCacheManager {
                     out.write(imageData)
                 }
 
-                // Decode bitmap from the data with original quality
+                // Decode full quality bitmap
                 val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
 
                 if (bitmap != null && !bitmap.isRecycled) {
@@ -455,13 +481,29 @@ object ImageCacheManager {
                 inputStream?.close()
             }
         }
+    
+    /**
+     * Legacy method for backward compatibility - calls progressive version without callback
+     */
+    private suspend fun performDownloadOriginal(
+        imageUrl: String,
+        mid: String,
+        context: Context
+    ): Bitmap? = performDownloadOriginalProgressive(imageUrl, mid, context, null)
 
     /**
-     * Load original image without compression for high-quality display
+     * Load original image with progressive loading support
+     * First returns low-quality preview, then full quality
      * Handles cancellation properly by cleaning up download queue
      */
     @OptIn(DelicateCoroutinesApi::class)
-    suspend fun loadOriginalImage(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true): Bitmap? =
+    suspend fun loadOriginalImage(
+        context: Context, 
+        imageUrl: String, 
+        mid: String, 
+        isVisible: Boolean = true,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null
+    ): Bitmap? =
         withContext(Dispatchers.IO) {
             var semaphoreAcquired = false
             try {
@@ -489,7 +531,7 @@ object ImageCacheManager {
                     // Another thread is downloading, wait for the result
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 300 && shouldContinue) { // Wait up to 30 seconds (300 * 100ms)
+                    while (attempts < 100 && shouldContinue) { // Wait up to 10 seconds (100 * 100ms) - reduced timeout
                         delay(100L)
                         attempts++
                         
@@ -521,11 +563,7 @@ object ImageCacheManager {
                     activeInvisibleDownloads++
                 }
                 
-                // Remove artificial delays for visible images to improve loading speed
-                // Only add minimal delay for invisible images to avoid overwhelming server
-                if (!isVisible) {
-                    delay(100L) // Minimal delay only for background downloads
-                }
+                // No artificial delays - let semaphore handle concurrency control
 
                 try {
                     var bitmap: Bitmap? = null
@@ -535,7 +573,7 @@ object ImageCacheManager {
                         attempt++
                         try {
                             Timber.tag("ImageCacheManager").d("📥 Downloading $mid (attempt $attempt)")
-                            bitmap = performDownloadOriginal(imageUrl, originalMid, context)
+                            bitmap = performDownloadOriginalProgressive(imageUrl, originalMid, context, onProgressiveLoad)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Store original bitmap in memory cache with original key
                                 addToMemoryCache(originalMid, bitmap)
@@ -558,8 +596,8 @@ object ImageCacheManager {
                             Timber.tag("ImageCacheManager")
                                 .w("❌ Download attempt $attempt failed for $mid: ${e.message}")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
-                                // Extended backoff delays to avoid overwhelming server
-                                delay(3000L * attempt) // 3s, 6s, 9s...
+                                // Shorter backoff for faster retries
+                                delay(500L * attempt) // 500ms - fail fast
                             }
                         }
                     }
@@ -813,11 +851,18 @@ object ImageCacheManager {
     }
 
     /**
-     * Load original image using a dedicated scope that can be cancelled when screen is disposed
+     * Load original image using a dedicated scope with progressive loading support
      * This avoids cancellation during UI recomposition but allows cancellation when leaving screen
+     * @param onProgressiveLoad Called with low-quality preview first (optional)
+     * @param onComplete Called with final full-quality image
      */
-    fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String,
-                                   onComplete: (Bitmap?) -> Unit) {
+    fun loadOriginalImageWithScope(
+        context: Context, 
+        imageUrl: String, 
+        mid: String,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null,
+        onComplete: (Bitmap?) -> Unit
+    ) {
         val contextKey = context.toString()
         
         // Track this download for the context
@@ -825,7 +870,7 @@ object ImageCacheManager {
         
         imageLoadingScope.launch {
             try {
-                val result = loadOriginalImage(context, imageUrl, mid)
+                val result = loadOriginalImage(context, imageUrl, mid, true, onProgressiveLoad)
                 // Use withContext to ensure callback runs on main thread safely
                 withContext(Dispatchers.Main) {
                     try {
@@ -1054,9 +1099,9 @@ object ImageCacheManager {
                 return null
             }
 
-            // Decode the actual bitmap with original quality
+            // Decode the actual bitmap - use RGB_565 for better memory efficiency (2x less memory)
             val decodeOptions = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888 // Use full quality for original images
+                inPreferredConfig = Bitmap.Config.RGB_565 // 2 bytes per pixel instead of 4 - much faster!
                 inJustDecodeBounds = false
             }
 
@@ -1109,21 +1154,16 @@ object ImageCacheManager {
 
     /**
      * Apply EXIF orientation to bitmap from byte array
+     * Optimized to read directly from stream instead of creating temp file
      */
     private fun applyExifOrientation(byteArray: ByteArray, bitmap: Bitmap): Bitmap {
         return try {
-            // Create a temporary file to use with ExifInterface
-            val tempFile = File.createTempFile("exif_temp", ".jpg")
-            tempFile.writeBytes(byteArray)
-
-            val exif = ExifInterface(tempFile.absolutePath)
+            // Use ByteArrayInputStream directly - no temp file needed (faster!)
+            val exif = ExifInterface(java.io.ByteArrayInputStream(byteArray))
             val orientation = exif.getAttributeInt(
                 ExifInterface.TAG_ORIENTATION,
                 ExifInterface.ORIENTATION_NORMAL
             )
-
-            // Clean up temp file
-            tempFile.delete()
 
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
