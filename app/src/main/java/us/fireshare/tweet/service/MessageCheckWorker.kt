@@ -92,7 +92,7 @@ class MessageCheckWorker @AssistedInject constructor(
     /**
      * Show system bar notifications for new messages
      */
-    private fun showNewMessageNotifications(messages: List<ChatMessage>) {
+    private suspend fun showNewMessageNotifications(messages: List<ChatMessage>) {
         try {
             if (messages.isEmpty()) return
             

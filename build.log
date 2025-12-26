@@ -1,3 +1,5 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preFullDebugBuild UP-TO-DATE
 > Task :app:mergeFullDebugJniLibFolders UP-TO-DATE
@@ -21,10 +23,8 @@
 > Task :app:parseFullDebugLocalResources UP-TO-DATE
 > Task :app:createFullDebugCompatibleScreenManifests UP-TO-DATE
 > Task :app:extractDeepLinksFullDebug UP-TO-DATE
-> Task :app:processFullDebugMainManifest UP-TO-DATE
-> Task :app:processFullDebugManifest UP-TO-DATE
-> Task :app:processFullDebugManifestForPackage UP-TO-DATE
-> Task :app:processFullDebugResources UP-TO-DATE
+> Task :app:processFullDebugMainManifest
+> Task :app:processFullDebugManifest
 > Task :app:javaPreCompileFullDebug UP-TO-DATE
 > Task :app:mergeFullDebugShaders UP-TO-DATE
 > Task :app:compileFullDebugShaders NO-SOURCE
@@ -38,67 +38,43 @@
 > Task :app:validateSigningFullDebug UP-TO-DATE
 > Task :app:writeFullDebugAppMetadata UP-TO-DATE
 > Task :app:writeFullDebugSigningConfigVersions UP-TO-DATE
+> Task :app:processFullDebugManifestForPackage
+> Task :app:processFullDebugResources
 
 > Task :app:kspFullDebugKotlin
 w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
 w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
 
 > Task :app:compileFullDebugKotlin
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/fullDebug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:539:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/fullDebug/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:629:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/fullDebug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:129:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/fullDebug/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:197:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:81:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:283:75 Unchecked cast of 'Any?' to 'List<String>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:463:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:560:59 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:622:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:709:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:874:57 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1005:49 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1264:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1265:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1349:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1350:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1535:41 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1848:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1859:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1968:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1969:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2019:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2020:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2491:28 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2808:43 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2837:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2847:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/TweetApplication.kt:152:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/profile/SystemSettings.kt:166:38 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes ExposedDropdownMenuAnchorType and enabled parameters.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/service/NotificationPermissionManager.kt:120:55 'field versionCode: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetDetailScreen.kt:226:13 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetFeedScreen.kt:133:21 'fun TabRow(selectedTabIndex: Int, modifier: Modifier = ..., containerColor: Color = ..., contentColor: Color = ..., indicator: @Composable() ComposableFunction1<@ParameterName(...) List<TabPosition>, Unit> = ..., divider: @Composable() ComposableFunction0<Unit> = ..., tabs: @Composable() ComposableFunction0<Unit>): Unit' is deprecated. Replaced with PrimaryTabRow and SecondaryTabRow.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItem.kt:88:17 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:78:26 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:78:52 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:77:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:117:32 'fun toggleSoftInput(p0: Int, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:130:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:131:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:174:32 'fun toggleSoftInput(p0: Int, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:186:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:187:40 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:200:58 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/UserViewModel.kt:996:57 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/ImageCacheManager.kt:751:9 This is a delicate API and its use requires care. Make sure you fully read and understand documentation of the declaration that is marked as a delicate API.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/IndependentFullScreenPlayer.kt:180:76 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/IndependentFullScreenPlayer.kt:204:82 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/MediaGrid.kt:795:9 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:84:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:286:75 Unchecked cast of 'Any?' to 'List<String>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:472:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:569:59 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:631:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:718:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:883:57 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1014:49 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1277:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1278:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1367:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1368:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1563:41 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1889:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1900:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2013:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2014:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2068:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2069:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2558:28 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3063:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3073:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
 
-> Task :app:compileFullDebugJavaWithJavac
+> Task :app:compileFullDebugJavaWithJavac UP-TO-DATE
 > Task :app:hiltAggregateDepsFullDebug UP-TO-DATE
 > Task :app:hiltJavaCompileFullDebug
 > Task :app:processFullDebugJavaRes
-> Task :app:transformFullDebugClassesWithAsm
 > Task :app:mergeFullDebugJavaResource
+> Task :app:transformFullDebugClassesWithAsm
 > Task :app:dexBuilderFullDebug
 > Task :app:mergeFullDebugGlobalSynthetics UP-TO-DATE
 > Task :app:mergeProjectDexFullDebug
@@ -106,5 +82,5 @@ w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tw
 > Task :app:createFullDebugApkListingFileRedirect
 > Task :app:assembleFullDebug
 
-BUILD SUCCESSFUL in 21s
-47 actionable tasks: 11 executed, 36 up-to-date
+BUILD SUCCESSFUL in 25s
+47 actionable tasks: 14 executed, 33 up-to-date

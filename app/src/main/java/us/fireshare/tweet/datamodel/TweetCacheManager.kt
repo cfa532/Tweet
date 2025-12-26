@@ -186,7 +186,7 @@ object TweetCacheManager {
      * Optimization: If memory copy is expired, database copy must also be expired
      * since they share the same timestamp, so we clear both immediately.
      */
-    fun getCachedUser(userId: MimeiId): User? {
+    suspend fun getCachedUser(userId: MimeiId): User? {
         return try {
             // Check memory cache first
             val memoryUser = synchronized(userCacheLock) {
@@ -207,7 +207,9 @@ object TweetCacheManager {
 
             // Check database cache (only if not found in memory)
             Timber.tag("TweetCacheManager").d("🔍 CHECKING DATABASE CACHE: userId: $userId")
-            val dbCachedUser = HproseInstance.dao.getCachedUser(userId)
+            val dbCachedUser = withContext(Dispatchers.IO) {
+                HproseInstance.dao.getCachedUser(userId)
+            }
             dbCachedUser?.let { cachedUser ->
                 val user = cachedUser.user
                 val cacheAge = System.currentTimeMillis() - cachedUser.timestamp.time

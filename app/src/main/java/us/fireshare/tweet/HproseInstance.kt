@@ -19,6 +19,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
+import io.ktor.client.request.head
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -2768,8 +2769,43 @@ object HproseInstance {
     }
 
     /**
-     * Try each IP address in the list in parallel until a healthy one is found
+     * Cache for tested IP addresses with timestamps
+     * Key: IP address, Value: Pair<isHealthy, timestamp>
+     */
+    private val ipHealthCache = mutableMapOf<String, Pair<Boolean, Long>>()
+    private val ipCacheMutex = Mutex()
+    private val IP_CACHE_DURATION_MS = 30 * 60 * 1000L // 30 minutes
+
+    /**
+     * Check if an IP is in cache and still valid
+     * @return true if healthy, false if unhealthy or not in cache, null if cache expired
+     */
+    private suspend fun getCachedHealth(ipAddress: String): Boolean? = ipCacheMutex.withLock {
+        val cached = ipHealthCache[ipAddress] ?: return@withLock null
+        val (isHealthy, timestamp) = cached
+        val now = System.currentTimeMillis()
+        
+        if (now - timestamp > IP_CACHE_DURATION_MS) {
+            // Cache expired, remove it
+            ipHealthCache.remove(ipAddress)
+            return@withLock null
+        }
+        
+        return@withLock isHealthy
+    }
+
+    /**
+     * Store IP health check result in cache
+     */
+    private suspend fun cacheIPHealth(ipAddress: String, isHealthy: Boolean) = ipCacheMutex.withLock {
+        ipHealthCache[ipAddress] = Pair(isHealthy, System.currentTimeMillis())
+    }
+
+    /**
+     * Try each IP address in the list in pairs until a healthy one is found
      * Returns the first healthy IP immediately without waiting for others
+     * Checks IPs in pairs (2 at a time) to avoid overwhelming the network
+     * Uses a 30-minute cache to avoid repeated checks
      * @param ipAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
      * @return First healthy IP address, or null if none found
@@ -2780,59 +2816,92 @@ object HproseInstance {
         }
 
         if (logPrefix.isNotEmpty()) {
-            Timber.tag("getProviderIP").d("$logPrefix - Testing ${ipAddresses.size} IPs in parallel")
+            Timber.tag("getProviderIP").d("$logPrefix - Testing ${ipAddresses.size} IPs in pairs with cache")
         }
 
-        // Create async jobs for all IP health checks
-        val healthCheckJobs = ipAddresses.mapIndexed { index, ipAddress ->
-            async(Dispatchers.IO) {
-                try {
-                    // Validate the IP address format by attempting to construct a URL
-                    val testURL = if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
-                    
-                    // Perform health check on this IP
-                    val isHealthy = isServerHealthy(HproseClientPool.getRegularClient(testURL))
-                    
-                    if (isHealthy) {
-                        if (logPrefix.isNotEmpty()) {
-                            Timber.tag("getProviderIP").d("$logPrefix - IP ${index + 1}/${ipAddresses.size} ($ipAddress) is healthy")
+        // First check cache for any healthy IPs
+        for (ipAddress in ipAddresses) {
+            val cachedHealth = getCachedHealth(ipAddress)
+            if (cachedHealth == true) {
+                if (logPrefix.isNotEmpty()) {
+                    Timber.tag("getProviderIP").d("$logPrefix - IP $ipAddress found healthy in cache")
+                }
+                return@coroutineScope ipAddress
+            }
+        }
+
+        // Process IPs in pairs (2 at a time)
+        val pairSize = 2
+        var firstHealthy: String? = null
+        val activeJobs = mutableListOf<kotlinx.coroutines.Deferred<String?>>()
+
+        for (i in ipAddresses.indices step pairSize) {
+            // Check if we already found a healthy IP
+            if (firstHealthy != null) {
+                break
+            }
+
+            // Get the current pair of IPs
+            val endIndex = minOf(i + pairSize, ipAddresses.size)
+            val currentPair = ipAddresses.subList(i, endIndex)
+
+            // Launch jobs for this pair
+            activeJobs.clear()
+            for ((pairIndex, ipAddress) in currentPair.withIndex()) {
+                val globalIndex = i + pairIndex
+                val job = async(Dispatchers.IO) {
+                    try {
+                        // Check cache first (double-check in case another coroutine updated it)
+                        val cachedHealth = getCachedHealth(ipAddress)
+                        if (cachedHealth != null) {
+                            return@async if (cachedHealth) ipAddress else null
                         }
-                        ipAddress
-                    } else {
+
+                        // Validate the IP address format by attempting to construct a URL
+                        val testURL = if (ipAddress.startsWith("http")) ipAddress.trim() else "http://${ipAddress.trim()}"
+                        
+                        // Perform health check on this IP using HTTP HEAD
+                        val isHealthy = isServerHealthyViaHead(testURL)
+                        
+                        // Cache the result
+                        cacheIPHealth(ipAddress, isHealthy)
+                        
+                        if (isHealthy) {
+                            if (logPrefix.isNotEmpty()) {
+                                Timber.tag("getProviderIP").d("$logPrefix - IP ${globalIndex + 1}/${ipAddresses.size} ($ipAddress) is healthy")
+                            }
+                            ipAddress
+                        } else {
+                            null
+                        }
+                    } catch (e: Exception) {
+                        // Health check failed for this IP, cache as unhealthy
+                        cacheIPHealth(ipAddress, false)
                         null
                     }
-                } catch (e: Exception) {
-                    // Health check failed for this IP
-                    null
                 }
+                activeJobs.add(job)
             }
-        }
 
-        // Find the first healthy IP - check jobs in order but they all run in parallel
-        var firstHealthy: String? = null
-        for ((index, job) in healthCheckJobs.withIndex()) {
-            if (firstHealthy != null) {
-                // Already found a healthy IP, cancel remaining jobs
-                job.cancel()
-                continue
-            }
-            
-            try {
-                val result = job.await()
-                if (result != null) {
-                    firstHealthy = result
-                    // Cancel all remaining jobs
-                    healthCheckJobs.drop(index + 1).forEach { remainingJob ->
-                        remainingJob.cancel()
+            // Wait for the first healthy IP in this pair
+            for ((pairIndex, job) in activeJobs.withIndex()) {
+                try {
+                    val result = job.await()
+                    if (result != null) {
+                        firstHealthy = result
+                        // Cancel all remaining jobs in this pair
+                        for (j in (pairIndex + 1) until activeJobs.size) {
+                            activeJobs[j].cancel()
+                        }
+                        break
                     }
-                    break
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Job was cancelled, continue to next
+                    continue
+                } catch (e: Exception) {
+                    // Job failed, continue to next
+                    continue
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Job was cancelled, continue to next
-                continue
-            } catch (e: Exception) {
-                // Job failed, continue to next
-                continue
             }
         }
 
@@ -2919,19 +2988,52 @@ object HproseInstance {
     }
 
     /**
+     * Dedicated HTTP client for health checks with shorter timeouts
+     */
+    private val healthCheckHttpClient = HttpClient(CIO) {
+        engine {
+            maxConnectionsCount = 100
+        }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 5_000  // 5 seconds for health checks
+            connectTimeoutMillis = 3_000  // 3 seconds to connect
+            socketTimeoutMillis = 3_000   // 3 seconds socket timeout
+        }
+    }
+
+    /**
+     * Check if a server is healthy by making an HTTP HEAD request
+     * This is a lightweight check that only verifies the server is alive
+     * @param url The server URL to check
+     * @return true if server responds to HEAD request, false otherwise
+     */
+    private suspend fun isServerHealthyViaHead(url: String): Boolean {
+        return try {
+            val response = healthCheckHttpClient.head(url)
+            // Consider 2xx and 3xx responses as healthy
+            response.status.value in 200..399
+        } catch (e: Exception) {
+            Timber.tag("isServerHealthy").w("Health check (HEAD) exception for $url: ${e.message}")
+            false
+        }
+    }
+
+    /**
      * Check if a server is healthy by making a simple HTTP request
+     * This version is kept for backward compatibility where HproseService is used
      */
     private suspend fun isServerHealthy(hproseService: HproseService?): Boolean {
+        // For hproseService health check, we now extract the base URL and use HEAD request
         return try {
-            val params = mapOf(
-                "aid" to appId,
-                "ver" to "last"
-            )
-            val rawResponse = hproseService?.runMApp<Any>("health", params)
-            val responseMap = rawResponse as? Map<String, Any>
-            return responseMap?.get("success") == true
+            // Extract base URL from hproseService if possible
+            val baseUrl = hproseService?.toString()?.let { serviceStr ->
+                // Try to extract URL from proxy string representation
+                // This is a fallback - ideally we'd have direct access to the URL
+                appUser.baseUrl
+            } ?: return false
+            
+            isServerHealthyViaHead(baseUrl)
         } catch (e: Exception) {
-            // Don't log hproseService as it's a proxy and toString() triggers RPC call
             Timber.tag("isServerHealthy").w("Health check exception: ${e.message}")
             false
         }
