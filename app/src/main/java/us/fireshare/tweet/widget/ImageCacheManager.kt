@@ -49,7 +49,6 @@ object ImageCacheManager {
     private const val READ_TIMEOUT = 15000 // 15 seconds - allow for large files but not too long
     private const val MAX_CONCURRENT_DOWNLOADS = 16 // Increase concurrent downloads for faster loading
     private const val MAX_RETRY_ATTEMPTS = 2
-    private const val PROGRESSIVE_LOAD_CHUNK_SIZE = 64 * 1024 // 64KB chunks for progressive loading
 
     // Coroutine scope for image loading that can be cancelled when screen is disposed
     private val imageLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -80,7 +79,7 @@ object ImageCacheManager {
     
     private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
-    private val downloadResults = ConcurrentHashMap<String, Bitmap?>()
+    private val downloadResults = ConcurrentHashMap<String, Bitmap>()
     private val resultTimestamps = ConcurrentHashMap<String, Long>()
     
     // Mutex to prevent race conditions in download queue
@@ -132,7 +131,7 @@ object ImageCacheManager {
             // Update memory usage counter
             val bitmapSize = try {
                 bitmap.byteCount
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // If bitmap is already recycled, we can't get the size
                 // This is fine, just log it for debugging
                 Timber.tag("ImageCacheManager").d("Could not get byteCount for removed bitmap: $mid")
@@ -270,7 +269,7 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            bitmap = performDownload(imageUrl, mid)
+                            bitmap = performDownload(imageUrl)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
@@ -294,10 +293,8 @@ object ImageCacheManager {
                         ongoingDownloads.remove(mid)
                     }
                     activeInvisibleDownloads--
-                    if (semaphoreAcquired) {
-                        downloadSemaphore.release()
-                        semaphoreAcquired = false
-                    }
+                    downloadSemaphore.release()
+                    semaphoreAcquired = false
                 }
             } catch (e: Exception) {
                 // Handle cancellation by cleaning up download queue
@@ -317,7 +314,6 @@ object ImageCacheManager {
                     // Release the download slot only if we acquired it and haven't released it yet
                     if (semaphoreAcquired) {
                         downloadSemaphore.release()
-                        semaphoreAcquired = false
                     }
                     
                     Timber.tag("ImageCacheManager").d("Cleaned up cancelled download for $mid")
@@ -335,7 +331,7 @@ object ImageCacheManager {
     /**
      * Perform the actual download with OkHttp connection pooling
      */
-    private suspend fun performDownload(imageUrl: String, mid: String): Bitmap? =
+    private suspend fun performDownload(imageUrl: String): Bitmap? =
         withContext(Dispatchers.IO) {
             var inputStream: InputStream? = null
 
@@ -355,12 +351,7 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
-                inputStream = response.body?.byteStream()
-                if (inputStream == null) {
-                    Timber.tag("ImageCacheManager").d("Empty response body for URL: $imageUrl")
-                    response.close()
-                    return@withContext null
-                }
+                inputStream = response.body.byteStream()
 
                 val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
                 response.close()
@@ -417,12 +408,7 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
-                inputStream = response.body?.byteStream()
-                if (inputStream == null) {
-                    Timber.tag("ImageCacheManager").d("Empty response body for URL: $imageUrl")
-                    response.close()
-                    return@withContext null
-                }
+                inputStream = response.body.byteStream()
 
                 // Read the image data to check size
                 val imageData = inputStream.readBytes()
@@ -457,7 +443,7 @@ object ImageCacheManager {
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 clearMemoryCache()
                 return@withContext null
-            } catch (e: java.net.SocketTimeoutException) {
+            } catch (_: java.net.SocketTimeoutException) {
                 // Timeout is expected on slow networks, log without stack trace
                 Timber.tag("ImageCacheManager").d("Image download timeout for $imageUrl")
                 return@withContext null
@@ -519,9 +505,14 @@ object ImageCacheManager {
                     return@withContext downloadResults[originalMid]
                 }
                 
-                // This thread will perform the download - acquire semaphore
+                // This thread won - it will perform the download
+                Timber.tag("ImageCacheManager").d("⬇️ Winner: $mid will download (visible=$isVisible)")
+                
+                // Acquire semaphore
+                Timber.tag("ImageCacheManager").d("⏳ Acquiring semaphore for $mid (available=${downloadSemaphore.availablePermits})")
                 downloadSemaphore.acquire()
                 semaphoreAcquired = true
+                Timber.tag("ImageCacheManager").d("✅ Semaphore acquired for $mid, starting download")
                 
                 // Track priority for monitoring
                 if (isVisible) {
@@ -543,6 +534,7 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
+                            Timber.tag("ImageCacheManager").d("📥 Downloading $mid (attempt $attempt)")
                             bitmap = performDownloadOriginal(imageUrl, originalMid, context)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Store original bitmap in memory cache with original key
@@ -551,16 +543,20 @@ object ImageCacheManager {
                                 downloadResults[originalMid] = bitmap
                                 resultTimestamps[originalMid] = System.currentTimeMillis()
                                 
+                                Timber.tag("ImageCacheManager").d("✅ Download complete for $mid, stored in cache")
+                                
                                 // Clean up old results periodically to prevent memory buildup
                                 if (downloadResults.size > 50) {
                                     cleanupOldResults()
                                 }
                                 
                                 return@withContext bitmap
+                            } else {
+                                Timber.tag("ImageCacheManager").w("⚠️ Download returned null/recycled bitmap for $mid")
                             }
                         } catch (e: Exception) {
                             Timber.tag("ImageCacheManager")
-                                .d("Original download attempt $attempt failed for $mid: $e")
+                                .w("❌ Download attempt $attempt failed for $mid: ${e.message}")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
                                 // Extended backoff delays to avoid overwhelming server
                                 delay(3000L * attempt) // 3s, 6s, 9s...
@@ -568,6 +564,8 @@ object ImageCacheManager {
                         }
                     }
 
+                    // All attempts failed
+                    Timber.tag("ImageCacheManager").e("💥 All download attempts failed for $mid after $attempt tries")
                     // Don't store null in ConcurrentHashMap (not allowed)
                     // Waiting requests will timeout or get null from missing entry
                     return@withContext null
@@ -628,7 +626,6 @@ object ImageCacheManager {
                     // Release the download slot only if we acquired it and haven't released it yet
                     if (semaphoreAcquired) {
                         downloadSemaphore.release()
-                        semaphoreAcquired = false
                     }
                 } else {
                     Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
@@ -681,6 +678,7 @@ object ImageCacheManager {
     /**
      * Start background task to periodically resume paused downloads and clean up stuck downloads
      */
+    @OptIn(DelicateCoroutinesApi::class)
     private fun startPausedDownloadResumer() {
         GlobalScope.launch(Dispatchers.IO) {
             while (true) {
@@ -818,7 +816,8 @@ object ImageCacheManager {
      * Load original image using a dedicated scope that can be cancelled when screen is disposed
      * This avoids cancellation during UI recomposition but allows cancellation when leaving screen
      */
-    fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String, isVisible: Boolean = true, onComplete: (Bitmap?) -> Unit) {
+    fun loadOriginalImageWithScope(context: Context, imageUrl: String, mid: String,
+                                   onComplete: (Bitmap?) -> Unit) {
         val contextKey = context.toString()
         
         // Track this download for the context
@@ -923,100 +922,6 @@ object ImageCacheManager {
     }
 
     /**
-     * Progressive image loading using OkHttp - downloads and displays image in chunks
-     * This allows images to appear progressively like in web browsers
-     */
-    suspend fun loadImageProgressive(
-        context: Context,
-        imageUrl: String,
-        mid: String,
-        onProgress: (ByteArray) -> Unit
-    ): Bitmap? = withContext(Dispatchers.IO) {
-        var inputStream: InputStream? = null
-        
-        try {
-            val request = Request.Builder()
-                .url(imageUrl)
-                .header("User-Agent", "TweetApp/1.0")
-                .header("Accept-Encoding", "gzip, deflate")
-                .header("Cache-Control", "no-cache")
-                .build()
-            
-            val response = okHttpClient.newCall(request).execute()
-            
-            if (!response.isSuccessful) {
-                Timber.tag("ImageCacheManager").d("Progressive download failed: HTTP ${response.code}")
-                response.close()
-                return@withContext null
-            }
-            
-            inputStream = response.body?.byteStream()
-            if (inputStream == null) {
-                Timber.tag("ImageCacheManager").d("Empty response body for progressive download")
-                response.close()
-                return@withContext null
-            }
-            val buffer = ByteArray(PROGRESSIVE_LOAD_CHUNK_SIZE)
-            val outputStream = java.io.ByteArrayOutputStream()
-            var totalBytesRead = 0
-            var bytesRead: Int
-            
-            Timber.tag("ImageCacheManager").d("Starting progressive download for $mid")
-            
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                outputStream.write(buffer, 0, bytesRead)
-                totalBytesRead += bytesRead
-                
-                // Send progress update every chunk
-                onProgress(buffer.copyOf(bytesRead))
-                
-                // Log progress every 1MB
-                if (totalBytesRead % (1024 * 1024) == 0) {
-                    Timber.tag("ImageCacheManager").d("Progressive download progress for $mid: ${totalBytesRead / 1024}KB")
-                }
-            }
-            
-            response.close()
-            
-            val imageData = outputStream.toByteArray()
-            Timber.tag("ImageCacheManager").d("Progressive download completed for $mid: ${imageData.size / 1024}KB")
-            
-            // Decode the complete image
-            val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
-            if (bitmap != null && !bitmap.isRecycled) {
-                // Cache the complete image
-                addToMemoryCache(mid, bitmap)
-                
-                // Save to disk cache
-                try {
-                    val dir = File(context.cacheDir, CACHE_DIR)
-                    if (!dir.exists()) dir.mkdirs()
-                    val file = File(dir, "$mid.jpg")
-                    FileOutputStream(file).use { out ->
-                        out.write(imageData)
-                    }
-                    Timber.tag("ImageCacheManager").d("Saved progressive image data (${imageData.size} bytes) for: $mid")
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error saving progressive image to disk: $e")
-                }
-                
-                return@withContext bitmap
-            }
-            
-            null
-        } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").e(e, "Progressive download failed for $mid")
-            null
-        } finally {
-            try {
-                inputStream?.close()
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").e(e, "Error closing progressive download resources")
-            }
-        }
-    }
-
-    /**
      * Clear a specific cached image by mid
      */
     suspend fun clearCachedImage(context: Context, mid: String) = withContext(Dispatchers.IO) {
@@ -1082,9 +987,8 @@ object ImageCacheManager {
         val maxSize = MAX_MEMORY_CACHE_SIZE
         val currentSize = memoryCache.size
         val currentMemory = currentMemoryUsage.get()
-        val hitRate = 0 // Simple cache doesn't track hit/miss rates
 
-        return "Memory: ${currentSize} items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}"
+        return "Memory: $currentSize items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}"
     }
 
     /**

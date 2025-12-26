@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
@@ -100,9 +99,9 @@ fun UserAvatar(
                         context = context,
                         imageUrl = avatarUrl ?: "",
                         mid = avatarMid
-                    ) { downloadedBitmap ->
-                        if (downloadedBitmap != null) {
-                            loadState = AvatarLoadState(bitmap = downloadedBitmap, isLoading = false, hasError = false)
+                    ) { bitmap ->
+                        if (bitmap != null && !bitmap.isRecycled) {
+                            loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
                         } else {
                             loadState = AvatarLoadState(isLoading = false, hasError = true)
                         }
