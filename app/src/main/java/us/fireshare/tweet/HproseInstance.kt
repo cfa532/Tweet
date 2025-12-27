@@ -2774,7 +2774,7 @@ object HproseInstance {
      */
     private val ipHealthCache = mutableMapOf<String, Pair<Boolean, Long>>()
     private val ipCacheMutex = Mutex()
-    private val IP_CACHE_DURATION_MS = 30 * 60 * 1000L // 30 minutes
+    private val IP_CACHE_DURATION_MS = 30 // 30 seconds
 
     /**
      * Check if an IP is in cache and still valid
