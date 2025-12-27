@@ -599,6 +599,18 @@ class UserViewModel @AssistedInject constructor(
         // Update the public count variables for UI
         _followersCount.value = fans.size
         _followingsCount.value = followings.size
+        
+        // Update the user object with the correct counts
+        _user.value = user.value.copy(
+            followersCount = fans.size,
+            followingCount = followings.size
+        )
+        
+        // Update the User singleton for this user (any user, not just appUser)
+        User.updateUserInstance(_user.value)
+        TweetCacheManager.saveUser(_user.value)
+        Timber.tag("refreshFollowingsAndFans")
+            .d("Updated user ${userId} counts: followers=${fans.size}, followings=${followings.size}")
     }
 
     companion object {
@@ -628,6 +640,14 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 _followers.value = allFollowers
+                
+                // Update the count
+                _followersCount.value = allFollowers.size
+                _user.value = user.value.copy(followersCount = allFollowers.size)
+                
+                // Update the User singleton for this user
+                User.updateUserInstance(_user.value)
+                TweetCacheManager.saveUser(_user.value)
 
                 // Return the first batch of users, filtering out nulls
                 val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE)
@@ -668,6 +688,14 @@ class UserViewModel @AssistedInject constructor(
                 // For page 0, refresh the entire list
                 val allFollowings = HproseInstance.getFollowings(user.value)
                 _followings.value = allFollowings
+                
+                // Update the count
+                _followingsCount.value = allFollowings.size
+                _user.value = user.value.copy(followingCount = allFollowings.size)
+                
+                // Update the User singleton for this user
+                User.updateUserInstance(_user.value)
+                TweetCacheManager.saveUser(_user.value)
 
                 // Return the first batch of users, filtering out nulls
                 allFollowings.take(TW_CONST.USER_BATCH_SIZE)
