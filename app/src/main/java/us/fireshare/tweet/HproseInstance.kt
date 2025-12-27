@@ -166,63 +166,55 @@ object HproseInstance {
     )
 
     suspend fun init(context: Context, onInitialized: (suspend () -> Unit)? = null) {
+        // Store Application context to avoid memory leaks
+        this.applicationContext = context.applicationContext as Application
+        HproseClassManager.register(Tweet::class.java, "Tweet")
+        HproseClassManager.register(User::class.java, "User")
+
+        this.preferenceHelper = PreferenceHelper(context)
+        chatDatabase = ChatDatabase.getInstance(context)
+        val tweetCache = TweetCacheDatabase.getInstance(context)
+        dao = tweetCache.tweetDao()
+
+        // Initialize appUser with userId from preferences, or GUEST_ID if not available
+        val storedUserId = preferenceHelper.getUserId()
+        val initialUserId = if (storedUserId != TW_CONST.GUEST_ID) storedUserId else TW_CONST.GUEST_ID
+        appUser = getInstance(initialUserId)
+        appUser.followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
+        Timber.tag("HproseInstance").d("Initialized appUser with mid: ${appUser.mid}")
+        
         try {
-            // Store Application context to avoid memory leaks
-            this.applicationContext = context.applicationContext as Application
-            HproseClassManager.register(Tweet::class.java, "Tweet")
-            HproseClassManager.register(User::class.java, "User")
-
-            this.preferenceHelper = PreferenceHelper(context)
-            chatDatabase = ChatDatabase.getInstance(context)
-            val tweetCache = TweetCacheDatabase.getInstance(context)
-            dao = tweetCache.tweetDao()
-
-            // Initialize appUser with userId from preferences, or GUEST_ID if not available
-            val storedUserId = preferenceHelper.getUserId()
-            val initialUserId = if (storedUserId != TW_CONST.GUEST_ID) storedUserId else TW_CONST.GUEST_ID
-            appUser = getInstance(initialUserId)
-            appUser.followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
-            Timber.tag("HproseInstance").d("Initialized appUser with mid: ${appUser.mid}")
-            
             // CRITICAL: initAppEntry() must complete first and set IP-based baseUrl
             // This is suspend, so init() will wait for it to complete
+            // If this times out or fails, we'll fall back to cached data
             initAppEntry()
             
             // Call the callback after successful initialization
             onInitialized?.invoke()
         } catch (e: Exception) {
-            Timber.tag("HproseInstance").e(e, "Error during HproseInstance initialization")
-            // Set up minimal fallback state to prevent app from being completely broken
-            if (!::preferenceHelper.isInitialized) {
-                this.preferenceHelper = PreferenceHelper(context)
-            }
+            Timber.tag("HproseInstance").e(e, "Error during network initialization, attempting offline mode")
             // If network is unavailable (all URLs failed), try to load cached user
             if (appUser.baseUrl == null) {
                 Timber.tag("HproseInstance").w("Network unavailable, attempting to load cached user for offline mode")
-                val storedUserId = preferenceHelper.getUserId()
                 if (storedUserId != TW_CONST.GUEST_ID) {
                     // Try to load the cached user
                     val cachedUser = TweetCacheManager.getCachedUser(storedUserId)
                     if (cachedUser != null) {
                         // Use the cached user but keep baseUrl as null for offline mode
-                        appUser = cachedUser.copy(baseUrl = null)
+                        appUser = cachedUser
                         Timber.tag("HproseInstance").d("✅ Loaded cached user for offline mode: userId=${appUser.mid}, username=${appUser.username}")
                     } else {
                         // No cached user found, keep the userId from preferences but set baseUrl to null
-                        Timber.tag("HproseInstance").w("No cached user found for userId: $storedUserId, keeping userId but baseUrl is null")
-                        appUser = appUser.copy(baseUrl = null)
+                        Timber.tag("HproseInstance").w("No cached user found for userId: $storedUserId")
                     }
                 } else {
                     // Guest user
-                    Timber.tag("HproseInstance").d("Guest user, using alpha IDs")
-                    appUser = appUser.copy(
-                        baseUrl = null,
-                        followingList = getAlphaIds()
-                    )
+                    Timber.tag("HproseInstance").d("Guest user, using alpha IDs for offline mode")
+                    appUser.followingList = getAlphaIds()
                 }
             }
-            // Re-throw the exception so the calling code can handle it
-            throw e
+            // Don't re-throw - allow app to continue in offline mode
+            Timber.tag("HproseInstance").w("App initialized in offline mode")
         }
     }
 
@@ -252,7 +244,7 @@ object HproseInstance {
                  *         mid:"d4lRyhABgqOnqY4bURSm_T-4FZ4"
                  * })]
                  * */
-                val response: HttpResponse = httpClient.get(url)
+                val response: HttpResponse = initHttpClient.get(url)
                 val pattern = Pattern.compile("window\\.setParam\\((\\{.*?\\})\\)", Pattern.DOTALL)
                 val matcher = pattern.matcher(response.bodyAsText().trimIndent() as CharSequence)
                 if (matcher.find()) {
@@ -2443,20 +2435,24 @@ object HproseInstance {
             return null
         }
 
+        Timber.tag("getUser").d("fetchUser called: userId=$userId, baseUrl=$baseUrl, forceRefresh=$forceRefresh")
+
         if (!skipRetryAndBlacklist && BlackList.isBlacklisted(userId)) {
-            Timber.tag("getUser").d("User $userId is blacklisted, returning null")
+            Timber.tag("getUser").w("User $userId is blacklisted, returning null")
             return null
         }
 
         // Check cache first (if not forcing refresh)
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
+            Timber.tag("getUser").d("Cached user for $userId: ${if (cachedUser != null) "found (username=${cachedUser.username}, expired=${cachedUser.hasExpired})" else "not found"}")
             if (cachedUser != null && cachedUser.username != null) {
                 // Matching iOS behavior: only return cached user if baseUrl parameter is not empty
                 // This ensures that when ProfileScreen calls fetchUser with empty baseUrl,
                 // it always fetches fresh data from server (like iOS ProfileView)
                 if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Return valid cached user only if baseUrl parameter is provided
+                    Timber.tag("getUser").d("Returning cached user for $userId")
                     return cachedUser
                 } else if (cachedUser.hasExpired) {
                     // Start background refresh if not already running
@@ -2478,6 +2474,7 @@ object HproseInstance {
                         )
                     }
                     // Return stale cached user while background refresh is running
+                    Timber.tag("getUser").d("Returning expired cached user for $userId while background refresh runs")
                     return cachedUser
                 }
                 // If baseUrl is empty, fall through to fetch from server
@@ -2495,6 +2492,7 @@ object HproseInstance {
         }
 
         if (!shouldProceed) {
+            Timber.tag("getUser").d("Update already in progress for $userId, waiting...")
             return waitForConcurrentUpdate(userId, baseUrl, maxRetries, forceRefresh)
         }
 
@@ -2503,10 +2501,15 @@ object HproseInstance {
 
             // Determine base URL
             val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
-                getProviderIP(userId)?.let { "http://$it" } ?: ""
+                Timber.tag("getUser").d("baseUrl is empty, calling getProviderIP for $userId")
+                val providerIP = getProviderIP(userId)
+                Timber.tag("getUser").d("getProviderIP returned: $providerIP")
+                providerIP?.let { "http://$it" } ?: ""
             } else {
                 baseUrl
             }
+
+            Timber.tag("getUser").d("finalBaseUrl for $userId: $finalBaseUrl")
 
             if (finalBaseUrl.isEmpty()) {
                 Timber.tag("getUser").w("Cannot fetch user $userId: no valid baseUrl available")
@@ -2514,6 +2517,7 @@ object HproseInstance {
             }
 
             user.baseUrl = finalBaseUrl
+            Timber.tag("getUser").d("Calling performUserUpdate for $userId")
             return performUserUpdate(userId, user, maxRetries, skipRetryAndBlacklist, "getUser")
         } catch (e: Exception) {
             Timber.tag("getUser").e(e, "Exception in getUser: userId: $userId")
@@ -2863,9 +2867,10 @@ object HproseInstance {
                         } else {
                             val trimmedIP = ipAddress.trim()
                             // Check if this is an IPv6 address that needs bracket wrapping
-                            // IPv6 addresses contain colons and don't already have brackets
-                            if (trimmedIP.contains(":") && !trimmedIP.startsWith("[")) {
-                                // Extract IP and port if present
+                            // IPv6 addresses have MULTIPLE colons, IPv4 with port has only ONE colon
+                            val colonCount = trimmedIP.count { it == ':' }
+                            if (colonCount > 1 && !trimmedIP.startsWith("[")) {
+                                // This is IPv6 - wrap in brackets
                                 val lastColonIndex = trimmedIP.lastIndexOf(":")
                                 val potentialPort = trimmedIP.substring(lastColonIndex + 1)
                                 
@@ -2880,7 +2885,7 @@ object HproseInstance {
                                     "http://[$trimmedIP]"
                                 }
                             } else {
-                                // IPv4 or already formatted
+                                // IPv4 (with or without port) or already formatted
                                 "http://$trimmedIP"
                             }
                         }
@@ -2965,21 +2970,23 @@ object HproseInstance {
                 null
             }
         } else {
-            // Check if appUser's server is healthy (uses 30-min cache)
+            // For non-appUser: try with appUser's server first, fallback to entry IP if unhealthy
             val appUserBaseUrl = appUser.baseUrl ?: return null
             return if (! isServerHealthy(appUserBaseUrl)) {
+                // Server unhealthy, try entry IP fallback
                 try {
                     val entryIP = findEntryIP()
-                    Timber.tag("getProviderIP").d("Found entry IP: $entryIP, retrying with entry IP client")
+                    Timber.tag("getProviderIP").d("appUser server unhealthy, using entry IP: $entryIP")
                     val baseUrl = "http://$entryIP"
                     _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
                 } catch(_: Exception) {
-                    // All attempts failed - throw error
                     Timber.tag("getProviderIP").e("All provider IP resolution attempts failed for user $mid")
                     null
                 }
             } else {
-                null
+                // Server is healthy, use it to get provider IP
+                Timber.tag("getProviderIP").d("Using appUser's server to get provider IP for $mid")
+                _getProviderIP(mid)
             }
         }
     }
@@ -3022,9 +3029,9 @@ object HproseInstance {
             maxConnectionsCount = 100
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 5_000  // 5 seconds for health checks
-            connectTimeoutMillis = 3_000  // 3 seconds to connect
-            socketTimeoutMillis = 3_000   // 3 seconds socket timeout
+            requestTimeoutMillis = 15_000  // 15 seconds for health checks
+            connectTimeoutMillis = 10_000  // 10 seconds to connect
+            socketTimeoutMillis = 15_000   // 15 seconds socket timeout
         }
     }
 
@@ -3285,6 +3292,18 @@ object HproseInstance {
      */
     suspend fun getFileSize(uri: Uri): Long? =
         mediaUploadService.getFileSize(uri)
+
+    /**
+     * HTTP client specifically for app initialization with short timeouts
+     * This ensures fast startup by failing quickly if network is unavailable
+     */
+    private val initHttpClient = HttpClient(CIO) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 15_000  // 15 seconds total for init requests
+            connectTimeoutMillis = 10_000  // 10 seconds to establish connection
+            socketTimeoutMillis = 15_000   // 15 seconds for socket operations
+        }
+    }
 
     /**
      * Ktor HTTP client with optimized connection pooling for distributed nodes
