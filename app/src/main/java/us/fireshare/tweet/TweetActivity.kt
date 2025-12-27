@@ -98,8 +98,8 @@ class TweetActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             try {
-                // Add timeout for network initialization
-                withTimeoutOrNull(10000) { // 10 second timeout
+                // Add timeout for network initialization (15s for IPFS network patience)
+                withTimeoutOrNull(15000) { // 15 second timeout
                     initJob.await()   // wait until network ready
                 } ?: run {
                     Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
