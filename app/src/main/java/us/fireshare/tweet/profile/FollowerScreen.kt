@@ -1,15 +1,24 @@
 package us.fireshare.tweet.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,6 +32,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -128,19 +141,79 @@ fun FollowerItem(
 ) {
     val user by viewModel.user.collectAsState()
     val navController = LocalNavController.current
+    var hasTimedOut by remember { mutableStateOf(false) }
+    val loadingTimeoutMs = 10000L // 10 seconds total timeout
 
-    // Retry loading only if user data is completely missing (guest with no username)
-    // The ViewModel already loads user data in its init block, so we only retry on failure
-    LaunchedEffect(user) {
-        if (user.isGuest() && user.username.isNullOrEmpty()) {
-            Timber.tag("FollowerItem").d("Retrying user load for userId: $userId")
-            // Launch in viewModelScope to prevent cancellation on scroll
-            viewModel.retryLoadUser()
+    // Simple timeout - remove placeholder after 10 seconds if still loading
+    LaunchedEffect(userId) {
+        if (user.username.isNullOrEmpty()) {
+            Timber.tag("FollowerItem").d("Waiting for user load: $userId")
+            kotlinx.coroutines.delay(loadingTimeoutMs)
+            if (user.username.isNullOrEmpty()) {
+                Timber.tag("FollowerItem").w("User load timed out for userId: $userId")
+                hasTimedOut = true
+            }
         }
     }
 
-    // Don't render if user is null or has null username
-    if (user.mid.isEmpty() || user.username.isNullOrEmpty()) {
+    // Show placeholder while loading
+    val isLoading = user.username.isNullOrEmpty() && !hasTimedOut
+
+    // Hide item if it timed out
+    if (hasTimedOut) {
+        return
+    }
+
+    // Show loading placeholder
+    if (isLoading) {
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 1.dp),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+        Row(
+            modifier = Modifier
+                .padding(vertical = 8.dp)
+                .padding(start = 4.dp, end = 8.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar with loading spinner
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    strokeWidth = 3.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                // Shimmering placeholder for name
+                Card(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .height(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                ) {}
+                Spacer(modifier = Modifier.height(6.dp))
+                // Shimmering placeholder for username
+                Card(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
+                ) {}
+            }
+        }
         return
     }
 
@@ -161,7 +234,17 @@ fun FollowerItem(
                 navController.navigate(NavTweet.UserProfile(user.mid))
             }
         }) {
-            UserAvatar(user = user, size = 40)
+            Box(contentAlignment = Alignment.Center) {
+                UserAvatar(user = user, size = 40)
+                // Show spinner overlay if user data is still being loaded
+                if (user.username.isNullOrEmpty() || user.name.isNullOrEmpty()) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
         Column {
             Row(
