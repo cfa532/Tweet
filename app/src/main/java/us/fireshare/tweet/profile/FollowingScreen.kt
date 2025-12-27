@@ -48,6 +48,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
@@ -149,8 +150,17 @@ fun FollowingItem(
             Timber.tag("FollowingItem").d("Waiting for user load: $userId")
             kotlinx.coroutines.delay(loadingTimeoutMs)
             if (user.username.isNullOrEmpty()) {
-                Timber.tag("FollowingItem").w("User load timed out for userId: $userId")
+                Timber.tag("FollowingItem").w("User load timed out for userId: $userId, adding to blacklist candidate")
                 hasTimedOut = true
+                // Add to blacklist candidates for tracking failed loads
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    BlackList.recordFailure(userId)
+                }
+            } else {
+                // Successfully loaded - record success to remove from candidates
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    BlackList.recordSuccess(userId)
+                }
             }
         }
     }
