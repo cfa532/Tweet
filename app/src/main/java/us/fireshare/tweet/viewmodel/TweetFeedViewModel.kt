@@ -224,13 +224,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (appUser.isGuest()) {
             // For guest users: call getTweetsByUser() to fetch tweets
             val alphaIds = getAlphaIds()
-            Timber.tag("MainFeed").d("Guest user detected, alphaIds: $alphaIds")
             if (alphaIds.isEmpty()) {
                 Timber.tag("TweetFeedViewModel").w("No alpha IDs configured, returning empty list for guest user")
                 return emptyList()
             }
             val defaultUserId = alphaIds.first()
-            Timber.tag("MainFeed").d("Loading tweets for alphaId: $defaultUserId, page: $pageNumber")
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
@@ -240,7 +238,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 allTweets
             }
             val result = getTweets(defaultUserId, pageNumber)
-            Timber.tag("MainFeed").d("getTweets returned ${result.size} tweets for alphaId: $defaultUserId")
             return result
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
@@ -358,34 +355,26 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * */
     private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
         try {
-            Timber.tag("GetTweets").d("Fetching user: $userId")
-            val user = fetchUser(userId)
-            if (user == null) {
-                Timber.tag("GetTweets").w("fetchUser returned null for userId: $userId")
-                return emptyList()
-            }
-            
-            Timber.tag("GetTweets").d("User fetched: ${user.mid}, calling getTweetsByUser for page: $pageNumber")
-            val tweetsWithNulls = HproseInstance.getTweetsByUser(
-                user,
-                pageNumber,
-            )
-            Timber.tag("GetTweets").d("getTweetsByUser returned ${tweetsWithNulls.size} tweets")
-            
-            // Filter out null elements and get valid tweets
-            val validTweets = tweetsWithNulls.filterNotNull()
+            fetchUser(userId)?.let { user ->
+                val tweetsWithNulls = HproseInstance.getTweetsByUser(
+                    user,
+                    pageNumber,
+                )
+                // Filter out null elements and get valid tweets
+                val validTweets = tweetsWithNulls.filterNotNull()
 
-            _tweets.update { list ->
-                val beforeFilter = validTweets + list
-                val afterPrivateFilter =
-                    beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
-                val mergedTweets = afterPrivateFilter
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                _tweets.update { list ->
+                    val beforeFilter = validTweets + list
+                    val afterPrivateFilter =
+                        beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                    val mergedTweets = afterPrivateFilter
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
 
-                mergedTweets
+                    mergedTweets
+                }
+                return tweetsWithNulls
             }
-            return tweetsWithNulls
         } catch (e: Exception) {
             Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
         }

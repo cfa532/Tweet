@@ -2435,24 +2435,20 @@ object HproseInstance {
             return null
         }
 
-        Timber.tag("getUser").d("fetchUser called: userId=$userId, baseUrl=$baseUrl, forceRefresh=$forceRefresh")
-
         if (!skipRetryAndBlacklist && BlackList.isBlacklisted(userId)) {
-            Timber.tag("getUser").w("User $userId is blacklisted, returning null")
+            Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
         }
 
         // Check cache first (if not forcing refresh)
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
-            Timber.tag("getUser").d("Cached user for $userId: ${if (cachedUser != null) "found (username=${cachedUser.username}, expired=${cachedUser.hasExpired})" else "not found"}")
             if (cachedUser != null && cachedUser.username != null) {
                 // Matching iOS behavior: only return cached user if baseUrl parameter is not empty
                 // This ensures that when ProfileScreen calls fetchUser with empty baseUrl,
                 // it always fetches fresh data from server (like iOS ProfileView)
                 if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Return valid cached user only if baseUrl parameter is provided
-                    Timber.tag("getUser").d("Returning cached user for $userId")
                     return cachedUser
                 } else if (cachedUser.hasExpired) {
                     // Start background refresh if not already running
@@ -2474,7 +2470,6 @@ object HproseInstance {
                         )
                     }
                     // Return stale cached user while background refresh is running
-                    Timber.tag("getUser").d("Returning expired cached user for $userId while background refresh runs")
                     return cachedUser
                 }
                 // If baseUrl is empty, fall through to fetch from server
@@ -2492,7 +2487,6 @@ object HproseInstance {
         }
 
         if (!shouldProceed) {
-            Timber.tag("getUser").d("Update already in progress for $userId, waiting...")
             return waitForConcurrentUpdate(userId, baseUrl, maxRetries, forceRefresh)
         }
 
@@ -2501,15 +2495,10 @@ object HproseInstance {
 
             // Determine base URL
             val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
-                Timber.tag("getUser").d("baseUrl is empty, calling getProviderIP for $userId")
-                val providerIP = getProviderIP(userId)
-                Timber.tag("getUser").d("getProviderIP returned: $providerIP")
-                providerIP?.let { "http://$it" } ?: ""
+                getProviderIP(userId)?.let { "http://$it" } ?: ""
             } else {
                 baseUrl
             }
-
-            Timber.tag("getUser").d("finalBaseUrl for $userId: $finalBaseUrl")
 
             if (finalBaseUrl.isEmpty()) {
                 Timber.tag("getUser").w("Cannot fetch user $userId: no valid baseUrl available")
@@ -2517,7 +2506,6 @@ object HproseInstance {
             }
 
             user.baseUrl = finalBaseUrl
-            Timber.tag("getUser").d("Calling performUserUpdate for $userId")
             return performUserUpdate(userId, user, maxRetries, skipRetryAndBlacklist, "getUser")
         } catch (e: Exception) {
             Timber.tag("getUser").e(e, "Exception in getUser: userId: $userId")
