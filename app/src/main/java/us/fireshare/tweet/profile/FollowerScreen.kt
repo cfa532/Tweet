@@ -247,7 +247,8 @@ fun FollowerItem(
             Box(contentAlignment = Alignment.Center) {
                 UserAvatar(user = user, size = 40)
                 // Show spinner overlay if user data is still being loaded
-                if (user.username.isNullOrEmpty() || user.name.isNullOrEmpty()) {
+                // A valid user needs mid + username; name is optional
+                if (user.username.isNullOrEmpty()) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,
