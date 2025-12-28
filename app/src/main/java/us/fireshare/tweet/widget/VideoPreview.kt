@@ -339,6 +339,9 @@ fun VideoPreview(
                         // Only show loading if not already cached/preloaded
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
                             isLoading = true
+                        } else {
+                            // Video is preloaded, no need to show loading
+                            isLoading = false
                         }
                     }
 
@@ -357,6 +360,9 @@ fun VideoPreview(
                         // Only show loading if not already cached/preloaded
                         if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
                             isLoading = true
+                        } else {
+                            // Video is preloaded/cached, clear loading state
+                            isLoading = false
                         }
                     }
                 }
@@ -388,6 +394,12 @@ fun VideoPreview(
                         errorMessage.contains("timeout", ignoreCase = true) ||
                         errorMessage.contains("connection", ignoreCase = true) ||
                         errorMessage.contains("server", ignoreCase = true) ||
+                        errorMessage.contains("400", ignoreCase = true) ||  // Bad Request
+                        errorMessage.contains("401", ignoreCase = true) ||  // Unauthorized
+                        errorMessage.contains("403", ignoreCase = true) ||  // Forbidden
+                        errorMessage.contains("404", ignoreCase = true) ||  // Not Found
+                        errorMessage.contains("408", ignoreCase = true) ||  // Request Timeout
+                        errorMessage.contains("429", ignoreCase = true) ||  // Too Many Requests
                         errorMessage.contains("500", ignoreCase = true) ||
                         errorMessage.contains("502", ignoreCase = true) ||
                         errorMessage.contains("503", ignoreCase = true) ||
@@ -451,7 +463,7 @@ fun VideoPreview(
                     
                     // Retry after a delay
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        delay(2000) // Wait 2 seconds before retry
+                        delay(1000) // Wait 1 second before retry
                         if (isLoading && !hasError) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
@@ -470,6 +482,13 @@ fun VideoPreview(
     // Add and remove listener properly
     DisposableEffect(exoPlayer) {
         exoPlayer.addListener(playerListener)
+        
+        // Check current state immediately in case we missed the state change
+        // This handles race conditions where the player becomes READY before listener attachment
+        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
+            isLoading = false
+        }
+        
         onDispose {
             exoPlayer.removeListener(playerListener)
         }
@@ -530,11 +549,11 @@ fun VideoPreview(
         )
 
         // Show loading indicator when video is loading
+        // Don't cover the entire video - allow frames to be visible while loading
         if (isLoading) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
