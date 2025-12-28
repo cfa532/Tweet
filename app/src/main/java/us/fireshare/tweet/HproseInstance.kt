@@ -765,11 +765,7 @@ object HproseInstance {
 
             Timber.tag("checkNewMessages").d("Returning ${incomingMessages.size} incoming messages (after filtering)")
 
-            // Update timestamp to current system time for incoming messages (matching iOS)
-            val currentTime = System.currentTimeMillis()
-            return incomingMessages.map { message ->
-                message.copy(timestamp = currentTime)
-            }
+            return incomingMessages
         } catch (e: Exception) {
             Timber.tag("checkNewMessages").e(e, "Error in checkNewMessages")
             null

@@ -256,23 +256,9 @@ class ChatViewModel @AssistedInject constructor(
             // Get or create session ID for this conversation
             val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
 
-            // Normalize order and timestamps so messages are processed sequentially
-            val fetchBaseTime = System.currentTimeMillis()
-            val sortedFetchedMessages = news.sortedBy { it.timestamp }
-            var lastKnownTimestamp = _chatMessages.value.lastOrNull()?.timestamp ?: 0L
-            val updatedNews = sortedFetchedMessages.mapIndexed { index, message ->
-                val baseTimestamp = if (message.authorId != appUser.mid) {
-                    maxOf(message.timestamp, fetchBaseTime + index)
-                } else {
-                    message.timestamp
-                }
-                val adjustedTimestamp = if (baseTimestamp <= lastKnownTimestamp) {
-                    lastKnownTimestamp + 1
-                } else {
-                    baseTimestamp
-                }
-                lastKnownTimestamp = adjustedTimestamp
-                message.copy(timestamp = adjustedTimestamp, sessionId = sessionId)
+            // Add session ID to messages
+            val updatedNews = news.map { message ->
+                message.copy(sessionId = sessionId)
             }
 
             /**
