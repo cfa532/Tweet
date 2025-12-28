@@ -133,8 +133,12 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         val success = jsonObject.get("success")?.asBoolean ?: true
         val errorMsg = jsonObject.get("errorMsg")?.asString
         
+        // Generate deterministic ID based on message characteristics if server doesn't provide one
+        // This ensures the same message fetched multiple times has the same ID for deduplication
+        val messageId = id ?: ChatMessage.generateDeterministicId(authorId, receiptId, timestamp)
+        
         return ChatMessage(
-            id = id ?: ChatMessage.generateUniqueId(),
+            id = messageId,
             receiptId = receiptId,
             authorId = authorId,
             content = content,
@@ -169,9 +173,20 @@ data class ChatMessage(
     companion object {
         /**
          * Generate a unique message ID using UUID
+         * This is used for client-generated messages before sending to server
          */
         fun generateUniqueId(): String {
             return UUID.randomUUID().toString()
+        }
+        
+        /**
+         * Generate a deterministic message ID based on message characteristics
+         * This ensures the same message from server gets the same ID every time for deduplication
+         * Uses authorId + receiptId + timestamp as the unique identifier
+         */
+        fun generateDeterministicId(authorId: String, receiptId: String, timestamp: Long): String {
+            val combinedString = "${authorId}_${receiptId}_${timestamp}"
+            return UUID.nameUUIDFromBytes(combinedString.toByteArray()).toString()
         }
     }
 }
