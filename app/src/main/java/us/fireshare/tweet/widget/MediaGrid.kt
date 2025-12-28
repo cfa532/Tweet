@@ -58,7 +58,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
  * Layout Strategy (matching iOS implementation):
  * - Uses PROPORTIONAL SIZING based on individual media aspect ratios
  * - Ensures maximum content visibility without excessive cropping
- * - Applies golden ratio (0.618) for hero images in 3-item grids
+ * - Hero images in 3-item grids use golden ratio (61.8%) for aesthetic balance
  * - Clamps grid aspect ratios between 0.8 (portrait) and 1.618 (landscape/golden ratio)
  * 
  * 1 Item: Uses individual aspect ratio (min 0.8)
@@ -69,7 +69,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
  * 3 Items:
  *   - All portrait: Hero left (61.8%), two stacked right with proportional heights
  *   - All landscape: Hero top (61.8%), two side-by-side bottom with proportional widths
- *   - Mixed: Adapts based on first item orientation with proportional sizing
+ *   - Mixed: Hero (61.8% minimum) adapts based on first item orientation with proportional sizing
  * 4+ Items: 2x2 grid with aspect ratio based on all items' orientation
  */
 @RequiresApi(Build.VERSION_CODES.R)
@@ -583,17 +583,19 @@ fun MediaGrid(
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
                 val isPortrait0 = ar0 < 1f
-                val goldenRatio = 0.618f
-                val remainder = 1f - goldenRatio
+                // Hero uses golden ratio for aesthetically pleasing proportions
+                val minHeroWeight = 0.618f  // Golden ratio (φ)
 
                 if (allPortrait) {
-                    // All portrait: hero on left (61.8%), two stacked on right with proportional heights
+                    // All portrait: hero on left (61.8% golden ratio), two stacked on right with proportional heights
                     // Calculate proportional heights for right-side images
                     val weight1 = 1f / ar1  // Inverse of aspect ratio
                     val weight2 = 1f / ar2
                     val totalWeight = weight1 + weight2
                     val normalizedWeight1 = weight1 / totalWeight
                     val normalizedWeight2 = weight2 / totalWeight
+                    val heroWeight = minHeroWeight
+                    val sideWeight = 1f - heroWeight
                     
                     Row(
                         modifier = Modifier
@@ -601,10 +603,10 @@ fun MediaGrid(
                             .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: left 61.8%
+                        // First image: left 61.8% (golden ratio)
                         Box(
                             modifier = Modifier
-                                .weight(goldenRatio)
+                                .weight(heroWeight)
                                 .fillMaxHeight()
                                 .clipToBounds()
                         ) {
@@ -618,9 +620,9 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: right 38.2%, stacked with proportional heights
+                        // Second and third: right side (38.2%), stacked with proportional heights
                         Column(
-                            modifier = Modifier.weight(remainder),
+                            modifier = Modifier.weight(sideWeight),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(
@@ -658,11 +660,13 @@ fun MediaGrid(
                         }
                     }
                 } else if (allLandscape) {
-                    // All landscape: hero on top (61.8%), two side-by-side on bottom with proportional widths
+                    // All landscape: hero on top (61.8% golden ratio), two side-by-side on bottom with proportional widths
                     // Calculate proportional widths for bottom images
                     val totalIdealWidth = ar1 + ar2
                     val weight1 = ar1 / totalIdealWidth
                     val weight2 = ar2 / totalIdealWidth
+                    val heroWeight = minHeroWeight
+                    val bottomWeight = 1f - heroWeight
                     
                     Column(
                         modifier = Modifier
@@ -670,11 +674,11 @@ fun MediaGrid(
                             .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: top 61.8%
+                        // First image: top 61.8% (golden ratio)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(goldenRatio)
+                                .weight(heroWeight)
                                 .clipToBounds()
                         ) {
                             MediaItemView(
@@ -687,11 +691,11 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: bottom 38.2%, side by side with proportional widths
+                        // Second and third: bottom (38.2%), side by side with proportional widths
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(remainder),
+                                .weight(bottomWeight),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(
@@ -736,6 +740,9 @@ fun MediaGrid(
                     val totalWeight = weight1 + weight2
                     val normalizedWeight1 = weight1 / totalWeight
                     val normalizedWeight2 = weight2 / totalWeight
+                    // Ensure hero takes more than 50% of area
+                    val heroWeight = minHeroWeight
+                    val sideWeight = 1f - heroWeight
                     
                     Row(
                         modifier = Modifier
@@ -743,10 +750,10 @@ fun MediaGrid(
                             .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: left with proportional width
+                        // First image: left 61.8% (golden ratio)
                         Box(
                             modifier = Modifier
-                                .weight(goldenRatio)
+                                .weight(heroWeight)
                                 .fillMaxHeight()
                                 .clipToBounds()
                         ) {
@@ -760,9 +767,9 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: right side, stacked with proportional heights
+                        // Second and third: right side (38.2%), stacked with proportional heights
                         Column(
-                            modifier = Modifier.weight(remainder),
+                            modifier = Modifier.weight(sideWeight),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(
@@ -805,6 +812,9 @@ fun MediaGrid(
                     val totalIdealWidth = ar1 + ar2
                     val weight1 = ar1 / totalIdealWidth
                     val weight2 = ar2 / totalIdealWidth
+                    // Ensure hero takes more than 50% of area
+                    val heroWeight = minHeroWeight
+                    val bottomWeight = 1f - heroWeight
                     
                     Column(
                         modifier = Modifier
@@ -812,11 +822,11 @@ fun MediaGrid(
                             .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: top with proportional height
+                        // First image: top 61.8% (golden ratio)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(goldenRatio)
+                                .weight(heroWeight)
                                 .clipToBounds()
                         ) {
                             MediaItemView(
@@ -829,11 +839,11 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: bottom, side by side with proportional widths
+                        // Second and third: bottom (38.2%), side by side with proportional widths
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(remainder),
+                                .weight(bottomWeight),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(
