@@ -113,9 +113,9 @@ fun MediaGrid(
                 item.aspectRatio?.takeIf { it > 0 } ?: (16f / 9f)
             }
             MediaType.Image -> {
-                // For images, use stored aspect ratio or default golden ratio (1.618)
-                // Golden ratio provides better visual consistency than 1.0 square
-                item.aspectRatio?.takeIf { it > 0 } ?: 1.618f
+                // For images, use stored aspect ratio
+                // If not available, return -1 to indicate unknown (will be handled appropriately)
+                item.aspectRatio?.takeIf { it > 0 } ?: -1f
             }
             else -> {
                 // For other types, use golden ratio
@@ -336,19 +336,78 @@ fun MediaGrid(
                 // Use cached aspect ratios for better performance
                 val ar0 = cachedAspectRatios[0]
                 val ar1 = cachedAspectRatios[1]
+                
+                // Check if aspect ratios are known (> 0 means valid aspect ratio)
+                val hasValidAspectRatios = ar0 > 0 && ar1 > 0
+                
                 val isPortrait0 = ar0 < 1f
                 val isPortrait1 = ar1 < 1f
                 val isLandscape0 = ar0 > 1f
                 val isLandscape1 = ar1 > 1f
                 
-                if (isLandscape0 && isLandscape1) {
-                    // Both landscape: vertical layout with proportional heights based on aspect ratios
-                    // Calculate proportional heights for each image to show maximum content
+            // If aspect ratios are unknown, default to horizontal layout with equal weights
+                // This prevents incorrect vertical stacking of portrait images
+                if (!hasValidAspectRatios) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1.0f), // Square aspect for unknown
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(0.5f)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                index = 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) },
+                                allMediaItems = mediaItems
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(0.5f)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                index = 1,
+                                autoPlay = isAutoPlayForGridIndex(1),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(1) },
+                                allMediaItems = mediaItems
+                            )
+                        }
+                    }
+                } else if (isLandscape0 && isLandscape1) {
+                // Both landscape: vertical layout with proportional heights based on aspect ratios
+                // Calculate proportional heights for each image to show maximum content
+                // Handle unknown aspect ratios (-1) by using equal weights
+                val normalizedWeight0: Float
+                val normalizedWeight1: Float
+                if (ar0 > 0 && ar1 > 0) {
                     val weight0 = 1f / ar0  // Inverse of aspect ratio gives proportional height
                     val weight1 = 1f / ar1
                     val totalWeight = weight0 + weight1
-                    val normalizedWeight0 = weight0 / totalWeight
-                    val normalizedWeight1 = weight1 / totalWeight
+                    normalizedWeight0 = weight0 / totalWeight
+                    normalizedWeight1 = weight1 / totalWeight
+                } else {
+                    // If either aspect ratio is unknown, use equal weights
+                    normalizedWeight0 = 0.5f
+                    normalizedWeight1 = 0.5f
+                }
                     
                     Column(
                         modifier = Modifier
@@ -393,12 +452,21 @@ fun MediaGrid(
                             )
                         }
                     }
-                } else if (isPortrait0 && isPortrait1) {
-                    // Both portrait: horizontal layout with proportional widths based on aspect ratios
-                    // Calculate proportional widths for each image to show maximum content
+            } else if (isPortrait0 && isPortrait1) {
+                // Both portrait: horizontal layout with proportional widths based on aspect ratios
+                // Calculate proportional widths for each image to show maximum content
+                // Handle unknown aspect ratios (-1) by using equal weights
+                val weight0: Float
+                val weight1: Float
+                if (ar0 > 0 && ar1 > 0) {
                     val totalIdealWidth = ar0 + ar1
-                    val weight0 = ar0 / totalIdealWidth
-                    val weight1 = ar1 / totalIdealWidth
+                    weight0 = ar0 / totalIdealWidth
+                    weight1 = ar1 / totalIdealWidth
+                } else {
+                    // If either aspect ratio is unknown, use equal weights
+                    weight0 = 0.5f
+                    weight1 = 0.5f
+                }
                     
                     Row(
                         modifier = Modifier
@@ -443,13 +511,24 @@ fun MediaGrid(
                             )
                         }
                     }
-                } else {
-                    // Mixed orientations: horizontal layout with proportional widths
-                    // Calculate dynamic aspect ratio based on sum of individual aspect ratios
+            } else {
+                // Mixed orientations or unknown aspect ratios: horizontal layout with proportional widths
+                // Calculate dynamic aspect ratio based on sum of individual aspect ratios
+                // Handle unknown aspect ratios (-1) by using defaults
+                val weight0: Float
+                val weight1: Float
+                val gridAspectRatio: Float
+                if (ar0 > 0 && ar1 > 0) {
                     val totalIdealWidth = ar0 + ar1
-                    val gridAspectRatio = totalIdealWidth.coerceIn(0.8f, 1.618f) // Clamp between min and max
-                    val weight0 = ar0 / totalIdealWidth
-                    val weight1 = ar1 / totalIdealWidth
+                    gridAspectRatio = totalIdealWidth.coerceIn(0.8f, 1.618f) // Clamp between min and max
+                    weight0 = ar0 / totalIdealWidth
+                    weight1 = ar1 / totalIdealWidth
+                } else {
+                    // If either aspect ratio is unknown, use equal weights and default grid aspect ratio
+                    gridAspectRatio = 1.0f // Square aspect for unknown
+                    weight0 = 0.5f
+                    weight1 = 0.5f
+                }
                     
                     Row(
                         modifier = Modifier
