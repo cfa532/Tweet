@@ -388,6 +388,56 @@ class ChatViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * Resend a failed message
+     */
+    suspend fun resendMessage(message: ChatMessage) {
+        Timber.tag("ChatViewModel").d("Attempting to resend message: ${message.id}")
+        
+        // Reset the message to sending state
+        val resendingMessage = message.copy(success = true, errorMsg = null)
+        _chatMessages.update { messages ->
+            messages.map { if (it.id == message.id) resendingMessage else it }
+        }
+        chatRepository.insertMessage(resendingMessage)
+        
+        try {
+            // Send message and get result
+            val (success, errorMsg) = HproseInstance.sendMessage(receiptId, resendingMessage)
+            
+            if (success) {
+                Timber.tag("ChatViewModel").d("Message resent successfully: ${message.content}")
+                
+                // Update ChatSession
+                val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                    appUser.mid,
+                    receiptId,
+                    resendingMessage,
+                    hasNews = false
+                )
+                chatListViewModel?.updateSession(previewMessage, hasNews = false)
+                
+                // Trigger scroll to bottom
+                _shouldScrollToBottom.value = true
+            } else {
+                // Message failed to send again, update with failure status
+                val failedMessage = resendingMessage.copy(success = false, errorMsg = errorMsg)
+                _chatMessages.update { messages ->
+                    messages.map { if (it.id == message.id) failedMessage else it }
+                }
+                chatRepository.insertMessage(failedMessage)
+            }
+        } catch (e: Exception) {
+            Timber.tag("ChatViewModel").e(e, "Error resending message")
+            // Update message with failure status
+            val failedMessage = resendingMessage.copy(success = false, errorMsg = e.message ?: "Network error")
+            _chatMessages.update { messages ->
+                messages.map { if (it.id == message.id) failedMessage else it }
+            }
+            chatRepository.insertMessage(failedMessage)
+        }
+    }
+
     @AssistedFactory
     interface ChatViewModelFactory {
         fun create(receiptId: MimeiId): ChatViewModel

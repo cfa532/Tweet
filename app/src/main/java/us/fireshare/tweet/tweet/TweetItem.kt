@@ -355,7 +355,13 @@ private fun RetweetWithContent(
                     },
                     modifier = Modifier.width(44.dp)
                 ) {
-                    author?.let { UserAvatar(user = it, size = 32) }
+                    UserAvatar(
+                        user = author ?: us.fireshare.tweet.datamodel.User(
+                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                            baseUrl = appUser.baseUrl
+                        ),
+                        size = 32
+                    )
                 }
             }
 

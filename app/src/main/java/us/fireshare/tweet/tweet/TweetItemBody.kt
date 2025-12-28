@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
@@ -105,7 +107,13 @@ fun TweetItemBody(
                     },
                     modifier = Modifier.width(48.dp)
                 ) {
-                    author?.let { UserAvatar(user = it, size = 36) }
+                    UserAvatar(
+                        user = author ?: us.fireshare.tweet.datamodel.User(
+                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                            baseUrl = appUser.baseUrl
+                        ),
+                        size = 36
+                    )
                 }
             }
 

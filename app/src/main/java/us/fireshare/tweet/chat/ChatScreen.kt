@@ -569,10 +569,6 @@ fun ChatItem(
     onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
-    // Capture string resources at composable level to avoid Android Studio warnings
-    val errorUnknownErrorText = stringResource(R.string.error_unknown_error)
-    val errorMessageFailedFormat = stringResource(R.string.error_message_failed)
-    val context = LocalContext.current
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
     
@@ -608,22 +604,6 @@ fun ChatItem(
             if (!isSentByCurrentUser) {
                 UserAvatar(user = receipt, size = 32)
                 Spacer(modifier = Modifier.width(8.dp))
-            }
-            
-            // Show failure icon for failed messages sent by current user
-            if (isSentByCurrentUser && !message.success) {
-                Icon(
-                    imageVector = Icons.Default.Error,
-                    contentDescription = stringResource(R.string.message_failed_send_tap_error),
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.CenterVertically)
-                        .clickable {
-                            val errorMessage = message.errorMsg ?: errorUnknownErrorText
-                            Toast.makeText(context, errorMessageFailedFormat.format(errorMessage), Toast.LENGTH_LONG).show()
-                        }
-                )
             }
             
             // Message content in a column with two rows
@@ -740,25 +720,27 @@ fun ChatItem(
                 }
             }
             
+            // Show failure icon for failed messages sent by current user (behind message)
+            if (isSentByCurrentUser && !message.success) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = stringResource(R.string.message_failed_send_tap_error),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.CenterVertically)
+                        .clickable {
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                viewModel.resendMessage(message)
+                            }
+                        }
+                )
+            }
+            
             if (isSentByCurrentUser) {
                 Spacer(modifier = Modifier.width(8.dp))
                 UserAvatar(user = appUser, size = 32)
-                
-                // Show failure icon for failed messages sent by current user
-                if (!message.success) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = stringResource(R.string.message_failed_send_tap_error),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable {
-                                val errorMessage = message.errorMsg ?: errorUnknownErrorText
-                                Toast.makeText(context, errorMessageFailedFormat.format(errorMessage), Toast.LENGTH_LONG).show()
-                            }
-                    )
-                }
             }
         }
         
