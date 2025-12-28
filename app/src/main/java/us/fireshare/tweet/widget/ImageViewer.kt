@@ -156,7 +156,7 @@ fun AdvancedImageViewer(
             if (initialBitmap != null) {
                 ImageLoadState(bitmap = initialBitmap, isLoading = false)
             } else {
-                ImageLoadState()
+                ImageLoadState(isLoading = true)
             }
         )
     }
