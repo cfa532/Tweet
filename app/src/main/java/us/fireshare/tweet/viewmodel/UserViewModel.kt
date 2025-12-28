@@ -1029,19 +1029,12 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            // When pageNumber is 0, load pinned tweets first and wait for completion
-            if (pageNumber == 0) {
-                loadPinnedTweets()
-                // Ensure pinned tweets are fully loaded before proceeding
-                Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
-            }
-
-            // Always load cached tweets first (especially for appUser, whose cache is shared with mainfeed)
+            // Always load cached tweets FIRST (immediately, before any network calls)
             Timber.tag("getTweets").d("Loading cached tweets for user: ${user.value.mid}")
             val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
             val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
             
-            // Update _tweets with cached tweets
+            // Update _tweets with cached tweets IMMEDIATELY (shows tweets to user right away)
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
                 val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
@@ -1057,6 +1050,12 @@ class UserViewModel @AssistedInject constructor(
             }
             
             Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
+            
+            // Load pinned tweets AFTER cached tweets are shown (only for page 0)
+            if (pageNumber == 0) {
+                loadPinnedTweets()
+                Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
+            }
             
             // If network is available, fetch more tweets from server
             if (user.value.baseUrl != null && appUser.baseUrl != null) {
