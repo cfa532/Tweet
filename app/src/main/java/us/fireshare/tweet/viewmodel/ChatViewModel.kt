@@ -380,10 +380,17 @@ class ChatViewModel @AssistedInject constructor(
     suspend fun resendMessage(message: ChatMessage) {
         Timber.tag("ChatViewModel").d("Attempting to resend message: ${message.id}")
         
-        // Reset the message to sending state
-        val resendingMessage = message.copy(success = true, errorMsg = null)
+        // Reset the message to sending state with updated timestamp
+        val currentTime = System.currentTimeMillis()
+        val resendingMessage = message.copy(
+            success = true, 
+            errorMsg = null,
+            timestamp = currentTime
+        )
+        Timber.tag("ChatViewModel").d("Updated timestamp from ${message.timestamp} to $currentTime")
+        
         _chatMessages.update { messages ->
-            messages.map { if (it.id == message.id) resendingMessage else it }
+            messages.map { if (it.id == message.id) resendingMessage else it }.sortedBy { it.timestamp }
         }
         chatRepository.insertMessage(resendingMessage)
         
