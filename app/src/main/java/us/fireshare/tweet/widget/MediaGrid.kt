@@ -52,6 +52,26 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.MediaItemView
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
+/**
+ * MediaGrid displays a grid of media items with intelligent layout based on aspect ratios.
+ * 
+ * Layout Strategy (matching iOS implementation):
+ * - Uses PROPORTIONAL SIZING based on individual media aspect ratios
+ * - Ensures maximum content visibility without excessive cropping
+ * - Applies golden ratio (0.618) for hero images in 3-item grids
+ * - Clamps grid aspect ratios between 0.8 (portrait) and 1.618 (landscape/golden ratio)
+ * 
+ * 1 Item: Uses individual aspect ratio (min 0.8)
+ * 2 Items: 
+ *   - Both portrait: Horizontal layout with proportional widths
+ *   - Both landscape: Vertical layout with proportional heights
+ *   - Mixed: Horizontal layout with dynamic proportional widths
+ * 3 Items:
+ *   - All portrait: Hero left (61.8%), two stacked right with proportional heights
+ *   - All landscape: Hero top (61.8%), two side-by-side bottom with proportional widths
+ *   - Mixed: Adapts based on first item orientation with proportional sizing
+ * 4+ Items: 2x2 grid with aspect ratio based on all items' orientation
+ */
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
 @Composable
@@ -83,15 +103,18 @@ fun MediaGrid(
 
     // Optimize: Pre-compute aspect ratios once instead of on every recomposition
     // This function is NOT @Composable to avoid unnecessary recomposition checks
+    // Matches iOS implementation for consistent cross-platform media display
     fun aspectRatioOf(item: MimeiFileType): Float {
         val itemType = inferMediaTypeFromAttachment(item)
         return when (itemType) {
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // For videos, try to get aspect ratio from stored value first
-                item.aspectRatio?.takeIf { it > 0 } ?: (4f / 3f) // Default to 4:3 to prevent shaking
+                // Default to 16:9 (standard video format) to match iOS implementation
+                item.aspectRatio?.takeIf { it > 0 } ?: (16f / 9f)
             }
             MediaType.Image -> {
-                // For images, use stored aspect ratio or default golden ratio
+                // For images, use stored aspect ratio or default golden ratio (1.618)
+                // Golden ratio provides better visual consistency than 1.0 square
                 item.aspectRatio?.takeIf { it > 0 } ?: 1.618f
             }
             else -> {
@@ -319,143 +342,156 @@ fun MediaGrid(
                 val isLandscape1 = ar1 > 1f
                 
                 if (isLandscape0 && isLandscape1) {
-                    // Both landscape: set grid's aspectRatio to 0.8 and align items vertically
+                    // Both landscape: vertical layout with proportional heights based on aspect ratios
+                    // Calculate proportional heights for each image to show maximum content
+                    val weight0 = 1f / ar0  // Inverse of aspect ratio gives proportional height
+                    val weight1 = 1f / ar1
+                    val totalWeight = weight0 + weight1
+                    val normalizedWeight0 = weight0 / totalWeight
+                    val normalizedWeight1 = weight1 / totalWeight
+                    
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(0.8f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        for (idx in 0..1) {
-                            Box(
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(normalizedWeight0)
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = idx,
-                                    autoPlay = isAutoPlayForGridIndex(idx),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(idx) },
-                                    allMediaItems = mediaItems // Pass all items for full screen navigation
-                                )
-                            }
+                                    .fillMaxSize(),
+                                index = 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) },
+                                allMediaItems = mediaItems
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(normalizedWeight1)
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                index = 1,
+                                autoPlay = isAutoPlayForGridIndex(1),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(1) },
+                                allMediaItems = mediaItems
+                            )
                         }
                     }
                 } else if (isPortrait0 && isPortrait1) {
-                    // Both portrait: set grid's aspectRatio to 1 and align them horizontally
+                    // Both portrait: horizontal layout with proportional widths based on aspect ratios
+                    // Calculate proportional widths for each image to show maximum content
+                    val totalIdealWidth = ar0 + ar1
+                    val weight0 = ar0 / totalIdealWidth
+                    val weight1 = ar1 / totalIdealWidth
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
+                            .aspectRatio(1.5f.coerceAtMost(1.618f)), // Clamp to max 1.618 (golden ratio)
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        for (idx in 0..1) {
-                            Box(
+                        Box(
+                            modifier = Modifier
+                                .weight(weight0)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = idx,
-                                    autoPlay = isAutoPlayForGridIndex(idx),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(idx) },
-                                    allMediaItems = mediaItems // Pass all items for full screen navigation
-                                )
-                            }
+                                    .fillMaxSize(),
+                                index = 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) },
+                                allMediaItems = mediaItems
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(weight1)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                index = 1,
+                                autoPlay = isAutoPlayForGridIndex(1),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(1) },
+                                allMediaItems = mediaItems
+                            )
                         }
                     }
                 } else {
-                    // Mixed orientations: set grid's ratio to 4:3 and let landscape item takes wider space
+                    // Mixed orientations: horizontal layout with proportional widths
+                    // Calculate dynamic aspect ratio based on sum of individual aspect ratios
+                    val totalIdealWidth = ar0 + ar1
+                    val gridAspectRatio = totalIdealWidth.coerceIn(0.8f, 1.618f) // Clamp between min and max
+                    val weight0 = ar0 / totalIdealWidth
+                    val weight1 = ar1 / totalIdealWidth
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(4f/3f),
+                            .aspectRatio(gridAspectRatio),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        if (isPortrait0) {
-                            // First is portrait, second is landscape
-                            Box(
+                        Box(
+                            modifier = Modifier
+                                .weight(weight0)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = 0,
-                                    autoPlay = isAutoPlayForGridIndex(0),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(0) }
-                                )
-                            }
-                            Box(
+                                    .fillMaxSize(),
+                                index = 0,
+                                autoPlay = isAutoPlayForGridIndex(0),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(0) },
+                                allMediaItems = mediaItems
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(weight1)
+                                .fillMaxHeight()
+                                .clipToBounds()
+                        ) {
+                            MediaItemView(
+                                limitedMediaList,
                                 modifier = Modifier
-                                    .weight(2f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
-                                )
-                            }
-                        } else {
-                            // First is landscape, second is portrait
-                            Box(
-                                modifier = Modifier
-                                    .weight(2f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = 0,
-                                    autoPlay = isAutoPlayForGridIndex(0),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(0) }
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
-                                )
-                            }
+                                    .fillMaxSize(),
+                                index = 1,
+                                autoPlay = isAutoPlayForGridIndex(1),
+                                inPreviewGrid = true,
+                                viewModel = viewModel,
+                                onVideoCompleted = { onVideoCompleted(1) },
+                                allMediaItems = mediaItems
+                            )
                         }
                     }
                 }
@@ -468,12 +504,18 @@ fun MediaGrid(
                 val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
                 val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
                 val isPortrait0 = ar0 < 1f
-                val isPortrait1 = ar1 < 1f
-                val isPortrait2 = ar2 < 1f
                 val goldenRatio = 0.618f
                 val remainder = 1f - goldenRatio
 
                 if (allPortrait) {
+                    // All portrait: hero on left (61.8%), two stacked on right with proportional heights
+                    // Calculate proportional heights for right-side images
+                    val weight1 = 1f / ar1  // Inverse of aspect ratio
+                    val weight2 = 1f / ar2
+                    val totalWeight = weight1 + weight2
+                    val normalizedWeight1 = weight1 / totalWeight
+                    val normalizedWeight2 = weight2 / totalWeight
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -489,9 +531,7 @@ fun MediaGrid(
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                    
+                                modifier = Modifier.fillMaxSize(),
                                 index = 0,
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
@@ -499,34 +539,52 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: right 38.2%, stacked vertically
+                        // Second and third: right 38.2%, stacked with proportional heights
                         Column(
                             modifier = Modifier.weight(remainder),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            for (idx in 1..2) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f)
-                                        .clipToBounds()
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                            
-                                        index = idx,
-                                        autoPlay = isAutoPlayForGridIndex(idx),
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onVideoCompleted = { onVideoCompleted(idx) }
-                                    )
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(normalizedWeight1)
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(normalizedWeight2)
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 2,
+                                    autoPlay = isAutoPlayForGridIndex(2),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(2) }
+                                )
                             }
                         }
                     }
                 } else if (allLandscape) {
+                    // All landscape: hero on top (61.8%), two side-by-side on bottom with proportional widths
+                    // Calculate proportional widths for bottom images
+                    val totalIdealWidth = ar1 + ar2
+                    val weight1 = ar1 / totalIdealWidth
+                    val weight2 = ar2 / totalIdealWidth
+                    
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -542,9 +600,7 @@ fun MediaGrid(
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                    
+                                modifier = Modifier.fillMaxSize(),
                                 index = 0,
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
@@ -552,43 +608,63 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: bottom 38.2%, side by side
+                        // Second and third: bottom 38.2%, side by side with proportional widths
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(remainder),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            for (idx in 1..2) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clipToBounds()
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                            
-                                        index = idx,
-                                        autoPlay = isAutoPlayForGridIndex(idx),
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onVideoCompleted = { onVideoCompleted(idx) }
-                                    )
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .weight(weight1)
+                                    .fillMaxHeight()
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(weight2)
+                                    .fillMaxHeight()
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 2,
+                                    autoPlay = isAutoPlayForGridIndex(2),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(2) }
+                                )
                             }
                         }
                     }
                 } else if (isPortrait0) {
+                    // Mixed: first is portrait (hero on left), others stacked on right with proportional heights
+                    // Calculate proportional heights for right-side images
+                    val weight1 = 1f / ar1
+                    val weight2 = 1f / ar2
+                    val totalWeight = weight1 + weight2
+                    val normalizedWeight1 = weight1 / totalWeight
+                    val normalizedWeight2 = weight2 / totalWeight
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f),
                         horizontalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: left 61.8%
+                        // First image: left with proportional width
                         Box(
                             modifier = Modifier
                                 .weight(goldenRatio)
@@ -597,8 +673,7 @@ fun MediaGrid(
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
+                                modifier = Modifier.fillMaxSize(),
                                 index = 0,
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
@@ -606,41 +681,59 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: right 38.2%, stacked vertically
+                        // Second and third: right side, stacked with proportional heights
                         Column(
                             modifier = Modifier.weight(remainder),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            for (idx in 1..2) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f)
-                                        .clipToBounds()
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                            
-                                        index = idx,
-                                        autoPlay = isAutoPlayForGridIndex(idx),
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onVideoCompleted = { onVideoCompleted(idx) }
-                                    )
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(normalizedWeight1)
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(normalizedWeight2)
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 2,
+                                    autoPlay = isAutoPlayForGridIndex(2),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(2) }
+                                )
                             }
                         }
                     }
                 } else {
+                    // Mixed: first is landscape (hero on top), others side-by-side on bottom with proportional widths
+                    // Calculate proportional widths for bottom images
+                    val totalIdealWidth = ar1 + ar2
+                    val weight1 = ar1 / totalIdealWidth
+                    val weight2 = ar2 / totalIdealWidth
+                    
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        // First image: top 61.8%
+                        // First image: top with proportional height
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -649,9 +742,7 @@ fun MediaGrid(
                         ) {
                             MediaItemView(
                                 limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                    
+                                modifier = Modifier.fillMaxSize(),
                                 index = 0,
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
@@ -659,32 +750,44 @@ fun MediaGrid(
                                 onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
-                        // Second and third: bottom 38.2%, side by side
+                        // Second and third: bottom, side by side with proportional widths
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(remainder),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            for (idx in 1..2) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clipToBounds()
-                                ) {
-                                    MediaItemView(
-                                        limitedMediaList,
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                            
-                                        index = idx,
-                                        autoPlay = isAutoPlayForGridIndex(idx),
-                                        inPreviewGrid = true,
-                                        viewModel = viewModel,
-                                        onVideoCompleted = { onVideoCompleted(idx) }
-                                    )
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .weight(weight1)
+                                    .fillMaxHeight()
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 1,
+                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(1) }
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(weight2)
+                                    .fillMaxHeight()
+                                    .clipToBounds()
+                            ) {
+                                MediaItemView(
+                                    limitedMediaList,
+                                    modifier = Modifier.fillMaxSize(),
+                                    index = 2,
+                                    autoPlay = isAutoPlayForGridIndex(2),
+                                    inPreviewGrid = true,
+                                    viewModel = viewModel,
+                                    onVideoCompleted = { onVideoCompleted(2) }
+                                )
                             }
                         }
                     }
