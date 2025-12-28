@@ -92,6 +92,17 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
                             }
                             isValid
                         }
+                        .map { attachment ->
+                            // Infer media type if it's Unknown
+                            if (attachment.type == MediaType.Unknown) {
+                                val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(attachment)
+                                Timber.tag("ChatMessageDeserializer")
+                                    .d("Inferred type for attachment ${attachment.mid}: $inferredType from fileName: ${attachment.fileName}")
+                                attachment.copy(type = inferredType)
+                            } else {
+                                attachment
+                            }
+                        }
                     // Return null if all attachments were invalid, otherwise return the valid list
                     validAttachments.ifEmpty {
                         Timber.tag("ChatMessageDeserializer")
@@ -114,7 +125,16 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
                     val deserialized = gson.fromJson(attachmentsElement, MimeiFileType::class.java)
                     // Validate attachment (mid and type must not be null)
                     if (isValidAttachment(deserialized)) {
-                        listOf(deserialized)
+                        // Infer media type if it's Unknown
+                        val finalAttachment = if (deserialized.type == MediaType.Unknown) {
+                            val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(deserialized)
+                            Timber.tag("ChatMessageDeserializer")
+                                .d("Inferred type for single attachment ${deserialized.mid}: $inferredType from fileName: ${deserialized.fileName}")
+                            deserialized.copy(type = inferredType)
+                        } else {
+                            deserialized
+                        }
+                        listOf(finalAttachment)
                     } else {
                         Timber.tag("ChatMessageDeserializer")
                             .w("Filtering out invalid single attachment: mid=${try { deserialized?.mid } catch (_: Exception) { "null" }}, type=${try { deserialized?.type } catch (_: Exception) { "null" }}")
