@@ -321,7 +321,7 @@ class UserViewModel @AssistedInject constructor(
                 try {
                     HproseInstance.uploadToIPFS(
                         uri,
-                        referenceId = null  // appUser.mid, avoid a backend bug for now.
+                        referenceId = appUser.mid
                     )
                 } catch (e: Exception) {
                     Timber.tag("updateAvatar").e(e, "Exception during uploadToIPFS: ${e.message}")
