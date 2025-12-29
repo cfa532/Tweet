@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
@@ -338,24 +339,37 @@ object HproseInstance {
                 appUser.baseUrl = "http://$entryIP"
                 appUser = appUser
             }
-
-            // THEN: Try to fetch fresh data from network in the background
-            // Pass empty string to getUser to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-            // forceRefresh ensures fresh data from server without needing to clear cache
-            val refreshedUser = fetchUser(userId, baseUrl = "", forceRefresh = true)
-            val refreshedBaseUrl = refreshedUser?.baseUrl
-            if (refreshedUser != null && refreshedBaseUrl != null && refreshedBaseUrl.isNotEmpty()) {
-                // Use the refreshed user's baseUrl
-                appUser = refreshedUser
-                TweetCacheManager.saveUser(refreshedUser)
-                Timber.tag("initAppEntry")
-                    .d("✅ App initialized with refreshed user baseUrl: ${appUser.baseUrl}")
-            } else {
-                // Network fetch failed, but we already have cached data loaded above
-                Timber.tag("initAppEntry")
-                    .w("User fetch failed, continuing with cached user data")
-            }
+            
             User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
+
+            // THEN: Fetch fresh data from network in the background (non-blocking)
+            // Launch in application scope so it continues even if this coroutine is cancelled
+            TweetApplication.applicationScope.launch {
+                Timber.tag("initAppEntry").d("Starting background user refresh...")
+                
+                try {
+                    // Use withTimeoutOrNull with 15 second timeout to prevent indefinite blocking
+                    val refreshedUser: User? = withTimeoutOrNull(15_000) {
+                        // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                        fetchUser(userId, baseUrl = "", forceRefresh = true)
+                    }
+                    
+                    if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
+                        // Use the refreshed user's baseUrl
+                        appUser = refreshedUser
+                        TweetCacheManager.saveUser(refreshedUser)
+                        User.updateUserInstance(appUser, true)
+                        Timber.tag("initAppEntry")
+                            .d("✅ Background refresh successful - baseUrl: ${appUser.baseUrl}")
+                    } else {
+                        // Network fetch failed or timed out - cached data is already loaded
+                        Timber.tag("initAppEntry")
+                            .w("Background user refresh failed/timed out, continuing with cached data")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("initAppEntry").e(e, "Error in background user refresh: ${e.message}")
+                }
+            }
             Timber.tag("initAppEntry")
                 .d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
         } else {
@@ -2515,6 +2529,7 @@ object HproseInstance {
             val result = performUserUpdate(userId, user, maxRetries, skipRetryAndBlacklist, "getUser")
             
             // If fetch failed and this is not already a retry, retry once with empty baseurl to refresh providerIP
+            // Skip retry if baseUrl is already empty (would cause another timeout with getProviderIP)
             if (result == null && !isRetry && !baseUrl.isNullOrEmpty()) {
                 Timber.tag("getUser").d("Retrying fetchUser with empty baseurl for userId: $userId")
                 userUpdateMutex.withLock {
@@ -2527,6 +2542,7 @@ object HproseInstance {
         } catch (e: Exception) {
             Timber.tag("getUser").e(e, "Exception in getUser: userId: $userId")
             // If fetch failed and this is not already a retry, retry once with empty baseurl to refresh providerIP
+            // Skip retry if baseUrl is already empty (would cause another timeout with getProviderIP)
             if (!isRetry && !baseUrl.isNullOrEmpty()) {
                 Timber.tag("getUser").d("Retrying fetchUser with empty baseurl after exception for userId: $userId")
                 userUpdateMutex.withLock {
