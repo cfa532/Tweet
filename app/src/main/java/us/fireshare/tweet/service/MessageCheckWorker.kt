@@ -114,12 +114,30 @@ class MessageCheckWorker @AssistedInject constructor(
             // Count messages from the same sender
             val messagesFromSameSender = messages.count { it.authorId == authorId }
             
-            // Try to get sender name from cache, fallback to authorId
+            // Try to get sender name from cache, fetch if not available
             val senderName = try {
-                val cachedUser = us.fireshare.tweet.datamodel.TweetCacheManager.getCachedUser(authorId)
-                cachedUser?.name ?: cachedUser?.username ?: authorId
+                var cachedUser = us.fireshare.tweet.datamodel.TweetCacheManager.getCachedUser(authorId)
+                
+                // If user not in cache or doesn't have name/username, try to fetch with short timeout
+                if (cachedUser == null || (cachedUser.name.isNullOrBlank() && cachedUser.username.isNullOrBlank())) {
+                    Timber.tag("MessageCheckWorker").d("User $authorId not in cache or missing name, fetching...")
+                    
+                    // Fetch user with 5 second timeout to avoid blocking notification
+                    cachedUser = kotlinx.coroutines.withTimeoutOrNull(5000) {
+                        us.fireshare.tweet.HproseInstance.fetchUser(authorId, skipRetryAndBlacklist = true)
+                    }
+                    
+                    if (cachedUser != null) {
+                        Timber.tag("MessageCheckWorker").d("Fetched user: ${cachedUser.name ?: cachedUser.username}")
+                    }
+                }
+                
+                // Use name (alias) first, fallback to username, then authorId
+                cachedUser?.name?.takeIf { it.isNotBlank() } 
+                    ?: cachedUser?.username?.takeIf { it.isNotBlank() }
+                    ?: authorId
             } catch (e: Exception) {
-                Timber.tag("MessageCheckWorker").d("Could not get cached user for $authorId, using ID")
+                Timber.tag("MessageCheckWorker").e(e, "Error getting sender name for $authorId")
                 authorId
             }
             
