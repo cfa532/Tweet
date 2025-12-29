@@ -325,6 +325,7 @@ private fun RetweetWithContent(
     onScrollToTop: (suspend () -> Unit)? = null
 ) {
     val navController = LocalNavController.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
     val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
@@ -370,7 +371,7 @@ private fun RetweetWithContent(
                             navController.navigate(NavTweet.UserProfile(tweet.authorId))
                         } else {
                             timber.log.Timber.tag("TweetItem").d("Already on this user's profile, scrolling to top")
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                            coroutineScope.launch {
                                 onScrollToTop?.invoke()
                             }
                         }

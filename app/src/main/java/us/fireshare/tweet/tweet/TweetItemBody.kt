@@ -61,6 +61,7 @@ fun TweetItemBody(
     onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
 ) {
     val navController = LocalNavController.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val tweet by viewModel.tweetState.collectAsState()
 
     // Observe author changes reactively via StateFlow
@@ -112,7 +113,7 @@ fun TweetItemBody(
                             navController.navigate(NavTweet.UserProfile(tweet.authorId))
                         } else {
                             timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                            coroutineScope.launch {
                                 onScrollToTop?.invoke()
                             }
                         }

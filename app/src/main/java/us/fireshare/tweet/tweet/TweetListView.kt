@@ -134,23 +134,8 @@ fun TweetListView(
     val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
     val previousUserId = remember { mutableStateOf(currentUserId) }
 
-    // Consolidated LaunchedEffect for tweets-related operations
-    LaunchedEffect(tweets, tweets.size, currentUserId) {
-        // Debug logging for parameter changes
-        if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
-            Timber.tag("TweetListView")
-                .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.intValue}, userId=$currentUserId->${previousUserId.value}")
-            previousTweetsSize.intValue = tweets.size
-            previousUserId.value = currentUserId
-        }
-        
-        // Track tweets list size changes
-        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
-        
-        // Update SharedViewModel's tweetListViewModel with the current tweets
-        tweetListViewModel.setTweetList(tweets)
-        Timber.tag("TweetListView").d("Updated SharedViewModel's tweetListViewModel with our instance and ${tweets.size} tweets")
-    }
+    // Track the first tweet's ID to detect when new tweets are loaded at the top
+    val firstTweetId = remember { mutableStateOf<MimeiId?>(null) }
 
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -174,6 +159,36 @@ fun TweetListView(
     // Create scroll-to-top function
     val scrollToTop: suspend () -> Unit = {
         listState.animateScrollToItem(0)
+    }
+
+    // Consolidated LaunchedEffect for tweets-related operations
+    LaunchedEffect(tweets, tweets.size, currentUserId) {
+        // Debug logging for parameter changes
+        if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
+            Timber.tag("TweetListView")
+                .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.intValue}, userId=$currentUserId->${previousUserId.value}")
+            previousTweetsSize.intValue = tweets.size
+            previousUserId.value = currentUserId
+        }
+        
+        // Track tweets list size changes
+        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
+        
+        // Detect when new tweets are added at the top (first tweet changed)
+        val currentFirstTweetId = tweets.firstOrNull()?.mid
+        if (currentFirstTweetId != null && firstTweetId.value != null && currentFirstTweetId != firstTweetId.value) {
+            // New tweets were added at the top - scroll to top
+            Timber.tag("TweetListView").d("First tweet changed from ${firstTweetId.value} to $currentFirstTweetId - scrolling to top")
+            withContext(Dispatchers.Main) {
+                listState.scrollToItem(0, 0)
+                savedScrollPosition.value = Pair(0, 0)
+            }
+        }
+        firstTweetId.value = currentFirstTweetId
+        
+        // Update SharedViewModel's tweetListViewModel with the current tweets
+        tweetListViewModel.setTweetList(tweets)
+        Timber.tag("TweetListView").d("Updated SharedViewModel's tweetListViewModel with our instance and ${tweets.size} tweets")
     }
 
     // Detect user changes and initialize data
@@ -418,6 +433,12 @@ fun TweetListView(
                         val result = fetchTweets(0) // Await the suspend function
                         Timber.tag("TweetListView")
                             .d("Pull refresh: fetchTweets completed, returned ${result.size} tweets")
+                    }
+                    // Reset scroll position to top after refresh
+                    withContext(Dispatchers.Main) {
+                        listState.scrollToItem(0, 0)
+                        savedScrollPosition.value = Pair(0, 0)
+                        Timber.tag("TweetListView").d("Reset scroll position to top after refresh")
                     }
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Error during pull refresh")

@@ -78,18 +78,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("TweetFeedViewModel").d("Loading cached tweets immediately...")
                 loadCachedTweetsOnly()
                 
-                // Clear loading state early so UI shows cached tweets
-                initState.value = false
-                Timber.tag("TweetFeedViewModel").d("initState cleared, cached tweets should be visible now")
+                val hasCachedTweets = _tweets.value.isNotEmpty()
                 
-                // Then try to fetch from network in background
+                if (hasCachedTweets) {
+                    // We have cached tweets - clear loading state early so UI shows them
+                    initState.value = false
+                    Timber.tag("TweetFeedViewModel").d("Found ${_tweets.value.size} cached tweets, clearing spinner")
+                } else {
+                    // No cached tweets (first time user or after login) - keep spinner until network loads
+                    Timber.tag("TweetFeedViewModel").d("No cached tweets found, keeping spinner until network fetch completes")
+                }
+                
+                // Try to fetch from network
                 waitForAppUser()
                 if (appUser.baseUrl != null) {
                     // BaseUrl available, try to load tweets from server
                     Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
                     refresh(0)
                 } else {
-                    // BaseUrl not available, cached tweets already loaded
+                    // BaseUrl not available, cached tweets already loaded (or none available)
                     Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
                 }
             } catch (e: Exception) {
@@ -104,7 +111,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     _tweets.value = emptyList()
                 }
             } finally {
-                // Ensure initState is always cleared
+                // Ensure initState is always cleared (in case network fetch happened)
                 initState.value = false
                 Timber.tag("TweetFeedViewModel").d("Initialization complete, initState=false")
             }
@@ -120,7 +127,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             _tweets.value = cachedTweets
                 .distinctBy { it.mid }
                 .sortedByDescending { it.timestamp }
-            Timber.tag("TweetFeedViewModel").d("Loaded ${cachedTweets.size} cached tweets")
+            
+            // Log timestamps to verify sort order
+            Timber.tag("TweetFeedViewModel").d("Loaded ${cachedTweets.size} cached tweets, sorted by timestamp DESC:")
+            _tweets.value.take(5).forEachIndexed { index, tweet ->
+                Timber.tag("TweetFeedViewModel").d("  [$index] ${tweet.mid} - timestamp: ${tweet.timestamp} (${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(tweet.timestamp))})")
+            }
         } catch (e: Exception) {
             Timber.tag("TweetFeedViewModel").e(e, "Failed to load cached tweets")
             _tweets.value = emptyList()
