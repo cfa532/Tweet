@@ -168,31 +168,34 @@ class UserViewModel @AssistedInject constructor(
     /**
      * Refresh user data to ensure it's up to date (e.g., after profile editing)
      * Includes retry logic.
+     * This function launches a coroutine and returns immediately (non-blocking).
      */
-    suspend fun refreshUserData(maxRetries: Int = 3) {
-        try {
-            refreshUserWithRetry(maxRetries)
+    fun refreshUserData(maxRetries: Int = 3) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                refreshUserWithRetry(maxRetries)
 
-            // If this is the current user's profile, update appUser from refreshed data
-            if (userId == appUser.mid) {
-                // Update appUser singleton with server data
-                User.updateUserInstance(user.value)
+                // If this is the current user's profile, update appUser from refreshed data
+                if (userId == appUser.mid) {
+                    // Update appUser singleton with server data
+                    User.updateUserInstance(user.value)
 
-                // Ensure appUser reference points to the updated singleton
-                appUser = User.getInstance(appUser.mid)
-                TweetCacheManager.saveUser(appUser)
+                    // Ensure appUser reference points to the updated singleton
+                    appUser = User.getInstance(appUser.mid)
+                    TweetCacheManager.saveUser(appUser)
+                }
+
+                // Update count variables from the refreshed user data (which now includes appUser if same user)
+                _bookmarksCount.value = user.value.bookmarksCount
+                _favoritesCount.value = user.value.favoritesCount
+                _followersCount.value = user.value.followersCount
+                _followingsCount.value = user.value.followingCount
+                _tweetCount.value = user.value.tweetCount
+
+                Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
+            } catch (e: Exception) {
+                Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
             }
-
-            // Update count variables from the refreshed user data (which now includes appUser if same user)
-            _bookmarksCount.value = user.value.bookmarksCount
-            _favoritesCount.value = user.value.favoritesCount
-            _followersCount.value = user.value.followersCount
-            _followingsCount.value = user.value.followingCount
-            _tweetCount.value = user.value.tweetCount
-
-            Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
-        } catch (e: Exception) {
-            Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
         }
     }
 
