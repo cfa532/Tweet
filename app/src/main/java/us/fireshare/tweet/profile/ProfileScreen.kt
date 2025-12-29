@@ -238,7 +238,8 @@ private fun ProfileContentWithTweetListView(
                         TweetItem(
                             tweet,
                             parentEntry,
-                            context = if (userId == appUser.mid) "appUserProfile" else "default"
+                            context = if (userId == appUser.mid) "appUserProfile" else "default",
+                            currentUserId = userId
                         )
                     }
 

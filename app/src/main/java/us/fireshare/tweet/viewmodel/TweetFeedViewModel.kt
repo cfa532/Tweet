@@ -74,26 +74,39 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         isInitialized = true
         viewModelScope.launch(IO) {
             try {
+                // Load cached tweets immediately to show something to the user
+                Timber.tag("TweetFeedViewModel").d("Loading cached tweets immediately...")
+                loadCachedTweetsOnly()
+                
+                // Clear loading state early so UI shows cached tweets
+                initState.value = false
+                Timber.tag("TweetFeedViewModel").d("initState cleared, cached tweets should be visible now")
+                
+                // Then try to fetch from network in background
                 waitForAppUser()
                 if (appUser.baseUrl != null) {
                     // BaseUrl available, try to load tweets from server
+                    Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
                     refresh(0)
                 } else {
-                    // BaseUrl not available, load cached tweets only
-                    Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, loading cached tweets only")
-                    loadCachedTweetsOnly()
+                    // BaseUrl not available, cached tweets already loaded
+                    Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
                 }
             } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization, loading cached tweets")
-                // Even on error, try to load cached tweets
+                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization: ${e.message}")
+                // Ensure cached tweets are loaded even on error
                 try {
-                    loadCachedTweetsOnly()
+                    if (_tweets.value.isEmpty()) {
+                        loadCachedTweetsOnly()
+                    }
                 } catch (cacheError: Exception) {
                     Timber.tag("TweetFeedViewModel").e(cacheError, "Failed to load cached tweets")
                     _tweets.value = emptyList()
                 }
             } finally {
+                // Ensure initState is always cleared
                 initState.value = false
+                Timber.tag("TweetFeedViewModel").d("Initialization complete, initState=false")
             }
         }
     }
@@ -257,13 +270,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             }
 
             /**
-             * Load tweet feed from network
+             * Load tweet feed from network with error handling
              * */
-            val tweetsWithNulls = HproseInstance.getTweetFeed(
-                appUser,
-                pageNumber,
-                pageSize,
-            )
+            val tweetsWithNulls = try {
+                HproseInstance.getTweetFeed(
+                    appUser,
+                    pageNumber,
+                    pageSize,
+                )
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error fetching tweet feed (page $pageNumber): ${e.message}")
+                // Return empty list on error - cached tweets are already shown above
+                if (pageNumber == 0) {
+                    Timber.tag("MainFeed").w("⚠️ Network fetch failed, showing ${_tweets.value.size} cached tweets")
+                }
+                emptyList()
+            }
 
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()

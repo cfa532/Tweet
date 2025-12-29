@@ -56,7 +56,9 @@ fun TweetItemBody(
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
-    context: String = "default"
+    context: String = "default",
+    currentUserId: us.fireshare.tweet.datamodel.MimeiId? = null, // Current profile userId to prevent duplicate navigation
+    onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
 ) {
     val navController = LocalNavController.current
     val tweet by viewModel.tweetState.collectAsState()
@@ -103,7 +105,17 @@ fun TweetItemBody(
             ) {
                 IconButton(
                     onClick = {
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        // Only navigate if we're not already on this user's profile
+                        timber.log.Timber.tag("TweetItemBody").d("Avatar clicked: authorId=${tweet.authorId}, currentUserId=$currentUserId")
+                        if (tweet.authorId != currentUserId) {
+                            timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.authorId}")
+                            navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        } else {
+                            timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                onScrollToTop?.invoke()
+                            }
+                        }
                     },
                     modifier = Modifier.width(48.dp)
                 ) {

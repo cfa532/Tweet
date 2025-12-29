@@ -66,7 +66,9 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null, // Current profile userId to prevent duplicate navigation
+    onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
 ) {
     // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
     val activity = LocalActivity.current as ComponentActivity
@@ -146,7 +148,9 @@ fun TweetItem(
                     isVisible = isVisible,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop
                 )
             }
             isRetweetWithContent -> {
@@ -155,12 +159,14 @@ fun TweetItem(
                     tweet = tweet,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop
                 )
             }
             else -> {
                 // Original tweet
-                TweetItemBody(viewModel, parentEntry = parentEntry, context = context)
+                TweetItemBody(viewModel, parentEntry = parentEntry, context = context, currentUserId = currentUserId, onScrollToTop = onScrollToTop)
             }
         }
     }
@@ -173,7 +179,9 @@ private fun RetweetContent(
     isVisible: Boolean,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null,
+    onScrollToTop: (suspend () -> Unit)? = null
 ) {
     val navController = LocalNavController.current
     Surface(
@@ -288,7 +296,9 @@ private fun RetweetContent(
                             parentEntry = parentEntry,
                             parentTweet = tweet,
                             modifier = Modifier.offset(y = (-8).dp),
-                            context = context
+                            context = context,
+                            currentUserId = currentUserId,
+                            onScrollToTop = onScrollToTop
                         )
                     }
                 }
@@ -310,7 +320,9 @@ private fun RetweetWithContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null,
+    onScrollToTop: (suspend () -> Unit)? = null
 ) {
     val navController = LocalNavController.current
     // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
@@ -351,7 +363,17 @@ private fun RetweetWithContent(
             Column {
                 IconButton(
                     onClick = {
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        // Only navigate if we're not already on this user's profile
+                        timber.log.Timber.tag("TweetItem").d("Avatar clicked in RetweetWithContent: authorId=${tweet.authorId}, currentUserId=$currentUserId")
+                        if (tweet.authorId != currentUserId) {
+                            timber.log.Timber.tag("TweetItem").d("Navigating to profile: ${tweet.authorId}")
+                            navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        } else {
+                            timber.log.Timber.tag("TweetItem").d("Already on this user's profile, scrolling to top")
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                onScrollToTop?.invoke()
+                            }
+                        }
                     },
                     modifier = Modifier.width(44.dp)
                 ) {

@@ -103,7 +103,7 @@ fun FollowingsTweet(
             showPrivateTweets = false,
             parentEntry = parentEntry,
             onScrollStateChange = onScrollStateChange,
-            currentUserId = appUser.mid, // Pass current user ID for change detection
+            // Don't pass currentUserId on main feed - it's only for profile screens
             onTweetUnavailable = { tweetId ->
                 // Remove the tweet from the list when it becomes unavailable
                 viewModel.removeTweet(tweetId)
