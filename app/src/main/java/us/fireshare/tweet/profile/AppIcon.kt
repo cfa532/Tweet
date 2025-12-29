@@ -67,12 +67,13 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val avatarMid = user.avatar
+    val baseUrl = user.baseUrl
 
-    // Watch user.avatar for changes - reset state when avatarMid changes
-    var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
+    // Watch user.avatar and user.baseUrl for changes - reset state when either changes
+    var loadState by remember(avatarMid, baseUrl) { mutableStateOf(AvatarLoadState()) }
 
-    // React to avatar changes - reset state immediately when avatarMid changes
-    LaunchedEffect(avatarMid) {
+    // React to avatar or baseUrl changes - reset state immediately when either changes
+    LaunchedEffect(avatarMid, baseUrl) {
         // Reset state immediately when avatar changes to clear old bitmap
         loadState = AvatarLoadState()
         
