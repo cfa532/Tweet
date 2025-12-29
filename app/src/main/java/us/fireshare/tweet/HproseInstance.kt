@@ -1140,9 +1140,9 @@ object HproseInstance {
                 // Update in-memory appUser with new values
                 updateAppUserInMemory(alias, profile, hostId, cloudDrivePort)
 
-                // Clear user cache to ensure fresh data is loaded
-                TweetCacheManager.removeCachedUser(appUser.mid)
-                Timber.tag("updateUserCore").d("Cleared user cache for: ${appUser.mid}")
+                // Save updated appUser to cache so cached tweets maintain their author reference
+                TweetCacheManager.saveUser(appUser)
+                Timber.tag("updateUserCore").d("Saved updated user to cache: ${appUser.mid}")
 
                 return Pair(true, null)
             } else {
