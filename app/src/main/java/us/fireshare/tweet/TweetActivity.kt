@@ -16,7 +16,12 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat.getString
 import androidx.core.content.FileProvider
@@ -80,89 +85,62 @@ class TweetActivity : ComponentActivity() {
             }
         }
 
-        initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@TweetActivity) {
-                // Callback called as soon as baseUrl is ready - show UI immediately
-                Timber.tag("TweetActivity").d("BaseUrl ready, showing UI")
-                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
-                
-                // Launch background tasks
-                lifecycleScope.launch(IO) {
-                    delay(30000) // 30 second delay to ensure app is fully initialized
-                    activityViewModel.checkForUpgrade(this@TweetActivity)
+        // Set up UI early (but don't render content until isAppReady)
+        setContent {
+            var isAppReady by remember { mutableStateOf(activityViewModel.isAppReady.value) }
+            LaunchedEffect(Unit) {
+                snapshotFlow { activityViewModel.isAppReady.value }.collect {
+                    isAppReady = it
                 }
+            }
+            val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
+            ThemeManager.updateThemeMode(initialThemeMode)
 
-                // Resume incomplete uploads on app startup (with 10s delay)
-                lifecycleScope.launch(IO) {
-                    kotlinx.coroutines.delay(10000) // 10 second delay
-                    HproseInstance.resumeIncompleteUploads(this@TweetActivity)
+            TweetTheme(themeMode = ThemeManager.currentThemeMode) {
+                if (isAppReady) {
+                    Scaffold(
+                        modifier = Modifier.fillMaxWidth()
+                    ) { innerPadding ->
+                        TweetNavGraph(
+                            appLinkIntent = activityViewModel.currentIntent.value,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
                 }
             }
         }
 
+        // Start initialization
         lifecycleScope.launch {
             try {
-                // Reduced timeout since UI now shows as soon as baseUrl is ready (not waiting for full user fetch)
-                withTimeoutOrNull(8000) { // 8 second timeout for finding entry IP
-                    initJob.await()   // wait until network ready and baseUrl is set
-                } ?: run {
-                    Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
-                    activityViewModel.isAppReady.value = true   // Show UI anyway on timeout
+                HproseInstance.init(this@TweetActivity) {
+                    // AppUser loaded, show UI
+                    Timber.tag("TweetActivity").d("AppUser loaded, showing UI")
+                    activityViewModel.isAppReady.value = true
                 }
-                
-                // activityViewModel.isAppReady is now set to true in the callback from HproseInstance.init()
-                // when baseUrl is ready, so we don't need to set it again here if callback was invoked
 
-                // Check for new messages and update badge after initialization completes
-                // This ensures badge is updated even if the callback in init() didn't run
-                // (e.g., if chatSessionRepository wasn't initialized yet)
+                // Background tasks
+                launch(IO) {
+                    delay(30000)
+                    activityViewModel.checkForUpgrade(this@TweetActivity)
+                }
+
+                launch(IO) {
+                    delay(10000)
+                    HproseInstance.resumeIncompleteUploads(this@TweetActivity)
+                }
+
                 launch(IO) {
                     if (::chatSessionRepository.isInitialized) {
                         checkMessagesAndUpdateBadge()
-                        Timber.tag("TweetActivity").d("Checked messages after initialization complete")
-                    } else {
-                        Timber.tag("TweetActivity").d("ChatSessionRepository not initialized yet after initJob completion")
                     }
                 }
 
-                // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
 
-                setContent {
-                    // Initialize theme manager with current preference
-                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
-                    ThemeManager.updateThemeMode(initialThemeMode)
-
-                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
-                        Scaffold(
-                            modifier = Modifier.fillMaxWidth()
-                        ) { innerPadding ->
-                            TweetNavGraph(
-                                appLinkIntent = activityViewModel.currentIntent.value,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        }
-                    }
-                }
             } catch (e: Exception) {
                 Timber.tag("TweetActivity").e(e, "Error during app initialization")
-                // Still show the app even if initialization fails
                 activityViewModel.isAppReady.value = true
-                setContent {
-                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
-                    ThemeManager.updateThemeMode(initialThemeMode)
-
-                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
-                        Scaffold(
-                            modifier = Modifier.fillMaxWidth()
-                        ) { innerPadding ->
-                            TweetNavGraph(
-                                appLinkIntent = activityViewModel.currentIntent.value,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        }
-                    }
-                }
             }
         }
         

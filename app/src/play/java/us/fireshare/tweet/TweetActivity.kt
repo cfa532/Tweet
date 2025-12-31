@@ -16,7 +16,12 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat.getString
 import androidx.core.net.toUri
@@ -73,86 +78,62 @@ class PlayTweetActivity : ComponentActivity() {
             }
         }
 
-        initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@PlayTweetActivity) {
-                // Callback called as soon as baseUrl is ready - show UI immediately
-                Timber.tag("PlayTweetActivity").d("BaseUrl ready, showing UI")
-                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
-                
-                // Resume incomplete uploads on app startup (with 10s delay)
-                lifecycleScope.launch(IO) {
-                    kotlinx.coroutines.delay(10000) // 10 second delay
-                    HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
+        // Set up UI early (but don't render content until isAppReady)
+        setContent {
+            var isAppReady by remember { mutableStateOf(activityViewModel.isAppReady.value) }
+            LaunchedEffect(Unit) {
+                snapshotFlow { activityViewModel.isAppReady.value }.collect {
+                    isAppReady = it
+                }
+            }
+            val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
+            ThemeManager.updateThemeMode(initialThemeMode)
+
+            TweetTheme(themeMode = ThemeManager.currentThemeMode) {
+                if (isAppReady) {
+                    Scaffold(
+                        modifier = Modifier.fillMaxWidth()
+                    ) { innerPadding ->
+                        TweetNavGraph(
+                            appLinkIntent = activityViewModel.currentIntent.value,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
                 }
             }
         }
 
+        // Start initialization
         lifecycleScope.launch {
             try {
-                // Reduced timeout since UI now shows as soon as baseUrl is ready
-                withTimeoutOrNull(8000) { // 8 second timeout for finding entry IP
-                    initJob.await()   // wait until network ready and baseUrl is set
-                } ?: run {
-                    Timber.tag("PlayTweetActivity").w("Network initialization timed out, proceeding with app startup")
-                    activityViewModel.isAppReady.value = true   // Show UI anyway on timeout
+                HproseInstance.init(this@PlayTweetActivity) {
+                    // AppUser loaded, show UI
+                    Timber.tag("PlayTweetActivity").d("AppUser loaded, showing UI")
+                    activityViewModel.isAppReady.value = true
                 }
 
-                // activityViewModel.isAppReady is now set in the callback from HproseInstance.init()
-
-                // Request notification permission on app startup
-                requestNotificationPermissionIfNeeded()
-
-                // Load entry URLs (required for all versions including Play)
-                launch {
-                    delay(30000) // 30 second delay to ensure app is fully initialized
+                // Background tasks
+                launch(IO) {
+                    delay(30000)
                     activityViewModel.loadEntryUrls()
                 }
 
-                // Handle initial intent
-                activityViewModel.currentIntent.value = intent
-                handleIntent(intent)
-
-                setContent {
-                    // Initialize theme manager with current preference
-                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
-                    ThemeManager.updateThemeMode(initialThemeMode)
-
-                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
-                        Scaffold(
-                            modifier = Modifier.fillMaxWidth()
-                        ) { innerPadding ->
-                            TweetNavGraph(
-                                appLinkIntent = activityViewModel.currentIntent.value,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        }
-                    }
+                launch(IO) {
+                    delay(10000)
+                    HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
                 }
+
+                requestNotificationPermissionIfNeeded()
+
             } catch (e: Exception) {
-                Timber.tag("TweetActivity").e(e, "Error during app initialization")
-                // Still show the app even if initialization fails
+                Timber.tag("PlayTweetActivity").e(e, "Error during app initialization")
                 activityViewModel.isAppReady.value = true
-                // Handle initial intent
-                activityViewModel.currentIntent.value = intent
-                handleIntent(intent)
-                
-                setContent {
-                    val initialThemeMode = HproseInstance.preferenceHelper.getThemeMode()
-                    ThemeManager.updateThemeMode(initialThemeMode)
-
-                    TweetTheme(themeMode = ThemeManager.currentThemeMode) {
-                        Scaffold(
-                            modifier = Modifier.fillMaxWidth()
-                        ) { innerPadding ->
-                            TweetNavGraph(
-                                appLinkIntent = activityViewModel.currentIntent.value,
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                        }
-                    }
-                }
             }
         }
+        
+        // Handle initial intent
+        activityViewModel.currentIntent.value = intent
+        handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -484,19 +484,19 @@ object HproseInstance {
             val hasCachedUser = cachedUser != null
             
             if (cachedUser != null) {
-                // Create a NEW User object with cached data and updated baseUrl
-                // This ensures StateFlow properly detects the change and triggers UI recomposition
-                appUser = cachedUser.copy(baseUrl = "http://$entryIP")
+                // Update singleton instance with cached data
+                User.updateUserInstance(cachedUser, true)
+                appUser = User.getInstance(userId)!!
+                appUser.baseUrl = "http://$entryIP"
                 Timber.tag("initAppEntry")
                     .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
             } else {
-                // No cached user, create new User object with baseUrl
-                appUser = appUser.copy(baseUrl = "http://$entryIP")
+                // No cached user, just update baseUrl
+                appUser.baseUrl = "http://$entryIP"
+                User.updateUserInstance(appUser, true)
                 Timber.tag("initAppEntry")
                     .d("⚠️ No cached user found, will fetch from network before showing UI")
             }
-            
-            User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
 
             // If we have cached user data, show UI immediately
             // Otherwise, wait for network fetch to complete first
