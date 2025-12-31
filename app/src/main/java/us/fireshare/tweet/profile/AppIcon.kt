@@ -67,15 +67,32 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val avatarMid = user.avatar
-    val baseUrl = user.baseUrl
 
-    // Only watch user.avatar for changes - reset state only when avatar ID changes
-    // baseUrl changes should not trigger a reload since the cached avatar is still valid
+    // Watch both avatar and user object - state resets only when avatar ID changes,
+    // but we recompose when user object changes to ensure toolbar updates
     var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-    // React to avatar changes only - reset state immediately when avatar ID changes
-    LaunchedEffect(avatarMid) {
-        // Reset state immediately when avatar changes to clear old bitmap
+    // React to avatar changes AND user object changes
+    // State reset only happens when avatarMid changes, but effect reruns to update URLs
+    LaunchedEffect(avatarMid, user) {
+        // Capture baseUrl inside LaunchedEffect to always use current value
+        val currentBaseUrl = user.baseUrl
+        
+        // Only reset state if avatarMid changed from the current loaded state
+        if (loadState.bitmap != null && !avatarMid.isNullOrEmpty()) {
+            // We have a cached bitmap, check if it matches the current avatar ID
+            val originalMid = "${avatarMid}_original"
+            val cachedBitmap = withContext(Dispatchers.IO) {
+                ImageCacheManager.getCachedImage(context, originalMid) 
+                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
+            }
+            if (cachedBitmap != null && cachedBitmap == loadState.bitmap) {
+                // Same avatar, keep using cached bitmap - don't reload
+                return@LaunchedEffect
+            }
+        }
+        
+        // Reset state when avatar changes or first load
         loadState = AvatarLoadState()
         
         if (!avatarMid.isNullOrEmpty()) {
@@ -92,7 +109,7 @@ fun UserAvatar(
             } else {
                 // Not cached, need to load it
                 Timber.tag("UserAvatar").d("Avatar not cached, loading from server: $avatarMid")
-                val avatarUrl = getMediaUrl(avatarMid, baseUrl)
+                val avatarUrl = getMediaUrl(avatarMid, currentBaseUrl)
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
                 try {
