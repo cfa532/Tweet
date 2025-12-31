@@ -281,7 +281,17 @@ object HproseInstance {
         }
         set(value) {
             val oldBaseUrl = _appUserState.value.baseUrl
+            val oldAvatar = _appUserState.value.avatar
+            
+            // Always emit to StateFlow, even if same reference
+            // This ensures UI updates when User object fields change
             _appUserState.value = value
+            
+            // Log if avatar changed (helps debug toolbar avatar issues)
+            if (oldAvatar != value.avatar) {
+                Timber.tag("appUser").d("Avatar updated: $oldAvatar -> ${value.avatar}")
+            }
+            
             // If baseUrl changed from null to a valid value, trigger tweet feed refresh
             if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
                 Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")
@@ -503,8 +513,13 @@ object HproseInstance {
                         appUser = refreshedUser
                         TweetCacheManager.saveUser(refreshedUser)
                         User.updateUserInstance(appUser, true)
+                        
+                        // CRITICAL: Force StateFlow to emit updated appUser to trigger UI recomposition
+                        // This ensures toolbar avatar updates when avatar changes
+                        _appUserState.value = appUser
+                        
                         Timber.tag("initAppEntry")
-                            .d("✅ Background refresh successful - baseUrl: ${appUser.baseUrl}")
+                            .d("✅ Background refresh successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
                     } else {
                         // Network fetch failed or timed out - cached data is already loaded
                         Timber.tag("initAppEntry")
@@ -2703,14 +2718,8 @@ object HproseInstance {
             // - If baseUrl param is null/default: use normal cache logic
             // - User's actual baseUrl comes from their singleton (cached from previous fetch) or gets resolved
             //
-            // We ONLY set user.baseUrl here if explicitly forcing to empty (which triggers resolution)
-            // Otherwise, preserve user's existing cached baseUrl
-            if (baseUrl != null && baseUrl.isEmpty()) {
-                // Empty string explicitly passed - clear user's baseUrl to force IP resolution
-                user.baseUrl = null
-            }
-            // For all other cases (null, appUser.baseUrl default, or specific URL), 
-            // keep user's existing baseUrl - don't overwrite it!
+            // DO NOT modify user.baseUrl here! Let resolveAndUpdateBaseUrl handle it.
+            // This prevents clearing appUser.baseUrl if fetch fails.
             
             // performUserUpdate handles retry logic with NodePool integration
             // Pass baseUrl parameter as hint for IP resolution logic
@@ -2834,11 +2843,11 @@ object HproseInstance {
 
     /**
      * Update user data from server using "get_user" entry with retry logic
-     * Matches iOS implementation: first attempt uses existing baseUrl, retries always resolve fresh IP
+     * Matches iOS implementation: forceFreshIP is determined by user's baseUrl, not the parameter
      * @param user User instance to update
      * @param maxRetries Maximum retry attempts
      * @param skipRetryAndBlacklist Skip retry and blacklist logic
-     * @param baseUrlHint Hint from fetchUser parameter ("" forces fresh IP, null uses defaults)
+     * @param baseUrlHint Hint from fetchUser parameter (for future use, not currently used)
      * @return true if user data was successfully fetched and updated, false otherwise
      */
     private suspend fun updateUserFromServerWithRetry(
@@ -2850,8 +2859,9 @@ object HproseInstance {
         val originalBaseUrl = user.baseUrl
         val hasExpired = user.hasExpired
         val userHasBaseUrl = !user.baseUrl.isNullOrEmpty()
-        // Force fresh IP if: baseUrlHint is "" (explicit), or user has no baseUrl, or cache expired
-        val forceFreshIP = (baseUrlHint != null && baseUrlHint.isEmpty()) || originalBaseUrl.isNullOrEmpty() || hasExpired
+        // MATCH iOS: Only force fresh IP if we don't have a baseUrl at all
+        // Don't force fresh IP just because user data expired - that's why we're fetching it!
+        val forceFreshIP = originalBaseUrl.isNullOrEmpty()
         
         var lastError: Exception? = null
         
@@ -2888,7 +2898,20 @@ object HproseInstance {
                 val success = when (rawResponse) {
                     is Map<*, *> -> processUserDataResponse(user, rawResponse, skipRetryAndBlacklist)
                     null -> {
-                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt")
+                        // MATCH iOS: Clear baseUrl and let retry loop handle it
+                        // This ensures next attempt will resolve fresh IP
+                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
+                        user.baseUrl = null
+                        
+                        // If this was the last attempt, fail
+                        if (attempt >= maxRetries) {
+                            Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
+                            if (!skipRetryAndBlacklist) {
+                                BlackList.recordFailure(user.mid)
+                            }
+                        } else {
+                            Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
+                        }
                         throw Exception("User not found - null response from server")
                     }
                     else -> {

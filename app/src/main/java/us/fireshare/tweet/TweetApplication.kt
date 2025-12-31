@@ -51,7 +51,7 @@ class TweetApplication : Application(), ComponentCallbacks2 {
                         )
                         if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                             HproseInstance.appUser = refreshedUser
-                            Timber.tag("AppLifecycle").d("✅ AppUser refreshed successfully on foreground")
+                            Timber.tag("AppLifecycle").d("✅ AppUser refreshed successfully on foreground - avatar: ${refreshedUser.avatar}")
                         } else {
                             Timber.tag("AppLifecycle").w("Failed to refresh appUser on foreground")
                         }
