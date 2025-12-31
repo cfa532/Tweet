@@ -262,9 +262,9 @@ object HproseInstance {
      */
     val appUserState: StateFlow<User> = _appUserState.asStateFlow()
     
-    // Lazy initialization of MediaUploadService
+    // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
-        MediaUploadService(applicationContext, httpClient, appUser, appId)
+        MediaUploadService(applicationContext, uploadHttpClient, appUser, appId)
     }
     
     /**
@@ -3516,21 +3516,37 @@ object HproseInstance {
     }
 
     /**
-     * Ktor HTTP client with optimized connection pooling for distributed nodes
-     * - Supports high concurrency for multiple node connections
-     * - Reuses connections efficiently across requests to same nodes
-     * - Proper timeout configuration for upload/download operations
+     * Ktor HTTP client for general API calls with right-sized connection pooling
+     * - Optimized for typical API request patterns (feed, profiles, etc.)
+     * - Most API calls complete in < 1 second, so connections are quickly reused
+     * - 100 connections is sufficient for heavy concurrent load
      */
     val httpClient = HttpClient(CIO) {
         engine {
-            maxConnectionsCount = 1000 // Total connections across all nodes
-            // CIO engine handles connection pooling automatically
-            // Connections are reused efficiently per host
+            maxConnectionsCount = 100 // Right-sized for API calls (reduced from 1000)
+            // CIO engine handles connection pooling automatically per host
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 3_000_000 // Total request timeout (50 minutes for large uploads)
-            connectTimeoutMillis = 60_000  // Connection timeout (1 minute)
-            socketTimeoutMillis = 300_000  // Socket timeout (5 minutes)
+            requestTimeoutMillis = 60_000  // 1 minute for API calls
+            connectTimeoutMillis = 30_000  // 30 seconds to connect
+            socketTimeoutMillis = 60_000   // 1 minute socket timeout
+        }
+    }
+    
+    /**
+     * Dedicated HTTP client for large file uploads
+     * - Separate pool prevents uploads from blocking API calls
+     * - Extended timeouts for large video/image uploads
+     * - One connection per upload = 20 max concurrent uploads
+     */
+    val uploadHttpClient = HttpClient(CIO) {
+        engine {
+            maxConnectionsCount = 20 // One connection per upload (realistic limit)
+        }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 3_000_000 // 50 minutes for large uploads
+            connectTimeoutMillis = 60_000    // 1 minute to connect
+            socketTimeoutMillis = 300_000    // 5 minutes socket timeout
         }
     }
     
@@ -3732,7 +3748,11 @@ object HproseInstance {
                 val workManager = WorkManager.getInstance(context)
                 workManager.enqueue(uploadRequest)
                 
-                Timber.tag("HproseInstance").d("Resumed non-video upload for workId: ${upload.workId} with ${validUris.size} valid URIs")
+                // CRITICAL: Remove the old workId since we just created a new WorkManager request with a new workId
+                // The new worker will track its own success/failure with the new workId
+                removeIncompleteUpload(context, upload.workId)
+                
+                Timber.tag("HproseInstance").d("Resumed upload - removed old workId: ${upload.workId}, created new work with ${validUris.size} valid URIs")
                 
             } catch (e: Exception) {
                 Timber.tag("HproseInstance").e("Error resuming upload ${upload.workId}: $e")

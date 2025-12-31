@@ -17,9 +17,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
-import okhttp3.ConnectionPool
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpHeaders
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -67,33 +72,29 @@ object ImageCacheManager {
     private var activeVisibleDownloads = 0
     private var activeInvisibleDownloads = 0
 
-    // OkHttp client with connection pooling for efficient network operations
-    private val okHttpClient = OkHttpClient.Builder()
-        .connectionPool(ConnectionPool(
-            maxIdleConnections = MAX_CONCURRENT_DOWNLOADS,
-            keepAliveDuration = 5,
-            timeUnit = TimeUnit.MINUTES
-        ))
-        .connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
-        .readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
-        .retryOnConnectionFailure(true)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    // Ktor HTTP client for image downloads with connection pooling
+    private val imageHttpClient = HttpClient(CIO) {
+        engine {
+            maxConnectionsCount = 50  // Sufficient for parallel image downloads
+        }
+        install(HttpTimeout) {
+            connectTimeoutMillis = CONNECTION_TIMEOUT.toLong()
+            requestTimeoutMillis = READ_TIMEOUT.toLong()  // 20s for IPFS
+        }
+        followRedirects = true
+    }
     
     // Separate client for avatars with shorter timeout
-    private val avatarHttpClient = OkHttpClient.Builder()
-        .connectionPool(ConnectionPool(
-            maxIdleConnections = MAX_CONCURRENT_DOWNLOADS,
-            keepAliveDuration = 5,
-            timeUnit = TimeUnit.MINUTES
-        ))
-        .connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
-        .readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
-        .retryOnConnectionFailure(true)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val avatarHttpClient = HttpClient(CIO) {
+        engine {
+            maxConnectionsCount = 30  // Avatars are smaller, need fewer connections
+        }
+        install(HttpTimeout) {
+            connectTimeoutMillis = CONNECTION_TIMEOUT.toLong()
+            requestTimeoutMillis = AVATAR_READ_TIMEOUT.toLong()  // 15s for avatars
+        }
+        followRedirects = true
+    }
     
     private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
@@ -331,24 +332,21 @@ object ImageCacheManager {
             var inputStream: InputStream? = null
 
             try {
-                val request = Request.Builder()
-                    .url(imageUrl)
-                    .header("User-Agent", "TweetApp/1.0")
-                    .header("Accept", "image/*,*/*;q=0.8")
-                    .header("Cache-Control", "no-cache")
-                    .build()
+                val response = imageHttpClient.get(imageUrl) {
+                    headers {
+                        append(HttpHeaders.UserAgent, "TweetApp/1.0")
+                        append(HttpHeaders.Accept, "image/*,*/*;q=0.8")
+                        append(HttpHeaders.CacheControl, "no-cache")
+                    }
+                }
 
-                val response = okHttpClient.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    response.close()
+                if (response.status.value !in 200..299) {
                     return@withContext null
                 }
 
-                inputStream = response.body.byteStream()
+                inputStream = response.bodyAsChannel().toInputStream()
 
                 val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
-                response.close()
 
                 if (bitmap != null && !bitmap.isRecycled) {
                     return@withContext bitmap
@@ -386,27 +384,24 @@ object ImageCacheManager {
                 
                 // Use appropriate client based on URL (avatar vs regular image)
                 val isAvatar = imageUrl.contains("/avatar/") || mid.contains("avatar")
-                val client = if (isAvatar) avatarHttpClient else okHttpClient
+                val client = if (isAvatar) avatarHttpClient else imageHttpClient
                 
-                val request = Request.Builder()
-                    .url(imageUrl)
-                    .header("User-Agent", "TweetApp/1.0")
-                    .header("Accept", "image/*,*/*;q=0.8")
-                    .header("Cache-Control", "no-cache")
-                    .build()
+                val response = client.get(imageUrl) {
+                    headers {
+                        append(HttpHeaders.UserAgent, "TweetApp/1.0")
+                        append(HttpHeaders.Accept, "image/*,*/*;q=0.8")
+                        append(HttpHeaders.CacheControl, "no-cache")
+                    }
+                }
 
-                val response = client.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    response.close()
+                if (response.status.value !in 200..299) {
                     return@withContext null
                 }
 
-                inputStream = response.body.byteStream()
+                inputStream = response.bodyAsChannel().toInputStream()
 
                 // Read the image data
                 val imageData = inputStream.readBytes()
-                response.close()
                 
                 // Check if download was paused during reading
                 if (isDownloadPaused(mid)) {

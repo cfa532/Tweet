@@ -113,7 +113,7 @@ object HproseClientPool {
             }
             
             // Check URL limit
-            if (regularClients.size >= MAX_URLS && pool.clients.isEmpty()) {
+            if (regularClients.size >= MAX_URLS) {
                 Timber.tag(TAG).w("Regular client pool at max URLs ($MAX_URLS), cleaning up...")
                 cleanupIdleClients(regularClients, regularLock, "regular")
             }
@@ -203,7 +203,7 @@ object HproseClientPool {
             }
             
             // Check URL limit
-            if (uploadClients.size >= MAX_URLS && pool.clients.isEmpty()) {
+            if (uploadClients.size >= MAX_URLS) {
                 Timber.tag(TAG).w("Upload client pool at max URLs ($MAX_URLS), cleaning up...")
                 cleanupIdleClients(uploadClients, uploadLock, "upload")
             }

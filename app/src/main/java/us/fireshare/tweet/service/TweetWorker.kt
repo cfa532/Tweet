@@ -59,13 +59,16 @@ class UploadCommentWorker @AssistedInject constructor(
         }
 
         return try {
-            // Prevent retries beyond the first one
-            if (runAttemptCount > 1) {
+            // Limit to 2 total attempts: initial attempt (0) + 1 retry (1)
+            // Stop if we've already tried twice (runAttemptCount >= 2)
+            if (runAttemptCount >= 2) {
                 Timber.tag("UploadCommentWorker").d("Maximum retry attempts reached (attempt $runAttemptCount), giving up")
-                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed after maximum retries"))
+                TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed after 2 attempts"))
                 cleanupPermissions()
                 return Result.failure()
             }
+            
+            Timber.tag("UploadCommentWorker").d("Comment upload attempt ${runAttemptCount + 1} of 2")
 
             val tweetId = inputData.getString("tweetId") ?: run {
                 cleanupPermissions()
@@ -181,14 +184,17 @@ class UploadTweetWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val runAttemptCount = runAttemptCount
         return try {
-            // Prevent retries beyond the first one
-            if (runAttemptCount > 1) {
+            // Limit to 2 total attempts: initial attempt (0) + 1 retry (1)
+            // Stop if we've already tried twice (runAttemptCount >= 2)
+            if (runAttemptCount >= 2) {
                 Timber.tag("UploadTweetWorker").d("Maximum retry attempts reached (attempt $runAttemptCount), giving up")
-                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed after maximum retries"))
+                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed after 2 attempts"))
                 val workId = id.toString()
                 HproseInstance.removeIncompleteUpload(applicationContext, workId)
                 return Result.failure()
             }
+            
+            Timber.tag("UploadTweetWorker").d("Tweet upload attempt ${runAttemptCount + 1} of 2")
 
             // Force baseUrl refresh before retrying (matching iOS behavior)
             if (runAttemptCount >= 1) {
@@ -321,24 +327,24 @@ class UploadTweetWorker @AssistedInject constructor(
                 wakeLock.release()
             }
         } catch (e: OutOfMemoryError) {
-            Timber.tag("UploadTweetWorker").e(e, "OUT OF MEMORY ERROR during tweet upload")
-            // Only show toast on final attempt and clean up incomplete upload
+            Timber.tag("UploadTweetWorker").e(e, "OUT OF MEMORY ERROR during tweet upload (attempt ${runAttemptCount + 1})")
+            // Show error and clean up on final attempt (runAttemptCount >= 1 means 2nd+ attempt)
             if (runAttemptCount >= 1) {
                 TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: Out of memory"))
-                // Clean up incomplete upload tracking on final failure
                 val workId = id.toString()
                 HproseInstance.removeIncompleteUpload(applicationContext, workId)
             }
+            // WorkManager will retry once more if runAttemptCount < 2
             return Result.failure()
         } catch (e: Exception) {
-            Timber.tag("UploadTweetWorker").e(e, "Error in doWork")
-            // Only show toast on final attempt and clean up incomplete upload
+            Timber.tag("UploadTweetWorker").e(e, "Error in doWork (attempt ${runAttemptCount + 1})")
+            // Show error and clean up on final attempt (runAttemptCount >= 1 means 2nd+ attempt)
             if (runAttemptCount >= 1) {
                 TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: ${e.message}"))
-                // Clean up incomplete upload tracking on final failure
                 val workId = id.toString()
                 HproseInstance.removeIncompleteUpload(applicationContext, workId)
             }
+            // WorkManager will retry once more if runAttemptCount < 2
             return Result.failure()
         }
     }
