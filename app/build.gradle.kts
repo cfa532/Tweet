@@ -32,7 +32,7 @@ android {
         targetSdk = 36
         versionCode = 76    // Full release version code. Must be higher than mini version code.
                             // So full version can override mini version.
-        versionName = "40"  // compared with App Mimei version to check for upgrade.
+        versionName = "41"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

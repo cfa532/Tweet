@@ -82,8 +82,11 @@ class TweetActivity : ComponentActivity() {
 
         initJob = CoroutineScope(IO).async {
             HproseInstance.init(this@TweetActivity) {
-                // Callback called after initialization completes
-                // Check for new messages and update badge on startup
+                // Callback called as soon as baseUrl is ready - show UI immediately
+                Timber.tag("TweetActivity").d("BaseUrl ready, showing UI")
+                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+                
+                // Launch background tasks
                 lifecycleScope.launch(IO) {
                     activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
@@ -98,14 +101,16 @@ class TweetActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             try {
-                // Add timeout for network initialization (15s for IPFS network patience)
-                withTimeoutOrNull(15000) { // 15 second timeout
-                    initJob.await()   // wait until network ready
+                // Reduced timeout since UI now shows as soon as baseUrl is ready (not waiting for full user fetch)
+                withTimeoutOrNull(8000) { // 8 second timeout for finding entry IP
+                    initJob.await()   // wait until network ready and baseUrl is set
                 } ?: run {
                     Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
+                    activityViewModel.isAppReady.value = true   // Show UI anyway on timeout
                 }
                 
-                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+                // activityViewModel.isAppReady is now set to true in the callback from HproseInstance.init()
+                // when baseUrl is ready, so we don't need to set it again here if callback was invoked
 
                 // Check for new messages and update badge after initialization completes
                 // This ensures badge is updated even if the callback in init() didn't run

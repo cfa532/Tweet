@@ -74,25 +74,30 @@ class PlayTweetActivity : ComponentActivity() {
         }
 
         initJob = CoroutineScope(IO).async {
-            HproseInstance.init(this@PlayTweetActivity)
-        }
-
-        lifecycleScope.launch {
-            try {
-                // Add timeout for network initialization
-                withTimeoutOrNull(10000) { // 10 second timeout
-                    initJob.await()   // wait until network ready
-                } ?: run {
-                    Timber.tag("TweetActivity").w("Network initialization timed out, proceeding with app startup")
-                }
-
+            HproseInstance.init(this@PlayTweetActivity) {
+                // Callback called as soon as baseUrl is ready - show UI immediately
+                Timber.tag("PlayTweetActivity").d("BaseUrl ready, showing UI")
+                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+                
                 // Resume incomplete uploads on app startup (with 10s delay)
                 lifecycleScope.launch(IO) {
                     kotlinx.coroutines.delay(10000) // 10 second delay
                     HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
                 }
+            }
+        }
 
-                activityViewModel.isAppReady.value = true   // app ready. Show main page now.
+        lifecycleScope.launch {
+            try {
+                // Reduced timeout since UI now shows as soon as baseUrl is ready
+                withTimeoutOrNull(8000) { // 8 second timeout for finding entry IP
+                    initJob.await()   // wait until network ready and baseUrl is set
+                } ?: run {
+                    Timber.tag("PlayTweetActivity").w("Network initialization timed out, proceeding with app startup")
+                    activityViewModel.isAppReady.value = true   // Show UI anyway on timeout
+                }
+
+                // activityViewModel.isAppReady is now set in the callback from HproseInstance.init()
 
                 // Request notification permission on app startup
                 requestNotificationPermissionIfNeeded()
