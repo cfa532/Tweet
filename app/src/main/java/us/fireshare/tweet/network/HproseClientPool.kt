@@ -17,6 +17,7 @@ import kotlin.concurrent.write
  * 2. Leverage HTTP connection pooling (clients reuse underlying connections)
  * 3. Improve performance by avoiding repeated client creation
  * 4. Properly manage client lifecycle and cleanup
+ * 5. Support concurrent requests with multiple clients per URL (matching iOS: 8 clients/URL)
  * 
  * Thread-safe singleton implementation using ConcurrentHashMap and ReadWriteLock.
  */
@@ -26,7 +27,8 @@ object HproseClientPool {
     // Pool configuration
     private const val DEFAULT_CLIENT_TIMEOUT = 30_000 // 30 seconds for regular operations
     private const val UPLOAD_CLIENT_TIMEOUT = 3_000_000 // 50 minutes for upload operations
-    private const val MAX_CLIENTS_PER_TYPE = 50 // Prevent unbounded growth
+    private const val CLIENTS_PER_URL = 8 // Number of clients per URL (matches iOS)
+    private const val MAX_URLS = 50 // Maximum number of different URLs to track
     private const val CLIENT_CLEANUP_INTERVAL_MS = 300_000L // 5 minutes
     private const val CLIENT_MAX_IDLE_TIME_MS = 600_000L // 10 minutes
     
@@ -40,9 +42,18 @@ object HproseClientPool {
         var referenceCount: Int = 0
     )
     
+    /**
+     * Pool of clients for a single URL
+     */
+    private data class ClientPool(
+        val clients: MutableList<ClientInfo> = mutableListOf(),
+        var nextClientIndex: Int = 0 // Round-robin index
+    )
+    
     // Separate pools for regular and upload clients (upload clients have longer timeouts)
-    private val regularClients = ConcurrentHashMap<String, ClientInfo>()
-    private val uploadClients = ConcurrentHashMap<String, ClientInfo>()
+    // Each URL has a pool of up to CLIENTS_PER_URL clients
+    private val regularClients = ConcurrentHashMap<String, ClientPool>()
+    private val uploadClients = ConcurrentHashMap<String, ClientPool>()
     
     // Locks for safe cleanup operations
     private val regularLock = ReentrantReadWriteLock()
@@ -57,7 +68,7 @@ object HproseClientPool {
     
     /**
      * Get or create a regular HproseService client for the given baseUrl (node)
-     * Multiple users on the same node will share the same client instance
+     * Uses round-robin to distribute requests across up to CLIENTS_PER_URL clients
      * 
      * @param baseUrl The base URL of the node/server
      * @return HproseService client for the node, or null if creation fails
@@ -72,52 +83,74 @@ object HproseClientPool {
         
         // Try to get existing client first (read lock)
         regularLock.read {
-            regularClients[normalizedUrl]?.let { clientInfo ->
-                clientInfo.lastAccessTime = System.currentTimeMillis()
-                clientInfo.referenceCount++
-                Timber.tag(TAG).d("Reusing regular client for node: $normalizedUrl (refs: ${clientInfo.referenceCount})")
-                return clientInfo.service
+            regularClients[normalizedUrl]?.let { pool ->
+                if (pool.clients.isNotEmpty()) {
+                    // Round-robin selection
+                    val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                    pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
+                    
+                    clientInfo.lastAccessTime = System.currentTimeMillis()
+                    clientInfo.referenceCount++
+                    Timber.tag(TAG).d("Reusing regular client for node: $normalizedUrl (client ${pool.nextClientIndex}/${pool.clients.size}, refs: ${clientInfo.referenceCount})")
+                    return clientInfo.service
+                }
             }
         }
         
-        // Create new client if not exists (write lock)
+        // Create new client if pool doesn't exist or isn't full (write lock)
         return regularLock.write {
-            // Double-check after acquiring write lock
-            regularClients[normalizedUrl]?.let { clientInfo ->
+            val pool = regularClients.getOrPut(normalizedUrl) { ClientPool() }
+            
+            // If pool already has clients, use round-robin
+            if (pool.clients.isNotEmpty()) {
+                val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
+                
                 clientInfo.lastAccessTime = System.currentTimeMillis()
                 clientInfo.referenceCount++
                 Timber.tag(TAG).d("Reusing regular client (double-check) for node: $normalizedUrl")
                 return@write clientInfo.service
             }
             
-            // Check pool size limit
-            if (regularClients.size >= MAX_CLIENTS_PER_TYPE) {
-                Timber.tag(TAG).w("Regular client pool at max capacity (${MAX_CLIENTS_PER_TYPE}), cleaning up...")
+            // Check URL limit
+            if (regularClients.size >= MAX_URLS && pool.clients.isEmpty()) {
+                Timber.tag(TAG).w("Regular client pool at max URLs ($MAX_URLS), cleaning up...")
                 cleanupIdleClients(regularClients, regularLock, "regular")
             }
             
-            // Create new client
-            try {
-                val client = HproseClient.create("$normalizedUrl/webapi/")
-                client.timeout = DEFAULT_CLIENT_TIMEOUT
-                val service = client.useService(HproseService::class.java)
+            // Create new client (up to CLIENTS_PER_URL per URL)
+            if (pool.clients.size < CLIENTS_PER_URL) {
+                try {
+                    val client = HproseClient.create("$normalizedUrl/webapi/")
+                    client.timeout = DEFAULT_CLIENT_TIMEOUT
+                    val service = client.useService(HproseService::class.java)
+                    
+                    val clientInfo = ClientInfo(
+                        client = client,
+                        service = service,
+                        referenceCount = 1
+                    )
+                    
+                    pool.clients.add(clientInfo)
+                    Timber.tag(TAG).d("Created new regular client for node: $normalizedUrl (${pool.clients.size}/$CLIENTS_PER_URL clients)")
+                    
+                    // Periodic cleanup check
+                    maybeCleanup()
+                    
+                    service
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Failed to create regular Hprose client for node: $normalizedUrl")
+                    null
+                }
+            } else {
+                // Pool is full, use round-robin
+                val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
                 
-                val clientInfo = ClientInfo(
-                    client = client,
-                    service = service,
-                    referenceCount = 1
-                )
-                
-                regularClients[normalizedUrl] = clientInfo
-                Timber.tag(TAG).d("Created new regular client for node: $normalizedUrl (total: ${regularClients.size})")
-                
-                // Periodic cleanup check
-                maybeCleanup()
-                
-                service
-            } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Failed to create regular Hprose client for node: $normalizedUrl")
-                null
+                clientInfo.lastAccessTime = System.currentTimeMillis()
+                clientInfo.referenceCount++
+                Timber.tag(TAG).d("Pool full, reusing regular client for node: $normalizedUrl")
+                clientInfo.service
             }
         }
     }
@@ -125,6 +158,7 @@ object HproseClientPool {
     /**
      * Get or create an upload HproseService client for the given baseUrl (node)
      * Upload clients have extended timeouts for long-running upload operations
+     * Uses round-robin to distribute requests across up to CLIENTS_PER_URL clients
      * 
      * @param baseUrl The base URL of the node/server
      * @return HproseService client for uploads, or null if creation fails
@@ -139,52 +173,74 @@ object HproseClientPool {
         
         // Try to get existing client first (read lock)
         uploadLock.read {
-            uploadClients[normalizedUrl]?.let { clientInfo ->
-                clientInfo.lastAccessTime = System.currentTimeMillis()
-                clientInfo.referenceCount++
-                Timber.tag(TAG).d("Reusing upload client for node: $normalizedUrl (refs: ${clientInfo.referenceCount})")
-                return clientInfo.service
+            uploadClients[normalizedUrl]?.let { pool ->
+                if (pool.clients.isNotEmpty()) {
+                    // Round-robin selection
+                    val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                    pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
+                    
+                    clientInfo.lastAccessTime = System.currentTimeMillis()
+                    clientInfo.referenceCount++
+                    Timber.tag(TAG).d("Reusing upload client for node: $normalizedUrl (client ${pool.nextClientIndex}/${pool.clients.size}, refs: ${clientInfo.referenceCount})")
+                    return clientInfo.service
+                }
             }
         }
         
-        // Create new client if not exists (write lock)
+        // Create new client if pool doesn't exist or isn't full (write lock)
         return uploadLock.write {
-            // Double-check after acquiring write lock
-            uploadClients[normalizedUrl]?.let { clientInfo ->
+            val pool = uploadClients.getOrPut(normalizedUrl) { ClientPool() }
+            
+            // If pool already has clients, use round-robin
+            if (pool.clients.isNotEmpty()) {
+                val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
+                
                 clientInfo.lastAccessTime = System.currentTimeMillis()
                 clientInfo.referenceCount++
                 Timber.tag(TAG).d("Reusing upload client (double-check) for node: $normalizedUrl")
                 return@write clientInfo.service
             }
             
-            // Check pool size limit
-            if (uploadClients.size >= MAX_CLIENTS_PER_TYPE) {
-                Timber.tag(TAG).w("Upload client pool at max capacity (${MAX_CLIENTS_PER_TYPE}), cleaning up...")
+            // Check URL limit
+            if (uploadClients.size >= MAX_URLS && pool.clients.isEmpty()) {
+                Timber.tag(TAG).w("Upload client pool at max URLs ($MAX_URLS), cleaning up...")
                 cleanupIdleClients(uploadClients, uploadLock, "upload")
             }
             
-            // Create new client
-            try {
-                val client = HproseClient.create("$normalizedUrl/webapi/")
-                client.timeout = UPLOAD_CLIENT_TIMEOUT
-                val service = client.useService(HproseService::class.java)
+            // Create new client (up to CLIENTS_PER_URL per URL)
+            if (pool.clients.size < CLIENTS_PER_URL) {
+                try {
+                    val client = HproseClient.create("$normalizedUrl/webapi/")
+                    client.timeout = UPLOAD_CLIENT_TIMEOUT
+                    val service = client.useService(HproseService::class.java)
+                    
+                    val clientInfo = ClientInfo(
+                        client = client,
+                        service = service,
+                        referenceCount = 1
+                    )
+                    
+                    pool.clients.add(clientInfo)
+                    Timber.tag(TAG).d("Created new upload client for node: $normalizedUrl (${pool.clients.size}/$CLIENTS_PER_URL clients)")
+                    
+                    // Periodic cleanup check
+                    maybeCleanup()
+                    
+                    service
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Failed to create upload Hprose client for node: $normalizedUrl")
+                    null
+                }
+            } else {
+                // Pool is full, use round-robin
+                val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
+                pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
                 
-                val clientInfo = ClientInfo(
-                    client = client,
-                    service = service,
-                    referenceCount = 1
-                )
-                
-                uploadClients[normalizedUrl] = clientInfo
-                Timber.tag(TAG).d("Created new upload client for node: $normalizedUrl (total: ${uploadClients.size})")
-                
-                // Periodic cleanup check
-                maybeCleanup()
-                
-                service
-            } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Failed to create upload Hprose client for node: $normalizedUrl")
-                null
+                clientInfo.lastAccessTime = System.currentTimeMillis()
+                clientInfo.referenceCount++
+                Timber.tag(TAG).d("Pool full, reusing upload client for node: $normalizedUrl")
+                clientInfo.service
             }
         }
     }
@@ -201,23 +257,29 @@ object HproseClientPool {
         
         if (isUploadClient) {
             uploadLock.write {
-                uploadClients[normalizedUrl]?.let { clientInfo ->
-                    clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
-                    Timber.tag(TAG).d("Released upload client for node: $normalizedUrl (refs: ${clientInfo.referenceCount})")
+                uploadClients[normalizedUrl]?.let { pool ->
+                    // Decrement reference count for all clients in pool
+                    pool.clients.forEach { clientInfo ->
+                        clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
+                    }
+                    Timber.tag(TAG).d("Released upload client pool for node: $normalizedUrl")
                 }
             }
         } else {
             regularLock.write {
-                regularClients[normalizedUrl]?.let { clientInfo ->
-                    clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
-                    Timber.tag(TAG).d("Released regular client for node: $normalizedUrl (refs: ${clientInfo.referenceCount})")
+                regularClients[normalizedUrl]?.let { pool ->
+                    // Decrement reference count for all clients in pool
+                    pool.clients.forEach { clientInfo ->
+                        clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
+                    }
+                    Timber.tag(TAG).d("Released regular client pool for node: $normalizedUrl")
                 }
             }
         }
     }
     
     /**
-     * Clear a specific client from the pool (e.g., when node URL changes)
+     * Clear a specific client pool from the pool (e.g., when node URL changes)
      * 
      * @param baseUrl The base URL of the node/server to clear
      */
@@ -225,14 +287,14 @@ object HproseClientPool {
         val normalizedUrl = normalizeUrl(baseUrl)
         
         regularLock.write {
-            regularClients.remove(normalizedUrl)?.let {
-                Timber.tag(TAG).d("Cleared regular client for node: $normalizedUrl")
+            regularClients.remove(normalizedUrl)?.let { pool ->
+                Timber.tag(TAG).d("Cleared regular client pool for node: $normalizedUrl (${pool.clients.size} clients)")
             }
         }
         
         uploadLock.write {
-            uploadClients.remove(normalizedUrl)?.let {
-                Timber.tag(TAG).d("Cleared upload client for node: $normalizedUrl")
+            uploadClients.remove(normalizedUrl)?.let { pool ->
+                Timber.tag(TAG).d("Cleared upload client pool for node: $normalizedUrl (${pool.clients.size} clients)")
             }
         }
     }
@@ -263,18 +325,32 @@ object HproseClientPool {
      * Clean up idle clients that haven't been accessed recently and have no references
      */
     private fun cleanupIdleClients(
-        clientMap: ConcurrentHashMap<String, ClientInfo>,
+        clientMap: ConcurrentHashMap<String, ClientPool>,
         lock: ReentrantReadWriteLock,
         type: String
     ) {
         lock.write {
             val now = System.currentTimeMillis()
             val toRemove = mutableListOf<String>()
+            var totalClientsRemoved = 0
             
-            clientMap.forEach { (url, clientInfo) ->
-                val idleTime = now - clientInfo.lastAccessTime
-                if (clientInfo.referenceCount == 0 && idleTime > CLIENT_MAX_IDLE_TIME_MS) {
+            clientMap.forEach { (url, pool) ->
+                // Remove idle clients from the pool
+                val initialSize = pool.clients.size
+                pool.clients.removeIf { clientInfo ->
+                    val idleTime = now - clientInfo.lastAccessTime
+                    clientInfo.referenceCount == 0 && idleTime > CLIENT_MAX_IDLE_TIME_MS
+                }
+                
+                val removedCount = initialSize - pool.clients.size
+                totalClientsRemoved += removedCount
+                
+                // If all clients in the pool are gone, remove the URL entry
+                if (pool.clients.isEmpty()) {
                     toRemove.add(url)
+                } else if (removedCount > 0) {
+                    // Reset round-robin index if we removed clients
+                    pool.nextClientIndex = 0
                 }
             }
             
@@ -282,8 +358,8 @@ object HproseClientPool {
                 clientMap.remove(url)
             }
             
-            if (toRemove.isNotEmpty()) {
-                Timber.tag(TAG).d("Cleaned up ${toRemove.size} idle $type clients (remaining: ${clientMap.size})")
+            if (totalClientsRemoved > 0 || toRemove.isNotEmpty()) {
+                Timber.tag(TAG).d("Cleaned up $totalClientsRemoved idle $type clients and ${toRemove.size} empty pools (remaining URLs: ${clientMap.size})")
             }
         }
     }
