@@ -496,39 +496,40 @@ object HproseInstance {
             
             User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
 
-            // THEN: Fetch fresh data from network in the background (non-blocking)
-            // Launch in application scope so it continues even if this coroutine is cancelled
-            TweetApplication.applicationScope.launch {
-                Timber.tag("initAppEntry").d("Starting background user refresh...")
-                
-                try {
-                    // Use withTimeoutOrNull with 15 second timeout to prevent indefinite blocking
-                    val refreshedUser: User? = withTimeoutOrNull(15_000) {
-                        // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-                        fetchUser(userId, baseUrl = "", forceRefresh = true)
-                    }
-                    
-                    if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
-                        // Use the refreshed user's baseUrl
-                        appUser = refreshedUser
-                        TweetCacheManager.saveUser(refreshedUser)
-                        User.updateUserInstance(appUser, true)
-                        
-                        // CRITICAL: Force StateFlow to emit updated appUser to trigger UI recomposition
-                        // This ensures toolbar avatar updates when avatar changes
-                        _appUserState.value = appUser
-                        
-                        Timber.tag("initAppEntry")
-                            .d("✅ Background refresh successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
-                    } else {
-                        // Network fetch failed or timed out - cached data is already loaded
-                        Timber.tag("initAppEntry")
-                            .w("Background user refresh failed/timed out, continuing with cached data")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("initAppEntry").e(e, "Error in background user refresh: ${e.message}")
+            // THEN: Fetch fresh data from network
+            // CRITICAL: We must wait for this to complete (with timeout) to ensure appUser.baseUrl
+            // is set to the user's actual server before TweetFeedViewModel tries to load tweets.
+            // Otherwise, tweets will fail to load when starting with cleared caches.
+            Timber.tag("initAppEntry").d("Fetching user data from network...")
+            
+            try {
+                // Use withTimeoutOrNull with 15 second timeout to prevent indefinite blocking
+                val refreshedUser: User? = withTimeoutOrNull(15_000) {
+                    // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                    fetchUser(userId, baseUrl = "", forceRefresh = true)
                 }
+                
+                if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
+                    // Use the refreshed user's baseUrl
+                    appUser = refreshedUser
+                    TweetCacheManager.saveUser(refreshedUser)
+                    User.updateUserInstance(appUser, true)
+                    
+                    // CRITICAL: Force StateFlow to emit updated appUser to trigger UI recomposition
+                    // This ensures toolbar avatar updates when avatar changes
+                    _appUserState.value = appUser
+                    
+                    Timber.tag("initAppEntry")
+                        .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
+                } else {
+                    // Network fetch failed or timed out - use cached data if available
+                    Timber.tag("initAppEntry")
+                        .w("User fetch failed/timed out, continuing with cached/entry data")
+                }
+            } catch (e: Exception) {
+                Timber.tag("initAppEntry").e(e, "Error fetching user: ${e.message}")
             }
+            
             Timber.tag("initAppEntry")
                 .d("User initialized. $appId, appUser.baseUrl: ${appUser.baseUrl}")
         } else {
