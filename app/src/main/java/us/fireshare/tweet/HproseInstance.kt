@@ -2028,8 +2028,6 @@ object HproseInstance {
                 if (updatedUserData != null) {
                     // Update appUser with new data from server
                     appUser.from(updatedUserData)
-                    // Trigger StateFlow emission to update UI
-                    appUser = appUser
                 }
                 
                 if (updatedTweetData != null) {
@@ -2085,8 +2083,6 @@ object HproseInstance {
                 if (updatedUserData != null) {
                     // Update appUser with new data from server
                     appUser.from(updatedUserData)
-                    // Trigger StateFlow emission to update UI
-                    appUser = appUser
                 }
                 
                 if (updatedTweetData != null) {
@@ -2577,12 +2573,6 @@ object HproseInstance {
         }
         user.from(response as Map<String, Any>)
         
-        // If this is appUser, trigger StateFlow emission to update UI
-        if (user.mid == appUser.mid) {
-            appUser = appUser
-            Timber.tag("updateUserFromServer").d("Triggered appUserState update for avatar and other fields")
-        }
-        
         if (isValidUserData(user)) {
             return true
         } else {
@@ -2591,47 +2581,6 @@ object HproseInstance {
         }
     }
 
-
-    /**
-     * Refreshes appUser by discovering entry IP and re-initializing
-     * This is used when appUser's baseUrl is detected as unhealthy
-     * @throws Exception if entry IP discovery or appUser IP resolution fails
-     */
-    private suspend fun refreshAppUser() {
-        Timber.tag("refreshAppUser").d("Refreshing appUser via entry IP discovery")
-        
-        val entryIP = try {
-            findEntryIP()
-        } catch (e: Exception) {
-            throw Exception("Failed to find entry IP for appUser refresh", e)
-        }
-        
-        val entryBaseUrl = "http://$entryIP"
-        val ip = _getProviderIP(appUser.mid, HproseClientPool.getRegularClient(entryBaseUrl))
-        if (ip != null) {
-            val newBaseUrl = if (ip.startsWith("http://")) ip else "http://$ip"
-            appUser.baseUrl = newBaseUrl
-            appUser.clearHproseService()
-            Timber.tag("refreshAppUser").d("appUser refreshed with new IP: $ip")
-        } else {
-            throw Exception("Failed to get appUser IP from entry")
-        }
-    }
-    
-    /**
-     * Apply baseUrl to user if needed (ensures http:// prefix and updates user)
-     */
-    private fun applyBaseUrlIfNeeded(user: User, url: String, reason: String) {
-        val finalUrl = if (url.startsWith("http://") || url.startsWith("https://")) {
-            url
-        } else {
-            "http://$url"
-        }
-        
-        Timber.tag("updateUserFromServer").d("Applying baseUrl to user ${user.mid}: $finalUrl (reason: $reason)")
-        user.baseUrl = finalUrl
-        user.clearHproseService()
-    }
 
     /**
      * Resolves and updates user's baseUrl (for first attempt or retries)
@@ -2652,55 +2601,10 @@ object HproseInstance {
         
         // Resolve fresh IP
         if (attempt > 1) {
-            // Retry attempts: check if user is on same node as appUser
-            val userHostIds = user.hostIds
-            val appUserHostIds = appUser.hostIds
-            
-            if (userHostIds != null && appUserHostIds != null &&
-                userHostIds.size > 1 && appUserHostIds.size > 1 &&
-                userHostIds[1] == appUserHostIds[1]) {
-                // User is on the same node as appUser, check if appUser's baseUrl is healthy
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - User ${user.mid} is on same node as appUser (hostIds[1]: ${userHostIds[1]})")
-                
-                val appUserBaseUrl = appUser.baseUrl
-                if (appUserBaseUrl != null && isServerHealthy(appUserBaseUrl)) {
-                    // appUser's baseUrl is healthy, reuse it
-                    Timber.tag("updateUserFromServer").d("appUser's baseUrl is healthy, using it for user ${user.mid}")
-                    applyBaseUrlIfNeeded(user, appUserBaseUrl, "same node as appUser (healthy)")
-                } else {
-                    // appUser's baseUrl is missing or unhealthy - refresh it FIRST
-                    Timber.tag("updateUserFromServer").w("appUser's baseUrl is missing or unhealthy, refreshing appUser before lookup for user ${user.mid}")
-                    
-                    try {
-                        refreshAppUser()
-                        
-                        // Now getProviderIP will use the refreshed appUser (no redundant health check!)
-                        val providerIP = getProviderIP(user.mid)
-                        if (providerIP != null) {
-                            applyBaseUrlIfNeeded(user, providerIP, "retry attempt $attempt")
-                        } else {
-                            throw Exception("getProviderIP returned null for user ${user.mid}")
-                        }
-                    } catch (e: Exception) {
-                        // If refresh fails, still try getProviderIP as last resort
-                        Timber.tag("updateUserFromServer").e(e, "Failed to refresh appUser, trying getProviderIP anyway")
-                        val providerIP = getProviderIP(user.mid)
-                        if (providerIP != null) {
-                            applyBaseUrlIfNeeded(user, providerIP, "retry attempt $attempt")
-                        } else {
-                            throw Exception("getProviderIP returned null for user ${user.mid} after appUser refresh failed")
-                        }
-                    }
-                }
-            } else {
-                // User is on a different node, resolve provider IP
-                val providerIP = getProviderIP(user.mid)
-                if (providerIP != null) {
-                    applyBaseUrlIfNeeded(user, providerIP, "retry attempt $attempt")
-                } else {
-                    throw Exception("getProviderIP returned null for user ${user.mid} on different node")
-                }
-            }
+            // Retry attempts: resolve fresh IP
+            val providerIP = getProviderIP(user.mid)
+            user.baseUrl = "http://$providerIP"
+            user.clearHproseService()
         } else {
             // First attempt with fresh IP
             val reason = when {
@@ -2708,14 +2612,15 @@ object HproseInstance {
                 hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
                 else -> "no baseUrl"
             }
-            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: "nil"}, reason: $reason")
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
 
             val providerIP = getProviderIP(user.mid)
-            if (providerIP != null) {
-                applyBaseUrlIfNeeded(user, providerIP, "initial resolution")
+            user.baseUrl = if (providerIP != null && providerIP.startsWith("http://")) {
+                providerIP
             } else {
-                throw Exception("getProviderIP returned null for user ${user.mid} on initial resolution")
+                "http://$providerIP"
             }
+            user.clearHproseService()
             
             if (user.hproseService == null) {
                 Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
