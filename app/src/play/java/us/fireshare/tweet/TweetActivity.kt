@@ -104,7 +104,7 @@ class PlayTweetActivity : ComponentActivity() {
 
                 // Load entry URLs (required for all versions including Play)
                 launch {
-                    delay(15000) // Same delay as checkForUpgrade
+                    delay(30000) // 30 second delay to ensure app is fully initialized
                     activityViewModel.loadEntryUrls()
                 }
 

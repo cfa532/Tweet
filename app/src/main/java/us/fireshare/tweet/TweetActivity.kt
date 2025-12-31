@@ -88,6 +88,7 @@ class TweetActivity : ComponentActivity() {
                 
                 // Launch background tasks
                 lifecycleScope.launch(IO) {
+                    delay(30000) // 30 second delay to ensure app is fully initialized
                     activityViewModel.checkForUpgrade(this@TweetActivity)
                 }
 

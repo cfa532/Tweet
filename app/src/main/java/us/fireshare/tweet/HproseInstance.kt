@@ -383,11 +383,11 @@ object HproseInstance {
      */
     private suspend fun findEntryIP(): String {
         val urls = preferenceHelper.getAppUrls()
-        Timber.tag("initAppEntry").d("Attempting to initialize app entry with ${urls.size} URL(s): $urls")
+        Timber.tag("findEntryIP").d("Attempting to find entry IP with ${urls.size} URL(s): $urls")
 
         for (url in urls) {
             try {
-                Timber.tag("initAppEntry").d("Trying URL: $url")
+                Timber.tag("findEntryIP").d("Trying URL: $url")
                 /**
                  * retrieve window.Param from page source code of http://base_url
                  * window.setParam({
@@ -418,7 +418,7 @@ object HproseInstance {
                             // Release builds: Use server's mid value
                             serverMid ?: BuildConfig.APP_ID
                         }
-                        Timber.tag("initAppEntry").d("Build type: ${if (BuildConfig.DEBUG) "DEBUG" else "RELEASE"}, Using APP_ID: $_appId")
+                        Timber.tag("findEntryIP").d("Build type: ${if (BuildConfig.DEBUG) "DEBUG" else "RELEASE"}, Using APP_ID: $_appId")
 
                         /**
                          * The code above makes a call to base URL of the app, get a html page
@@ -431,7 +431,7 @@ object HproseInstance {
                          *
                          * bestIp is the IP with the smallest response time from valid public IPs.
                          * */
-                        Timber.tag("initAppEntry").d("Successfully parsed paramMap: $paramMap")
+                        Timber.tag("findEntryIP").d("Successfully parsed paramMap: $paramMap")
                         val entryIP = filterIpAddresses(paramMap["addrs"] as List<String>)
                         if (entryIP != null) {
                             return entryIP
@@ -441,14 +441,14 @@ object HproseInstance {
                         }
                     }
                 } else {
-                    Timber.tag("initAppEntry").w("No data found within window.setParam() for URL: $url")
+                    Timber.tag("findEntryIP").w("No data found within window.setParam() for URL: $url")
                 }
             } catch (e: Exception) {
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 if (isNetworkError) {
-                    Timber.tag("initAppEntry").w(e, "Network error connecting to URL: $url (will try next URL if available)")
+                    Timber.tag("findEntryIP").w(e, "Network error connecting to URL: $url (will try next URL if available)")
                 } else {
-                    Timber.tag("initAppEntry").e(e, "Failed to initialize app entry from URL: $url")
+                    Timber.tag("findEntryIP").e(e, "Failed to find entry IP from URL: $url")
                 }
             }
         }
@@ -3182,15 +3182,23 @@ object HproseInstance {
 
         // Step 2: Check if user is appUser
         if (mid == appUser.mid) {
-            // User IS appUser - use entry IP to lookup appUser's IPs
-            return try {
-                val entryIP = findEntryIP()
-                Timber.tag("getProviderIP").d("appUser lookup failed, using entry IP: $entryIP")
-                val baseUrl = "http://$entryIP"
-                _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
-            } catch(e: Exception) {
-                Timber.tag("getProviderIP").e(e, "Entry IP lookup failed for appUser $mid")
-                null
+            // User IS appUser
+            // Only use entry IP as fallback if appUser.baseUrl is not yet initialized
+            if (appUser.baseUrl.isNullOrBlank()) {
+                // App is still initializing - use entry IP to lookup appUser's IPs
+                Timber.tag("getProviderIP").d("appUser not yet initialized, using entry IP for lookup")
+                return try {
+                    val entryIP = findEntryIP()
+                    val baseUrl = "http://$entryIP"
+                    _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
+                } catch(e: Exception) {
+                    Timber.tag("getProviderIP").e(e, "Entry IP lookup failed for appUser $mid")
+                    null
+                }
+            } else {
+                // App is already initialized - appUser lookup failed, return null
+                Timber.tag("getProviderIP").w("appUser lookup failed despite initialized baseUrl: ${appUser.baseUrl}")
+                return null
             }
         }
         
@@ -3198,29 +3206,11 @@ object HproseInstance {
         val appUserBaseUrl = appUser.baseUrl ?: return null
         
         if (!isServerHealthy(appUserBaseUrl)) {
-            // AppUser UNHEALTHY - refresh appUser first, then retry
-            Timber.tag("getProviderIP").d("appUser server unhealthy - refreshing appUser before retry")
-            return try {
-                // Refresh appUser via entry IP
-                val entryIP = findEntryIP()
-                val entryBaseUrl = "http://$entryIP"
-                val entryClient = HproseClientPool.getRegularClient(entryBaseUrl)
-                
-                // Get appUser's new IP
-                val newAppUserIP = _getProviderIP(appUser.mid, entryClient)
-                if (newAppUserIP != null) {
-                    // Update appUser's baseUrl with new IP
-                    appUser.baseUrl = "http://$newAppUserIP"
-                    appUser.clearHproseService()
-                    Timber.tag("getProviderIP").d("Refreshed appUser with new IP: $newAppUserIP")
-                }
-                
-                // Retry lookup for target user with refreshed appUser
-                _getProviderIP(mid)
-            } catch(e: Exception) {
-                Timber.tag("getProviderIP").e(e, "Failed to refresh appUser and retry for user $mid")
-                null
-            }
+            // AppUser UNHEALTHY - This could be temporary network issue
+            // In most cases during normal app operation, we should just return null
+            // and let the caller handle the failure, rather than triggering a full entry IP lookup
+            Timber.tag("getProviderIP").w("appUser server unhealthy at $appUserBaseUrl - provider lookup failed")
+            return null
         } else {
             // AppUser HEALTHY - user's servers are genuinely down
             // Entry IP would return the same unhealthy list, so return null
