@@ -67,6 +67,154 @@ import java.util.UUID
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
+/**
+ * NodePool: Persistent authoritative source for node IP management
+ * 
+ * Key Principles:
+ * - Tracks access nodes (hostIds[1]) for READ operations only
+ * - Each node maintains a list of valid IPs (IPv4 and IPv6)
+ * - Nodes persist indefinitely (no pruning)
+ * - Prefers IPv4 over IPv6 for better compatibility
+ * - Thread-safe operations with mutex protection
+ * 
+ * Usage Flow:
+ * 1. Validate user's IP against pool before access
+ * 2. Get IP from user's access node if not in pool
+ * 3. On failure: re-resolve and update/replace node's IP list
+ */
+object NodePool {
+    data class NodeInfo(
+        val mid: MimeiId,                    // Node MID (hostIds[1])
+        var ips: MutableList<String>,        // Array of valid IPs (IPv4 and IPv6)
+        var lastUpdate: Long = System.currentTimeMillis()  // When IPs were last updated
+    ) {
+        fun hasIP(ip: String): Boolean {
+            // Extract base IP from URL formats
+            val normalizedIP = normalizeIP(ip)
+            return ips.any { normalizeIP(it) == normalizedIP }
+        }
+        
+        fun getPreferredIP(): String? {
+            // Prefer IPv4 over IPv6 for better compatibility
+            // IPv4 addresses don't contain multiple colons
+            val ipv4 = ips.firstOrNull { it.count { c -> c == ':' } <= 1 }
+            return ipv4 ?: ips.firstOrNull()
+        }
+        
+        private fun normalizeIP(ip: String): String {
+            // Remove http://, brackets, and extract just the IP:port
+            return ip.trim()
+                .removePrefix("http://")
+                .removePrefix("https://")
+                .removePrefix("[")
+                .removeSuffix("]")
+                .substringBefore("/")
+        }
+    }
+    
+    private val nodes = mutableMapOf<MimeiId, NodeInfo>()
+    private val nodeMutex = Mutex()
+    
+    /**
+     * Check if user's current IP is in the pool
+     */
+    suspend fun isUserIPValid(user: User): Boolean = nodeMutex.withLock {
+        val accessNodeMid = user.hostIds?.getOrNull(1) ?: return@withLock false
+        val nodeInfo = nodes[accessNodeMid] ?: return@withLock false
+        val userIP = user.baseUrl ?: return@withLock false
+        
+        nodeInfo.hasIP(userIP)
+    }
+    
+    /**
+     * Get IP from user's access node in pool
+     * Uses hostIds[1] (access node for READ operations)
+     */
+    suspend fun getIPFromNode(user: User): String? = nodeMutex.withLock {
+        val accessNodeMid = user.hostIds?.getOrNull(1) ?: return@withLock null
+        val nodeInfo = nodes[accessNodeMid] ?: return@withLock null
+        
+        nodeInfo.getPreferredIP()
+    }
+    
+    /**
+     * Update node's IP list (replaces existing IPs)
+     * Called after re-resolution when fetch fails
+     */
+    suspend fun updateNodeIP(nodeMid: MimeiId, newIP: String) = nodeMutex.withLock {
+        val nodeInfo = nodes[nodeMid]
+        if (nodeInfo != null) {
+            // Replace IP list with new IP
+            nodeInfo.ips = mutableListOf(newIP)
+            nodeInfo.lastUpdate = System.currentTimeMillis()
+            Timber.tag("NodePool").d("Updated node $nodeMid - replaced IPs with: $newIP")
+        } else {
+            // Create new node entry
+            nodes[nodeMid] = NodeInfo(
+                mid = nodeMid,
+                ips = mutableListOf(newIP)
+            )
+            Timber.tag("NodePool").d("Added new node $nodeMid with IP: $newIP")
+        }
+    }
+    
+    /**
+     * Add IP to node's list (doesn't replace existing IPs)
+     * Called when discovering new IPs for a node
+     */
+    suspend fun addIPToNode(nodeMid: MimeiId, ip: String) = nodeMutex.withLock {
+        val nodeInfo = nodes[nodeMid]
+        if (nodeInfo != null) {
+            // Add IP if not already present
+            if (!nodeInfo.hasIP(ip)) {
+                nodeInfo.ips.add(ip)
+                nodeInfo.lastUpdate = System.currentTimeMillis()
+                Timber.tag("NodePool").d("Added IP to node $nodeMid: $ip (total: ${nodeInfo.ips.size})")
+            }
+        } else {
+            // Create new node entry
+            nodes[nodeMid] = NodeInfo(
+                mid = nodeMid,
+                ips = mutableListOf(ip)
+            )
+            Timber.tag("NodePool").d("Added new node $nodeMid with IP: $ip")
+        }
+    }
+    
+    /**
+     * Update pool from user object (adds discovered IPs)
+     * Called after successful fetch
+     */
+    suspend fun updateFromUser(user: User) {
+        val accessNodeMid = user.hostIds?.getOrNull(1) ?: return
+        val userIP = user.baseUrl ?: return
+        
+        // Extract just the IP:port from baseUrl
+        val normalizedIP = userIP.trim()
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .removePrefix("[")
+            .removeSuffix("]")
+            .substringBefore("/")
+        
+        addIPToNode(accessNodeMid, normalizedIP)
+    }
+    
+    /**
+     * Get node info for debugging
+     */
+    suspend fun getNodeInfo(nodeMid: MimeiId): NodeInfo? = nodeMutex.withLock {
+        nodes[nodeMid]
+    }
+    
+    /**
+     * Get all nodes count (for monitoring)
+     */
+    suspend fun getNodesCount(): Int = nodeMutex.withLock {
+        nodes.size
+    }
+}
+
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private var _appId: MimeiId = BuildConfig.APP_ID
@@ -2378,6 +2526,12 @@ object HproseInstance {
     @Suppress("SENSELESS_COMPARISON")
     /**
      * Performs user update and cache save, handling success and error cases
+     * @param userId User ID being fetched
+     * @param user User instance to update
+     * @param maxRetries Maximum retry attempts
+     * @param skipRetryAndBlacklist Skip retry and blacklist logic
+     * @param logContext Logging context
+     * @param baseUrlHint Hint for cache logic ("" forces refresh, null uses defaults)
      * @return User if successful, null otherwise
      */
     private suspend fun performUserUpdate(
@@ -2385,11 +2539,12 @@ object HproseInstance {
         user: User,
         maxRetries: Int,
         skipRetryAndBlacklist: Boolean,
-        logContext: String = "fetchUser"
+        logContext: String = "fetchUser",
+        baseUrlHint: String? = null
     ): User? {
         return try {
             val effectiveMaxRetries = if (skipRetryAndBlacklist) 1 else maxRetries
-            val fetchSuccess = updateUserFromServerWithRetry(user, effectiveMaxRetries, skipRetryAndBlacklist)
+            val fetchSuccess = updateUserFromServerWithRetry(user, effectiveMaxRetries, skipRetryAndBlacklist, baseUrlHint)
             
             if (fetchSuccess && isValidUserData(user)) {
                 TweetCacheManager.saveUser(user)
@@ -2398,6 +2553,10 @@ object HproseInstance {
                 Timber.tag(logContext).w("Failed to fetch valid user data: userId: $userId")
                 null
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Propagate cancellation without logging as error
+            Timber.tag(logContext).d("Fetch cancelled for userId: $userId")
+            throw e
         } catch (e: Exception) {
             Timber.tag(logContext).e(e, "Exception in user update: userId: $userId")
             null
@@ -2407,13 +2566,20 @@ object HproseInstance {
     /**
      * Starts background refresh for expired cached user
      */
-    private fun startBackgroundRefresh(userId: MimeiId, cachedUser: User, maxRetries: Int, skipRetryAndBlacklist: Boolean) {
+    private fun startBackgroundRefresh(
+        userId: MimeiId, 
+        cachedUser: User, 
+        maxRetries: Int, 
+        skipRetryAndBlacklist: Boolean,
+        baseUrlHint: String?
+    ) {
         TweetApplication.applicationScope.launch {
             try {
                 val userInstance = getUserInstance(userId)
-                userInstance.baseUrl = cachedUser.baseUrl
+                // Don't overwrite user's baseUrl - keep their cached value
+                // baseUrlHint will control whether to force IP resolution
                 
-                performUserUpdate(userId, userInstance, maxRetries, skipRetryAndBlacklist, "getUser.backgroundRefresh")
+                performUserUpdate(userId, userInstance, maxRetries, skipRetryAndBlacklist, "getUser.backgroundRefresh", baseUrlHint)
             } catch (e: Exception) {
                 Timber.tag("getUser").e(e, "Background refresh error for userId: $userId")
             } finally {
@@ -2451,7 +2617,22 @@ object HproseInstance {
         }
     }
 
-    suspend fun fetchUser(userId: MimeiId?, baseUrl: String? = appUser.baseUrl, maxRetries: Int = 2, forceRefresh: Boolean = false, skipRetryAndBlacklist: Boolean = false, isRetry: Boolean = false): User? {
+    /**
+     * Fetch user data with intelligent retry and caching
+     * 
+     * @param userId User ID to fetch
+     * @param baseUrl Base URL hint (empty string forces fresh IP resolution)
+     * @param maxRetries Maximum retry attempts (default 2)
+     * @param forceRefresh Skip cache and force fresh fetch
+     * @param skipRetryAndBlacklist Skip retry logic and blacklist checks (for internal use)
+     */
+    suspend fun fetchUser(
+        userId: MimeiId?, 
+        baseUrl: String? = appUser.baseUrl, 
+        maxRetries: Int = 2, 
+        forceRefresh: Boolean = false, 
+        skipRetryAndBlacklist: Boolean = false
+    ): User? {
         if (userId == null) {
             Timber.tag("getUser").w("Null userId, returning null")
             return null
@@ -2472,7 +2653,7 @@ object HproseInstance {
                 if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Return valid cached user only if baseUrl parameter is provided
                     return cachedUser
-                } else if (cachedUser.hasExpired) {
+                } else if (cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Start background refresh if not already running
                     val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
                         if (!ongoingUserUpdates.contains(userId)) {
@@ -2488,13 +2669,14 @@ object HproseInstance {
                             userId,
                             cachedUser,
                             maxRetries,
-                            skipRetryAndBlacklist
+                            skipRetryAndBlacklist,
+                            baseUrl
                         )
                     }
                     // Return stale cached user while background refresh is running
                     return cachedUser
                 }
-                // If baseUrl is empty, fall through to fetch from server
+                // If baseUrl is empty or cache expired, fall through to fetch from server
             }
         }
 
@@ -2515,43 +2697,30 @@ object HproseInstance {
         try {
             val user = getUserInstance(userId)
 
-            // Determine base URL
-            val finalBaseUrl = if (baseUrl.isNullOrEmpty()) {
-                getProviderIP(userId)?.let { "http://$it" } ?: ""
-            } else {
-                baseUrl
+            // CRITICAL: The baseUrl parameter is a HINT for cache logic, NOT the actual baseUrl to use!
+            // Each user has their own baseUrl (their own server/node).
+            // - If baseUrl param is "" (empty): forces IP resolution (bypasses cache even if valid)
+            // - If baseUrl param is null/default: use normal cache logic
+            // - User's actual baseUrl comes from their singleton (cached from previous fetch) or gets resolved
+            //
+            // We ONLY set user.baseUrl here if explicitly forcing to empty (which triggers resolution)
+            // Otherwise, preserve user's existing cached baseUrl
+            if (baseUrl != null && baseUrl.isEmpty()) {
+                // Empty string explicitly passed - clear user's baseUrl to force IP resolution
+                user.baseUrl = null
             }
-
-            if (finalBaseUrl.isEmpty()) {
-                Timber.tag("getUser").w("Cannot fetch user $userId: no valid baseUrl available")
-                return null
-            }
-
-            user.baseUrl = finalBaseUrl
-            val result = performUserUpdate(userId, user, maxRetries, skipRetryAndBlacklist, "getUser")
+            // For all other cases (null, appUser.baseUrl default, or specific URL), 
+            // keep user's existing baseUrl - don't overwrite it!
             
-            // If fetch failed and this is not already a retry, retry once with empty baseurl to refresh providerIP
-            // Skip retry if baseUrl is already empty (would cause another timeout with getProviderIP)
-            if (result == null && !isRetry && !baseUrl.isNullOrEmpty()) {
-                Timber.tag("getUser").d("Retrying fetchUser with empty baseurl for userId: $userId")
-                userUpdateMutex.withLock {
-                    ongoingUserUpdates.remove(userId)
-                }
-                return fetchUser(userId, baseUrl = "", maxRetries, forceRefresh, skipRetryAndBlacklist, isRetry = true)
-            }
-            
-            return result
+            // performUserUpdate handles retry logic with NodePool integration
+            // Pass baseUrl parameter as hint for IP resolution logic
+            return performUserUpdate(userId, user, maxRetries, skipRetryAndBlacklist, "getUser", baseUrl)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Propagate cancellation without logging as error
+            Timber.tag("getUser").d("Fetch cancelled for userId: $userId")
+            throw e
         } catch (e: Exception) {
             Timber.tag("getUser").e(e, "Exception in getUser: userId: $userId")
-            // If fetch failed and this is not already a retry, retry once with empty baseurl to refresh providerIP
-            // Skip retry if baseUrl is already empty (would cause another timeout with getProviderIP)
-            if (!isRetry && !baseUrl.isNullOrEmpty()) {
-                Timber.tag("getUser").d("Retrying fetchUser with empty baseurl after exception for userId: $userId")
-                userUpdateMutex.withLock {
-                    ongoingUserUpdates.remove(userId)
-                }
-                return fetchUser(userId, baseUrl = "", maxRetries, forceRefresh, skipRetryAndBlacklist, isRetry = true)
-            }
             return null
         } finally {
             userUpdateMutex.withLock {
@@ -2586,6 +2755,11 @@ object HproseInstance {
 
     /**
      * Resolves and updates user's baseUrl (for first attempt or retries)
+     * 
+     * NodePool Integration:
+     * - First attempt: validate user IP against pool, get IP from pool if not in pool
+     * - Retry attempts: always resolve fresh IP via getProviderIP
+     * - After resolution: update NodePool with new IP
      */
     private suspend fun resolveAndUpdateBaseUrl(
         user: User, 
@@ -2596,50 +2770,88 @@ object HproseInstance {
         hasExpired: Boolean,
         originalBaseUrl: String?
     ) {
+        // First attempt logic with NodePool integration
         if (attempt == 1 && !forceFreshIP && userHasBaseUrl && !user.baseUrl.isNullOrEmpty()) {
-            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl: ${user.baseUrl} for userId: ${user.mid} (hasExpired: $hasExpired)")
+            // Check if user's IP is in NodePool
+            if (NodePool.isUserIPValid(user)) {
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl (validated in NodePool): ${user.baseUrl} for userId: ${user.mid}")
+                return
+            }
+            
+            // Not in pool - try to get IP from user's access node in pool
+            val poolIP = NodePool.getIPFromNode(user)
+            if (poolIP != null) {
+                user.baseUrl = "http://$poolIP"
+                user.clearHproseService()
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool: $poolIP for userId: ${user.mid}")
+                return
+            }
+            
+            // Not in pool and no node IP available - use existing baseUrl
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl (not in pool): ${user.baseUrl} for userId: ${user.mid}")
             return
         }
         
-        // Resolve fresh IP
-        if (attempt > 1) {
-            // Retry attempts: resolve fresh IP
-            val providerIP = getProviderIP(user.mid)
-            user.baseUrl = "http://$providerIP"
-            user.clearHproseService()
+        // Resolve fresh IP (retry attempts or forced refresh)
+        val reason = if (attempt > 1) {
+            "retry attempt - resolving fresh IP"
         } else {
-            // First attempt with fresh IP
-            val reason = when {
+            when {
                 originalBaseUrl.isNullOrEmpty() -> "forcing fresh IP resolution (baseUrl param empty)"
                 hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
                 else -> "no baseUrl"
             }
-            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
-
-            val providerIP = getProviderIP(user.mid)
-            user.baseUrl = if (providerIP != null && providerIP.startsWith("http://")) {
+        }
+        
+        Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
+        
+        val providerIP = getProviderIP(user.mid)
+        if (providerIP != null) {
+            val newBaseUrl = if (providerIP.startsWith("http://")) {
                 providerIP
             } else {
                 "http://$providerIP"
             }
+            
+            user.baseUrl = newBaseUrl
             user.clearHproseService()
+            
+            // Update NodePool with newly resolved IP (replaces old IPs for this node)
+            val accessNodeMid = user.hostIds?.getOrNull(1)
+            if (accessNodeMid != null) {
+                // Extract IP:port from baseUrl for pool
+                val ipWithPort = newBaseUrl.removePrefix("http://").removePrefix("https://")
+                NodePool.updateNodeIP(accessNodeMid, ipWithPort)
+            }
             
             if (user.hproseService == null) {
                 Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
             }
+        } else {
+            Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}")
         }
     }
 
     /**
      * Update user data from server using "get_user" entry with retry logic
      * Matches iOS implementation: first attempt uses existing baseUrl, retries always resolve fresh IP
+     * @param user User instance to update
+     * @param maxRetries Maximum retry attempts
+     * @param skipRetryAndBlacklist Skip retry and blacklist logic
+     * @param baseUrlHint Hint from fetchUser parameter ("" forces fresh IP, null uses defaults)
      * @return true if user data was successfully fetched and updated, false otherwise
      */
-    private suspend fun updateUserFromServerWithRetry(user: User, maxRetries: Int = 2, skipRetryAndBlacklist: Boolean = false): Boolean {
+    private suspend fun updateUserFromServerWithRetry(
+        user: User, 
+        maxRetries: Int = 2, 
+        skipRetryAndBlacklist: Boolean = false,
+        baseUrlHint: String? = null
+    ): Boolean {
         val originalBaseUrl = user.baseUrl
         val hasExpired = user.hasExpired
         val userHasBaseUrl = !user.baseUrl.isNullOrEmpty()
-        val forceFreshIP = originalBaseUrl.isNullOrEmpty() || hasExpired
+        // Force fresh IP if: baseUrlHint is "" (explicit), or user has no baseUrl, or cache expired
+        val forceFreshIP = (baseUrlHint != null && baseUrlHint.isEmpty()) || originalBaseUrl.isNullOrEmpty() || hasExpired
         
         var lastError: Exception? = null
         
@@ -2673,7 +2885,7 @@ object HproseInstance {
                 Timber.tag("updateUserFromServer").d("get_user rawResponse received: ${rawResponse?.javaClass?.simpleName}, isNull: ${rawResponse == null}")
                 
                 // v3 API returns user object (Map) or null if not found
-                return when (rawResponse) {
+                val success = when (rawResponse) {
                     is Map<*, *> -> processUserDataResponse(user, rawResponse, skipRetryAndBlacklist)
                     null -> {
                         Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt")
@@ -2684,7 +2896,20 @@ object HproseInstance {
                         throw Exception("Unexpected response type: ${rawResponse.javaClass.simpleName}")
                     }
                 }
+                
+                // On success, update NodePool with discovered IPs
+                if (success) {
+                    NodePool.updateFromUser(user)
+                }
+                
+                return success
             } catch (e: Exception) {
+                // Handle cancellation specially - don't log as failure, don't retry
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Timber.tag("updateUserFromServer").d("🔄 Fetch cancelled for userId: ${user.mid}, attempt: $attempt/$maxRetries")
+                    throw e  // Propagate cancellation immediately
+                }
+                
                 lastError = e
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
                 
@@ -2878,8 +3103,17 @@ object HproseInstance {
 
     /**
      * Get provider IP for a user using "get_provider_ips" entry
-     * Tries each IP returned until a working one is found
-     * If no IPs are returned or all IPs fail, tries again with entry IP
+     * 
+     * Fallback Strategy:
+     * 1. Try lookup using appUser's client
+     * 2. If user IS appUser -> use entry IP to lookup
+     * 3. If user is NOT appUser and appUser UNHEALTHY -> refresh appUser via entry IP, retry lookup
+     * 4. If user is NOT appUser and appUser HEALTHY -> return null (user's servers are genuinely down)
+     * 
+     * Key Insight: When appUser is healthy, don't try entry IP fallback for other users.
+     * This is because appUser successfully responded with the user's IP list, but all those IPs
+     * failed health checks (they are genuinely unhealthy). Entry IP would return the same
+     * unhealthy list - no point in redundant lookup.
      */
     suspend fun getProviderIP(mid: MimeiId): String? {
         // Safety check: never try to get provider IP for GUEST_ID
@@ -2887,41 +3121,59 @@ object HproseInstance {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
             return findEntryIP()
         }
+        
+        // Step 1: Try lookup using appUser's client
         val providerIP = _getProviderIP(mid)
         if (providerIP != null) {
             return providerIP
         }
 
+        // Step 2: Check if user is appUser
         if (mid == appUser.mid) {
+            // User IS appUser - use entry IP to lookup appUser's IPs
             return try {
                 val entryIP = findEntryIP()
-                Timber.tag("getProviderIP").d("Found entry IP: $entryIP, retrying with entry IP client")
+                Timber.tag("getProviderIP").d("appUser lookup failed, using entry IP: $entryIP")
                 val baseUrl = "http://$entryIP"
                 _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
-            } catch(_: Exception) {
-                // All attempts failed - throw error
-                Timber.tag("getProviderIP").e("All provider IP resolution attempts failed for appUser $mid")
+            } catch(e: Exception) {
+                Timber.tag("getProviderIP").e(e, "Entry IP lookup failed for appUser $mid")
+                null
+            }
+        }
+        
+        // Step 3: For non-appUser - check appUser health
+        val appUserBaseUrl = appUser.baseUrl ?: return null
+        
+        if (!isServerHealthy(appUserBaseUrl)) {
+            // AppUser UNHEALTHY - refresh appUser first, then retry
+            Timber.tag("getProviderIP").d("appUser server unhealthy - refreshing appUser before retry")
+            return try {
+                // Refresh appUser via entry IP
+                val entryIP = findEntryIP()
+                val entryBaseUrl = "http://$entryIP"
+                val entryClient = HproseClientPool.getRegularClient(entryBaseUrl)
+                
+                // Get appUser's new IP
+                val newAppUserIP = _getProviderIP(appUser.mid, entryClient)
+                if (newAppUserIP != null) {
+                    // Update appUser's baseUrl with new IP
+                    appUser.baseUrl = "http://$newAppUserIP"
+                    appUser.clearHproseService()
+                    Timber.tag("getProviderIP").d("Refreshed appUser with new IP: $newAppUserIP")
+                }
+                
+                // Retry lookup for target user with refreshed appUser
+                _getProviderIP(mid)
+            } catch(e: Exception) {
+                Timber.tag("getProviderIP").e(e, "Failed to refresh appUser and retry for user $mid")
                 null
             }
         } else {
-            // For non-appUser: try with appUser's server first, fallback to entry IP if unhealthy
-            val appUserBaseUrl = appUser.baseUrl ?: return null
-            return if (! isServerHealthy(appUserBaseUrl)) {
-                // Server unhealthy, try entry IP fallback
-                try {
-                    val entryIP = findEntryIP()
-                    Timber.tag("getProviderIP").d("appUser server unhealthy, using entry IP: $entryIP")
-                    val baseUrl = "http://$entryIP"
-                    _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
-                } catch(_: Exception) {
-                    Timber.tag("getProviderIP").e("All provider IP resolution attempts failed for user $mid")
-                    null
-                }
-            } else {
-                // Server is healthy, use it to get provider IP
-                Timber.tag("getProviderIP").d("Using appUser's server to get provider IP for $mid")
-                _getProviderIP(mid)
-            }
+            // AppUser HEALTHY - user's servers are genuinely down
+            // Entry IP would return the same unhealthy list, so return null
+            Timber.tag("getProviderIP").d("appUser healthy but user $mid IPs all unhealthy - servers genuinely down")
+            return null
         }
     }
 
