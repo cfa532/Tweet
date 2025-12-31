@@ -69,11 +69,12 @@ fun UserAvatar(
     val avatarMid = user.avatar
     val baseUrl = user.baseUrl
 
-    // Watch user.avatar and user.baseUrl for changes - reset state when either changes
-    var loadState by remember(avatarMid, baseUrl) { mutableStateOf(AvatarLoadState()) }
+    // Only watch user.avatar for changes - reset state only when avatar ID changes
+    // baseUrl changes should not trigger a reload since the cached avatar is still valid
+    var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-    // React to avatar or baseUrl changes - reset state immediately when either changes
-    LaunchedEffect(avatarMid, baseUrl) {
+    // React to avatar changes only - reset state immediately when avatar ID changes
+    LaunchedEffect(avatarMid) {
         // Reset state immediately when avatar changes to clear old bitmap
         loadState = AvatarLoadState()
         
@@ -91,7 +92,7 @@ fun UserAvatar(
             } else {
                 // Not cached, need to load it
                 Timber.tag("UserAvatar").d("Avatar not cached, loading from server: $avatarMid")
-                val avatarUrl = getMediaUrl(avatarMid, user.baseUrl)
+                val avatarUrl = getMediaUrl(avatarMid, baseUrl)
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
                 try {

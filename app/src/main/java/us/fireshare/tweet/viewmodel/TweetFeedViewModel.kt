@@ -6,7 +6,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.NetworkType
@@ -14,7 +13,6 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -154,7 +152,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         initState.value = true
         
         // Re-initialize after a short delay to ensure appUser state is updated
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(IO) {
             kotlinx.coroutines.delay(100) // Small delay to ensure state consistency
             initialize()
         }
@@ -167,52 +165,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     suspend fun refresh(pageNumber: Int = 0) {
         // Don't save appUser here - it gets saved after network initialization with full data
         fetchTweets(pageNumber)
-    }
-
-    /**
-     * Load a page of cached tweets and merge them with the existing tweets StateFlow.
-     * This function loads tweets from the cache without making network calls.
-     * Useful for quickly showing content while offline or before network requests complete.
-     * 
-     * @param pageNumber The page number to load (0-indexed)
-     * @param pageSize The number of tweets per page (defaults to TW_CONST.PAGE_SIZE)
-     * @return List of cached tweets loaded (as Tweet? to match fetchTweets signature)
-     */
-    suspend fun loadCachedTweetsPage(
-        pageNumber: Int,
-        pageSize: Int = TW_CONST.PAGE_SIZE
-    ): List<Tweet?> {
-        return try {
-            Timber.tag("loadCachedTweetsPage").d("Loading cached tweets page $pageNumber for mainfeed")
-            
-            // Load cached tweets for this page (mainfeed tweets are cached by appUser.mid)
-            val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
-            
-            // Merge cached tweets with existing tweets
-            _tweets.update { currentTweets ->
-                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
-                
-                if (newCachedTweets.isNotEmpty()) {
-                    val mergedTweets = (currentTweets + newCachedTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
-                    Timber.tag("loadCachedTweetsPage").d("Merged ${newCachedTweets.size} new cached tweets, total: ${mergedTweets.size}")
-                    mergedTweets
-                } else {
-                    Timber.tag("loadCachedTweetsPage").d("No new cached tweets to merge")
-                    currentTweets
-                }
-            }
-            
-            Timber.tag("loadCachedTweetsPage").d("Loaded ${cachedTweets.size} cached tweets for mainfeed, page: $pageNumber")
-            
-            // Return cached tweets as nullable list to match fetchTweets signature
-            cachedTweets.map { it as Tweet? }
-        } catch (e: Exception) {
-            Timber.tag("loadCachedTweetsPage").e(e, "Error loading cached tweets page $pageNumber for mainfeed")
-            emptyList()
-        }
     }
 
     private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
@@ -342,7 +294,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * // Process both results together
              * */
             if (pageNumber == 0 && followingTweetsJob?.isActive != true) {
-                followingTweetsJob = applicationScope.launch(Dispatchers.IO) {
+                followingTweetsJob = applicationScope.launch(IO) {
                     try {
                         val followingTweetsWithNulls = HproseInstance.getTweetFeed(
                             appUser,
@@ -355,7 +307,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         val followingTweets = followingTweetsWithNulls.filterNotNull()
 
                         // Always merge following tweets with existing ones
-                        withContext(Dispatchers.Main) {
+                        withContext(Main) {
                             _tweets.update { currentTweets ->
                                 // Use Set for O(1) lookup performance
                                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -478,7 +430,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     // Optimistic deletion: Remove from UI immediately, then delete from backend
     // If deletion fails, restore the tweet and throw exception
     suspend fun delTweet(
-        navController: NavController,
         tweetId: MimeiId,
         userViewModel: UserViewModel? = null,
         callback: () -> Unit,
@@ -646,7 +597,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Timber.tag("TweetFeedViewModel").w("Failed to take persistable permission for URI: $uri")
             }
         }
@@ -656,7 +607,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             try {
                 val mimeType = context.contentResolver.getType(uri)
                 mimeType?.startsWith("video/") == true
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 false
             }
         } ?: false

@@ -326,18 +326,14 @@ object HproseInstance {
             // FIRST: Load cached user immediately so UI has data to display
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null) {
-                // Copy all fields from cached user to appUser
-                appUser.from(cachedUser)
-                // Temporarily set baseUrl to the resolved IP
-                appUser.baseUrl = "http://$entryIP"
-                // Update the StateFlow to trigger UI recomposition immediately
-                appUser = appUser
+                // Create a NEW User object with cached data and updated baseUrl
+                // This ensures StateFlow properly detects the change and triggers UI recomposition
+                appUser = cachedUser.copy(baseUrl = "http://$entryIP")
                 Timber.tag("initAppEntry")
                     .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
             } else {
-                // No cached user, just set baseUrl for now
-                appUser.baseUrl = "http://$entryIP"
-                appUser = appUser
+                // No cached user, create new User object with baseUrl
+                appUser = appUser.copy(baseUrl = "http://$entryIP")
             }
             
             User.updateUserInstance(appUser, true)      // sync appUser with its user instance.
@@ -1773,7 +1769,7 @@ object HproseInstance {
                     // Create a new tweet with the updated mid
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
 
-                    Timber.tag("HproseInstance").d("Tweet uploaded successfully with new ID: ${newTweetId}")
+                    Timber.tag("HproseInstance").d("Tweet uploaded successfully with new ID: $newTweetId")
 
                     // Post notification for successful upload (only for original tweets, not retweets)
                     if (tweet.originalTweetId == null) {
@@ -2026,8 +2022,11 @@ object HproseInstance {
                 val updatedTweetData = response["tweet"] as? Map<String, Any>
                 
                 if (updatedUserData != null) {
-                    // Update appUser with new data from server
-                    appUser.from(updatedUserData)
+                    // Create a new User object to properly trigger StateFlow observers
+                    val newAppUser = appUser.copy()
+                    newAppUser.from(updatedUserData)
+                    appUser = newAppUser
+                    TweetCacheManager.saveUser(appUser)
                 }
                 
                 if (updatedTweetData != null) {
@@ -2081,8 +2080,11 @@ object HproseInstance {
                 val updatedTweetData = response["tweet"] as? Map<String, Any>
                 
                 if (updatedUserData != null) {
-                    // Update appUser with new data from server
-                    appUser.from(updatedUserData)
+                    // Create a new User object to properly trigger StateFlow observers
+                    val newAppUser = appUser.copy()
+                    newAppUser.from(updatedUserData)
+                    appUser = newAppUser
+                    TweetCacheManager.saveUser(appUser)
                 }
                 
                 if (updatedTweetData != null) {
@@ -2710,7 +2712,7 @@ object HproseInstance {
      */
     private val ipHealthCache = mutableMapOf<String, Pair<Boolean, Long>>()
     private val ipCacheMutex = Mutex()
-    private val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
+    private const val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
 
     /**
      * Check if an IP is in cache and still valid
@@ -2810,7 +2812,7 @@ object HproseInstance {
                                 val portNumber = potentialPort.toIntOrNull()
                                 if (portNumber != null && portNumber in 8000..8999) {
                                     // Has port - wrap IP part in brackets
-                                    val ipPart = trimmedIP.substring(0, lastColonIndex)
+                                    val ipPart = trimmedIP.take(lastColonIndex)
                                     "http://[$ipPart]:$portNumber"
                                 } else {
                                     // No port or doesn't look like port - wrap entire address
@@ -2836,7 +2838,7 @@ object HproseInstance {
                         } else {
                             null
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Health check failed for this IP, cache as unhealthy
                         cacheIPHealth(ipAddress, false)
                         null
@@ -2857,10 +2859,10 @@ object HproseInstance {
                         }
                         break
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
+                } catch (_: kotlinx.coroutines.CancellationException) {
                     // Job was cancelled, continue to next
                     continue
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Job failed, continue to next
                     continue
                 }
@@ -3284,11 +3286,11 @@ object HproseInstance {
                             uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         Timber.tag("HproseInstance").w("Failed to release permission for URI: $uriString")
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Timber.tag("HproseInstance").w("Failed to parse upload data for permission cleanup: $workId")
             }
         }

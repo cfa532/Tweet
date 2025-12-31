@@ -118,7 +118,7 @@ fun TweetDropdownMenuItems(
                     try {
                         Timber.tag("TweetDropdownMenuItems").d("Starting optimistic deletion of tweet: ${tweet.mid}")
                         
-                        tweetFeedViewModel.delTweet(navController, tweet.mid, appUserViewModel) {
+                        tweetFeedViewModel.delTweet(tweet.mid, appUserViewModel) {
                             // Deletion completed successfully
                             Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
 
