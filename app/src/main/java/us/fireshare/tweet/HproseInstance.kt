@@ -1970,13 +1970,12 @@ object HproseInstance {
                         TweetCacheManager.removeCachedUser(appUser.mid)
                         val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
-                            // Create a new user object to trigger recompose
-                            val updatedUser = refreshedUser.copy()
-                            appUser = updatedUser
+                            // Update appUser directly - no need for .copy()
+                            appUser = refreshedUser
                             TweetCacheManager.saveUser(appUser)
                             
                             // Notify other ViewModels that user data has been updated
-                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
+                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
                         }
                     } catch (e: Exception) {
                         Timber.tag("uploadTweet").w("Failed to refresh appUser after upload: $e")
@@ -2207,10 +2206,8 @@ object HproseInstance {
                 val updatedTweetData = response["tweet"] as? Map<String, Any>
                 
                 if (updatedUserData != null) {
-                    // Create a new User object to properly trigger StateFlow observers
-                    val newAppUser = appUser.copy()
-                    newAppUser.from(updatedUserData)
-                    appUser = newAppUser
+                    // Update appUser directly from the response data
+                    appUser.from(updatedUserData)
                     TweetCacheManager.saveUser(appUser)
                 }
                 
@@ -2265,10 +2262,8 @@ object HproseInstance {
                 val updatedTweetData = response["tweet"] as? Map<String, Any>
                 
                 if (updatedUserData != null) {
-                    // Create a new User object to properly trigger StateFlow observers
-                    val newAppUser = appUser.copy()
-                    newAppUser.from(updatedUserData)
-                    appUser = newAppUser
+                    // Update appUser directly from the response data
+                    appUser.from(updatedUserData)
                     TweetCacheManager.saveUser(appUser)
                 }
                 
@@ -2395,13 +2390,12 @@ object HproseInstance {
                 TweetCacheManager.removeCachedUser(appUser.mid)
                 val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Create a new user object to trigger recompose
-                    val updatedUser = refreshedUser.copy()
-                    appUser = updatedUser
+                    // Update appUser directly - no need for .copy()
+                    appUser = refreshedUser
                     TweetCacheManager.saveUser(appUser)
 
                     // Notify other ViewModels that user data has been updated
-                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser.copy()))
+                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
                 }
             } catch (e: Exception) {
                 Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")

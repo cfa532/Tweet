@@ -107,9 +107,10 @@ fun ProfileScreen(
     }
 
     // Refresh user data when screen opens (in background, non-blocking)
+    // Force refresh to ensure data is always fetched from server when profile is opened
     LaunchedEffect(userId) {
         Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
-        viewModel.refreshUserData()
+        viewModel.refreshUserData(forceRefresh = true)
     }
 
     // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens

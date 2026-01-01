@@ -114,6 +114,7 @@ class UserViewModel @AssistedInject constructor(
     var cloudDrivePortError = mutableStateOf("")
 
     var initState = MutableStateFlow(true)      // initial load state
+    private var hasInitialUserFetch = false      // track if initial user fetch completed
 
     /**
      * Initial load of tweets of an user. Execute only once.
@@ -167,12 +168,21 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Refresh user data to ensure it's up to date (e.g., after profile editing)
-     * Includes retry logic.
+     * Includes retry logic (max 2 retries).
      * This function launches a coroutine and returns immediately (non-blocking).
+     * Skips refresh if initial fetch just completed to avoid redundant backend calls.
      */
-    fun refreshUserData(maxRetries: Int = 3) {
+    fun refreshUserData(maxRetries: Int = 2, forceRefresh: Boolean = false) {
         viewModelScope.launch(IO) {
             try {
+                // Skip refresh if initial fetch just completed, unless forced
+                // This prevents duplicate get_user calls when profile first opens
+                if (hasInitialUserFetch && !forceRefresh) {
+                    Timber.tag("refreshUserData").d("Skipping refresh for user $userId - initial fetch just completed")
+                    hasInitialUserFetch = false // Reset flag for future refreshes
+                    return@launch
+                }
+                
                 refreshUserWithRetry(maxRetries)
 
                 // If this is the current user's profile, update appUser from refreshed data
@@ -200,13 +210,13 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Refresh user data with retry logic
+     * Refresh user data with retry logic (max 2 retries)
      * Matches iOS ProfileView.refreshProfileData() behavior:
      * - Passes empty baseUrl to force fresh IP resolution and skip cache
      * - Does NOT use forceRefresh=true (relies on empty baseUrl logic)
      * - Does NOT remove cached user before fetching
      */
-    private suspend fun refreshUserWithRetry(maxRetries: Int = 3) {
+    private suspend fun refreshUserWithRetry(maxRetries: Int = 2) {
         repeat(maxRetries) { attempt ->
             try {
                 // Pass empty baseUrl to force IP re-resolution and skip cache (matching iOS)
@@ -928,6 +938,9 @@ class UserViewModel @AssistedInject constructor(
                     // Only get current user's fans list when opening the app.
                     refreshFollowingsAndFans()
                 }
+                
+                // Mark initial user fetch as complete
+                hasInitialUserFetch = true
             }
         } else {
             _user.value = appUser
@@ -938,6 +951,9 @@ class UserViewModel @AssistedInject constructor(
             _followersCount.value = appUser.followersCount
             _followingsCount.value = appUser.followingCount
             _tweetCount.value = appUser.tweetCount
+            
+            // Mark initial user fetch as complete (appUser doesn't need fetching)
+            hasInitialUserFetch = true
         }
     }
 
@@ -963,6 +979,26 @@ class UserViewModel @AssistedInject constructor(
             _followersCount.value = appUser.followersCount
             _followingsCount.value = appUser.followingCount
             _tweetCount.value = appUser.tweetCount
+        }
+    }
+    
+    /**
+     * Update ViewModel state from cached user data without fetching from server.
+     * Use this when you've already fetched fresh user data and just need to update the ViewModel.
+     */
+    fun updateFromCache() {
+        viewModelScope.launch(IO) {
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            if (cachedUser != null) {
+                _user.value = cachedUser
+                _bookmarksCount.value = cachedUser.bookmarksCount
+                _favoritesCount.value = cachedUser.favoritesCount
+                _followersCount.value = cachedUser.followersCount
+                _followingsCount.value = cachedUser.followingCount
+                _tweetCount.value = cachedUser.tweetCount
+                
+                Timber.tag("UserViewModel").d("Updated ViewModel state from cache for user: ${cachedUser.mid}")
+            }
         }
     }
 

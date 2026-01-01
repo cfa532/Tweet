@@ -428,11 +428,14 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 ) {
                     Text("Privacy Policy")
                 }
-                SelectableText(
-                    text = appUser.mid,
-                    color = MaterialTheme.colorScheme.secondary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                // Show IP address for guest users
+                if (appUser.isGuest()) {
+                    SelectableText(
+                        text = appUser.baseUrl ?: "",
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 Text(
                     "Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                     color = MaterialTheme.colorScheme.secondary,
