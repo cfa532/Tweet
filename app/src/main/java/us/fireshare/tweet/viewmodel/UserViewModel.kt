@@ -114,7 +114,6 @@ class UserViewModel @AssistedInject constructor(
     var cloudDrivePortError = mutableStateOf("")
 
     var initState = MutableStateFlow(true)      // initial load state
-    private var hasInitialUserFetch = false      // track if initial user fetch completed
 
     /**
      * Initial load of tweets of an user. Execute only once.
@@ -167,83 +166,42 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
-     * Refresh user data to ensure it's up to date (e.g., after profile editing)
-     * Includes retry logic (max 2 retries).
+     * Refresh user data from server when profile is opened or needs updating.
      * This function launches a coroutine and returns immediately (non-blocking).
-     * Skips refresh if initial fetch just completed to avoid redundant backend calls.
      */
-    fun refreshUserData(maxRetries: Int = 2, forceRefresh: Boolean = false) {
+    fun refreshUserData() {
         viewModelScope.launch(IO) {
             try {
-                // Skip refresh if initial fetch just completed, unless forced
-                // This prevents duplicate get_user calls when profile first opens
-                if (hasInitialUserFetch && !forceRefresh) {
-                    Timber.tag("refreshUserData").d("Skipping refresh for user $userId - initial fetch just completed")
-                    hasInitialUserFetch = false // Reset flag for future refreshes
-                    return@launch
-                }
+                Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
                 
-                refreshUserWithRetry(maxRetries)
-
-                // If this is the current user's profile, update appUser from refreshed data
-                if (userId == appUser.mid) {
-                    // Update appUser singleton with server data
-                    User.updateUserInstance(user.value)
-
-                    // Ensure appUser reference points to the updated singleton
-                    appUser = User.getInstance(appUser.mid)
-                    TweetCacheManager.saveUser(appUser)
-                }
-
-                // Update count variables from the refreshed user data (which now includes appUser if same user)
-                _bookmarksCount.value = user.value.bookmarksCount
-                _favoritesCount.value = user.value.favoritesCount
-                _followersCount.value = user.value.followersCount
-                _followingsCount.value = user.value.followingCount
-                _tweetCount.value = user.value.tweetCount
-
-                Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
-            } catch (e: Exception) {
-                Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
-            }
-        }
-    }
-
-    /**
-     * Refresh user data with retry logic (max 2 retries)
-     * Matches iOS ProfileView.refreshProfileData() behavior:
-     * - Passes empty baseUrl to force fresh IP resolution and skip cache
-     * - Does NOT use forceRefresh=true (relies on empty baseUrl logic)
-     * - Does NOT remove cached user before fetching
-     */
-    private suspend fun refreshUserWithRetry(maxRetries: Int = 2) {
-        repeat(maxRetries) { attempt ->
-            try {
-                // Pass empty baseUrl to force IP re-resolution and skip cache (matching iOS)
-                // fetchUser will skip cache when baseUrl is empty and fetch from server
-                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 1, forceRefresh = false)
+                // Fetch fresh data from server (fetchUser handles retries internally)
+                // Pass empty baseUrl to force fresh IP resolution and skip cache (matches iOS)
+                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 2, forceRefresh = true)
+                
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Prevent downgrading the avatar if we recently updated it locally
-                    // This handles server consistency issues where get_user might return old data for a short time
-                    if (userId == appUser.mid && appUser.avatar != null && refreshedUser.avatar != appUser.avatar) {
-                        Timber.tag("refreshUserWithRetry").d("Server returned old avatar CID: ${refreshedUser.avatar}, keeping local: ${appUser.avatar}")
-                        _user.value = refreshedUser.copy(avatar = appUser.avatar)
-                    } else {
-                        _user.value = refreshedUser
+                    // Update user state
+                    _user.value = refreshedUser
+                    
+                    // If this is the app user, sync with appUser singleton
+                    if (userId == appUser.mid) {
+                        User.updateUserInstance(refreshedUser)
+                        appUser = User.getInstance(appUser.mid)
+                        TweetCacheManager.saveUser(appUser)
                     }
-                    return // Success, exit retry loop
+                    
+                    // Update count variables
+                    _bookmarksCount.value = refreshedUser.bookmarksCount
+                    _favoritesCount.value = refreshedUser.favoritesCount
+                    _followersCount.value = refreshedUser.followersCount
+                    _followingsCount.value = refreshedUser.followingCount
+                    _tweetCount.value = refreshedUser.tweetCount
+                    
+                    Timber.tag("refreshUserData").d("✅ Refreshed user data for: ${refreshedUser.name}")
                 } else {
-                    Timber.tag("refreshUserWithRetry").w("Failed to fetch valid user data for $userId (attempt ${attempt + 1})")
+                    Timber.tag("refreshUserData").w("Failed to fetch valid user data for userId: $userId")
                 }
             } catch (e: Exception) {
-                Timber.tag("refreshUserWithRetry").e(e, "Error refreshing user $userId (attempt ${attempt + 1})")
-            }
-            
-            // If this isn't the last attempt, wait before retrying
-            if (attempt < maxRetries - 1) {
-                val delayMs = minOf(3000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s
-                Timber.tag("refreshUserWithRetry").d("Retrying user refresh in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                delay(delayMs)
+                Timber.tag("refreshUserData").e(e, "Error refreshing user data for userId: $userId")
             }
         }
     }
@@ -938,9 +896,6 @@ class UserViewModel @AssistedInject constructor(
                     // Only get current user's fans list when opening the app.
                     refreshFollowingsAndFans()
                 }
-                
-                // Mark initial user fetch as complete
-                hasInitialUserFetch = true
             }
         } else {
             _user.value = appUser
@@ -951,9 +906,6 @@ class UserViewModel @AssistedInject constructor(
             _followersCount.value = appUser.followersCount
             _followingsCount.value = appUser.followingCount
             _tweetCount.value = appUser.tweetCount
-            
-            // Mark initial user fetch as complete (appUser doesn't need fetching)
-            hasInitialUserFetch = true
         }
     }
 
