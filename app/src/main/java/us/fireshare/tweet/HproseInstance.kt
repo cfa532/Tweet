@@ -199,20 +199,6 @@ object NodePool {
         
         addIPToNode(accessNodeMid, normalizedIP)
     }
-    
-    /**
-     * Get node info for debugging
-     */
-    suspend fun getNodeInfo(nodeMid: MimeiId): NodeInfo? = nodeMutex.withLock {
-        nodes[nodeMid]
-    }
-    
-    /**
-     * Get all nodes count (for monitoring)
-     */
-    suspend fun getNodesCount(): Int = nodeMutex.withLock {
-        nodes.size
-    }
 }
 
 // Encapsulate Hprose client and related operations in a singleton object.
@@ -254,7 +240,7 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     
     // Private backing field for appUser StateFlow
-    private val _appUserState = MutableStateFlow<User>(getInstance(TW_CONST.GUEST_ID))
+    private val _appUserState = MutableStateFlow(getInstance(TW_CONST.GUEST_ID))
     
     /**
      * StateFlow for observing appUser changes.
@@ -493,7 +479,7 @@ object HproseInstance {
             if (cachedUser != null) {
                 // Update singleton instance with cached data
                 User.updateUserInstance(cachedUser, true)
-                appUser = User.getInstance(userId)!!
+                appUser = getInstance(userId)
                 appUser.baseUrl = "http://$entryIP"
                 Timber.tag("initAppEntry")
                     .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
@@ -680,7 +666,7 @@ object HproseInstance {
                     return Pair(true, null)
                 } else {
                     lastError = lastError ?: applicationContext.getString(R.string.error_send_outgoing_message)
-                    Timber.tag("sendMessage").e("❌ Failed to send to sender node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                    Timber.tag("sendMessage").e("❌ Failed to send to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${lastError?.takeIf { it != applicationContext.getString(R.string.error_send_outgoing_message) } ?: "Failed to send outgoing message"}")
                     
                     if (attempt < maxRetries) {
                         val delay = (attempt + 1) * 2000L // 2, 4 seconds
@@ -691,7 +677,7 @@ object HproseInstance {
                 }
             } catch (e: Exception) {
                 lastError = e.message ?: applicationContext.getString(R.string.error_network)
-                Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
+                Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message ?: "Network error"}")
                 
                 if (attempt < maxRetries) {
                     delay((attempt + 1) * 2000L)
@@ -1033,7 +1019,7 @@ object HproseInstance {
                 val userId = getUserId(username)
                 if (userId == null) {
                     lastError = context.getString(R.string.login_getuserid_fail)
-                    Timber.tag("Login").w("getUserId failed for username: $username (attempt ${attempt + 1}/$maxRetries)")
+                    Timber.tag("Login").w("getUserId failed for username: $username (attempt ${attempt + 1}/$maxRetries) - Failed to get user ID")
                     // Don't return yet, let retry logic handle it
                     if (attempt == maxRetries - 1) {
                         // Last attempt failed
@@ -1046,7 +1032,7 @@ object HproseInstance {
                 val user = fetchUser(userId, "", maxRetries = 1)
                 if (user == null) {
                     lastError = context.getString(R.string.login_getuser_fail)
-                    Timber.tag("Login").w("fetchUser failed for userId: $userId (attempt ${attempt + 1}/$maxRetries)")
+                    Timber.tag("Login").w("fetchUser failed for userId: $userId (attempt ${attempt + 1}/$maxRetries) - Failed to fetch user")
                     // Don't return yet, let retry logic handle it
                     if (attempt == maxRetries - 1) {
                         // Last attempt failed
@@ -1481,8 +1467,8 @@ object HproseInstance {
             // Check success status first
             val success = response?.get("success") as? Boolean
             if (success != true) {
-                val errorMessage = response?.get("message") as? String ?: applicationContext.getString(R.string.error_unknown_occurred)
-                Timber.tag("getTweetFeed").e("Feed failed: $errorMessage")
+                val serverMessage = response?.get("message") as? String
+                Timber.tag("getTweetFeed").e("Feed failed: ${serverMessage ?: "Unknown error occurred"}")
                 return emptyList()
             }
 
@@ -1568,9 +1554,9 @@ object HproseInstance {
             // Check success status first
             val success = response?.get("success") as? Boolean
             if (success != true) {
-                val errorMessage = response?.get("message") as? String ?: applicationContext.getString(R.string.error_unknown_occurred)
+                val serverMessage = response?.get("message") as? String
                 Timber.tag("getTweetsByUser")
-                    .e("Tweets loading failed for user ${user.mid}: $errorMessage")
+                    .e("Tweets loading failed for user ${user.mid}: ${serverMessage ?: "Unknown error occurred"}")
                 Timber.tag("getTweetsByUser").e("Response: $response")
 
                 return emptyList()
@@ -2008,8 +1994,8 @@ object HproseInstance {
                     null
                 }
             } else {
-                val errorMessage = rawResponse?.get("message") as? String ?: applicationContext.getString(R.string.error_upload_unknown)
-                Timber.tag("uploadTweet").e("Upload failed: $errorMessage")
+                val serverMessage = rawResponse?.get("message") as? String
+                Timber.tag("uploadTweet").e("Upload failed: ${serverMessage ?: "Unknown upload error"}")
                 null
             }
         } catch (e: OutOfMemoryError) {
@@ -2535,8 +2521,8 @@ object HproseInstance {
                 )
                 updatedTweet
             } else {
-                val errorMessage = rawResponse?.get("message") as? String ?: applicationContext.getString(R.string.error_unknown)
-                Timber.tag("uploadComment").e("Failed to upload comment: $errorMessage")
+                val serverMessage = rawResponse?.get("message") as? String
+                Timber.tag("uploadComment").e("Failed to upload comment: ${serverMessage ?: "Unknown error"}")
                 null
             }
         } catch (e: Exception) {
@@ -3545,6 +3531,7 @@ object HproseInstance {
         while (true) {
             // Check if we've been polling too long
             if (System.currentTimeMillis() - startTime > maxPollingTime) {
+                Timber.tag("pollVideoConversionStatus").e("Video processing timeout after ${maxPollingTime / 1000 / 60} minutes")
                 throw Exception(applicationContext.getString(R.string.error_video_processing_timeout, maxPollingTime / 1000 / 60))
             }
 
@@ -3558,6 +3545,7 @@ object HproseInstance {
                 }
                 
                 if (statusResponse.status != HttpStatusCode.OK) {
+                    Timber.tag("pollVideoConversionStatus").e("Status check failed with HTTP status: ${statusResponse.status}")
                     throw Exception(applicationContext.getString(R.string.error_status_check_failed, statusResponse.status.toString()))
                 }
 
@@ -3592,8 +3580,10 @@ object HproseInstance {
 
                 when (status) {
                     "completed" -> {
-                        val cid = statusData["cid"] as? String
-                            ?: throw Exception(applicationContext.getString(R.string.error_no_cid_in_response))
+                        val cid = statusData["cid"] as? String ?: run {
+                            Timber.tag("pollVideoConversionStatus").e("No CID in response")
+                            throw Exception(applicationContext.getString(R.string.error_no_cid_in_response))
+                        }
                         
                         @OptIn(UnstableApi::class)
                         val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
@@ -3613,7 +3603,9 @@ object HproseInstance {
                         )
                     }
                     "failed" -> {
-                        val errorMessage = statusData["message"] as? String ?: applicationContext.getString(R.string.error_video_conversion_failed)
+                        val serverMessage = statusData["message"] as? String
+                        Timber.tag("pollVideoConversionStatus").e("Video conversion failed: ${serverMessage ?: "Unknown error"}")
+                        val errorMessage = serverMessage ?: applicationContext.getString(R.string.error_video_conversion_failed)
                         throw Exception(errorMessage)
                     }
                     "uploading", "processing" -> {
@@ -3627,10 +3619,12 @@ object HproseInstance {
                 }
             } catch (e: Exception) {
                 consecutiveFailures++
-                Timber.tag("pollVideoConversionStatus").e("Error polling status (attempt $consecutiveFailures/$maxConsecutiveFailures): ${e.message}")
+                val englishError = e.message ?: "Unknown error"
+                Timber.tag("pollVideoConversionStatus").e("Error polling status (attempt $consecutiveFailures/$maxConsecutiveFailures): $englishError")
                 
                 if (consecutiveFailures >= maxConsecutiveFailures) {
-                    throw Exception(applicationContext.getString(R.string.error_poll_status_failures, maxConsecutiveFailures, e.message ?: ""))
+                    Timber.tag("pollVideoConversionStatus").e("Failed to poll status after $maxConsecutiveFailures consecutive failures")
+                    throw Exception(applicationContext.getString(R.string.error_poll_status_failures, maxConsecutiveFailures, englishError))
                 }
                 
                 // Exponential backoff for retries, but cap at reasonable maximum
@@ -3904,40 +3898,6 @@ object HproseInstance {
                 removeIncompleteUpload(context, upload.workId)
             }
         }
-    }
-    
-    /**
-     * Clear all stuck/stale uploads (useful for debugging or cleanup)
-     * Cancels WorkManager jobs and removes incomplete upload tracking
-     */
-    fun clearStuckUploads(context: Context) {
-        val incompleteUploads = getIncompleteUploads(context)
-        if (incompleteUploads.isEmpty()) {
-            Timber.tag("HproseInstance").d("No incomplete uploads to clear")
-            return
-        }
-        
-        Timber.tag("HproseInstance").d("Clearing ${incompleteUploads.size} stuck uploads")
-        
-        for (upload in incompleteUploads) {
-            try {
-                // Cancel WorkManager job
-                try {
-                    val uuid = UUID.fromString(upload.workId)
-                    WorkManager.getInstance(context).cancelWorkById(uuid)
-                    Timber.tag("HproseInstance").d("Cancelled work: ${upload.workId}")
-                } catch (e: Exception) {
-                    Timber.tag("HproseInstance").w("Could not cancel work ${upload.workId}: $e")
-                }
-                
-                // Remove from tracking
-                removeIncompleteUpload(context, upload.workId)
-            } catch (e: Exception) {
-                Timber.tag("HproseInstance").e("Error clearing upload ${upload.workId}: $e")
-            }
-        }
-        
-        Timber.tag("HproseInstance").d("Cleared all stuck uploads")
     }
 }
 
