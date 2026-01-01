@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -110,6 +111,32 @@ fun ProfileScreen(
     LaunchedEffect(userId) {
         Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
         viewModel.refreshUserData()
+    }
+
+    // Resync user data on server in background (long-running operation)
+    // Only run once per app session per user to avoid redundant expensive operations
+    // Matches iOS ProfileView behavior
+    LaunchedEffect(userId) {
+        val shouldResync = HproseInstance.shouldResyncUser(userId)
+        
+        if (shouldResync) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val resyncedUser = HproseInstance.resyncUser(userId)
+                    if (resyncedUser != null) {
+                        Timber.tag("ProfileScreen").d("✅ Successfully resynced user $userId on server")
+                        TweetCacheManager.saveUser(resyncedUser)
+                        Timber.tag("ProfileScreen").d("Saved resynced user to cache")
+                    } else {
+                        Timber.tag("ProfileScreen").w("Failed to resync user $userId")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ProfileScreen").e(e, "Failed to resync user $userId")
+                }
+            }
+        } else {
+            Timber.tag("ProfileScreen").d("Skipping resync for user $userId - already resynced this session")
+        }
     }
 
     // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens

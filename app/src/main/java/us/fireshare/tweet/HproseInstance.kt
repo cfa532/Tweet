@@ -312,6 +312,13 @@ object HproseInstance {
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
     
+    /**
+     * Track users that have been resynced this app session to avoid redundant operations
+     * Matches iOS ProfileView.resyncedUsersThisSession behavior
+     */
+    private val resyncedUsersThisSession = mutableSetOf<MimeiId>()
+    private val resyncLock = Any()
+    
     // Data class for tracking incomplete uploads
     data class IncompleteUpload(
         val workId: String,
@@ -3147,6 +3154,121 @@ object HproseInstance {
         }
 
         firstHealthy
+    }
+
+    /**
+     * Check if user should be resynced this session and mark as resynced if so.
+     * Thread-safe check using synchronized block.
+     * 
+     * @param userId The user ID to check
+     * @return true if user should be resynced, false if already resynced this session
+     */
+    fun shouldResyncUser(userId: MimeiId): Boolean {
+        return synchronized(resyncLock) {
+            if (resyncedUsersThisSession.contains(userId)) {
+                false
+            } else {
+                resyncedUsersThisSession.add(userId)
+                true
+            }
+        }
+    }
+
+    /**
+     * Resync user data on the server - matches iOS ProfileView behavior.
+     * This triggers a backend operation to refresh the user's data on the server side.
+     * Should be called once per app session when a user profile is opened.
+     * 
+     * @param userId The user ID to resync
+     * @return The updated User object from server, or null if failed
+     */
+    suspend fun resyncUser(userId: MimeiId): User? {
+        return try {
+            Timber.tag("resyncUser").d("Starting resync for user: $userId")
+            
+            // Get the user instance to access their baseUrl
+            val user = getUserInstance(userId)
+            
+            // If user doesn't have a baseUrl, fetch it first
+            if (user.baseUrl.isNullOrBlank()) {
+                Timber.tag("resyncUser").d("User $userId has no baseUrl, fetching user first")
+                fetchUser(userId, baseUrl = "")
+            }
+            
+            val entry = "resync_user"
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "userid" to userId
+            )
+            
+            // Use the target user's hproseService (with their baseUrl)
+            val service = user.hproseService ?: run {
+                Timber.tag("resyncUser").w("User $userId has no hproseService, using appUser's client")
+                appUser.hproseService
+            }
+            
+            if (service == null) {
+                Timber.tag("resyncUser").e("No hproseService available for resync")
+                return null
+            }
+            
+            Timber.tag("resyncUser").d("Calling resync_user API for user: $userId with baseUrl: ${user.baseUrl}")
+            
+            // Make the API call
+            val rawResponse = withContext(Dispatchers.IO) {
+                service.runMApp<Any>(entry, params)
+            }
+            
+            Timber.tag("resyncUser").d("Got response for user $userId: ${rawResponse?.javaClass?.simpleName}")
+            
+            // Parse response (v2 API returns unwrapped user data)
+            val userData = when (rawResponse) {
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    rawResponse as? Map<String, Any>
+                }
+                else -> {
+                    Timber.tag("resyncUser").w("Unexpected response type: ${rawResponse?.javaClass}")
+                    null
+                }
+            }
+            
+            if (userData == null) {
+                Timber.tag("resyncUser").e("Failed to parse user data from response")
+                return null
+            }
+            
+            // Update user properties from the response
+            user.name = userData["name"] as? String
+            user.username = userData["username"] as? String
+            user.email = userData["email"] as? String
+            user.profile = userData["profile"] as? String
+            user.avatar = userData["avatar"] as? String
+            
+            // Update counts only if provided (non-nullable Int properties)
+            (userData["tweetCount"] as? Number)?.let { user.tweetCount = it.toInt() }
+            (userData["followingCount"] as? Number)?.let { user.followingCount = it.toInt() }
+            (userData["followersCount"] as? Number)?.let { user.followersCount = it.toInt() }
+            (userData["bookmarksCount"] as? Number)?.let { user.bookmarksCount = it.toInt() }
+            (userData["favoritesCount"] as? Number)?.let { user.favoritesCount = it.toInt() }
+            (userData["commentsCount"] as? Number)?.let { user.commentsCount = it.toInt() }
+            
+            // Update cloudDrivePort if provided
+            (userData["cloudDrivePort"] as? Number)?.let { port ->
+                user.cloudDrivePort = port.toInt()
+            }
+            
+            // Save updated user to cache
+            TweetCacheManager.saveUser(user)
+            Timber.tag("resyncUser").d("✅ Successfully resynced user $userId")
+            
+            user
+        } catch (e: Exception) {
+            Timber.tag("resyncUser").e(e, "Failed to resync user $userId")
+            null
+        }
     }
 
     /**
