@@ -480,15 +480,23 @@ object HproseInstance {
                 // Update singleton instance with cached data
                 User.updateUserInstance(cachedUser, true)
                 appUser = getInstance(userId)
-                appUser.baseUrl = "http://$entryIP"
-                Timber.tag("initAppEntry")
-                    .d("✅ Loaded cached user immediately for UI - baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+                
+                // CRITICAL: Only set entry IP if cached user has no baseUrl
+                // Otherwise preserve the cached user's baseUrl (their known node IP)
+                if (appUser.baseUrl.isNullOrBlank()) {
+                    appUser.baseUrl = "http://$entryIP"
+                    Timber.tag("initAppEntry")
+                        .d("✅ Loaded cached user, set baseUrl to entry IP: ${appUser.baseUrl}, username: ${appUser.username}")
+                } else {
+                    Timber.tag("initAppEntry")
+                        .d("✅ Loaded cached user with existing baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+                }
             } else {
-                // No cached user, just update baseUrl
+                // No cached user, set baseUrl to entry IP as fallback
                 appUser.baseUrl = "http://$entryIP"
                 User.updateUserInstance(appUser, true)
                 Timber.tag("initAppEntry")
-                    .d("⚠️ No cached user found, will fetch from network before showing UI")
+                    .d("⚠️ No cached user found, set baseUrl to entry IP: ${appUser.baseUrl}")
             }
 
             // If we have cached user data, show UI immediately
@@ -2963,17 +2971,37 @@ object HproseInstance {
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
                 
                 if (skipRetryAndBlacklist) {
+                    // Restore original baseUrl before returning
+                    if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
+                        user.baseUrl = originalBaseUrl
+                        Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after exception: $originalBaseUrl")
+                    }
                     return false
                 }
                 
                 if (attempt < maxRetries) {
                     val delayMs = attempt * 1000L
                     delay(delayMs)
+                } else {
+                    // Last attempt failed - restore original baseUrl
+                    if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
+                        user.baseUrl = originalBaseUrl
+                        Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after final attempt exception: $originalBaseUrl")
+                    }
                 }
             }
         }
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
+        
+        // CRITICAL: Restore original baseUrl if all retries failed
+        // Don't leave baseUrl as null - IPFS network instability can cause temporary failures
+        // Preserve the last known working baseUrl so user can retry later
+        if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
+            user.baseUrl = originalBaseUrl
+            Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after all retries failed: $originalBaseUrl")
+        }
+        
         if (!skipRetryAndBlacklist && lastError != null) {
             BlackList.recordFailure(user.mid)
         }
