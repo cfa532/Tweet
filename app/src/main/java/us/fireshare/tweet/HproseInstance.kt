@@ -505,17 +505,19 @@ object HproseInstance {
                 onBaseUrlReady?.invoke()
             }
 
-            // THEN: Fetch fresh data from network
-            // If we have cached data, this runs in background
-            // If no cached data, this blocks until complete before showing UI
+            // THEN: Fetch fresh data from network in background (IO dispatcher)
+            // If we have cached data, this runs in background without blocking UI
+            // If no cached data, this still runs but may delay UI briefly
             Timber.tag("initAppEntry").d("Fetching user data from network...")
             
-            // Fetch user data from network
+            // Fetch user data from network on IO dispatcher to avoid blocking main thread
             try {
                 // Use withTimeoutOrNull with 15 second timeout to prevent indefinite blocking
-                val refreshedUser: User? = withTimeoutOrNull(15_000) {
-                    // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-                    fetchUser(userId, baseUrl = "", forceRefresh = true)
+                val refreshedUser: User? = withContext(Dispatchers.IO) {
+                    withTimeoutOrNull(15_000) {
+                        // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
+                        fetchUser(userId, baseUrl = "", forceRefresh = true)
+                    }
                 }
                 
                 if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
