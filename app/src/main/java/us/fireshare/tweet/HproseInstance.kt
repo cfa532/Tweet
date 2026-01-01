@@ -1217,21 +1217,32 @@ object HproseInstance {
                 val registeredUserId = userDict?.get("mid") as? String
 
                 if (registeredUserId != null) {
-                    // Make the newly registered user follow each user in getAlphaIds()
-                    val alphaIds = getAlphaIds()
-                    for (alphaId in alphaIds) {
+                    // Launch toggleFollowing operations in a separate coroutine to avoid blocking
+                    // This allows the user to receive the success response immediately
+                    CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            val followResult = toggleFollowing(alphaId, registeredUserId)
-                            Timber.tag("registerUser").d("New user $registeredUserId followed alpha user $alphaId, result: $followResult")
+                            Timber.tag("registerUser").d("Starting async follow operations for new user $registeredUserId")
+                            // Make the newly registered user follow each user in getAlphaIds()
+                            val alphaIds = getAlphaIds()
+                            for (alphaId in alphaIds) {
+                                try {
+                                    val followResult = toggleFollowing(alphaId, registeredUserId)
+                                    Timber.tag("registerUser").d("New user $registeredUserId followed alpha user $alphaId, result: $followResult")
+                                } catch (e: Exception) {
+                                    Timber.tag("registerUser").e(e, "Failed to follow alphaId $alphaId for new user $registeredUserId")
+                                    // Continue with other users even if one fails
+                                }
+                            }
+                            Timber.tag("registerUser").d("Completed async follow operations for new user $registeredUserId")
                         } catch (e: Exception) {
-                            Timber.tag("registerUser").e(e, "Failed to follow alphaId $alphaId for new user $registeredUserId")
-                            // Continue with other users even if one fails
+                            Timber.tag("registerUser").e(e, "Error in async follow operations")
                         }
                     }
                 } else {
                     Timber.tag("registerUser").w("Warning: User object not found in registration response")
                 }
 
+                // Return success immediately without waiting for follow operations
                 return Pair(true, null)
             } else if (success == false) {
                 // Error response - extract error message (like iOS does)
@@ -2925,31 +2936,28 @@ object HproseInstance {
                 }
                 
                 Timber.tag("updateUserFromServer").d("get_user rawResponse received: ${rawResponse?.javaClass?.simpleName}, isNull: ${rawResponse == null}")
-                
-                // v3 API returns user object (Map) or null if not found
-                val success = when (rawResponse) {
-                    is Map<*, *> -> processUserDataResponse(user, rawResponse, skipRetryAndBlacklist)
-                    null -> {
-                        // MATCH iOS: Clear baseUrl and let retry loop handle it
-                        // This ensures next attempt will resolve fresh IP
-                        Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
-                        user.baseUrl = null
-                        
-                        // If this was the last attempt, fail
-                        if (attempt >= maxRetries) {
-                            Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
-                            if (!skipRetryAndBlacklist) {
-                                BlackList.recordFailure(user.mid)
-                            }
-                        } else {
-                            Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
+
+                // v3 API returns JSON response with success field: {success: true, data: userObject} or {success: false, message: "..."}
+                val userData = unwrapV2Response<Map<String, Any>>(rawResponse)
+                val success = if (userData != null) {
+                    processUserDataResponse(user, userData, skipRetryAndBlacklist)
+                } else {
+                    // unwrapV2Response returned null (either error response or null response)
+                    // MATCH iOS: Clear baseUrl and let retry loop handle it
+                    // This ensures next attempt will resolve fresh IP
+                    Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
+                    user.baseUrl = null
+
+                    // If this was the last attempt, fail
+                    if (attempt >= maxRetries) {
+                        Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
+                        if (!skipRetryAndBlacklist) {
+                            BlackList.recordFailure(user.mid)
                         }
-                        throw Exception("User not found - null response from server")
+                    } else {
+                        Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
                     }
-                    else -> {
-                        Timber.tag("updateUserFromServer").w("⚠️ UNEXPECTED RESPONSE TYPE: userId: ${user.mid}, type: ${rawResponse.javaClass.simpleName}")
-                        throw Exception("Unexpected response type: ${rawResponse.javaClass.simpleName}")
-                    }
+                    false
                 }
                 
                 // On success, update NodePool with discovered IPs
