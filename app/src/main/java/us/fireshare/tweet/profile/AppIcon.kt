@@ -96,7 +96,6 @@ fun UserAvatar(
         loadState = AvatarLoadState()
         
         if (!avatarMid.isNullOrEmpty()) {
-            Timber.tag("UserAvatar").d("📥 Loading avatar: $avatarMid, baseUrl: $currentBaseUrl")
             // Check cache for original image (loadOriginalImageWithScope uses "${mid}_original" key)
             val originalMid = "${avatarMid}_original"
             val cachedBitmap = withContext(Dispatchers.IO) {
