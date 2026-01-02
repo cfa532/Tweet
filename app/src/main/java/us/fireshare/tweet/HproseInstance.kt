@@ -29,9 +29,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -247,13 +251,19 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     
     // Private backing field for appUser StateFlow
-    private val _appUserState = MutableStateFlow(getInstance(TW_CONST.GUEST_ID))
+    private data class UserWrapper(val user: User, val version: Long = System.nanoTime())
+    
+    private val _appUserState = MutableStateFlow(UserWrapper(getInstance(TW_CONST.GUEST_ID)))
     
     /**
      * StateFlow for observing appUser changes.
-     * Others can collect this flow to observe when the app user changes.
+     * Wraps User in a data class with timestamp to force emission even with same User reference
      */
-    val appUserState: StateFlow<User> = _appUserState.asStateFlow()
+    val appUserState: StateFlow<User> = _appUserState.map { it.user }.stateIn(
+        scope = CoroutineScope(Dispatchers.Main + SupervisorJob()),
+        started = SharingStarted.Eagerly,
+        initialValue = getInstance(TW_CONST.GUEST_ID)
+    )
     
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
@@ -270,15 +280,14 @@ object HproseInstance {
      */
     var appUser: User
         get() {
-            return _appUserState.value
+            return _appUserState.value.user
         }
         set(value) {
-            val oldBaseUrl = _appUserState.value.baseUrl
-            val oldAvatar = _appUserState.value.avatar
+            val oldBaseUrl = _appUserState.value.user.baseUrl
+            val oldAvatar = _appUserState.value.user.avatar
             
-            // Always emit to StateFlow, even if same reference
-            // This ensures UI updates when User object fields change
-            _appUserState.value = value
+            // Wrap in UserWrapper with new timestamp to force StateFlow emission
+            _appUserState.value = UserWrapper(value)
             
             // Log if avatar changed (helps debug toolbar avatar issues)
             if (oldAvatar != value.avatar) {
@@ -486,7 +495,8 @@ object HproseInstance {
             if (cachedUser != null) {
                 // Update singleton instance with cached data
                 User.updateUserInstance(cachedUser, true)
-                appUser = getInstance(userId)
+                // CRITICAL: Set to cachedUser (not getInstance) to force StateFlow emission
+                appUser = cachedUser
                 
                 // CRITICAL: Only set entry IP if cached user has no baseUrl
                 // Otherwise preserve the cached user's baseUrl (their known node IP)
@@ -531,10 +541,10 @@ object HproseInstance {
                 if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                     // Update on Main dispatcher to ensure UI recomposition happens immediately
                     withContext(Dispatchers.Main) {
-                        // Use the refreshed user's baseUrl
+                        // Update singleton first, THEN set appUser to force StateFlow emission
+                        User.updateUserInstance(refreshedUser, true)
                         appUser = refreshedUser
                         TweetCacheManager.saveUser(refreshedUser)
-                        User.updateUserInstance(appUser, true)
                         
                         Timber.tag("initAppEntry")
                             .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
@@ -3298,17 +3308,24 @@ object HproseInstance {
                 }
             }
             
-            if (userData == null) {
-                Timber.tag("resyncUser").e("Failed to parse user data from response")
+            // Validate response: must have userData and username (required field)
+            if (userData == null || userData.isEmpty()) {
+                Timber.tag("resyncUser").e("Null or empty user data, ignoring result")
                 return null
             }
             
-            // Update user properties from the response
-            user.name = userData["name"] as? String
-            user.username = userData["username"] as? String
-            user.email = userData["email"] as? String
-            user.profile = userData["profile"] as? String
-            user.avatar = userData["avatar"] as? String
+            val username = userData["username"] as? String
+            if (username == null) {
+                Timber.tag("resyncUser").e("Invalid user data (no username), ignoring result")
+                return null
+            }
+            
+            // Valid response - update user fields
+            (userData["name"] as? String)?.let { user.name = it }
+            user.username = username  // Username is validated above
+            (userData["email"] as? String)?.let { user.email = it }
+            (userData["profile"] as? String)?.let { user.profile = it }
+            (userData["avatar"] as? String)?.let { user.avatar = it }
             
             // Update counts only if provided (non-nullable Int properties)
             (userData["tweetCount"] as? Number)?.let { user.tweetCount = it.toInt() }

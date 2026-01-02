@@ -185,8 +185,9 @@ class UserViewModel @AssistedInject constructor(
                     // If this is the app user, sync with appUser singleton
                     if (userId == appUser.mid) {
                         User.updateUserInstance(refreshedUser)
-                        appUser = User.getInstance(appUser.mid)
-                        TweetCacheManager.saveUser(appUser)
+                        // CRITICAL: Set to refreshedUser (not getInstance) to force StateFlow emission
+                        appUser = refreshedUser
+                        TweetCacheManager.saveUser(refreshedUser)
                     }
                     
                     // Update count variables
