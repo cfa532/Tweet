@@ -109,36 +109,24 @@ class TweetActivity : ComponentActivity() {
 
         // Start initialization
         lifecycleScope.launch {
-            val startTime = System.currentTimeMillis()
-            Timber.tag("TweetActivity").d("⏱️ Initialization started")
-            
-            // Set 3-second timeout to force show UI
-            val timeoutJob = launch {
-                delay(3000L)
-                if (!activityViewModel.isAppReady.value) {
-                    val elapsedTime = System.currentTimeMillis() - startTime
-                    Timber.tag("TweetActivity").d("⏱️ 3s timeout reached (init took ${elapsedTime}ms), forcing UI to show")
-                    activityViewModel.isAppReady.value = true
-                }
-            }
-            
             try {
                 HproseInstance.init(this@TweetActivity) {
-                    // AppUser loaded, show UI immediately
-                    val initCompleteTime = System.currentTimeMillis()
-                    val initElapsed = initCompleteTime - startTime
-                    Timber.tag("TweetActivity").d("⏱️ Init completed in ${initElapsed}ms, showing UI immediately")
+                    // AppUser loaded, show UI
+                    Timber.tag("TweetActivity").d("AppUser loaded, showing UI")
+                    activityViewModel.isAppReady.value = true
                     
-                    lifecycleScope.launch {
-                        timeoutJob.cancel() // Cancel timeout since init finished
-                        activityViewModel.isAppReady.value = true
+                    // Background tasks - delayed after appUser initialization
+                    lifecycleScope.launch(IO) {
+                        delay(5000) // Check for upgrade 5s after appUser init
+                        activityViewModel.checkForUpgrade(this@TweetActivity)
                     }
-                }
-
-                // Background tasks
-                launch(IO) {
-                    delay(5000) // Check for upgrade 5s after init
-                    activityViewModel.checkForUpgrade(this@TweetActivity)
+                    
+                    lifecycleScope.launch(IO) {
+                        delay(10000) // Check messages 10s after appUser init
+                        if (::chatSessionRepository.isInitialized) {
+                            checkMessagesAndUpdateBadge()
+                        }
+                    }
                 }
 
                 launch(IO) {
@@ -146,19 +134,10 @@ class TweetActivity : ComponentActivity() {
                     HproseInstance.resumeIncompleteUploads(this@TweetActivity)
                 }
 
-                launch(IO) {
-                    delay(10000) // Check messages 10s after init
-                    if (::chatSessionRepository.isInitialized) {
-                        checkMessagesAndUpdateBadge()
-                    }
-                }
-
                 requestNotificationPermissionIfNeeded()
 
             } catch (e: Exception) {
-                timeoutJob.cancel() // Cancel timeout since we're handling error
-                val elapsedTime = System.currentTimeMillis() - startTime
-                Timber.tag("TweetActivity").e(e, "⏱️ Error during app initialization after ${elapsedTime}ms, showing UI immediately")
+                Timber.tag("TweetActivity").e(e, "Error during app initialization")
                 activityViewModel.isAppReady.value = true
             }
         }
@@ -726,5 +705,4 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     }
 
 }
-
 

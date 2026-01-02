@@ -1028,12 +1028,17 @@ object HproseInstance {
                 if (userId == null) {
                     lastError = context.getString(R.string.login_getuserid_fail)
                     Timber.tag("Login").w("getUserId failed for username: $username (attempt ${attempt + 1}/$maxRetries) - Failed to get user ID")
-                    // Don't return yet, let retry logic handle it
                     if (attempt == maxRetries - 1) {
                         // Last attempt failed
                         return Pair(null, lastError)
                     }
-                    throw Exception("getUserId returned null")
+                    // Wait before retry
+                    if (attempt < maxRetries - 1) {
+                        val delayMs = minOf(5000L, 1000L * (1 shl attempt))
+                        Timber.tag("Login").d("Retrying login after getUserId failure in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                        delay(delayMs)
+                    }
+                    return@repeat // Continue to next attempt
                 }
                 
                 // Fetch user - retry if this fails  
@@ -1041,12 +1046,17 @@ object HproseInstance {
                 if (user == null) {
                     lastError = context.getString(R.string.login_getuser_fail)
                     Timber.tag("Login").w("fetchUser failed for userId: $userId (attempt ${attempt + 1}/$maxRetries) - Failed to fetch user")
-                    // Don't return yet, let retry logic handle it
                     if (attempt == maxRetries - 1) {
                         // Last attempt failed
                         return Pair(null, lastError)
                     }
-                    throw Exception("fetchUser returned null")
+                    // Wait before retry
+                    if (attempt < maxRetries - 1) {
+                        val delayMs = minOf(5000L, 1000L * (1 shl attempt))
+                        Timber.tag("Login").d("Retrying login after fetchUser failure in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                        delay(delayMs)
+                    }
+                    return@repeat // Continue to next attempt
                 }
                 
                 val entry = "login"
@@ -1081,30 +1091,45 @@ object HproseInstance {
                             errorMsg.contains("invalid", ignoreCase = true)) {
                             return Pair(null, errorMsg)
                         }
-                        // For other failures, continue to retry
+                        // For other failures, log and continue to retry
+                        Timber.tag("Login").w("Login failed with error: $errorMsg (attempt ${attempt + 1}/$maxRetries)")
                     }
                 } else {
                     // Response was null or unwrapV2Response returned null (error case)
                     lastError = context.getString(R.string.login_error)
-                    // Continue to retry for unknown errors
+                    Timber.tag("Login").w("Login response was null (attempt ${attempt + 1}/$maxRetries)")
                 }
+                
+                // If this is the last attempt, return failure
+                if (attempt == maxRetries - 1) {
+                    return Pair(null, lastError)
+                }
+                
+                // Wait before retrying
+                val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
+                Timber.tag("Login").d("Retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                delay(delayMs)
             } catch (e: Exception) {
                 lastError = ErrorMessageUtils.getNetworkErrorMessage(context, e)
-                Timber.tag("Login").e(e, "Login attempt ${attempt + 1} failed")
+                Timber.tag("Login").e(e, "Login attempt ${attempt + 1}/$maxRetries failed with exception")
                 
                 // Check if it's a network-related error that should be retried
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (!isNetworkError) {
                     // Don't retry for non-network errors
+                    Timber.tag("Login").w("Non-network error detected, not retrying")
                     return Pair(null, lastError)
                 }
-            }
-            
-            // If this isn't the last attempt, wait before retrying
-            if (attempt < maxRetries - 1) {
+                
+                // If this is the last attempt, return failure
+                if (attempt == maxRetries - 1) {
+                    return Pair(null, lastError)
+                }
+                
+                // Wait before retrying
                 val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
-                Timber.tag("Login").d("Retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
+                Timber.tag("Login").d("Network error detected, retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
                 delay(delayMs)
             }
         }
