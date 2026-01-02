@@ -207,6 +207,13 @@ object HproseInstance {
     val appId: MimeiId get() = _appId
     
     /**
+     * Global flag to enable IPv4-only mode for all backend calls.
+     * When true, only IPv4 addresses will be used.
+     * When false, both IPv4 and IPv6 addresses can be used.
+     */
+    var v4Only: Boolean = false
+    
+    /**
      * Helper function to unwrap v2 API response format
      * v2 responses are wrapped as: {success: true, data: result} or {success: false, message: "..."}
      * @return The unwrapped data if success is true, null otherwise
@@ -1000,8 +1007,9 @@ object HproseInstance {
             "ver" to "last",
             "version" to "v2",
             "username" to username,
-            "v4only" to "true"
+            "v4only" to v4Only.toString()
         )
+        Timber.tag("getUserId").d("🔍 v4Only global = $v4Only, sending v4only = ${v4Only.toString()}")
         return try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             unwrapV2Response<String>(rawResponse)
@@ -1148,7 +1156,7 @@ object HproseInstance {
      * Find IP addresses of given node and return the best one.
      * Uses the same algorithm as get_provider_ips to test and select the best IP.
      * */
-    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = "false"): String? {
+    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = HproseInstance.v4Only.toString()): String? {
         val entry = "get_node_ips"
         val params = mapOf("aid" to appId, "ver" to "last", "version" to "v2", "nodeid" to nodeId, "v4only" to v4Only)
         try {
@@ -1488,7 +1496,7 @@ object HproseInstance {
             "ps" to pageSize,
             "userid" to if (!user.isGuest()) user.mid else userIdForGuest,
             "appuserid" to appUser.mid,
-            "v4only" to "true"
+            "v4only" to v4Only.toString()
         )
         if (entry == "update_following_tweets") {
             appUser.hostIds?.first()?.let { hostId ->
@@ -1578,7 +1586,7 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize,
                 "appuserid" to appUser.mid,
-                "v4only" to "true"
+                "v4only" to v4Only.toString()
             )
             
             if (user.hproseService == null) {
@@ -2946,7 +2954,7 @@ object HproseInstance {
                     "ver" to "last",
                     "version" to "v3",
                     "userid" to user.mid,
-                    "v4only" to "true"
+                    "v4only" to v4Only.toString()
                 )
                 
                 if (user.hproseService == null) {
@@ -3399,12 +3407,14 @@ object HproseInstance {
             "ver" to "last",
             "version" to "v2",
             "mid" to mid,
-            "v4only" to "true"
+            "v4only" to v4Only.toString()
         )
+        Timber.tag("_getProviderIP").d("🔍 v4Only global = $v4Only, sending v4only = ${v4Only.toString()}")
 
         return try {
             val rawResponse = hproseService?.runMApp<Any>(entry, params)
             val ipArray = unwrapV2Response<List<String>>(rawResponse)
+            Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
             // If ipArray is valid, try each IP
             if (ipArray != null && ipArray.isNotEmpty()) {
