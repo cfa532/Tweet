@@ -1,9 +1,11 @@
 package us.fireshare.tweet.datamodel
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -46,8 +48,8 @@ object TweetCacheManager {
         }
 
         try {
-            synchronized(cacheLock) {
-                val cachedTweet = CachedTweet(
+            val cachedTweet = synchronized(cacheLock) {
+                val cached = CachedTweet(
                     mid = tweet.mid,
                     uid = userId,
                     originalTweet = tweet,
@@ -55,10 +57,17 @@ object TweetCacheManager {
                 )
 
                 // Always update memory cache
-                memoryCache[tweet.mid] = cachedTweet
-
-                // Always update database cache
-                HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
+                memoryCache[tweet.mid] = cached
+                cached
+            }
+            
+            // Always update database cache on IO thread
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
+                } catch (e: Exception) {
+                    Timber.e("Error saving tweet to database: $e")
+                }
             }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")
@@ -156,7 +165,7 @@ object TweetCacheManager {
     fun saveUser(user: User) {
         Timber.tag("TweetCacheManager").d("=== SAVING USER TO CACHE === userId: ${user.mid}, username: ${user.username}")
         try {
-            synchronized(userCacheLock) {
+            val cachedUser = synchronized(userCacheLock) {
                 val currentTime = System.currentTimeMillis()
                 
                 // Update memory cache
@@ -164,9 +173,17 @@ object TweetCacheManager {
                 userCacheTimestamps[user.mid] = currentTime
                 Timber.tag("TweetCacheManager").d("💾 USER SAVED TO MEMORY CACHE: userId: ${user.mid}, timestamp: $currentTime")
 
-                // Update database cache with timestamp
-                HproseInstance.dao.insertOrUpdateCachedUser(CachedUser(user.mid, user, Date(currentTime)))
-                Timber.tag("TweetCacheManager").d("💾 USER SAVED TO DATABASE CACHE: userId: ${user.mid}")
+                CachedUser(user.mid, user, Date(currentTime))
+            }
+            
+            // Update database cache with timestamp on IO thread
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    HproseInstance.dao.insertOrUpdateCachedUser(cachedUser)
+                    Timber.tag("TweetCacheManager").d("💾 USER SAVED TO DATABASE CACHE: userId: ${user.mid}")
+                } catch (e: Exception) {
+                    Timber.tag("TweetCacheManager").e("❌ ERROR SAVING USER TO DATABASE: userId: ${user.mid}, error: $e")
+                }
             }
             
             // Update StateFlow to notify observers

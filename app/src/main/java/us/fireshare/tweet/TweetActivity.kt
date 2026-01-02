@@ -110,8 +110,17 @@ class TweetActivity : ComponentActivity() {
         // Start initialization
         lifecycleScope.launch {
             try {
+                // Maximum 3-second splash screen timeout
+                launch {
+                    delay(3000)
+                    if (!activityViewModel.isAppReady.value) {
+                        Timber.tag("TweetActivity").d("Splash screen timeout (3s), showing UI")
+                        activityViewModel.isAppReady.value = true
+                    }
+                }
+                
                 HproseInstance.init(this@TweetActivity) {
-                    // AppUser loaded, show UI
+                    // AppUser loaded, show UI immediately
                     Timber.tag("TweetActivity").d("AppUser loaded, showing UI")
                     activityViewModel.isAppReady.value = true
                     
