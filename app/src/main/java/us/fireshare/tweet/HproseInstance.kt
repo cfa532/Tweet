@@ -555,9 +555,13 @@ object HproseInstance {
             Timber.tag("initAppEntry")
                 .d("User initialized with cached data. $appId, appUser.baseUrl: ${appUser.baseUrl}")
         } else {
-            appUser.followingList = getAlphaIds()
+            val alphaIds = getAlphaIds()
+            appUser.followingList = alphaIds
             TweetCacheManager.saveUser(appUser)
-            Timber.tag("initAppEntry").d("Guest user initialized. $appId, $appUser")
+            Timber.tag("initAppEntry").d("🔍 Guest user initialized. appId: $appId")
+            Timber.tag("initAppEntry").d("🔍 Guest user alphaIds: $alphaIds")
+            Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${appUser.baseUrl}")
+            Timber.tag("initAppEntry").d("🔍 Guest user mid: ${appUser.mid}")
             // For guest users, also call the callback to show UI
             onBaseUrlReady?.invoke()
         }
@@ -995,7 +999,8 @@ object HproseInstance {
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
-            "username" to username
+            "username" to username,
+            "v4only" to "true"
         )
         return try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
@@ -1482,7 +1487,8 @@ object HproseInstance {
             "pn" to pageNumber,
             "ps" to pageSize,
             "userid" to if (!user.isGuest()) user.mid else userIdForGuest,
-            "appuserid" to appUser.mid
+            "appuserid" to appUser.mid,
+            "v4only" to "true"
         )
         if (entry == "update_following_tweets") {
             appUser.hostIds?.first()?.let { hostId ->
@@ -1568,21 +1574,26 @@ object HproseInstance {
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
-                "version" to "v2",
                 "userid" to user.mid,
                 "pn" to pageNumber,
                 "ps" to pageSize,
-                "appuserid" to appUser.mid
+                "appuserid" to appUser.mid,
+                "v4only" to "true"
             )
-
-            Timber.tag("getTweetsByUser")
-                .d("Fetching tweets for user: ${user.mid}, page: $pageNumber, size: $pageSize")
+            
+            if (user.hproseService == null) {
+                Timber.tag("getTweetsByUser").e("❌ user.hproseService is NULL! Cannot fetch tweets")
+                return emptyList()
+            }
+            
             val response = try {
                 user.hproseService?.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
-                Timber.tag("getTweetsByUser").e(e, "Exception calling runMApp for getTweetsByUser, userId: ${user.mid}")
+                Timber.tag("getTweetsByUser").e(e, "❌ Exception calling runMApp for getTweetsByUser, userId: ${user.mid}")
                 throw e
             }
+            
+            Timber.tag("getTweetsByUser").d("🔍 Response received: ${response != null}")
 
             // Check success status first
             val success = response?.get("success") as? Boolean
@@ -1590,7 +1601,6 @@ object HproseInstance {
                 val serverMessage = response?.get("message") as? String
                 Timber.tag("getTweetsByUser")
                     .e("Tweets loading failed for user ${user.mid}: ${serverMessage ?: "Unknown error occurred"}")
-                Timber.tag("getTweetsByUser").e("Response: $response")
 
                 return emptyList()
             }
@@ -1609,7 +1619,7 @@ object HproseInstance {
                         Timber.tag("getTweetsByUser")
                             .d("Cached original tweet: ${originalTweet.mid}")
                     } catch (e: Exception) {
-                        Timber.tag("getTweetsByUser").e("Error caching original tweet: $e")
+                        Timber.tag("getTweetsByUser").e(e, "Error caching original tweet")
                     }
                 }
             }
@@ -1628,7 +1638,7 @@ object HproseInstance {
                         updateCachedTweet(tweet, userId = tweet.authorId)
                         tweet
                     } catch (e: Exception) {
-                        Timber.tag("getTweetsByUser").e("Error decoding tweet: $e")
+                        Timber.tag("getTweetsByUser").e(e, "Error decoding tweet")
                         null
                     }
                 }
@@ -1639,10 +1649,7 @@ object HproseInstance {
 
             return result
         } catch (e: Exception) {
-            Timber.tag("getTweetsByUser").e("Error fetching tweets for user: ${user.mid}")
-            Timber.tag("getTweetsByUser").e("Exception: $e")
-            Timber.tag("getTweetsByUser").e("Stack trace: ${e.stackTraceToString()}")
-
+            Timber.tag("getTweetsByUser").e("Error fetching tweets for user: ${user.mid}: ${e.message}")
             throw e
         }
     }
@@ -2938,7 +2945,8 @@ object HproseInstance {
                     "aid" to appId,
                     "ver" to "last",
                     "version" to "v3",
-                    "userid" to user.mid
+                    "userid" to user.mid,
+                    "v4only" to "true"
                 )
                 
                 if (user.hproseService == null) {
@@ -3390,7 +3398,8 @@ object HproseInstance {
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
-            "mid" to mid
+            "mid" to mid,
+            "v4only" to "true"
         )
 
         return try {

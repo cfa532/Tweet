@@ -174,34 +174,19 @@ class TweetApplication : Application(), ComponentCallbacks2 {
 }
 
 /**
- * Gather error log from production release builds.
+ * Log tree for release builds that prints all logs like debug builds.
  * */
 class ReleaseTree : Timber.Tree() {
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-
-        // Only log WARN, ERROR, and WTF levels in release builds
-        if (priority == android.util.Log.VERBOSE || priority == android.util.Log.DEBUG || priority == android.util.Log.INFO) {
-            return
-        }
-        // Error messages are no longer sent back to server
-        // Only log locally for debugging purposes
-        val logEntry = JSONObject().apply {
-            put("timestamp", System.currentTimeMillis())
-            put("level", priorityToString(priority))
-            put("tag", tag)
-            put("message", message)
-            t?.let { put("exception", it.toString()) }
-        }
-    }
-
-    private fun priorityToString(priority: Int): String {
-        return when (priority) {
-            android.util.Log.ERROR -> "ERROR"
-            android.util.Log.WARN -> "WARN"
-            android.util.Log.INFO -> "INFO"
-            android.util.Log.DEBUG -> "DEBUG"
-            android.util.Log.VERBOSE -> "VERBOSE"
-            else -> "UNKNOWN"
+        // Print all logs to logcat like debug builds
+        val logTag = tag ?: "ReleaseTree"
+        when (priority) {
+            android.util.Log.VERBOSE -> android.util.Log.v(logTag, message, t)
+            android.util.Log.DEBUG -> android.util.Log.d(logTag, message, t)
+            android.util.Log.INFO -> android.util.Log.i(logTag, message, t)
+            android.util.Log.WARN -> android.util.Log.w(logTag, message, t)
+            android.util.Log.ERROR -> android.util.Log.e(logTag, message, t)
+            android.util.Log.ASSERT -> android.util.Log.wtf(logTag, message, t)
         }
     }
 }
