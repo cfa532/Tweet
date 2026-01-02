@@ -2991,23 +2991,18 @@ object HproseInstance {
     ) {
         // First attempt logic with NodePool integration
         if (attempt == 1 && !forceFreshIP && userHasBaseUrl && !user.baseUrl.isNullOrEmpty()) {
-            // Check if user's IP is in NodePool
-            if (NodePool.isUserIPValid(user)) {
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl (validated in NodePool): ${user.baseUrl} for userId: ${user.mid}")
-                return
-            }
-            
-            // Not in pool - try to get IP from user's access node in pool
+            // Try to get IP from user's node in pool (indexed by nodeId)
             val poolIP = NodePool.getIPFromNode(user)
             if (poolIP != null) {
+                // User's node is in pool - use any IP from the list
                 user.baseUrl = "http://$poolIP"
                 user.clearHproseService()
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool: $poolIP for userId: ${user.mid}")
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool for user's node: $poolIP for userId: ${user.mid}")
                 return
             }
             
-            // Not in pool and no node IP available - use existing baseUrl
-            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using user's existing baseUrl (not in pool): ${user.baseUrl} for userId: ${user.mid}")
+            // User's node not in pool - use user's cached baseUrl
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - User's node not in pool, using cached baseUrl: ${user.baseUrl} for userId: ${user.mid}")
             return
         }
         
