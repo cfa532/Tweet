@@ -251,19 +251,16 @@ object HproseInstance {
     lateinit var preferenceHelper: PreferenceHelper
     
     // Private backing field for appUser StateFlow
-    private data class UserWrapper(val user: User, val version: Long = System.nanoTime())
-    
-    private val _appUserState = MutableStateFlow(UserWrapper(getInstance(TW_CONST.GUEST_ID)))
+    private val _appUserState = MutableStateFlow(getInstance(TW_CONST.GUEST_ID))
     
     /**
-     * StateFlow for observing appUser changes.
-     * Wraps User in a data class with timestamp to force emission even with same User reference
+     * StateFlow for observing appUser changes
      */
-    val appUserState: StateFlow<User> = _appUserState.map { it.user }.stateIn(
-        scope = CoroutineScope(Dispatchers.Main + SupervisorJob()),
-        started = SharingStarted.Eagerly,
-        initialValue = getInstance(TW_CONST.GUEST_ID)
-    )
+    val appUserState: StateFlow<User> = _appUserState.asStateFlow()
+    
+    // Separate StateFlow for avatar to force UI updates
+    private val _appUserAvatar = MutableStateFlow<String?>(null)
+    val appUserAvatar: StateFlow<String?> = _appUserAvatar.asStateFlow()
     
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
@@ -280,14 +277,14 @@ object HproseInstance {
      */
     var appUser: User
         get() {
-            return _appUserState.value.user
+            return _appUserState.value
         }
         set(value) {
-            val oldBaseUrl = _appUserState.value.user.baseUrl
-            val oldAvatar = _appUserState.value.user.avatar
+            val oldBaseUrl = _appUserState.value.baseUrl
+            val oldAvatar = _appUserState.value.avatar
             
-            // Wrap in UserWrapper with new timestamp to force StateFlow emission
-            _appUserState.value = UserWrapper(value)
+            _appUserState.value = value
+            _appUserAvatar.value = value.avatar  // Always emit avatar separately
             
             // Log if avatar changed (helps debug toolbar avatar issues)
             if (oldAvatar != value.avatar) {

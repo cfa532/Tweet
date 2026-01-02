@@ -18,10 +18,12 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
+import us.fireshare.tweet.HproseInstance.appUserAvatar
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
@@ -35,8 +37,9 @@ fun MainTopAppBar(
     onScrollToTop: (() -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
-    // Observe appUser changes via StateFlow
+    // Observe appUser and avatar separately for reactive updates
     val appUser by appUserState.collectAsState()
+    val avatarMid by appUserAvatar.collectAsState()
     
     CenterAlignedTopAppBar(
         scrollBehavior = scrollBehavior,
@@ -68,7 +71,10 @@ fun MainTopAppBar(
                     navController.navigate(NavTweet.UserProfile(appUser.mid))
                 }
             }) {
-                UserAvatar(user = appUser, size = 32, useOriginalColors = true)
+                // key() forces recomposition when avatar changes
+                key(avatarMid) {
+                    UserAvatar(user = appUser, size = 32, useOriginalColors = true)
+                }
             }
         },
         actions = {
