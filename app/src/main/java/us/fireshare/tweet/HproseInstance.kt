@@ -2912,11 +2912,21 @@ object HproseInstance {
         try {
             val user = getUserInstance(userId)
 
+            // CRITICAL: Load cached baseUrl into singleton if not already present
+            // This ensures the first fetch attempt uses the cached baseUrl before trying getProviderIP
+            if (user.baseUrl.isNullOrEmpty()) {
+                val cachedUser = TweetCacheManager.getCachedUser(userId)
+                if (cachedUser != null && !cachedUser.baseUrl.isNullOrEmpty()) {
+                    user.baseUrl = cachedUser.baseUrl
+                    Timber.tag("fetchUser").d("📥 Loaded cached baseUrl into singleton: ${user.baseUrl} for userId: $userId")
+                }
+            }
+
             // CRITICAL: The baseUrl parameter is a HINT for cache logic, NOT the actual baseUrl to use!
             // Each user has their own baseUrl (their own server/node).
             // - If baseUrl param is "" (empty): forces IP resolution (bypasses cache even if valid)
             // - If baseUrl param is null/default: use normal cache logic
-            // - User's actual baseUrl comes from their singleton (cached from previous fetch) or gets resolved
+            // - User's actual baseUrl comes from their singleton (cached from previous fetch OR loaded above from cache)
             //
             // DO NOT modify user.baseUrl here! Let resolveAndUpdateBaseUrl handle it.
             // This prevents clearing appUser.baseUrl if fetch fails.
