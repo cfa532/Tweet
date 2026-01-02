@@ -1610,8 +1610,11 @@ object HproseInstance {
                 val success = response?.get("success") as? Boolean
                 if (success != true) {
                     val serverMessage = response?.get("message") as? String
-                    Timber.tag("getTweetFeed").e("Feed failed: ${serverMessage ?: "Unknown error occurred"}")
-                    return emptyList()
+                    Timber.tag("getTweetFeed").w("Feed failed: ${serverMessage ?: "Unknown error occurred"} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    
+                    // Throw exception to trigger retry logic for server failures
+                    // This allows baseUrl refresh and retry on different nodes
+                    throw Exception("Server returned failure: ${serverMessage ?: "Unknown error"}")
                 }
 
                 // Extract tweets and originalTweets from the new response format
