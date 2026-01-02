@@ -1433,7 +1433,7 @@ object HproseInstance {
      * Value is timestamp when the following is added.
      * Includes retry logic with exponential backoff for network-related failures.
      * */
-    suspend fun getFollowings(user: User, maxRetries: Int = 2): List<MimeiId> {
+    suspend fun getFollowings(user: User, maxRetries: Int = 5): List<MimeiId> {
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -1491,7 +1491,7 @@ object HproseInstance {
      * Value is timestamp when the follower is added.
      * Includes retry logic with exponential backoff for network-related failures.
      * */
-    suspend fun getFans(user: User, maxRetries: Int = 2): List<MimeiId>? {
+    suspend fun getFans(user: User, maxRetries: Int = 5): List<MimeiId>? {
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -1552,9 +1552,9 @@ object HproseInstance {
     suspend fun getTweetFeed(
         user: User = appUser,
         pageNumber: Int = 0,
-        pageSize: Int = 20,
+        pageSize: Int = 5,
         entry: String = "get_tweet_feed",
-        maxRetries: Int = 2
+        maxRetries: Int = 5
     ): List<Tweet?> {
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
@@ -1698,7 +1698,7 @@ object HproseInstance {
     suspend fun getTweetsByUser(
         user: User,
         pageNumber: Int = 0,
-        pageSize: Int = 20,
+        pageSize: Int = 5,
         entry: String = "get_tweets_by_user"
     ): List<Tweet?> {
         try {
@@ -2591,7 +2591,7 @@ object HproseInstance {
      * Load all comments of a tweet.
      * @param pageNumber
      * */
-    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 20): List<Tweet>? {
+    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 5): List<Tweet>? {
         return try {
             // CRITICAL: Use the tweet's author's baseUrl to fetch comments
             // Comments are stored on the tweet author's node, not the appUser's node
