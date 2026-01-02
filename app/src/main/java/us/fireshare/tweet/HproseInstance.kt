@@ -1431,8 +1431,9 @@ object HproseInstance {
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
+     * Includes retry logic with exponential backoff for network-related failures.
      * */
-    suspend fun getFollowings(user: User): List<MimeiId> {
+    suspend fun getFollowings(user: User, maxRetries: Int = 2): List<MimeiId> {
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -1441,22 +1442,56 @@ object HproseInstance {
             "version" to "v2",
             "userid" to user.mid
         )
-        return try {
-            val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
-            val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-            response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
-                ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
-        } catch (e: Exception) {
-            Timber.tag("Hprose.getFollowings").e(e)
-            getAlphaIds()
+        
+        // Retry logic
+        for (attempt in 0..maxRetries) {
+            try {
+                val forceRefresh = attempt > 0
+                if (forceRefresh) {
+                    Timber.tag("getFollowings").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
+                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
+                    if (refreshedUser != null) {
+                        user.baseUrl = refreshedUser.baseUrl
+                        Timber.tag("getFollowings").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                    }
+                }
+                
+                val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+                val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
+                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                    ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
+                
+                if (attempt > 0) {
+                    Timber.tag("getFollowings").d("✅ Successfully fetched followings after retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                }
+                return result
+                
+            } catch (e: Exception) {
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
+                
+                if (isNetworkError && attempt < maxRetries) {
+                    val delayMs = minOf(5000L, 1000L * (1 shl attempt))
+                    Timber.tag("getFollowings").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    delay(delayMs)
+                    continue
+                }
+                
+                Timber.tag("Hprose.getFollowings").e(e)
+                if (attempt >= maxRetries) {
+                    Timber.tag("getFollowings").e("❌ All retry attempts exhausted after ${maxRetries + 1} attempts")
+                }
+            }
         }
+        
+        return getAlphaIds()
     }
 
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
+     * Includes retry logic with exponential backoff for network-related failures.
      * */
-    suspend fun getFans(user: User): List<MimeiId>? {
+    suspend fun getFans(user: User, maxRetries: Int = 2): List<MimeiId>? {
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -1465,26 +1500,61 @@ object HproseInstance {
             "version" to "v2",
             "userid" to user.mid
         )
-        return try {
-            val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
-            val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-            response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
-                ?.mapNotNull { it["field"] as? String }
-        } catch (e: Exception) {
-            Timber.tag("Hprose.getFans").e(e)
-            null
+        
+        // Retry logic
+        for (attempt in 0..maxRetries) {
+            try {
+                val forceRefresh = attempt > 0
+                if (forceRefresh) {
+                    Timber.tag("getFans").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
+                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
+                    if (refreshedUser != null) {
+                        user.baseUrl = refreshedUser.baseUrl
+                        Timber.tag("getFans").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                    }
+                }
+                
+                val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+                val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
+                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                    ?.mapNotNull { it["field"] as? String }
+                
+                if (attempt > 0) {
+                    Timber.tag("getFans").d("✅ Successfully fetched fans after retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                }
+                return result
+                
+            } catch (e: Exception) {
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
+                
+                if (isNetworkError && attempt < maxRetries) {
+                    val delayMs = minOf(5000L, 1000L * (1 shl attempt))
+                    Timber.tag("getFans").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    delay(delayMs)
+                    continue
+                }
+                
+                Timber.tag("Hprose.getFans").e(e)
+                if (attempt >= maxRetries) {
+                    Timber.tag("getFans").e("❌ All retry attempts exhausted after ${maxRetries + 1} attempts")
+                }
+            }
         }
+        
+        return null
     }
 
     /**
      * Load tweets of appUser and its followings from network.
      * Keep null elements in the response list and preserves their positions.
+     * Includes retry logic with exponential backoff for network-related failures.
      * */
     suspend fun getTweetFeed(
         user: User = appUser,
         pageNumber: Int = 0,
         pageSize: Int = 20,
-        entry: String = "get_tweet_feed"
+        entry: String = "get_tweet_feed",
+        maxRetries: Int = 2
     ): List<Tweet?> {
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
@@ -1510,69 +1580,112 @@ object HproseInstance {
                 params["hostid"] = hostId
             }
         }
-        return try {
-            val response = try {
-                user.hproseService?.runMApp<Map<String, Any>>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, userId: ${user.mid}")
-                throw e
-            }
-
-            // Check success status first
-            val success = response?.get("success") as? Boolean
-            if (success != true) {
-                val serverMessage = response?.get("message") as? String
-                Timber.tag("getTweetFeed").e("Feed failed: ${serverMessage ?: "Unknown error occurred"}")
-                return emptyList()
-            }
-
-            // Extract tweets and originalTweets from the new response format
-            val tweetsData = response["tweets"] as? List<Map<String, Any>?>
-            val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
-
-            // Cache original tweets by authorId
-            originalTweetsData?.forEach { originalTweetJson ->
-                if (originalTweetJson != null) {
-                    try {
-                        val originalTweet = Tweet.from(originalTweetJson)
-                        originalTweet.author = fetchUser(originalTweet.authorId)
-                        TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
-                    } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
+        
+        // Retry logic
+        var lastError: Exception? = null
+        for (attempt in 0..maxRetries) {
+            try {
+                val forceRefresh = attempt > 0
+                if (forceRefresh) {
+                    Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
+                    // Refresh user's baseUrl on retry
+                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
+                    if (refreshedUser != null) {
+                        // Update the user's baseUrl (hproseService is computed from baseUrl)
+                        user.baseUrl = refreshedUser.baseUrl
+                        Timber.tag("getTweetFeed").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                    } else {
+                        Timber.tag("getTweetFeed").w("⚠️ Failed to refresh user baseUrl on retry")
                     }
                 }
-            }
+                
+                val response = try {
+                    user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                } catch (e: Exception) {
+                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, userId: ${user.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    throw e
+                }
 
-            // Process main tweets - cache mainfeed tweets under appUser.mid
-            tweetsData?.map { tweetJson ->
-                // If the element is null, keep it as null
-                if (tweetJson == null) {
-                    null
-                } else {
-                    // Try to decode the tweet
-                    try {
-                        val tweet = Tweet.from(tweetJson)
-                        tweet.author = fetchUser(tweet.authorId)
+                // Check success status first
+                val success = response?.get("success") as? Boolean
+                if (success != true) {
+                    val serverMessage = response?.get("message") as? String
+                    Timber.tag("getTweetFeed").e("Feed failed: ${serverMessage ?: "Unknown error occurred"}")
+                    return emptyList()
+                }
 
-                        // Skip private tweets in feed
-                        if (tweet.isPrivate) {
-                            null
-                        } else {
-                            // Cache mainfeed tweets under appUser.mid
-                            updateCachedTweet(tweet, userId = appUser.mid)
-                            tweet
+                // Extract tweets and originalTweets from the new response format
+                val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+                val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
+
+                // Cache original tweets by authorId
+                originalTweetsData?.forEach { originalTweetJson ->
+                    if (originalTweetJson != null) {
+                        try {
+                            val originalTweet = Tweet.from(originalTweetJson)
+                            originalTweet.author = fetchUser(originalTweet.authorId)
+                            TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
+                        } catch (e: Exception) {
+                            Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
                         }
-                    } catch (e: Exception) {
-                        Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
-                        null
                     }
                 }
-            } ?: emptyList()
-        } catch (e: Exception) {
-            Timber.tag("getTweetFeed").e("Exception: $e")
-            Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
-            emptyList()
+
+                // Process main tweets - cache mainfeed tweets under appUser.mid
+                val result = tweetsData?.map { tweetJson ->
+                    // If the element is null, keep it as null
+                    if (tweetJson == null) {
+                        null
+                    } else {
+                        // Try to decode the tweet
+                        try {
+                            val tweet = Tweet.from(tweetJson)
+                            tweet.author = fetchUser(tweet.authorId)
+
+                            // Skip private tweets in feed
+                            if (tweet.isPrivate) {
+                                null
+                            } else {
+                                // Cache mainfeed tweets under appUser.mid
+                                updateCachedTweet(tweet, userId = appUser.mid)
+                                tweet
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("getTweetFeed").e("Error decoding tweet: $e")
+                            null
+                        }
+                    }
+                } ?: emptyList()
+                
+                // Success! Return the result
+                if (attempt > 0) {
+                    Timber.tag("getTweetFeed").d("✅ Successfully fetched tweets after retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                }
+                return result
+                
+            } catch (e: Exception) {
+                lastError = e
+                val isNetworkError = ErrorMessageUtils.isNetworkError(e)
+                
+                if (isNetworkError && attempt < maxRetries) {
+                    val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
+                    Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    delay(delayMs)
+                    continue
+                }
+                
+                // Log final error
+                Timber.tag("getTweetFeed").e("Exception: $e")
+                Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
+                
+                if (attempt >= maxRetries) {
+                    Timber.tag("getTweetFeed").e("❌ All retry attempts exhausted after ${maxRetries + 1} attempts")
+                }
+            }
         }
+        
+        // All retries exhausted
+        return emptyList()
     }
 
     /**
@@ -2921,7 +3034,10 @@ object HproseInstance {
                 Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
             }
         } else {
-            Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}")
+            // getProviderIP returned null - this is a network error, not "user not found"
+            // Throw exception to trigger retry logic without clearing cached baseUrl
+            Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}, attempt: $attempt/$maxRetries")
+            throw Exception("Failed to resolve provider IP for user: ${user.mid}")
         }
     }
 
