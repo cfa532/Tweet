@@ -119,12 +119,12 @@ class PlayTweetActivity : ComponentActivity() {
                     // AppUser loaded, show UI immediately
                     Timber.tag("PlayTweetActivity").d("AppUser loaded, showing UI")
                     activityViewModel.isAppReady.value = true
-                    
-                    // Background tasks - delayed after appUser initialization
-                    lifecycleScope.launch(IO) {
-                        delay(5000) // Load entry URLs 5s after appUser init
-                        activityViewModel.loadEntryUrls()
-                    }
+                }
+                
+                // Background tasks - independent of init callback
+                launch(IO) {
+                    delay(5000) // Load entry URLs 5s after start
+                    activityViewModel.loadEntryUrls()
                 }
 
                 launch(IO) {

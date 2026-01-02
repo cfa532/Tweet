@@ -123,18 +123,18 @@ class TweetActivity : ComponentActivity() {
                     // AppUser loaded, show UI immediately
                     Timber.tag("TweetActivity").d("AppUser loaded, showing UI")
                     activityViewModel.isAppReady.value = true
-                    
-                    // Background tasks - delayed after appUser initialization
-                    lifecycleScope.launch(IO) {
-                        delay(5000) // Check for upgrade 5s after appUser init
-                        activityViewModel.checkForUpgrade(this@TweetActivity)
-                    }
-                    
-                    lifecycleScope.launch(IO) {
-                        delay(10000) // Check messages 10s after appUser init
-                        if (::chatSessionRepository.isInitialized) {
-                            checkMessagesAndUpdateBadge()
-                        }
+                }
+                
+                // Background tasks - independent of init callback
+                launch(IO) {
+                    delay(5000) // Check for upgrade 5s after start
+                    activityViewModel.checkForUpgrade(this@TweetActivity)
+                }
+                
+                launch(IO) {
+                    delay(10000) // Check messages 10s after start
+                    if (::chatSessionRepository.isInitialized) {
+                        checkMessagesAndUpdateBadge()
                     }
                 }
 
