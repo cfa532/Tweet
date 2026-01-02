@@ -3011,33 +3011,39 @@ object HproseInstance {
         
         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
         
-        val providerIP = getProviderIP(user.mid)
-        if (providerIP != null) {
-            val newBaseUrl = if (providerIP.startsWith("http://")) {
-                providerIP
+        try {
+            val providerIP = getProviderIP(user.mid)
+            if (providerIP != null) {
+                val newBaseUrl = if (providerIP.startsWith("http://")) {
+                    providerIP
+                } else {
+                    "http://$providerIP"
+                }
+                
+                user.baseUrl = newBaseUrl
+                user.clearHproseService()
+                
+                // Update NodePool with newly resolved IP (replaces old IPs for this node)
+                val accessNodeMid = user.hostIds?.getOrNull(1)
+                if (accessNodeMid != null) {
+                    // Extract IP:port from baseUrl for pool
+                    val ipWithPort = newBaseUrl.removePrefix("http://").removePrefix("https://")
+                    NodePool.updateNodeIP(accessNodeMid, ipWithPort)
+                }
+                
+                if (user.hproseService == null) {
+                    Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
+                }
             } else {
-                "http://$providerIP"
+                // getProviderIP returned null (not exception) - user not found or servers genuinely down
+                // This is NOT a retryable error - just log and continue with null baseUrl
+                Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid} - user not found or no IPs available")
+                // Continue - the calling code will handle null baseUrl appropriately
             }
-            
-            user.baseUrl = newBaseUrl
-            user.clearHproseService()
-            
-            // Update NodePool with newly resolved IP (replaces old IPs for this node)
-            val accessNodeMid = user.hostIds?.getOrNull(1)
-            if (accessNodeMid != null) {
-                // Extract IP:port from baseUrl for pool
-                val ipWithPort = newBaseUrl.removePrefix("http://").removePrefix("https://")
-                NodePool.updateNodeIP(accessNodeMid, ipWithPort)
-            }
-            
-            if (user.hproseService == null) {
-                Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
-            }
-        } else {
-            // getProviderIP returned null - this is a network error, not "user not found"
-            // Throw exception to trigger retry logic without clearing cached baseUrl
-            Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}, attempt: $attempt/$maxRetries")
-            throw Exception("Failed to resolve provider IP for user: ${user.mid}")
+        } catch (e: Exception) {
+            // getProviderIP threw exception - network error, should trigger retry
+            Timber.tag("updateUserFromServer").w(e, "🔴 Network error calling getProviderIP for userId: ${user.mid}, attempt: $attempt/$maxRetries")
+            throw e  // Re-throw to trigger retry logic
         }
     }
 
@@ -3486,9 +3492,17 @@ object HproseInstance {
         }
         
         // Step 1: Try lookup using appUser's client
-        val providerIP = _getProviderIP(mid)
-        if (providerIP != null) {
-            return providerIP
+        try {
+            val providerIP = _getProviderIP(mid)
+            if (providerIP != null) {
+                return providerIP
+            }
+            // null means: server responded but no IPs found (user not found)
+            // Continue to fallback logic
+        } catch (e: Exception) {
+            // Network error occurred - propagate exception to trigger retry
+            Timber.tag("getProviderIP").w(e, "Network error in _getProviderIP for $mid, propagating exception")
+            throw e
         }
 
         // Step 2: Check if user is appUser
@@ -3504,7 +3518,8 @@ object HproseInstance {
                     _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
                 } catch(e: Exception) {
                     Timber.tag("getProviderIP").e(e, "Entry IP lookup failed for appUser $mid")
-                    null
+                    // Propagate network errors
+                    throw e
                 }
             } else {
                 // App is already initialized - appUser lookup failed, return null
@@ -3541,26 +3556,18 @@ object HproseInstance {
         )
         Timber.tag("_getProviderIP").d("🔍 v4Only global = $v4Only, sending v4only = ${v4Only.toString()}")
 
-        return try {
-            val rawResponse = hproseService?.runMApp<Any>(entry, params)
-            val ipArray = unwrapV2Response<List<String>>(rawResponse)
-            Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
+        // Let exceptions propagate - caller will decide whether to retry
+        val rawResponse = hproseService?.runMApp<Any>(entry, params)
+        val ipArray = unwrapV2Response<List<String>>(rawResponse)
+        Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
-            // If ipArray is valid, try each IP
-            if (ipArray != null && ipArray.isNotEmpty()) {
-                return tryIpAddresses(ipArray)
-            }
-            null
-        } catch (e: Exception) {
-            // Unwrap UndeclaredThrowableException to get the actual cause
-            val actualException = if (e is java.lang.reflect.UndeclaredThrowableException) {
-                e.cause ?: e
-            } else {
-                e
-            }
-            Timber.tag("getProviderIP").e(actualException, "Error getting provider IPs for $mid at ${appUser.baseUrl}")
-            null
+        // If ipArray is valid, try each IP
+        if (ipArray != null && ipArray.isNotEmpty()) {
+            return tryIpAddresses(ipArray)
         }
+        
+        // Return null means: server responded successfully but no IPs found (user not found or no IPs)
+        return null
     }
 
     /**

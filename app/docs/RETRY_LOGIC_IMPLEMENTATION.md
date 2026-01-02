@@ -153,49 +153,125 @@ To test the retry logic:
 - `TweetFeedViewModel.kt` - Calls `getTweetFeed()`
 - `UserViewModel.kt` - Calls `getFans()` and `getFollowings()`
 
-## Additional Fix: Prevent Null Overwriting Cached User
+## Additional Fix: Distinguish Network Errors from "User Not Found"
 
 ### Issue
-When `getProviderIP` returns `null` (due to network failure), the code was treating it as "user not found" and clearing the user's `baseUrl` at line 3104, overwriting valid cached data with null.
+When `getProviderIP` returns `null`, it could mean two very different things:
+1. **Network error** occurred (should retry)
+2. **User doesn't exist** or no IPs available (should NOT retry)
+
+The original code couldn't distinguish these cases, treating both as network errors and retrying unnecessarily.
 
 ### Root Cause
-In `resolveAndUpdateBaseUrl()`, when `getProviderIP` returned null, the code just logged a warning but didn't throw an exception. The flow would continue, and later when `unwrapV2Response` also returned null, the code at line 3104 would set `user.baseUrl = null`, destroying the cached baseUrl.
+The `_getProviderIP()` function was catching all exceptions and returning `null`, making it impossible to distinguish:
+- Network failures (exception occurred) → Should retry
+- User not found (server responded with empty IP list) → Should fail gracefully
 
-### Fix Applied (Line ~3037)
+### Fix Applied
+
+#### 1. Modified `_getProviderIP()` (Line ~3533)
 **Before:**
 ```kotlin
-} else {
-    Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}")
+return try {
+    val rawResponse = hproseService?.runMApp<Any>(entry, params)
+    val ipArray = unwrapV2Response<List<String>>(rawResponse)
+    // ...
+    return tryIpAddresses(ipArray)
+} catch (e: Exception) {
+    Timber.tag("getProviderIP").e(actualException, "Error getting provider IPs")
+    null  // ❌ Can't distinguish error type
 }
 ```
 
 **After:**
 ```kotlin
-} else {
-    // getProviderIP returned null - this is a network error, not "user not found"
-    // Throw exception to trigger retry logic without clearing cached baseUrl
-    Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid}, attempt: $attempt/$maxRetries")
-    throw Exception("Failed to resolve provider IP for user: ${user.mid}")
+// Let exceptions propagate - caller will decide whether to retry
+val rawResponse = hproseService?.runMApp<Any>(entry, params)
+val ipArray = unwrapV2Response<List<String>>(rawResponse)
+// ...
+if (ipArray != null && ipArray.isNotEmpty()) {
+    return tryIpAddresses(ipArray)
+}
+// Return null means: server responded successfully but no IPs found
+return null
+```
+
+#### 2. Modified `getProviderIP()` (Line ~3481)
+Now catches exceptions and propagates them to signal network errors:
+```kotlin
+try {
+    val providerIP = _getProviderIP(mid)
+    if (providerIP != null) {
+        return providerIP
+    }
+    // null means: server responded but no IPs found (user not found)
+} catch (e: Exception) {
+    // Network error occurred - propagate exception to trigger retry
+    Timber.tag("getProviderIP").w(e, "Network error in _getProviderIP, propagating")
+    throw e
+}
+```
+
+#### 3. Modified `resolveAndUpdateBaseUrl()` (Line ~3012)
+Now handles both cases appropriately:
+```kotlin
+try {
+    val providerIP = getProviderIP(user.mid)
+    if (providerIP != null) {
+        user.baseUrl = newBaseUrl
+        // ... update NodePool
+    } else {
+        // null = user not found, NOT a retryable error
+        Timber.tag("updateUserFromServer").w("⚠️ User not found or no IPs available")
+        // Continue with null baseUrl - let calling code handle appropriately
+    }
+} catch (e: Exception) {
+    // Exception = network error, SHOULD retry
+    Timber.tag("updateUserFromServer").w(e, "🔴 Network error, attempt: $attempt")
+    throw e  // Re-throw to trigger retry logic
 }
 ```
 
 ### How It Works
-1. When `getProviderIP` fails (returns null), an exception is thrown
-2. The exception is caught by the retry loop's catch block
-3. The catch block restores `originalBaseUrl` (lines 3138-3154)
-4. The retry logic attempts again with the preserved baseUrl
-5. Cached user data is never overwritten with null
 
-### Expected Behavior
+**Scenario 1: Network Error (Should Retry)**
 ```
-Attempt 1: getProviderIP returns null
+Attempt 1: Network error in _getProviderIP
          → Exception thrown
+         → Caught in resolveAndUpdateBaseUrl
+         → Re-thrown to trigger retry
          → originalBaseUrl restored
          → Retry scheduled
 
-Attempt 2: getProviderIP called again with preserved baseUrl
-         → Either succeeds or fails with proper error handling
-         → baseUrl never set to null inappropriately
+Attempt 2: Retry with preserved baseUrl
+         → Either succeeds or fails appropriately
+```
+
+**Scenario 2: User Not Found (Should NOT Retry)**
+```
+Attempt 1: Server responds but returns empty IP array
+         → _getProviderIP returns null (no exception)
+         → Caught in resolveAndUpdateBaseUrl
+         → Logs "user not found"
+         → Continues with null baseUrl
+         → Fails gracefully without retry
+```
+
+### Expected Log Output
+
+**Network Error (Retries):**
+```
+🔴 Network error calling getProviderIP, attempt: 1/2
+🔧 Restored originalBaseUrl after exception
+⏳ Waiting 1s before retry
+🔄 Retry attempt 2
+```
+
+**User Not Found (No Retry):**
+```
+🔍 Received IPs from server: null
+⚠️ User not found or no IPs available
+❌ NULL RESPONSE on final attempt
 ```
 
 ## Future Improvements
