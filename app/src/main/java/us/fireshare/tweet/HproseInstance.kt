@@ -2860,7 +2860,6 @@ object HproseInstance {
                 // it always fetches fresh data from server (like iOS ProfileView)
                 if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Return valid cached user only if baseUrl parameter is provided
-                    Timber.tag("fetchUser").d("✅ Returning CACHED user (not expired): ${cachedUser.username}, userId: $userId")
                     return cachedUser
                 } else if (cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
                     // Start background refresh if not already running
@@ -2883,7 +2882,6 @@ object HproseInstance {
                         )
                     }
                     // Return stale cached user while background refresh is running
-                    Timber.tag("fetchUser").d("⚠️ Returning CACHED user (expired, refreshing in background): ${cachedUser.username}, userId: $userId")
                     return cachedUser
                 }
                 // If baseUrl is empty or cache expired, fall through to fetch from server
