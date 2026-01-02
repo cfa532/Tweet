@@ -106,13 +106,15 @@ object NodePool {
         }
         
         private fun normalizeIP(ip: String): String {
-            // Remove http://, brackets, and extract just the IP:port
-            return ip.trim()
+            // Remove http:// but keep brackets for IPv6 addresses with ports
+            val trimmed = ip.trim()
                 .removePrefix("http://")
                 .removePrefix("https://")
-                .removePrefix("[")
-                .removeSuffix("]")
                 .substringBefore("/")
+            
+            // Keep brackets intact for IPv6 with port: [ipv6]:port
+            // IPv6 addresses have multiple colons, need brackets when port is present
+            return trimmed
         }
     }
     
@@ -194,11 +196,10 @@ object NodePool {
         val userIP = user.baseUrl ?: return
         
         // Extract just the IP:port from baseUrl
+        // Normalize IP but keep brackets for IPv6 addresses with ports
         val normalizedIP = userIP.trim()
             .removePrefix("http://")
             .removePrefix("https://")
-            .removePrefix("[")
-            .removeSuffix("]")
             .substringBefore("/")
         
         addIPToNode(accessNodeMid, normalizedIP)
@@ -1554,7 +1555,8 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = 5,
         entry: String = "get_tweet_feed",
-        maxRetries: Int = 5
+        maxRetries: Int = 5,
+        onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
     ): List<Tweet?> {
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
@@ -1587,6 +1589,9 @@ object HproseInstance {
             try {
                 val forceRefresh = attempt > 0
                 if (forceRefresh) {
+                    // Notify UI about retry attempt
+                    onRetry?.invoke(attempt, maxRetries)
+                    
                     Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
                     // Refresh user's baseUrl on retry
                     val refreshedUser = fetchUser(user.mid, baseUrl = "")

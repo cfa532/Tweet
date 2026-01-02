@@ -50,6 +50,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
     
+    // Retry status message (null when not retrying)
+    private val _retryMessage = MutableStateFlow<String?>(null)
+    val retryMessage: StateFlow<String?> get() = _retryMessage.asStateFlow()
+    
+    // Context reference for accessing string resources
+    private var contextRef = WeakReference<Context>(null)
+    
     // Track if ViewModel has been initialized to prevent race conditions
     private var isInitialized = false
 
@@ -59,6 +66,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         
         // Don't load tweets immediately - wait for explicit initialization
         // This prevents race conditions with HproseInstance initialization
+    }
+    
+    /**
+     * Set context reference for accessing string resources
+     */
+    fun setContext(context: Context) {
+        contextRef = WeakReference(context)
     }
     
     /**
@@ -109,9 +123,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     _tweets.value = emptyList()
                 }
             } finally {
-                // Ensure initState is always cleared (in case network fetch happened)
-                initState.value = false
-                Timber.tag("TweetFeedViewModel").d("Initialization complete, initState=false")
+                // Only clear initState if we have tweets to show
+                // Keep spinner showing if no tweets loaded yet (including during retries)
+                if (_tweets.value.isNotEmpty()) {
+                    initState.value = false
+                    Timber.tag("TweetFeedViewModel").d("Initialization complete with tweets, initState=false")
+                } else {
+                    Timber.tag("TweetFeedViewModel").d("Initialization complete but no tweets, keeping initState=true for retry visibility")
+                }
             }
         }
     }
@@ -247,14 +266,34 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     appUser,
                     pageNumber,
                     pageSize,
+                    onRetry = { attempt, maxRetries ->
+                        // Show retry message when no tweets are loaded yet
+                        if (_tweets.value.isEmpty() && pageNumber == 0) {
+                            viewModelScope.launch(Main) {
+                                val context = contextRef.get()
+                                if (context != null) {
+                                    val message = context.getString(R.string.retrying, attempt, maxRetries)
+                                    _retryMessage.value = message
+                                }
+                            }
+                        }
+                    }
                 )
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error fetching tweet feed (page $pageNumber): ${e.message}")
-                // Return empty list on error - cached tweets are already shown above
+                // Clear retry message and loading state on final failure
+                _retryMessage.value = null
                 if (pageNumber == 0) {
-                    Timber.tag("MainFeed").w("⚠️ Network fetch failed, showing ${_tweets.value.size} cached tweets")
+                    initState.value = false  // Stop showing spinner after all retries exhausted
+                    Timber.tag("MainFeed").w("⚠️ Network fetch failed after retries, showing ${_tweets.value.size} cached tweets")
                 }
                 emptyList()
+            }
+            
+            // Clear retry message and loading state on success
+            _retryMessage.value = null
+            if (pageNumber == 0 && tweetsWithNulls.isNotEmpty()) {
+                initState.value = false  // Stop showing spinner when tweets loaded
             }
 
             // Filter out null elements and get valid tweets
@@ -306,7 +345,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             appUser,
                             pageNumber,
                             pageSize,
-                            "update_following_tweets"
+                            "update_following_tweets",
+                            onRetry = { attempt, maxRetries ->
+                                // Show retry message when no tweets are loaded yet
+                                if (_tweets.value.isEmpty() && pageNumber == 0) {
+                                    viewModelScope.launch(Main) {
+                                        val context = contextRef.get()
+                                        if (context != null) {
+                                            val message = context.getString(R.string.retrying, attempt, maxRetries)
+                                            _retryMessage.value = message
+                                        }
+                                    }
+                                }
+                            }
                         )
 
                         // Filter out null elements and get valid tweets

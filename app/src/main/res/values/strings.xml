@@ -13,6 +13,7 @@
     <string name="save">Save</string>
     <string name="saving">Saving...</string>
     <string name="registering">Registering...</string>
+    <string name="retrying">Retrying %1$d/%2$d...</string>
     <string name="updating_avatar">Updating avatar...</string>
     <string name="avatar_update_success">Avatar updated successfully</string>
     <string name="avatar_update_failed">Failed to update avatar</string>

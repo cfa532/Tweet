@@ -75,14 +75,11 @@ fun UserAvatar(
     // React to avatar changes AND user object changes
     // State reset only happens when avatarMid changes, but effect reruns to update URLs
     LaunchedEffect(avatarMid, user) {
-        Timber.tag("UserAvatar").d("🔄 LaunchedEffect triggered - avatarMid: $avatarMid, user.mid: ${user.mid}, username: ${user.username}, baseUrl: ${user.baseUrl}")
-        
         // Capture baseUrl inside LaunchedEffect to always use current value
         val currentBaseUrl = user.baseUrl
         
         // Only reset state if avatarMid changed from the current loaded state
         if (loadState.bitmap != null && !avatarMid.isNullOrEmpty()) {
-            Timber.tag("UserAvatar").d("🔍 Checking if cached bitmap matches current avatar - loadState has bitmap, avatarMid: $avatarMid")
             // We have a cached bitmap, check if it matches the current avatar ID
             val originalMid = "${avatarMid}_original"
             val cachedBitmap = withContext(Dispatchers.IO) {
@@ -91,15 +88,11 @@ fun UserAvatar(
             }
             if (cachedBitmap != null && cachedBitmap == loadState.bitmap) {
                 // Same avatar, keep using cached bitmap - don't reload
-                Timber.tag("UserAvatar").d("✅ Cached bitmap matches, skipping reload")
                 return@LaunchedEffect
-            } else {
-                Timber.tag("UserAvatar").d("⚠️ Cached bitmap doesn't match or not found, will reload")
             }
         }
         
         // Reset state when avatar changes or first load
-        Timber.tag("UserAvatar").d("🔄 Resetting loadState for avatarMid: $avatarMid")
         loadState = AvatarLoadState()
         
         if (!avatarMid.isNullOrEmpty()) {
@@ -113,11 +106,9 @@ fun UserAvatar(
             }
             if (cachedBitmap != null) {
                 // Use cached avatar immediately
-                Timber.tag("UserAvatar").d("✅ Using cached avatar bitmap for: $avatarMid")
                 loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
             } else {
                 // Not cached, need to load it
-                Timber.tag("UserAvatar").d("⬇️ Avatar not cached, loading from server: $avatarMid")
                 val avatarUrl = getMediaUrl(avatarMid, currentBaseUrl)
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
@@ -143,8 +134,6 @@ fun UserAvatar(
             Timber.tag("UserAvatar").d("❌ No avatarMid, showing default icon")
             loadState = AvatarLoadState()
         }
-        
-        Timber.tag("UserAvatar").d("📊 Final loadState - hasBitmap: ${loadState.bitmap != null}, isLoading: ${loadState.isLoading}, hasError: ${loadState.hasError}")
     }
 
     val modifier = Modifier

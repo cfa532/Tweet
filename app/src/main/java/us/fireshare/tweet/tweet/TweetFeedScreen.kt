@@ -70,6 +70,11 @@ fun TweetFeedScreen(
         TabItem(title = context.getString(R.string.recommendation))
     )
 
+    // Set context reference for the ViewModel (for string resources)
+    LaunchedEffect(context) {
+        viewModel.setContext(context)
+    }
+    
     // Initialize the ViewModel when the screen is first displayed
     // This ensures HproseInstance is ready before tweet loading begins
     LaunchedEffect(Unit) {
@@ -78,6 +83,9 @@ fun TweetFeedScreen(
 
     // Collect initialization state to show loading indicator
     val initState by viewModel.initState.collectAsState()
+    
+    // Collect retry message
+    val retryMessage by viewModel.retryMessage.collectAsState()
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
@@ -167,9 +175,21 @@ fun TweetFeedScreen(
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     if (initState) {
                                         // Show loading indicator while initializing
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            modifier = Modifier.padding(16.dp)
-                                        )
+                                        Column(
+                                            modifier = Modifier.padding(16.dp),
+                                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                                        ) {
+                                            androidx.compose.material3.CircularProgressIndicator()
+                                            // Show retry message if retrying
+                                            retryMessage?.let { message ->
+                                                androidx.compose.material3.Text(
+                                                    text = message,
+                                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                    modifier = Modifier.padding(top = 8.dp)
+                                                )
+                                            }
+                                        }
                                     } else {
                                         FollowingsTweet(
                                             parentEntry,
