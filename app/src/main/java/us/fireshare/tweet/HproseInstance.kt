@@ -144,6 +144,14 @@ object NodePool {
     }
     
     /**
+     * Get IP directly from nodeId (works for both READ and WRITE nodes)
+     */
+    suspend fun getIPFromNodeId(nodeId: MimeiId): String? = nodeMutex.withLock {
+        val nodeInfo = nodes[nodeId] ?: return@withLock null
+        nodeInfo.getPreferredIP()
+    }
+    
+    /**
      * Update node's IP list (replaces existing IPs)
      * Called after re-resolution when fetch fails
      */
@@ -161,6 +169,16 @@ object NodePool {
                 ips = mutableListOf(newIP)
             )
             Timber.tag("NodePool").d("Added new node $nodeMid with IP: $newIP")
+        }
+    }
+    
+    /**
+     * Remove node from pool (called when cached IP becomes unhealthy)
+     */
+    suspend fun removeNode(nodeId: MimeiId) = nodeMutex.withLock {
+        val removed = nodes.remove(nodeId)
+        if (removed != null) {
+            Timber.tag("NodePool").d("Removed node $nodeId from pool (was: ${removed.ips})")
         }
     }
     
@@ -1163,25 +1181,118 @@ object HproseInstance {
      * @param nodeId
      * Find IP addresses of given node and return the best one.
      * Uses the same algorithm as get_provider_ips to test and select the best IP.
+     * 
+     * Fallback Strategy (mirrors getProviderIP):
+     * 1. Check NodePool for cached healthy IP
+     * 2. Try lookup using appUser's client
+     * 3. If no healthy IPs found AND appUser unhealthy -> try via entry IP
+     * 4. Update NodePool with successful result
      * */
     suspend fun getHostIP(nodeId: MimeiId, v4Only: String = HproseInstance.v4Only.toString()): String? {
+        // Step 1: Check NodePool for known IPs and verify health
+        val poolIP = NodePool.getIPFromNodeId(nodeId)
+        if (poolIP != null) {
+            // Verify the cached IP is still healthy before returning
+            val fullUrl = "http://$poolIP"
+            
+            if (isServerHealthy(fullUrl)) {
+                // Still healthy - use it!
+                Timber.tag("getHostIP").d("✓ Found healthy node $nodeId in NodePool: $poolIP")
+                return poolIP
+            } else {
+                // No longer healthy - remove from cache and continue to fresh lookup
+                Timber.tag("getHostIP").w("NodePool IP $poolIP for node $nodeId is no longer healthy, removing from cache")
+                NodePool.removeNode(nodeId)
+                // Fall through to Step 2
+            }
+        }
+        
+        // Step 2: Try lookup using appUser's client
+        try {
+            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService)
+            if (hostIP != null) {
+                // Successfully resolved healthy IP
+                NodePool.updateNodeIP(nodeId, hostIP)
+                Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via appUser: $hostIP, updated NodePool")
+                return hostIP
+            }
+            // null means: server responded but no healthy IPs found
+            // Continue to fallback logic
+        } catch (e: Exception) {
+            // Network error occurred
+            Timber.tag("getHostIP").w(e, "Network error in _getHostIP for node $nodeId via appUser")
+            // Continue to fallback logic instead of giving up
+        }
+        
+        // Step 3: No healthy IPs found - check if it's because appUser is unhealthy
+        val appUserBaseUrl = appUser.baseUrl
+        if (appUserBaseUrl.isNullOrBlank()) {
+            Timber.tag("getHostIP").w("Cannot retry for node $nodeId - appUser.baseUrl is null")
+            return null
+        }
+        
+        if (!isServerHealthy(appUserBaseUrl)) {
+            // AppUser is UNHEALTHY - this could be temporary network issue
+            // Try resolving via entry IP as fallback
+            Timber.tag("getHostIP").d("appUser server unhealthy at $appUserBaseUrl, trying via entry IP for node $nodeId")
+            
+            return try {
+                val entryIP = findEntryIP()
+                val entryClient = HproseClientPool.getRegularClient("http://$entryIP")
+                
+                val hostIP = _getHostIP(nodeId, v4Only, entryClient)
+                if (hostIP != null) {
+                    NodePool.updateNodeIP(nodeId, hostIP)
+                    Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP, updated NodePool")
+                    hostIP
+                } else {
+                    Timber.tag("getHostIP").w("No IPs found for node $nodeId even via entry IP")
+                    null
+                }
+            } catch (e: Exception) {
+                Timber.tag("getHostIP").e(e, "Entry IP lookup failed for node $nodeId")
+                null
+            }
+        } else {
+            // AppUser is HEALTHY but node has no healthy IPs - node is genuinely down
+            Timber.tag("getHostIP").d("appUser healthy but node $nodeId has no healthy IPs - node genuinely down")
+            return null
+        }
+    }
+    
+    /**
+     * Internal method to get host IP via specified Hprose client
+     * @return healthy IP or null if no healthy IPs found
+     */
+    private suspend fun _getHostIP(
+        nodeId: MimeiId, 
+        v4Only: String = HproseInstance.v4Only.toString(),
+        hproseService: HproseService? = appUser.hproseService
+    ): String? {
         val entry = "get_node_ips"
         val params = mapOf("aid" to appId, "ver" to "last", "version" to "v2", "nodeid" to nodeId, "v4only" to v4Only)
-        try {
-            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
-            val ipArray = unwrapV2Response<List<String>>(rawResponse)
+        
+        val rawResponse = hproseService?.runMApp<Any>(entry, params)
+        val ipArray = unwrapV2Response<List<String>>(rawResponse)
+        
+        // If ipArray is valid, try each IP and return the best one
+        if (ipArray != null && ipArray.isNotEmpty()) {
+            val ipCount = ipArray.size
+            val ipList = ipArray.joinToString(", ")
+            Timber.tag("getHostIP").d("Received $ipCount IP(s) for node $nodeId: [$ipList]")
             
-            // If ipArray is valid, try each IP and return the best one
-            if (ipArray != null && ipArray.isNotEmpty()) {
-                Timber.tag("getHostIP").d("Received ${ipArray.size} IP(s) for node $nodeId, testing for best IP")
-                return tryIpAddresses(ipArray, "getHostIP($nodeId)")
+            val bestIP = tryIpAddresses(ipArray, "getHostIP($nodeId)")
+            
+            if (bestIP != null) {
+                Timber.tag("getHostIP").d("Found healthy IP for node $nodeId: $bestIP")
+            } else {
+                Timber.tag("getHostIP").w("No healthy IPs found for node $nodeId among $ipCount address(es)")
             }
             
-            Timber.tag("getHostIP").w("No IPs returned for node $nodeId")
-            return null
-        } catch (e: Exception) {
-            Timber.tag("getHostIP").e("$e $nodeId")
+            return bestIP
         }
+        
+        Timber.tag("getHostIP").w("No IPs returned for node $nodeId")
         return null
     }
 
@@ -1631,7 +1742,15 @@ object HproseInstance {
                     if (originalTweetJson != null) {
                         try {
                             val originalTweet = Tweet.from(originalTweetJson)
-                            originalTweet.author = fetchUser(originalTweet.authorId)
+                            // Fetch author, fallback to cached user if fetchUser fails
+                            val fetchedAuthor = fetchUser(originalTweet.authorId)
+                            originalTweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(originalTweet.authorId)
+                            
+                            // Log warning if author is still null
+                            if (originalTweet.author == null) {
+                                Timber.tag("getTweetFeed").w("⚠️ Failed to get author for original tweet ${originalTweet.mid}, authorId: ${originalTweet.authorId}")
+                            }
+                            
                             TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
                         } catch (e: Exception) {
                             Timber.tag("getTweetFeed").e("Error caching original tweet: $e")
@@ -1648,7 +1767,15 @@ object HproseInstance {
                         // Try to decode the tweet
                         try {
                             val tweet = Tweet.from(tweetJson)
-                            tweet.author = fetchUser(tweet.authorId)
+                            
+                            // Fetch author, fallback to cached user if fetchUser fails
+                            val fetchedAuthor = fetchUser(tweet.authorId)
+                            tweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(tweet.authorId)
+                            
+                            // Log warning if author is still null after both fetch and cache attempts
+                            if (tweet.author == null) {
+                                Timber.tag("getTweetFeed").w("⚠️ Failed to get author for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
+                            }
 
                             // Skip private tweets in feed
                             if (tweet.isPrivate) {
@@ -1750,7 +1877,16 @@ object HproseInstance {
                 if (originalTweetJson != null) {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
-                        originalTweet.author = fetchUser(originalTweet.authorId)
+                        
+                        // Fetch author, fallback to cached user if fetchUser fails
+                        val fetchedAuthor = fetchUser(originalTweet.authorId)
+                        originalTweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(originalTweet.authorId)
+                        
+                        // Log warning if author is still null
+                        if (originalTweet.author == null) {
+                            Timber.tag("getTweetsByUser").w("⚠️ Failed to get author for original tweet ${originalTweet.mid}, authorId: ${originalTweet.authorId}")
+                        }
+                        
                         TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
                         Timber.tag("getTweetsByUser")
                             .d("Cached original tweet: ${originalTweet.mid}")
@@ -2396,7 +2532,12 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.author = fetchUser(updatedTweet.authorId)
+                    
+                    // Preserve author from original tweet, or fetch if not available
+                    // Don't overwrite with null from fetchUser
+                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
+                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
+                    
                     // Cache by authorId
                     updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
@@ -2452,7 +2593,12 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.author = fetchUser(updatedTweet.authorId)
+                    
+                    // Preserve author from original tweet, or fetch if not available
+                    // Don't overwrite with null from fetchUser
+                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
+                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
+                    
                     // Cache by authorId
                     updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
@@ -2510,7 +2656,16 @@ object HproseInstance {
                     // Try to decode the tweet
                     try {
                         val tweet = Tweet.from(tweetJson)
-                        tweet.author = fetchUser(tweet.authorId)
+                        
+                        // Fetch author, fallback to cached user if fetchUser fails
+                        val fetchedAuthor = fetchUser(tweet.authorId)
+                        tweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(tweet.authorId)
+                        
+                        // Log warning if author is still null
+                        if (tweet.author == null) {
+                            Timber.tag("getUserTweetsByType").w("⚠️ Failed to get author for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
+                        }
+                        
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")
@@ -2994,19 +3149,20 @@ object HproseInstance {
     ) {
         // First attempt logic with NodePool integration
         if (attempt == 1 && !forceFreshIP && userHasBaseUrl && !user.baseUrl.isNullOrEmpty()) {
-            // Try to get IP from user's node in pool (indexed by nodeId)
+            // Try to get IP from user's node in pool (indexed by nodeId) - trust it
             val poolIP = NodePool.getIPFromNode(user)
             if (poolIP != null) {
-                // User's node is in pool - use any IP from the list
                 user.baseUrl = "http://$poolIP"
                 user.clearHproseService()
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool for user's node: $poolIP for userId: ${user.mid}")
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool: $poolIP for userId: ${user.mid} (trusted)")
                 return
             }
             
             // User's node not in pool - use user's cached baseUrl
-            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - User's node not in pool, using cached baseUrl: ${user.baseUrl} for userId: ${user.mid}")
-            return
+            if (!user.baseUrl.isNullOrEmpty()) {
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using cached baseUrl: ${user.baseUrl} for userId: ${user.mid}")
+                return
+            }
         }
         
         // Resolve fresh IP (retry attempts or forced refresh)

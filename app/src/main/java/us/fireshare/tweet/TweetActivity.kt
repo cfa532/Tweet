@@ -244,26 +244,27 @@ class TweetActivity : ComponentActivity() {
                 val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
                 
                 if (trulyNewMessages.isNotEmpty()) {
-                    // Get existing sessions
-                    val existingSessions = chatSessionRepository.getAllSessions()
+                    // CRITICAL FIX: Insert original messages first (without preview text)
+                    // Group messages by partner to get the last message for each conversation
+                    val messagesByPartner = trulyNewMessages.groupBy { message ->
+                        if (message.authorId == HproseInstance.appUser.mid) {
+                            message.receiptId  // Outgoing: use receiptId (recipient)
+                        } else {
+                            message.authorId   // Incoming: use authorId (sender)
+                        }
+                    }
                     
-                    // Merge new messages with existing sessions
-                    val updatedSessions = chatSessionRepository.mergeMessagesWithSessions(
-                        existingSessions,
-                        trulyNewMessages
-                    )
-                    
-                    // Update chat session database - create/update sessions and save messages for badge counting
-                    // Messages are saved here so the session can be created with hasNews flag
-                    // fetchNewMessage() will filter out existing messages using filterExistingMessages
-                    updatedSessions.forEach { chatSession ->
-                        // Use updateChatSessionWithMessage to create session and save message
-                        // This ensures the session exists with hasNews flag for badge counting
+                    messagesByPartner.forEach { (partnerId, messages) ->
+                        // Get the last (newest) message from the group
+                        val lastMessage = messages.maxByOrNull { it.timestamp } ?: return@forEach
+                        
+                        // Insert the ORIGINAL message (not the preview) to database
+                        // This prevents "Image sent" text from being saved as actual message content
                         chatSessionRepository.updateChatSessionWithMessage(
                             HproseInstance.appUser.mid,
-                            chatSession.receiptId,
-                            chatSession.lastMessage,
-                            hasNews = chatSession.hasNews
+                            partnerId,
+                            lastMessage,  // Original message, preview will be applied when loading sessions
+                            hasNews = true
                         )
                     }
                 }
