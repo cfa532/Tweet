@@ -28,6 +28,7 @@ import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
@@ -79,6 +80,7 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     init {
+        // Load initial data
         viewModelScope.launch(Dispatchers.IO) {
             // OPTIMIZED: Load cached user data FIRST to avoid blocking screen
             val cachedUser = TweetCacheManager.getCachedUser(receiptId)
@@ -107,6 +109,64 @@ class ChatViewModel @AssistedInject constructor(
                     }
                 } catch (e: Exception) {
                     Timber.tag("ChatViewModel").e(e, "Failed to fetch fresh user data, using cached")
+                }
+            }
+        }
+        
+        // CRITICAL: Start SINGLE event listener for ALL background message uploads
+        // This prevents multiple collectors from interfering with each other
+        startListeningToMessageEvents()
+    }
+    
+    /**
+     * Start listening to message send events from background workers.
+     * This should only be called ONCE in init block to prevent multiple collectors.
+     */
+    private fun startListeningToMessageEvents() {
+        viewModelScope.launch {
+            Timber.tag("ChatViewModel").d("Starting single event listener for receiptId: $receiptId")
+            TweetNotificationCenter.events.collect { event ->
+                when (event) {
+                    is TweetEvent.ChatMessageSent -> {
+                        if (event.message.receiptId == receiptId) {
+                            Timber.tag("ChatViewModel").d("Received ChatMessageSent event: ${event.message.id}")
+                            // Deduplication using unique message IDs
+                            if (isNewMessage(event.message, _chatMessages.value)) {
+                                // Add the real message to UI and database only if it's new
+                                _chatMessages.update { messages ->
+                                    (messages + event.message).sortedBy { it.timestamp }
+                                }
+
+                                // Insert message to database
+                                chatRepository.insertMessage(event.message)
+                                
+                                // Trigger scroll to bottom for messages from current user
+                                if (event.message.authorId == appUser.mid) {
+                                    _shouldScrollToBottom.value = true
+                                }
+                            } else {
+                                Timber.tag("ChatViewModel").d("Skipping duplicate message: ${event.message.id}")
+                            }
+                            // Update chat session (always update, even if message already exists)
+                            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                                appUser.mid,
+                                receiptId,
+                                event.message,
+                                hasNews = false
+                            )
+                            chatListViewModel?.updateSession(previewMessage, hasNews = false)
+                        }
+                    }
+
+                    is TweetEvent.ChatMessageSendFailed -> {
+                        Timber.tag("ChatViewModel").e("Received ChatMessageSendFailed: ${event.error}")
+                        // Show error toast
+                        _toastMessage.value = "Failed to send message: ${event.error}"
+                    }
+
+                    else -> {
+                        // Ignore other events
+                    }
                 }
             }
         }
@@ -214,50 +274,9 @@ class ChatViewModel @AssistedInject constructor(
 
         // Enqueue the work
         WorkManager.getInstance(context).enqueue(workRequest)
-
-        // Listen for worker completion events
-        viewModelScope.launch {
-            TweetNotificationCenter.events.collect { event ->
-                when (event) {
-                    is TweetEvent.ChatMessageSent -> {
-                        if (event.message.receiptId == receiptId) {
-                            // Deduplication using unique message IDs
-                            if (isNewMessage(event.message, _chatMessages.value)) {
-                                // Add the real message to UI and database only if it's new
-                                _chatMessages.update { messages ->
-                                    (messages + event.message).sortedBy { it.timestamp }
-                                }
-
-                                // Insert message to database
-                                chatRepository.insertMessage(event.message)
-                                
-                                // Trigger scroll to bottom for messages from current user
-                                if (event.message.authorId == appUser.mid) {
-                                    _shouldScrollToBottom.value = true
-                                }
-                            }
-                            // Update chat session (always update, even if message already exists)
-                            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
-                                appUser.mid,
-                                receiptId,
-                                event.message,
-                                hasNews = false
-                            )
-                            chatListViewModel?.updateSession(previewMessage, hasNews = false)
-                        }
-                    }
-
-                    is TweetEvent.ChatMessageSendFailed -> {
-                        // Show error toast
-                        _toastMessage.value = "Failed to send message: ${event.error}"
-                    }
-
-                    else -> {
-                        // Ignore other events
-                    }
-                }
-            }
-        }
+        
+        Timber.tag("ChatViewModel").d("Enqueued background message upload worker for receiptId: $receiptId")
+        // Worker completion events will be handled by the single event listener in init block
     }
 
     fun clearToastMessage() {
