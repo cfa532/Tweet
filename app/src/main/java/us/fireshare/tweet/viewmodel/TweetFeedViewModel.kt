@@ -188,15 +188,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
         val startTime = System.currentTimeMillis()
-        Timber.tag("TweetFeedViewModel").d("Waiting for appUser.baseUrl to be available (timeout: ${timeoutMillis}ms)")
-        while (appUser.baseUrl.isNullOrBlank() && System.currentTimeMillis() - startTime < timeoutMillis) {
+        Timber.tag("TweetFeedViewModel").d("Waiting for appUser to be fully initialized (timeout: ${timeoutMillis}ms)")
+        while (!HproseInstance.isAppUserInitialized.value && System.currentTimeMillis() - startTime < timeoutMillis) {
             kotlinx.coroutines.delay(200)
         }
         val elapsed = System.currentTimeMillis() - startTime
-        if (appUser.baseUrl.isNullOrBlank()) {
-            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser.baseUrl after ${elapsed}ms")
+        if (!HproseInstance.isAppUserInitialized.value) {
+            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, using entry IP")
         } else {
-            Timber.tag("TweetFeedViewModel").d("appUser.baseUrl became available after ${elapsed}ms: ${appUser.baseUrl}")
+            Timber.tag("TweetFeedViewModel").d("appUser initialized after ${elapsed}ms: ${appUser.baseUrl}")
         }
     }
 

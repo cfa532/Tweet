@@ -16,8 +16,10 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import hprose.io.HproseClassManager
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import okhttp3.Protocol
+import java.util.concurrent.TimeUnit
 import io.ktor.client.request.get
 import io.ktor.client.request.head
 import io.ktor.client.statement.HttpResponse
@@ -281,6 +283,10 @@ object HproseInstance {
     private val _appUserAvatar = MutableStateFlow<String?>(null)
     val appUserAvatar: StateFlow<String?> = _appUserAvatar.asStateFlow()
     
+    // Track if appUser has been fully initialized from server (not just entry IP)
+    private val _isAppUserInitialized = MutableStateFlow(false)
+    val isAppUserInitialized: StateFlow<Boolean> = _isAppUserInitialized.asStateFlow()
+    
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
         MediaUploadService(applicationContext, uploadHttpClient, appUser, appId)
@@ -535,7 +541,9 @@ object HproseInstance {
             // If we have cached user data, show UI immediately
             // Otherwise, wait for network fetch to complete first
             if (hasCachedUser) {
-                Timber.tag("initAppEntry").d("🚀 BaseUrl ready with cached data, showing UI now")
+                // Cached user has valid baseUrl, mark as initialized
+                _isAppUserInitialized.value = true
+                Timber.tag("initAppEntry").d("🚀 BaseUrl ready with cached data, showing UI now (initialized: true)")
                 onBaseUrlReady?.invoke()
             }
 
@@ -585,8 +593,11 @@ object HproseInstance {
                         appUser = refreshedUser
                         TweetCacheManager.saveUser(refreshedUser)
                         
+                        // Mark appUser as fully initialized (not just entry IP)
+                        _isAppUserInitialized.value = true
+                        
                         Timber.tag("initAppEntry")
-                            .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
+                            .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}, initialized: true")
                     }
                     
                     // Show UI with fresh data
@@ -1735,7 +1746,6 @@ object HproseInstance {
         }
         
         // Retry logic
-        var lastError: Exception? = null
         for (attempt in 0..maxRetries) {
             try {
                 val forceRefresh = attempt > 0
@@ -1839,7 +1849,6 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
-                lastError = e
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
@@ -3779,15 +3788,17 @@ object HproseInstance {
 
     /**
      * Dedicated HTTP client for health checks with shorter timeouts
+     * Uses OkHttp engine for better Android performance and reliability
      */
-    private val healthCheckHttpClient = HttpClient(CIO) {
+    private val healthCheckHttpClient = HttpClient(OkHttp) {
         engine {
-            maxConnectionsCount = 100
-        }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 15_000  // 15 seconds for health checks
-            connectTimeoutMillis = 10_000  // 10 seconds to connect
-            socketTimeoutMillis = 15_000   // 15 seconds socket timeout
+            config {
+                connectTimeout(3, TimeUnit.SECONDS)
+                readTimeout(5, TimeUnit.SECONDS)
+                writeTimeout(5, TimeUnit.SECONDS)
+                // HTTP/2 and HTTP/1.1 support for better performance
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            }
         }
     }
 
@@ -4059,48 +4070,49 @@ object HproseInstance {
 
     /**
      * HTTP client specifically for app initialization with short timeouts
-     * This ensures fast startup by failing quickly if network is unavailable
+     * Uses OkHttp engine for better Android performance and reliability
      */
-    private val initHttpClient = HttpClient(CIO) {
-        install(HttpTimeout) {
-            requestTimeoutMillis = 15_000  // 15 seconds total for init requests
-            connectTimeoutMillis = 10_000  // 10 seconds to establish connection
-            socketTimeoutMillis = 15_000   // 15 seconds for socket operations
+    private val initHttpClient = HttpClient(OkHttp) {
+        engine {
+            config {
+                connectTimeout(10, TimeUnit.SECONDS)
+                readTimeout(15, TimeUnit.SECONDS)
+                writeTimeout(15, TimeUnit.SECONDS)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            }
         }
     }
 
     /**
-     * Ktor HTTP client for general API calls with right-sized connection pooling
-     * - Optimized for typical API request patterns (feed, profiles, etc.)
-     * - Most API calls complete in < 1 second, so connections are quickly reused
-     * - 100 connections is sufficient for heavy concurrent load
+     * Ktor HTTP client for general API calls
+     * Uses OkHttp engine for better Android performance, connection pooling, and reliability
+     * OkHttp automatically handles connection pooling, keep-alive, and HTTP/2
      */
-    val httpClient = HttpClient(CIO) {
+    val httpClient = HttpClient(OkHttp) {
         engine {
-            maxConnectionsCount = 100 // Right-sized for API calls (reduced from 1000)
-            // CIO engine handles connection pooling automatically per host
-        }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 60_000  // 1 minute for API calls
-            connectTimeoutMillis = 30_000  // 30 seconds to connect
-            socketTimeoutMillis = 60_000   // 1 minute socket timeout
+            config {
+                connectTimeout(30, TimeUnit.SECONDS)
+                readTimeout(60, TimeUnit.SECONDS)
+                writeTimeout(60, TimeUnit.SECONDS)
+                // HTTP/2 for multiplexing and better performance
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                // OkHttp's default connection pool (5 connections, 5 min keep-alive)
+            }
         }
     }
     
     /**
      * Dedicated HTTP client for large file uploads
-     * - Separate pool prevents uploads from blocking API calls
-     * - Extended timeouts for large video/image uploads
-     * - One connection per upload = 20 max concurrent uploads
+     * Uses OkHttp engine with extended timeouts for large video/image uploads
      */
-    val uploadHttpClient = HttpClient(CIO) {
+    val uploadHttpClient = HttpClient(OkHttp) {
         engine {
-            maxConnectionsCount = 20 // One connection per upload (realistic limit)
-        }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 3_000_000 // 50 minutes for large uploads
-            connectTimeoutMillis = 60_000    // 1 minute to connect
-            socketTimeoutMillis = 300_000    // 5 minutes socket timeout
+            config {
+                connectTimeout(60, TimeUnit.SECONDS)
+                readTimeout(50, TimeUnit.MINUTES)
+                writeTimeout(50, TimeUnit.MINUTES)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+            }
         }
     }
     

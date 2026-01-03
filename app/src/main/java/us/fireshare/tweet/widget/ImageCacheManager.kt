@@ -18,8 +18,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import okhttp3.Protocol
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.statement.bodyAsChannel
@@ -72,28 +73,30 @@ object ImageCacheManager {
     private var activeVisibleDownloads = 0
     private var activeInvisibleDownloads = 0
 
-    // Ktor HTTP client for image downloads with connection pooling
-    private val imageHttpClient = HttpClient(CIO) {
+    // Ktor HTTP client for image downloads with OkHttp engine
+    private val imageHttpClient = HttpClient(OkHttp) {
         engine {
-            maxConnectionsCount = 50  // Sufficient for parallel image downloads
+            config {
+                connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 20s for IPFS
+                writeTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                followRedirects(true)
+            }
         }
-        install(HttpTimeout) {
-            connectTimeoutMillis = CONNECTION_TIMEOUT.toLong()
-            requestTimeoutMillis = READ_TIMEOUT.toLong()  // 20s for IPFS
-        }
-        followRedirects = true
     }
     
     // Separate client for avatars with shorter timeout
-    private val avatarHttpClient = HttpClient(CIO) {
+    private val avatarHttpClient = HttpClient(OkHttp) {
         engine {
-            maxConnectionsCount = 30  // Avatars are smaller, need fewer connections
+            config {
+                connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 15s for avatars
+                writeTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                followRedirects(true)
+            }
         }
-        install(HttpTimeout) {
-            connectTimeoutMillis = CONNECTION_TIMEOUT.toLong()
-            requestTimeoutMillis = AVATAR_READ_TIMEOUT.toLong()  // 15s for avatars
-        }
-        followRedirects = true
     }
     
     private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)

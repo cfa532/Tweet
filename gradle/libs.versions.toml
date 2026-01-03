@@ -65,7 +65,7 @@ androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "
 firebase-analytics = { module = "com.google.firebase:firebase-analytics", version.ref = "firebaseAnalytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
-ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor"}
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor"}
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler"}
 accompanist-pager = { module = "com.google.accompanist:accompanist-pager", version.ref = "accompanistPager" }
