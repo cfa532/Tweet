@@ -263,9 +263,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * */
             val tweetsWithNulls = try {
                 HproseInstance.getTweetFeed(
-                    appUser,
-                    pageNumber,
-                    pageSize,
+                    pageNumber = pageNumber,
+                    pageSize = pageSize,
                     onRetry = { attempt, maxRetries ->
                         // Show retry message when no tweets are loaded yet
                         if (_tweets.value.isEmpty() && pageNumber == 0) {
@@ -342,10 +341,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 followingTweetsJob = applicationScope.launch(IO) {
                     try {
                         val followingTweetsWithNulls = HproseInstance.getTweetFeed(
-                            appUser,
-                            pageNumber,
-                            pageSize,
-                            "update_following_tweets",
+                            pageNumber = pageNumber,
+                            pageSize = pageSize,
+                            entry = "update_following_tweets",
                             onRetry = { attempt, maxRetries ->
                                 // Show retry message when no tweets are loaded yet
                                 if (_tweets.value.isEmpty() && pageNumber == 0) {

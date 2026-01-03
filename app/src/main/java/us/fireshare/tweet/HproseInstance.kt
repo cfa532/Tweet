@@ -1711,9 +1711,9 @@ object HproseInstance {
      * Load tweets of appUser and its followings from network.
      * Keep null elements in the response list and preserves their positions.
      * Includes retry logic with exponential backoff for network-related failures.
+     * Always uses appUser - caller should wait for isAppUserInitialized before calling.
      * */
     suspend fun getTweetFeed(
-        user: User = appUser,
         pageNumber: Int = 0,
         pageSize: Int = 5,
         entry: String = "get_tweet_feed",
@@ -1724,7 +1724,7 @@ object HproseInstance {
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
         
         // For guest users, if no alpha IDs are configured, return empty list
-        if (user.isGuest() && alphaIds.isEmpty()) {
+        if (appUser.isGuest() && alphaIds.isEmpty()) {
             Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
             return emptyList()
         }
@@ -1735,7 +1735,7 @@ object HproseInstance {
             "version" to "v2",
             "pn" to pageNumber,
             "ps" to pageSize,
-            "userid" to if (!user.isGuest()) user.mid else userIdForGuest,
+            "userid" to if (!appUser.isGuest()) appUser.mid else userIdForGuest,
             "appuserid" to appUser.mid,
             "v4only" to v4Only.toString()
         )
@@ -1753,22 +1753,22 @@ object HproseInstance {
                     // Notify UI about retry attempt
                     onRetry?.invoke(attempt, maxRetries)
                     
-                    Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
-                    // Refresh user's baseUrl on retry
-                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
+                    Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
+                    // Refresh appUser's baseUrl on retry
+                    val refreshedUser = fetchUser(appUser.mid, baseUrl = "")
                     if (refreshedUser != null) {
-                        // Update the user's baseUrl (hproseService is computed from baseUrl)
-                        user.baseUrl = refreshedUser.baseUrl
-                        Timber.tag("getTweetFeed").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                        // Update appUser's baseUrl (hproseService is computed from baseUrl)
+                        appUser.baseUrl = refreshedUser.baseUrl
+                        Timber.tag("getTweetFeed").d("✅ Refreshed appUser baseUrl: ${appUser.baseUrl}")
                     } else {
-                        Timber.tag("getTweetFeed").w("⚠️ Failed to refresh user baseUrl on retry")
+                        Timber.tag("getTweetFeed").w("⚠️ Failed to refresh appUser baseUrl on retry")
                     }
                 }
                 
                 val response = try {
-                    user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                    appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
                 } catch (e: Exception) {
-                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, userId: ${user.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
                     throw e
                 }
 
