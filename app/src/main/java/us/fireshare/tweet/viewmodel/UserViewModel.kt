@@ -117,13 +117,23 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Initial load of tweets of an user. Execute only once.
+     * OPTIMIZED: Clears loading state immediately after cached tweets are loaded,
+     * then continues fetching from network in the background.
      * */
     suspend fun initLoad() {
         try {
             Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
 
             // Load first page (page 0) which includes pinned tweets
+            // getTweets loads cached tweets FIRST, then network
             val page0Tweets = getTweets(0)
+            
+            // CRITICAL: Clear loading state immediately if we have cached tweets
+            // This allows UI to show content while network fetch continues in background
+            if (tweets.value.isNotEmpty() || pinnedTweets.value.isNotEmpty()) {
+                initState.value = false
+                Timber.tag("initLoad").d("Cleared loading state - found ${tweets.value.size} cached tweets and ${pinnedTweets.value.size} pinned tweets")
+            }
             
             // Check if page 0 indicates server depletion
             // If server returns fewer than PAGE_SIZE tweets, it's depleted (regardless of null/valid)
@@ -161,6 +171,7 @@ class UserViewModel @AssistedInject constructor(
         } catch (e: Exception) {
             Timber.tag("initLoad").e(e, "Error during initial load for user: ${user.value.mid}")
         } finally {
+            // Always clear loading state on completion or error
             initState.value = false
         }
     }

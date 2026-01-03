@@ -80,12 +80,35 @@ class ChatViewModel @AssistedInject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            _receipt.value = HproseInstance.fetchUser(receiptId)
-                ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-
-            // Load only the latest 20 messages from local database
+            // OPTIMIZED: Load cached user data FIRST to avoid blocking screen
+            val cachedUser = TweetCacheManager.getCachedUser(receiptId)
+            if (cachedUser != null && !cachedUser.isGuest()) {
+                _receipt.value = cachedUser
+                Timber.tag("ChatViewModel").d("Loaded cached user for chat: ${cachedUser.username}")
+            } else {
+                // No cached user, use guest placeholder temporarily
+                _receipt.value = User(mid = receiptId, username = "loading...", baseUrl = appUser.baseUrl)
+                Timber.tag("ChatViewModel").d("No cached user found, using placeholder")
+            }
+            
+            // Load messages from database (fast)
             _chatMessages.value = loadLatestMessages(receiptId)
                 .sortedBy { it.timestamp }
+            Timber.tag("ChatViewModel").d("Loaded ${_chatMessages.value.size} messages from database")
+            
+            // Fetch fresh user data from network in background (slow)
+            // This runs asynchronously and doesn't block the screen from appearing
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val freshUser = HproseInstance.fetchUser(receiptId)
+                    if (freshUser != null && !freshUser.isGuest()) {
+                        _receipt.value = freshUser
+                        Timber.tag("ChatViewModel").d("Updated with fresh user data from network: ${freshUser.username}")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ChatViewModel").e(e, "Failed to fetch fresh user data, using cached")
+                }
+            }
         }
     }
 
