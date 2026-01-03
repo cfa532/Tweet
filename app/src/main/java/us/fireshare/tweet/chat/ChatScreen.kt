@@ -195,7 +195,8 @@ fun ChatScreen(
             pendingScrollJob?.cancel()
             val job = coroutineScope.launch {
                 try {
-                    listState.scrollToItem(chatMessages.size - 1)
+                    // With reverseLayout = true, index 0 is the newest message (at bottom)
+                    listState.scrollToItem(0)
                 } finally {
                     pendingScrollJob = null
                 }
@@ -229,20 +230,20 @@ fun ChatScreen(
     }
 
     // Scroll to bottom when messages are first loaded
-    LaunchedEffect(chatMessages.isNotEmpty()) {
+    LaunchedEffect(Unit) {
+        // With reverseLayout, newest messages automatically appear at bottom
+        // Short delay to ensure LazyColumn is laid out
+        delay(200)
         if (chatMessages.isNotEmpty()) {
-            // Add a small delay to ensure the LazyColumn is properly laid out
-            delay(100)
-            scrollToBottom()
+            listState.scrollToItem(0)
         }
     }
     
     // Scroll to bottom when current user sends a message
     LaunchedEffect(shouldScrollToBottom) {
         if (shouldScrollToBottom && chatMessages.isNotEmpty()) {
-            // Add a small delay to ensure the new message is rendered
-            delay(50)
-            scrollToBottom()
+            // Instant scroll to newest message (index 0 with reverseLayout)
+            listState.animateScrollToItem(0)
             // Reset the flag
             viewModel.resetScrollToBottomFlag()
         }
@@ -306,7 +307,8 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(bottom = 80.dp), // Increased padding for new input design
-                        state = listState
+                        state = listState,
+                        reverseLayout = true  // Reverse scroll: newest messages at bottom
                     ) {
                         // Show loading indicator at the top when loading older messages
                         if (isLoadingOlderMessages) {
@@ -355,11 +357,12 @@ fun ChatScreen(
                             }
                         }
 
-                        itemsIndexed(chatMessages) { index, msg ->
+                        itemsIndexed(chatMessages.reversed()) { index, msg ->
                             // Add time divider if more than 1 hour difference from previous message
+                            // Note: With reverseLayout, we're iterating from newest to oldest
                             if (index > 0) {
-                                val previousMessage = chatMessages[index - 1]
-                                val timeDifference = msg.timestamp - previousMessage.timestamp
+                                val previousMessage = chatMessages.reversed()[index - 1]
+                                val timeDifference = previousMessage.timestamp - msg.timestamp  // Reversed comparison
                                 val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
 
                                 if (timeDifference > oneHourInMillis) {

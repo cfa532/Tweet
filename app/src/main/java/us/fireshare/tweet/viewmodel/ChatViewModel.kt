@@ -68,7 +68,7 @@ class ChatViewModel @AssistedInject constructor(
     val shouldScrollToBottom: StateFlow<Boolean> get() = _shouldScrollToBottom.asStateFlow()
 
     companion object {
-        private const val MESSAGES_PER_PAGE = 20
+        private const val MESSAGES_PER_PAGE = 10  // Load only 10 most recent messages initially
         
         /**
          * Helper function to check if a message is new (not already in the list)
