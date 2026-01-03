@@ -566,9 +566,16 @@ object HproseInstance {
                             .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}")
                     }
                 } else {
-                    // Network fetch failed or timed out - use cached data if available
-                    Timber.tag("initAppEntry")
-                        .w("User fetch failed/timed out, continuing with cached/entry data")
+                    // Network fetch failed or timed out - restore entry IP baseUrl if needed
+                    // fetchUser may have cleared baseUrl when user not found (line 3280 in updateUserFromServerWithRetry)
+                    if (appUser.baseUrl.isNullOrBlank()) {
+                        appUser.baseUrl = "http://$entryIP"
+                        Timber.tag("initAppEntry")
+                            .w("User fetch failed, restored entry IP baseUrl: ${appUser.baseUrl}")
+                    } else {
+                        Timber.tag("initAppEntry")
+                            .w("User fetch failed/timed out, continuing with existing baseUrl: ${appUser.baseUrl}")
+                    }
                 }
                 
                 // If we didn't have cached user, show UI now after network fetch
