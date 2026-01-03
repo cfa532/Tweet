@@ -326,6 +326,7 @@
     
     <!-- Empty states -->
     <string name="no_tweets_found">No tweets found</string>
+    <string name="no_more_chat_messages">No more chat messages</string>
     <string name="no_search_results">No results found for "%s"</string>
     <string name="no_bookmarks">No bookmarks yet</string>
     <string name="no_favorites">No favorites yet</string>

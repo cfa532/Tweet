@@ -54,6 +54,7 @@
     
     <!-- Empty states -->
     <string name="no_tweets_found">ツイートが見つかりません</string>
+    <string name="no_more_chat_messages">これ以上のチャットメッセージはありません</string>
     <string name="no_search_results">「%s」の結果が見つかりません</string>
     <string name="search_generic_error">検索中に問題が発生しました。もう一度お試しください。</string>
     <string name="search_section_users">アカウント</string>

@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -397,6 +398,46 @@ fun TweetListView(
         }
     }
 
+    // Check if we're at the very top (first item visible and scrolled to top)
+    val isAtTop by remember(listState) {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val firstVisibleItem = layoutInfo.visibleItemsInfo.firstOrNull()
+            val result = firstVisibleItem != null &&
+                        firstVisibleItem.index == 0 &&
+                        listState.firstVisibleItemScrollOffset == 0
+
+            Timber.tag("TweetListView")
+                .d("isAtTop check: firstVisibleItem=${firstVisibleItem?.index}, offset=${listState.firstVisibleItemScrollOffset}, result=$result")
+
+            result
+        }
+    }
+
+    // Check if we've reached the beginning (no more old messages to fetch)
+    val hasReachedBeginning by remember(lastLoadedPage, serverDepleted, tweets) {
+        derivedStateOf {
+            // We've reached the beginning if:
+            // 1. We've loaded the first page (lastLoadedPage >= 0)
+            // 2. We have tweets (not empty)
+            // 3. And either server is depleted or we can't load page 0 anymore
+            val result = lastLoadedPage >= 0 && tweets.isNotEmpty() && (
+                (lastLoadedPage == 0 && serverDepleted) ||
+                (lastLoadedPage == 0 && tweets.size < TW_CONST.PAGE_SIZE)
+            )
+
+            Timber.tag("TweetListView")
+                .d("hasReachedBeginning check: lastLoadedPage=$lastLoadedPage, serverDepleted=$serverDepleted, tweets.size=${tweets.size}, PAGE_SIZE=${TW_CONST.PAGE_SIZE}, result=$result")
+
+            if (result) {
+                Timber.tag("TweetListView")
+                    .d("hasReachedBeginning: TRUE - will show 'no more messages' message")
+            }
+
+            result
+        }
+    }
+
     // Notify caller when isAtLastTweet changes
     LaunchedEffect(isAtLastTweet) {
         onIsAtLastTweetChange?.invoke(isAtLastTweet)
@@ -665,6 +706,30 @@ fun TweetListView(
                 item(key = "header") {
                     header()
                 }
+            }
+
+            // Show "no more chat messages" when at top and reached beginning
+            if (isAtTop && hasReachedBeginning && tweets.isNotEmpty()) {
+                Timber.tag("TweetListView")
+                    .d("SHOWING 'no more messages' - isAtTop=$isAtTop, hasReachedBeginning=$hasReachedBeginning, tweets.size=${tweets.size}")
+                item(key = "no_more_messages") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp, horizontal = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.no_more_chat_messages),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                Timber.tag("TweetListView")
+                    .d("NOT showing 'no more messages' - isAtTop=$isAtTop, hasReachedBeginning=$hasReachedBeginning, tweets.size=${tweets.size}")
             }
 
             // Show empty state if no tweets
