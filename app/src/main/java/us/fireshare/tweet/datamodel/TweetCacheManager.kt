@@ -53,7 +53,8 @@ object TweetCacheManager {
                     mid = tweet.mid,
                     uid = userId,
                     originalTweet = tweet,
-                    timestamp = Date()
+                    timestamp = Date(),
+                    tweetTimestamp = tweet.timestamp  // Store tweet's actual creation timestamp for ordering
                 )
 
                 // Always update memory cache

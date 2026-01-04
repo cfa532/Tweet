@@ -96,6 +96,8 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.service.BadgeStateManager
+import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
@@ -206,6 +208,12 @@ fun ChatScreen(
     }
 
     LaunchedEffect(Unit) {
+        // Clear badge when entering chat screen
+        BadgeStateManager.clearBadge()
+        
+        // Clear system notifications when entering chat screen
+        SystemNotificationManager.clearNotification(context, 1001)
+        
         // Assume user read new message when opening this chat screen.
         // Upon opening ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,

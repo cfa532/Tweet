@@ -22,12 +22,13 @@ import us.fireshare.tweet.HproseInstance.appUser
 import java.util.Date
 
 // cache for tweets
-@Entity(indices = [Index(value = ["uid"])])
+@Entity(indices = [Index(value = ["uid"]), Index(value = ["tweetTimestamp"])])
 data class CachedTweet(
     @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
     val uid: MimeiId,       // user Id
     val originalTweet: Tweet,   // tweet object.
-    val timestamp: Date = Date() // Automatically set to the current date and time
+    val timestamp: Date = Date(), // Cache timestamp (when saved to database)
+    val tweetTimestamp: Long = 0L  // Tweet's actual creation timestamp (for ordering)
 )
 
 @Entity
@@ -134,13 +135,13 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
 
-    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :count OFFSET :offset")
+    @Query("SELECT * FROM CachedTweet ORDER BY tweetTimestamp DESC LIMIT :count OFFSET :offset")
     fun getCachedTweets(offset: Int, count: Int): List<CachedTweet>
 
-    @Query("SELECT * FROM CachedTweet ORDER BY timestamp DESC LIMIT :limit")
+    @Query("SELECT * FROM CachedTweet ORDER BY tweetTimestamp DESC LIMIT :limit")
     fun getRecentCachedTweets(limit: Int): List<CachedTweet>
 
-    @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY timestamp DESC" +
+    @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY tweetTimestamp DESC" +
             " LIMIT :count OFFSET :offset")
     fun getCachedTweetsByUser(userId: MimeiId, offset: Int, count: Int): List<CachedTweet>
 
@@ -165,7 +166,7 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 12)
+@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 13)
 @TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
@@ -183,7 +184,7 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     "tweet_cache_database"
                 )
                     .fallbackToDestructiveMigration(false)
-                    .addMigrations(MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .build()
                 INSTANCE = instance
                 instance
@@ -202,6 +203,16 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                 // Clear corrupted tweet cache (tweets were serialized incorrectly with excludeFieldsWithoutExposeAnnotation)
                 Timber.tag("TweetCacheDatabase").w("Migration 11->12: Clearing corrupted tweet cache")
                 db.execSQL("DELETE FROM CachedTweet")
+            }
+        }
+        
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add tweetTimestamp column to CachedTweet table for proper ordering
+                Timber.tag("TweetCacheDatabase").w("Migration 12->13: Adding tweetTimestamp column")
+                db.execSQL("ALTER TABLE CachedTweet ADD COLUMN tweetTimestamp INTEGER NOT NULL DEFAULT 0")
+                // Create index for faster ordering
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CachedTweet_tweetTimestamp ON CachedTweet(tweetTimestamp)")
             }
         }
     }
