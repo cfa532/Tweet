@@ -1792,9 +1792,15 @@ object HproseInstance {
                     if (originalTweetJson != null) {
                         try {
                             val originalTweet = Tweet.from(originalTweetJson)
-                            // Fetch author, fallback to cached user if fetchUser fails
+                            
+                            // IMPORTANT: Set cached author FIRST (immediate, fast)
+                            originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
+                            
+                            // Then fetch fresh author from server (slow network call)
                             val fetchedAuthor = fetchUser(originalTweet.authorId)
-                            originalTweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(originalTweet.authorId)
+                            if (fetchedAuthor != null) {
+                                originalTweet.author = fetchedAuthor
+                            }
                             
                             // Log warning if author is still null
                             if (originalTweet.author == null) {
@@ -1818,11 +1824,18 @@ object HproseInstance {
                         try {
                             val tweet = Tweet.from(tweetJson)
                             
-                            // Fetch author, fallback to cached user if fetchUser fails
-                            val fetchedAuthor = fetchUser(tweet.authorId)
-                            tweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(tweet.authorId)
+                            // IMPORTANT: Set cached author FIRST (immediate, fast)
+                            // This ensures tweets render with cached author data right away
+                            tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
                             
-                            // Log warning if author is still null after both fetch and cache attempts
+                            // Then fetch fresh author from server (slow network call)
+                            // Update author if fetch succeeds
+                            val fetchedAuthor = fetchUser(tweet.authorId)
+                            if (fetchedAuthor != null) {
+                                tweet.author = fetchedAuthor
+                            }
+                            
+                            // Log warning if author is still null after both cache and fetch attempts
                             if (tweet.author == null) {
                                 Timber.tag("getTweetFeed").w("⚠️ Failed to get author for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
                             }
@@ -1927,9 +1940,14 @@ object HproseInstance {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
                         
-                        // Fetch author, fallback to cached user if fetchUser fails
+                        // IMPORTANT: Set cached author FIRST (immediate, fast)
+                        originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
+                        
+                        // Then fetch fresh author from server (slow network call)
                         val fetchedAuthor = fetchUser(originalTweet.authorId)
-                        originalTweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(originalTweet.authorId)
+                        if (fetchedAuthor != null) {
+                            originalTweet.author = fetchedAuthor
+                        }
                         
                         // Log warning if author is still null
                         if (originalTweet.author == null) {
@@ -2706,9 +2724,14 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetJson)
                         
-                        // Fetch author, fallback to cached user if fetchUser fails
+                        // IMPORTANT: Set cached author FIRST (immediate, fast)
+                        tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                        
+                        // Then fetch fresh author from server (slow network call)
                         val fetchedAuthor = fetchUser(tweet.authorId)
-                        tweet.author = fetchedAuthor ?: TweetCacheManager.getCachedUser(tweet.authorId)
+                        if (fetchedAuthor != null) {
+                            tweet.author = fetchedAuthor
+                        }
                         
                         // Log warning if author is still null
                         if (tweet.author == null) {

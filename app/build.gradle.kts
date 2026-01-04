@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 97    // Full release version code. Must be increased each time,
+        versionCode = 99    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
         versionName = "42"  // compared with App Mimei version to check for upgrade.
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 97  // Play version code increased for release
+            versionCode = 99  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
