@@ -127,13 +127,11 @@ class UserViewModel @AssistedInject constructor(
             // Load first page (page 0) which includes pinned tweets
             // getTweets loads cached tweets FIRST, then network
             val page0Tweets = getTweets(0)
-            
-            // CRITICAL: Clear loading state immediately if we have cached tweets
-            // This allows UI to show content while network fetch continues in background
-            if (tweets.value.isNotEmpty() || pinnedTweets.value.isNotEmpty()) {
-                initState.value = false
-                Timber.tag("initLoad").d("Cleared loading state - found ${tweets.value.size} cached tweets and ${pinnedTweets.value.size} pinned tweets")
-            }
+
+            // Clear loading state after first page loads (whether from cache or network)
+            // This ensures UI shows content as soon as any tweets are available
+            initState.value = false
+            Timber.tag("initLoad").d("Cleared loading state after page 0 loaded - found ${tweets.value.size} tweets and ${pinnedTweets.value.size} pinned tweets")
             
             // Check if page 0 indicates server depletion
             // If server returns fewer than PAGE_SIZE tweets, it's depleted (regardless of null/valid)
@@ -886,13 +884,16 @@ class UserViewModel @AssistedInject constructor(
             // Use applicationScope to prevent cancellation during app initialization
             // This ensures user data loading completes even if composition is cancelled
             us.fireshare.tweet.TweetApplication.applicationScope.launch(IO) {
-                // If this is the app user, use local data first to avoid stale server data after updates
+                // Get cached user data immediately for instant UI display
+                val cachedUser = TweetCacheManager.getCachedUser(userId)
                 val initialUser = if (userId == appUser.mid) {
                     appUser
                 } else {
-                    fetchUser(userId, maxRetries = 2) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                    // Use cached user data if available, otherwise create skeleton
+                    cachedUser ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
                 }
-                
+
+                // Set cached/initial user data immediately for instant UI display
                 _user.value = initialUser
 
                 // Initialize count variables from user data
@@ -901,6 +902,40 @@ class UserViewModel @AssistedInject constructor(
                 _followersCount.value = initialUser.followersCount
                 _followingsCount.value = initialUser.followingCount
                 _tweetCount.value = initialUser.tweetCount
+
+                // Load cached tweets immediately for instant UI display
+                if (userId != TW_CONST.GUEST_ID) {
+                    val cachedTweets = loadCachedTweetsByAuthor(userId, 0, TW_CONST.PAGE_SIZE)
+                    if (cachedTweets.isNotEmpty()) {
+                        _tweets.value = cachedTweets
+                        Timber.tag("UserViewModel").d("Loaded ${cachedTweets.size} cached tweets immediately for user $userId")
+                    }
+                }
+
+                // Fetch fresh user data in background and update
+                if (userId != appUser.mid) {
+                    launch(IO) {
+                        try {
+                            val freshUser = fetchUser(userId, maxRetries = 2)
+                            if (freshUser != null) {
+                                _user.value = freshUser
+
+                                // Update count variables with fresh data
+                                _bookmarksCount.value = freshUser.bookmarksCount
+                                _favoritesCount.value = freshUser.favoritesCount
+                                _followersCount.value = freshUser.followersCount
+                                _followingsCount.value = freshUser.followingCount
+                                _tweetCount.value = freshUser.tweetCount
+
+                                Timber.tag("UserViewModel").d("✅ Updated user $userId with fresh data")
+                            } else {
+                                Timber.tag("UserViewModel").w("⚠️ Failed to fetch fresh user data for $userId")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("UserViewModel").e("Error updating user data for $userId: $e")
+                        }
+                    }
+                }
 
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
