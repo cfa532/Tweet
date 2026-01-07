@@ -1,86 +1,57 @@
 > Task :app:preBuild UP-TO-DATE
-> Task :app:preMiniDebugBuild UP-TO-DATE
-> Task :app:mergeMiniDebugJniLibFolders UP-TO-DATE
-> Task :app:mergeMiniDebugNativeLibs UP-TO-DATE
-> Task :app:stripMiniDebugDebugSymbols UP-TO-DATE
-> Task :app:extractMiniDebugNativeDebugMetadata UP-TO-DATE
-> Task :app:mergeMiniDebugNativeDebugMetadata NO-SOURCE
+> Task :app:preFullDebugBuild UP-TO-DATE
+> Task :app:mergeFullDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeFullDebugNativeLibs UP-TO-DATE
+> Task :app:stripFullDebugDebugSymbols UP-TO-DATE
+> Task :app:extractFullDebugNativeDebugMetadata UP-TO-DATE
+> Task :app:mergeFullDebugNativeDebugMetadata NO-SOURCE
 > Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :app:generateMiniDebugBuildConfig
-> Task :app:checkMiniDebugAarMetadata UP-TO-DATE
-> Task :app:processMiniDebugNavigationResources UP-TO-DATE
-> Task :app:compileMiniDebugNavigationResources UP-TO-DATE
-> Task :app:generateMiniDebugResValues UP-TO-DATE
-> Task :app:injectCrashlyticsMappingFileIdMiniDebug UP-TO-DATE
-> Task :app:injectCrashlyticsVersionControlInfoMiniDebug UP-TO-DATE
-> Task :app:processMiniDebugGoogleServices UP-TO-DATE
-> Task :app:mapMiniDebugSourceSetPaths UP-TO-DATE
-> Task :app:generateMiniDebugResources UP-TO-DATE
-> Task :app:mergeMiniDebugResources UP-TO-DATE
-> Task :app:packageMiniDebugResources UP-TO-DATE
-> Task :app:parseMiniDebugLocalResources UP-TO-DATE
-> Task :app:createMiniDebugCompatibleScreenManifests
-> Task :app:extractDeepLinksMiniDebug UP-TO-DATE
-> Task :app:processMiniDebugMainManifest
-> Task :app:processMiniDebugManifest
-> Task :app:javaPreCompileMiniDebug UP-TO-DATE
-> Task :app:mergeMiniDebugShaders UP-TO-DATE
-> Task :app:compileMiniDebugShaders NO-SOURCE
-> Task :app:generateMiniDebugAssets UP-TO-DATE
-> Task :app:mergeMiniDebugAssets UP-TO-DATE
-> Task :app:compressMiniDebugAssets UP-TO-DATE
-> Task :app:checkMiniDebugDuplicateClasses UP-TO-DATE
-> Task :app:desugarMiniDebugFileDependencies UP-TO-DATE
-> Task :app:mergeExtDexMiniDebug UP-TO-DATE
-> Task :app:mergeLibDexMiniDebug UP-TO-DATE
-> Task :app:validateSigningMiniDebug UP-TO-DATE
-> Task :app:writeMiniDebugAppMetadata UP-TO-DATE
-> Task :app:writeMiniDebugSigningConfigVersions UP-TO-DATE
-> Task :app:processMiniDebugManifestForPackage
-> Task :app:processMiniDebugResources
+> Task :app:generateFullDebugBuildConfig UP-TO-DATE
+> Task :app:checkFullDebugAarMetadata UP-TO-DATE
+> Task :app:processFullDebugNavigationResources UP-TO-DATE
+> Task :app:compileFullDebugNavigationResources UP-TO-DATE
+> Task :app:generateFullDebugResValues UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdFullDebug UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoFullDebug UP-TO-DATE
+> Task :app:processFullDebugGoogleServices UP-TO-DATE
+> Task :app:mapFullDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateFullDebugResources UP-TO-DATE
+> Task :app:mergeFullDebugResources UP-TO-DATE
+> Task :app:packageFullDebugResources UP-TO-DATE
+> Task :app:parseFullDebugLocalResources UP-TO-DATE
+> Task :app:createFullDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksFullDebug UP-TO-DATE
+> Task :app:processFullDebugMainManifest UP-TO-DATE
+> Task :app:processFullDebugManifest UP-TO-DATE
+> Task :app:processFullDebugManifestForPackage UP-TO-DATE
+> Task :app:processFullDebugResources UP-TO-DATE
+> Task :app:kspFullDebugKotlin UP-TO-DATE
+> Task :app:compileFullDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileFullDebug UP-TO-DATE
+> Task :app:compileFullDebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeFullDebugShaders UP-TO-DATE
+> Task :app:compileFullDebugShaders NO-SOURCE
+> Task :app:generateFullDebugAssets UP-TO-DATE
+> Task :app:mergeFullDebugAssets UP-TO-DATE
+> Task :app:compressFullDebugAssets UP-TO-DATE
+> Task :app:checkFullDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarFullDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexFullDebug UP-TO-DATE
+> Task :app:hiltAggregateDepsFullDebug UP-TO-DATE
+> Task :app:hiltJavaCompileFullDebug UP-TO-DATE
+> Task :app:transformFullDebugClassesWithAsm UP-TO-DATE
+> Task :app:dexBuilderFullDebug UP-TO-DATE
+> Task :app:mergeFullDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processFullDebugJavaRes UP-TO-DATE
+> Task :app:mergeFullDebugJavaResource UP-TO-DATE
+> Task :app:mergeLibDexFullDebug UP-TO-DATE
+> Task :app:mergeProjectDexFullDebug UP-TO-DATE
+> Task :app:validateSigningFullDebug UP-TO-DATE
+> Task :app:writeFullDebugAppMetadata UP-TO-DATE
+> Task :app:writeFullDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageFullDebug UP-TO-DATE
+> Task :app:createFullDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleFullDebug UP-TO-DATE
 
-> Task :app:kspMiniDebugKotlin
-w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
-w: [ksp] Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
-
-> Task :app:compileMiniDebugKotlin
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:233:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:435:75 Unchecked cast of 'Any?' to 'List<String>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:647:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:744:59 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:806:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:893:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1054:57 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1195:49 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1458:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1459:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1548:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1549:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1744:41 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2070:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2081:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2194:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2195:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2252:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2253:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2764:28 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3315:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3325:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/TweetApplication.kt:152:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/profile/SystemSettings.kt:166:38 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes ExposedDropdownMenuAnchorType and enabled parameters.
-
-> Task :app:compileMiniDebugJavaWithJavac
-> Task :app:hiltAggregateDepsMiniDebug UP-TO-DATE
-> Task :app:hiltJavaCompileMiniDebug
-> Task :app:processMiniDebugJavaRes
-> Task :app:mergeMiniDebugJavaResource
-> Task :app:transformMiniDebugClassesWithAsm
-> Task :app:dexBuilderMiniDebug
-> Task :app:mergeMiniDebugGlobalSynthetics UP-TO-DATE
-> Task :app:mergeProjectDexMiniDebug
-> Task :app:packageMiniDebug
-> Task :app:createMiniDebugApkListingFileRedirect
-> Task :app:assembleMiniDebug
-
-BUILD SUCCESSFUL in 16s
-47 actionable tasks: 17 executed, 30 up-to-date
+BUILD SUCCESSFUL in 824ms
+47 actionable tasks: 47 up-to-date
