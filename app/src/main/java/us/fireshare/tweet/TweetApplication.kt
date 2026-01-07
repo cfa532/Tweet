@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
@@ -50,7 +51,8 @@ class TweetApplication : Application(), ComponentCallbacks2 {
                             forceRefresh = true
                         )
                         if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
-                            HproseInstance.appUser = refreshedUser
+                            User.updateUserInstance(refreshedUser, true)
+                            HproseInstance.appUser = User.getInstance(refreshedUser.mid)
                             Timber.tag("AppLifecycle").d("✅ AppUser refreshed successfully on foreground - avatar: ${refreshedUser.avatar}")
                         } else {
                             Timber.tag("AppLifecycle").w("Failed to refresh appUser on foreground")

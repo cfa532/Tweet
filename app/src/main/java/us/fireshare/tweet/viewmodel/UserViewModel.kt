@@ -194,9 +194,8 @@ class UserViewModel @AssistedInject constructor(
                     // If this is the app user, sync with appUser singleton
                     if (userId == appUser.mid) {
                         User.updateUserInstance(refreshedUser)
-                        // CRITICAL: Set to refreshedUser (not getInstance) to force StateFlow emission
-                        appUser = refreshedUser
-                        TweetCacheManager.saveUser(refreshedUser)
+                        // Set appUser to the updated singleton instance
+                        appUser = User.getInstance(refreshedUser.mid)
                     }
                     
                     // Update count variables
@@ -294,12 +293,9 @@ class UserViewModel @AssistedInject constructor(
             // Update the user objects with new avatar (on Main thread for immediate UI update)
             withContext(Dispatchers.Main) {
                 val updatedAppUser = appUser.copy(avatar = avatarId)
-                appUser = updatedAppUser
-                _user.value = user.value.copy(avatar = avatarId)
                 User.updateUserInstance(updatedAppUser)
-
-                // Save the updated user to cache
-                TweetCacheManager.saveUser(updatedAppUser)
+                appUser = User.getInstance(updatedAppUser.mid)
+                _user.value = user.value.copy(avatar = avatarId)
                 Timber.tag("updateAvatar").d("State updated on Main thread, new avatar ID: $avatarId")
             }
             
@@ -1269,7 +1265,9 @@ class UserViewModel @AssistedInject constructor(
                 loginError.value = ret.second.toString()
                 isLoading.value = false
             } else {
-                appUser = ret.first as User
+                val loggedInUser = ret.first as User
+                User.updateUserInstance(loggedInUser, true)
+                appUser = User.getInstance(loggedInUser.mid)
                 preferenceHelper.setUserId(appUser.mid)
                 _user.value = appUser
                 username.value = appUser.username
@@ -1371,9 +1369,10 @@ class UserViewModel @AssistedInject constructor(
             // Find IP of the desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
-                appUser = appUser.copy(baseUrl = "http://$ip")
+                val updatedUser = appUser.copy(baseUrl = "http://$ip")
+                User.updateUserInstance(updatedUser, true)
+                appUser = User.getInstance(updatedUser.mid)
                 _user.value = user.value.copy(baseUrl = "http://$ip")
-                User.updateUserInstance(appUser, true)
             } ?: run {
                 hostIdError.value = context.getString(R.string.node_not_found)
                 isLoading.value = false

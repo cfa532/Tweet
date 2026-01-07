@@ -307,10 +307,10 @@ object HproseInstance {
         set(value) {
             val oldBaseUrl = _appUserState.value.baseUrl
             val oldAvatar = _appUserState.value.avatar
-            
+
             _appUserState.value = value
             _appUserAvatar.value = value.avatar  // Always emit avatar separately
-            
+
             // Log if avatar changed (helps debug toolbar avatar issues)
             if (oldAvatar != value.avatar) {
                 Timber.tag("appUser").d("Avatar updated: $oldAvatar -> ${value.avatar}")
@@ -517,8 +517,10 @@ object HproseInstance {
             if (cachedUser != null) {
                 // Update singleton instance with cached data
                 User.updateUserInstance(cachedUser, true)
-                // CRITICAL: Set to cachedUser (not getInstance) to force StateFlow emission
-                appUser = cachedUser
+                // Get the updated singleton instance (ensures consistency)
+                val singletonUser = User.getInstance(cachedUser.mid)
+                // CRITICAL: Set appUser to the singleton instance to maintain sync
+                appUser = singletonUser
                 
                 // CRITICAL: Only set entry IP if cached user has no baseUrl
                 // Otherwise preserve the cached user's baseUrl (their known node IP)
@@ -588,10 +590,9 @@ object HproseInstance {
                 if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                     // Update on Main dispatcher to ensure UI recomposition happens immediately
                     withContext(Dispatchers.Main) {
-                        // Update singleton first, THEN set appUser to force StateFlow emission
+                        // Update singleton first, THEN set appUser to the singleton instance
                         User.updateUserInstance(refreshedUser, true)
-                        appUser = refreshedUser
-                        TweetCacheManager.saveUser(refreshedUser)
+                        appUser = User.getInstance(refreshedUser.mid)
                         
                         // Mark appUser as fully initialized (not just entry IP)
                         _isAppUserInitialized.value = true
@@ -1826,8 +1827,13 @@ object HproseInstance {
                             
                             // IMPORTANT: Set cached author FIRST (immediate, fast)
                             // This ensures tweets render with cached author data right away
-                            tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
-                            
+                            // For appUser's tweets, use appUser directly since it's always the most up-to-date
+                            if (tweet.authorId == appUser.mid) {
+                                tweet.author = appUser
+                            } else {
+                                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                            }
+
                             // Then fetch fresh author from server (slow network call)
                             // Update author if fetch succeeds
                             val fetchedAuthor = fetchUser(tweet.authorId)
@@ -1941,8 +1947,13 @@ object HproseInstance {
                         val originalTweet = Tweet.from(originalTweetJson)
                         
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
-                        originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
-                        
+                        // For appUser's tweets, use appUser directly since it's always the most up-to-date
+                        if (originalTweet.authorId == appUser.mid) {
+                            originalTweet.author = appUser
+                        } else {
+                            originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
+                        }
+
                         // Then fetch fresh author from server (slow network call)
                         val fetchedAuthor = fetchUser(originalTweet.authorId)
                         if (fetchedAuthor != null) {
@@ -2319,12 +2330,18 @@ object HproseInstance {
                 }
                 
                 // Always populate author from user cache (author field is not serialized with tweet)
-                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
-                
-                // If no cached user found, create a skeleton user object as placeholder for offline loading
-                if (tweet.author == null) {
-                    tweet.author = getUserInstance(tweet.authorId)
-                    Timber.tag("loadCachedTweetsByAuthor").d("Created skeleton user placeholder for tweet ${tweet.mid} - authorId ${tweet.authorId}")
+                // For appUser's tweets, use appUser directly since it's always the most up-to-date singleton
+                if (tweet.authorId == appUser.mid) {
+                    tweet.author = appUser
+                    Timber.tag("loadCachedTweetsByAuthor").d("Using appUser singleton for tweet ${tweet.mid} - author: ${appUser.username}")
+                } else {
+                    tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+
+                    // If no cached user found, create a skeleton user object as placeholder for offline loading
+                    if (tweet.author == null) {
+                        tweet.author = getUserInstance(tweet.authorId)
+                        Timber.tag("loadCachedTweetsByAuthor").d("Created skeleton user placeholder for tweet ${tweet.mid} - authorId ${tweet.authorId}")
+                    }
                 }
                 
                 Timber.tag("loadCachedTweetsByAuthor").d("Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username ?: tweet.authorId}")
@@ -2421,9 +2438,9 @@ object HproseInstance {
                         TweetCacheManager.removeCachedUser(appUser.mid)
                         val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
-                            // Update appUser directly - no need for .copy()
-                            appUser = refreshedUser
-                            TweetCacheManager.saveUser(appUser)
+                            // Update singleton and set appUser to it
+                            User.updateUserInstance(refreshedUser, true)
+                            appUser = User.getInstance(refreshedUser.mid)
                             
                             // Notify other ViewModels that user data has been updated
                             TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
@@ -2865,9 +2882,9 @@ object HproseInstance {
                 TweetCacheManager.removeCachedUser(appUser.mid)
                 val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Update appUser directly - no need for .copy()
-                    appUser = refreshedUser
-                    TweetCacheManager.saveUser(appUser)
+                    // Update singleton and set appUser to it
+                    User.updateUserInstance(refreshedUser, true)
+                    appUser = User.getInstance(refreshedUser.mid)
 
                     // Notify other ViewModels that user data has been updated
                     TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
@@ -2895,8 +2912,13 @@ object HproseInstance {
             // Comments are stored on the tweet author's node, not the appUser's node
             // Fetch author if not already loaded
             if (tweet.author == null) {
-                // Check cache first before fetching from server
-                tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: fetchUser(tweet.authorId)
+                // For appUser's tweets, use appUser directly
+                if (tweet.authorId == appUser.mid) {
+                    tweet.author = appUser
+                } else {
+                    // Check cache first before fetching from server
+                    tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: fetchUser(tweet.authorId)
+                }
             }
             
             // Ensure author has a baseUrl (hproseService requires baseUrl)
