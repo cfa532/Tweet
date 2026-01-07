@@ -708,30 +708,6 @@ fun TweetListView(
                 }
             }
 
-            // Skip for all profile contexts as this is inappropriate for profiles
-            if (isAtTop && hasReachedBeginning && tweets.isNotEmpty() && !context.contains("Profile")) {
-                Timber.tag("TweetListView")
-                    .d("SHOWING 'no more messages' - isAtTop=$isAtTop, hasReachedBeginning=$hasReachedBeginning, tweets.size=${tweets.size}")
-                item(key = "no_more_messages") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp, horizontal = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.no_more_chat_messages),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                Timber.tag("TweetListView")
-                    .d("NOT showing 'no more messages' - isAtTop=$isAtTop, hasReachedBeginning=$hasReachedBeginning, tweets.size=${tweets.size}")
-            }
-
             // Show empty state if no tweets
             if (tweets.isEmpty() && !isRefreshingAtTop) {
                 item(key = "empty_state") {
