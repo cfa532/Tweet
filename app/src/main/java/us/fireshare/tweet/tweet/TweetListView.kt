@@ -708,8 +708,8 @@ fun TweetListView(
                 }
             }
 
-            // Show "no more chat messages" when at top and reached beginning
-            if (isAtTop && hasReachedBeginning && tweets.isNotEmpty()) {
+            // Skip for all profile contexts as this is inappropriate for profiles
+            if (isAtTop && hasReachedBeginning && tweets.isNotEmpty() && !context.contains("Profile")) {
                 Timber.tag("TweetListView")
                     .d("SHOWING 'no more messages' - isAtTop=$isAtTop, hasReachedBeginning=$hasReachedBeginning, tweets.size=${tweets.size}")
                 item(key = "no_more_messages") {

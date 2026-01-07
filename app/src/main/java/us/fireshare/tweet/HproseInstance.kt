@@ -369,38 +369,52 @@ object HproseInstance {
         // Initialize appUser with userId from preferences, or GUEST_ID if not available
         val storedUserId = preferenceHelper.getUserId()
         val initialUserId = if (storedUserId != TW_CONST.GUEST_ID) storedUserId else TW_CONST.GUEST_ID
-        appUser = getInstance(initialUserId)
-        appUser.followingList = if (initialUserId == TW_CONST.GUEST_ID) getAlphaIds() else emptyList()
-        Timber.tag("HproseInstance").d("Initialized appUser with mid: ${appUser.mid}")
         
+        // STEP 1: Extract cached appUser FIRST, before any network operations
+        if (initialUserId != TW_CONST.GUEST_ID) {
+            val cachedUser = TweetCacheManager.getCachedUser(initialUserId)
+            if (cachedUser != null) {
+                // Print detailed cached user data
+                Timber.tag("HproseInstance").d("=== CACHED USER DATA ===")
+                Timber.tag("HproseInstance").d("  mid: ${cachedUser.mid}")
+                Timber.tag("HproseInstance").d("  username: ${cachedUser.username}")
+                Timber.tag("HproseInstance").d("  name: ${cachedUser.name}")
+                Timber.tag("HproseInstance").d("  avatar: ${cachedUser.avatar}")
+                Timber.tag("HproseInstance").d("  baseUrl: ${cachedUser.baseUrl}")
+                Timber.tag("HproseInstance").d("  email: ${cachedUser.email}")
+                Timber.tag("HproseInstance").d("  profile: ${cachedUser.profile}")
+                Timber.tag("HproseInstance").d("  tweetCount: ${cachedUser.tweetCount}")
+                Timber.tag("HproseInstance").d("  followingCount: ${cachedUser.followingCount}")
+                Timber.tag("HproseInstance").d("  followersCount: ${cachedUser.followersCount}")
+                Timber.tag("HproseInstance").d("  timestamp: ${cachedUser.timestamp}")
+                Timber.tag("HproseInstance").d("========================")
+                
+                // Use cached data to populate appUser immediately
+                User.updateUserInstance(cachedUser, true)
+                appUser = User.getInstance(initialUserId)
+                Timber.tag("HproseInstance").d("✅ Loaded cached appUser at startup: userId=${appUser.mid}, username=${appUser.username}, baseUrl=${appUser.baseUrl}")
+            } else {
+                // No cached data, create skeleton user
+                appUser = getInstance(initialUserId)
+                Timber.tag("HproseInstance").d("No cached user found, created skeleton appUser with mid: ${appUser.mid}")
+            }
+        } else {
+            // Guest user
+            appUser = getInstance(TW_CONST.GUEST_ID)
+            appUser.followingList = getAlphaIds()
+            Timber.tag("HproseInstance").d("Guest user initialized")
+        }
+        
+        // STEP 2: Try to update appUser with fresh data from server during init
         try {
             // CRITICAL: initAppEntry() now calls onInitialized as soon as baseUrl is set
-            // User data fetch continues in the background
+            // User data fetch continues in the background and updates appUser
             initAppEntry(onInitialized)
         } catch (e: Exception) {
-            Timber.tag("HproseInstance").e(e, "Error during network initialization, attempting offline mode")
-            // If network is unavailable (all URLs failed), try to load cached user
-            if (appUser.baseUrl == null) {
-                Timber.tag("HproseInstance").w("Network unavailable, attempting to load cached user for offline mode")
-                if (storedUserId != TW_CONST.GUEST_ID) {
-                    // Try to load the cached user
-                    val cachedUser = TweetCacheManager.getCachedUser(storedUserId)
-                    if (cachedUser != null) {
-                        // Use the cached user but keep baseUrl as null for offline mode
-                        appUser = cachedUser
-                        Timber.tag("HproseInstance").d("✅ Loaded cached user for offline mode: userId=${appUser.mid}, username=${appUser.username}")
-                    } else {
-                        // No cached user found, keep the userId from preferences but set baseUrl to null
-                        Timber.tag("HproseInstance").w("No cached user found for userId: $storedUserId")
-                    }
-                } else {
-                    // Guest user
-                    Timber.tag("HproseInstance").d("Guest user, using alpha IDs for offline mode")
-                    appUser.followingList = getAlphaIds()
-                }
-            }
+            Timber.tag("HproseInstance").e(e, "Error during network initialization, continuing with cached data")
+            // Already have cached data loaded in STEP 1, just continue
             // Don't re-throw - allow app to continue in offline mode
-            Timber.tag("HproseInstance").w("App initialized in offline mode")
+            Timber.tag("HproseInstance").w("App initialized in offline mode with cached data")
             // Call callback even in offline mode so UI can be shown
             onInitialized?.invoke()
         }
@@ -510,40 +524,24 @@ object HproseInstance {
             Timber.tag("initAppEntry")
                 .d("Always refreshing appUser's baseUrl on app start for userId: $userId")
 
-            // FIRST: Load cached user immediately so UI has data to display
-            val cachedUser = TweetCacheManager.getCachedUser(userId)
-            val hasCachedUser = cachedUser != null
+            // appUser was already loaded from cache in initialization step
+            // Just need to set baseUrl if not already set
+            val hasCachedData = !appUser.username.isNullOrBlank()
             
-            if (cachedUser != null) {
-                // Update singleton instance with cached data
-                User.updateUserInstance(cachedUser, true)
-                // Get the updated singleton instance (ensures consistency)
-                val singletonUser = User.getInstance(cachedUser.mid)
-                // CRITICAL: Set appUser to the singleton instance to maintain sync
-                appUser = singletonUser
-                
-                // CRITICAL: Only set entry IP if cached user has no baseUrl
-                // Otherwise preserve the cached user's baseUrl (their known node IP)
-                if (appUser.baseUrl.isNullOrBlank()) {
-                    appUser.baseUrl = "http://$entryIP"
-                    Timber.tag("initAppEntry")
-                        .d("✅ Loaded cached user, set baseUrl to entry IP: ${appUser.baseUrl}, username: ${appUser.username}")
-                } else {
-                    Timber.tag("initAppEntry")
-                        .d("✅ Loaded cached user with existing baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
-                }
-            } else {
-                // No cached user, set baseUrl to entry IP as fallback
+            if (appUser.baseUrl.isNullOrBlank()) {
                 appUser.baseUrl = "http://$entryIP"
                 User.updateUserInstance(appUser, true)
                 Timber.tag("initAppEntry")
-                    .d("⚠️ No cached user found, set baseUrl to entry IP: ${appUser.baseUrl}")
+                    .d("Set baseUrl to entry IP: ${appUser.baseUrl}, username: ${appUser.username}")
+            } else {
+                Timber.tag("initAppEntry")
+                    .d("appUser already has baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
             }
 
             // If we have cached user data, show UI immediately
             // Otherwise, wait for network fetch to complete first
-            if (hasCachedUser) {
-                // Cached user has valid baseUrl, mark as initialized
+            if (hasCachedData) {
+                // Cached user has valid data, mark as initialized
                 _isAppUserInitialized.value = true
                 Timber.tag("initAppEntry").d("🚀 BaseUrl ready with cached data, showing UI now (initialized: true)")
                 onBaseUrlReady?.invoke()
@@ -602,7 +600,7 @@ object HproseInstance {
                     }
                     
                     // Show UI with fresh data
-                    if (!hasCachedUser) {
+                    if (!hasCachedData) {
                         Timber.tag("initAppEntry").d("🚀 Fresh user data loaded, showing UI now")
                         onBaseUrlReady?.invoke()
                     }
@@ -619,7 +617,7 @@ object HproseInstance {
                     }
                     
                     // Show UI in degraded mode (using entry IP only)
-                    if (!hasCachedUser) {
+                    if (!hasCachedData) {
                         Timber.tag("initAppEntry").w("⚠️ User fetch failed after all retries, showing UI with entry IP only")
                         onBaseUrlReady?.invoke()
                     }
@@ -631,7 +629,7 @@ object HproseInstance {
                     appUser.baseUrl = "http://$entryIP"
                 }
                 // Still show UI even if fetch failed
-                if (!hasCachedUser) {
+                if (!hasCachedData) {
                     Timber.tag("initAppEntry").e("❌ Critical error fetching user, showing UI with entry IP only")
                     onBaseUrlReady?.invoke()
                 }
