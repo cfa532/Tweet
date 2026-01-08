@@ -216,10 +216,10 @@ object TweetCacheManager {
                     Timber.tag("TweetCacheManager").d("✅ MEMORY CACHE HIT: userId: $userId, username: ${user.username}")
                     return user
                 } else {
-                    // Remove expired user from both memory and database cache
-                    // If memory copy is expired, database copy must also be expired
-                    Timber.tag("TweetCacheManager").d("⏰ MEMORY CACHE EXPIRED: userId: $userId, removing from cache")
-                    removeCachedUserInternal(userId)
+                    // User is expired but still return it (stale data is better than no data)
+                    // The caller (fetchUser) will handle background refresh
+                    Timber.tag("TweetCacheManager").d("⏰ MEMORY CACHE EXPIRED (but returning): userId: $userId, username: ${user.username}")
+                    return user
                 }
             }
 
@@ -241,9 +241,14 @@ object TweetCacheManager {
                     }
                     return user
                 } else {
-                    // Cache is expired, remove from database cache
-                    Timber.tag("TweetCacheManager").d("⏰ DATABASE CACHE EXPIRED: userId: $userId, cacheAge: ${cacheAge}ms, removing from cache")
-                    removeCachedUserInternal(userId)
+                    // Cache is expired but still return it (stale data is better than no data)
+                    // Add back to memory cache so hasExpired check works correctly
+                    Timber.tag("TweetCacheManager").d("⏰ DATABASE CACHE EXPIRED (but returning): userId: $userId, username: ${user.username}, cacheAge: ${cacheAge}ms")
+                    synchronized(userCacheLock) {
+                        userMemoryCache[userId] = user
+                        userCacheTimestamps[userId] = cachedUser.timestamp.time
+                    }
+                    return user
                 }
             }
 
