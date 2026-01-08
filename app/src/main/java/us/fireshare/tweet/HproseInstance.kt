@@ -2240,19 +2240,10 @@ object HproseInstance {
         startRank: Int,  // earlier in time, therefore smaller timestamp
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
-        // Force log to appear - print directly to System.out as well
-        val msg1 = "🚨🚨🚨 loadCachedTweets CALLED: startRank=$startRank, count=$count"
-        println(msg1)
-        Timber.tag("loadCachedTweets").e(msg1)
-        android.util.Log.e("loadCachedTweets", msg1)
-        
         return@withContext try {
             // Load tweets cached for mainfeed (uid = appUser.mid)
             val userId = appUser.mid
-            val msg2 = "🚨🚨🚨 Loading cached tweets for user: $userId, appUser.username=${appUser.username}"
-            println(msg2)
-            Timber.tag("loadCachedTweets").e(msg2)
-            android.util.Log.e("loadCachedTweets", msg2)
+            Timber.tag("loadCachedTweets").d("Loading cached tweets for mainfeed user: $userId")
             
             dao.getCachedTweetsByUser(userId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
@@ -2272,20 +2263,16 @@ object HproseInstance {
                 // For appUser's tweets, use appUser directly since it's always the most up-to-date singleton
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
-                    println("✅ Using appUser singleton for tweet ${tweet.mid} - author: ${appUser.username}")
                 } else {
-                    println("🔍 Looking up cached user for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
                     tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
-                    println("🔍 getCachedUser returned: ${if (tweet.author != null) "user with username=${tweet.author?.username}" else "NULL"}")
                     
                     // If no cached user found, create a skeleton user object as placeholder for offline loading
                     if (tweet.author == null) {
                         tweet.author = getUserInstance(tweet.authorId)
-                        println("📦 Created SKELETON user for tweet ${tweet.mid} - authorId ${tweet.authorId}")
+                        Timber.tag("loadCachedTweets").w("Created skeleton user placeholder for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
                     }
                 }
                 
-                println("✅ Final: tweet ${tweet.mid} has author ${tweet.author?.username ?: "SKELETON(${tweet.authorId})"}")
                 tweet
             }
         } catch (e: Exception) {
