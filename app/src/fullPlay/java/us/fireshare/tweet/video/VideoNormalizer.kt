@@ -29,7 +29,7 @@ class VideoNormalizer(private val context: Context) {
         // Bitrate constants for video normalization
         private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
         private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
-        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps for quality
+        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality (matches LocalHLSConverter)
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 5 * 60 * 1000L   // 5 minutes minimum
@@ -144,11 +144,14 @@ class VideoNormalizer(private val context: Context) {
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
 
+            // Get source video bitrate (in bps, convert to kbps)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, inputUri)?.let { it / 1000 }
+            
             // Calculate target bitrate based on pixel count
             // Formula: bitrate = (pixel_count / REFERENCE_720P_PIXELS) * 1000k
             // If resolution > 720p, normalize to 720p with 1000k
             // If resolution ≤ 720p, keep original resolution with proportional bitrate
-            val targetBitrateK = if (resolutionValue != null && resolutionValue > 720) {
+            val calculatedTargetBitrateK = if (resolutionValue != null && resolutionValue > 720) {
                 // Resolution > 720p: normalize to 720p with reference bitrate
                 REFERENCE_720P_BITRATE
             } else if (resolutionValue != null && videoResolution != null) {
@@ -162,8 +165,19 @@ class VideoNormalizer(private val context: Context) {
                 Timber.tag(TAG).w("Could not determine resolution, defaulting to ${REFERENCE_720P_BITRATE}k")
                 REFERENCE_720P_BITRATE
             }
+            
+            // Determine final target bitrate:
+            // If source bitrate is lower than calculated target but higher than minimum, keep source bitrate
+            val targetBitrateK = if (sourceBitrateK != null && 
+                                     sourceBitrateK < calculatedTargetBitrateK && 
+                                     sourceBitrateK >= MIN_BITRATE) {
+                Timber.tag(TAG).d("Using source bitrate ${sourceBitrateK}k (between min ${MIN_BITRATE}k and target ${calculatedTargetBitrateK}k)")
+                sourceBitrateK
+            } else {
+                calculatedTargetBitrateK
+            }
 
-            Timber.tag(TAG).d("Normalization: resolution=$videoResolution (${resolutionValue}p), target bitrate=${targetBitrateK}k, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
+            Timber.tag(TAG).d("Normalization: resolution=$videoResolution (${resolutionValue}p), source bitrate=${sourceBitrateK}k, calculated target=${calculatedTargetBitrateK}k, final target bitrate=${targetBitrateK}k, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
             Timber.tag(TAG).d("Dynamic timeout set to: ${dynamicTimeoutMs}ms (${dynamicTimeoutMs / 1000 / 60} minutes)")
 
             // Copy input file to a temporary location for FFmpeg processing
