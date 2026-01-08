@@ -12,6 +12,8 @@ The Android app now caches bookmarked and favorited tweets using special cache I
 2. **Instant Loading:** Cached bookmarks/favorites load immediately when viewing those screens
 3. **Offline Access:** Users can view their bookmarks and favorites offline
 4. **Clean Separation:** Each content type has its own dedicated cache bucket
+5. **Never Expires:** Bookmarks and favorites are preserved indefinitely
+6. **Private Tweets Protected:** AppUser's private tweets never expire
 
 ## Caching Strategy
 
@@ -301,9 +303,21 @@ When a user unbookmarks or unfavorites a tweet:
 - No special handling needed
 
 ### 4. Cache Expiration
-- All cached tweets expire after 30 days
-- Applies to all cache buckets equally
-- Cleanup worker handles expiration automatically
+
+**Never-Expiring Content:**
+- ✅ Bookmarks (cached with `_bookmarks` suffix)
+- ✅ Favorites (cached with `_favorites` suffix)
+- ✅ AppUser's private tweets (any cache bucket)
+
+**Expiring Content (30 days):**
+- ❌ Public tweets in main feed
+- ❌ Public profile tweets
+- ❌ Cached users (30 minutes)
+
+Cleanup worker automatically:
+1. Excludes bookmarks and favorites from cleanup
+2. Preserves appUser's private tweets
+3. Removes old public tweets after 30 days
 
 ## Testing Recommendations
 

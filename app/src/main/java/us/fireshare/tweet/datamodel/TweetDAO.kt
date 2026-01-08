@@ -148,16 +148,25 @@ interface CachedTweetDao {
     /**
      * Delete expired tweets older than the cutoff date.
      * 
-     * IMPORTANT: Expiration applies to ALL caches, not filtered by uid.
-     * This ensures all expired tweets are removed regardless of which cache they're stored in:
-     * - Tweets cached by authorId
-     * - Tweets cached by appUser.mid
-     * - All other cached tweets
+     * IMPORTANT: Never-expiring tweets:
+     * - Bookmarks (uid LIKE '%_bookmarks') - User's saved tweets
+     * - Favorites (uid LIKE '%_favorites') - User's favorited tweets
+     * - AppUser's private tweets - Checked in CleanUpWorker code
      * 
-     * Expiration is based on timestamp only, not on which uid the tweet is cached under.
+     * Expiration applies to other caches:
+     * - Tweets cached by authorId (public tweets from profiles)
+     * - Tweets cached by appUser.mid (mainfeed public tweets)
+     * 
+     * Expiration is based on timestamp, excluding special cache buckets.
      */
-    @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo")
+    @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE '%_bookmarks' AND uid NOT LIKE '%_favorites'")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
+    
+    /**
+     * Get old cached tweets that would be deleted (for filtering private tweets)
+     */
+    @Query("SELECT * FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE '%_bookmarks' AND uid NOT LIKE '%_favorites'")
+    fun getOldCachedTweets(oneMonthAgo: Date): List<CachedTweet>
 
     @Query("DELETE FROM CachedTweet")
     fun clearAllCachedTweets()

@@ -64,6 +64,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.scale
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.delay
@@ -73,7 +74,6 @@ import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.min
-import androidx.core.graphics.scale
 
 /**
  * State object for image loading to reduce recomposition

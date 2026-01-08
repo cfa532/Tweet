@@ -25,7 +25,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 /**

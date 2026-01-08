@@ -17,9 +17,6 @@ import com.google.gson.GsonBuilder
 import hprose.io.HproseClassManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
-import okhttp3.Protocol
-import java.util.concurrent.TimeUnit
 import io.ktor.client.request.get
 import io.ktor.client.request.head
 import io.ktor.client.statement.HttpResponse
@@ -39,17 +36,20 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import okhttp3.Protocol
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.fetchTweet
+import us.fireshare.tweet.HproseInstance.refreshTweet
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.CachedTweetDao
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatMessageDeserializer
-import us.fireshare.tweet.datamodel.MimeiFileType
-import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.FeedResetReason
 import us.fireshare.tweet.datamodel.HproseService
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
@@ -66,6 +66,7 @@ import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 

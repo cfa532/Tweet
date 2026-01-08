@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import timber.log.Timber
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.datamodel.TW_CONST
 
 class PreferenceHelper(context: Context) {

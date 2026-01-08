@@ -1,7 +1,5 @@
 package us.fireshare.tweet.viewmodel
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -9,7 +7,6 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
-import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -32,7 +29,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
@@ -45,6 +41,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.UploadCommentWorker
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.VideoManager
@@ -54,7 +51,6 @@ import java.io.FileOutputStream
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
-import us.fireshare.tweet.datamodel.User
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(

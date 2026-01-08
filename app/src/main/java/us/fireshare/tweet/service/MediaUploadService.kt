@@ -26,7 +26,6 @@ import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
-import java.util.Locale
 
 /**
  * Service for handling media upload operations including:

@@ -19,20 +19,31 @@ import java.util.Locale
  * Caching Strategy:
  * - Main feed tweets: Cached by `appUser.mid`
  * - Profile tweets: Cached by tweet's `authorId`
- * - Bookmarks: Cached by `appUser.mid + "_bookmarks"`
- * - Favorites: Cached by `appUser.mid + "_favorites"`
+ * - Bookmarks: Cached by `appUser.mid + "_bookmarks"` (NEVER EXPIRES)
+ * - Favorites: Cached by `appUser.mid + "_favorites"` (NEVER EXPIRES)
+ * - AppUser's private tweets: NEVER EXPIRE (preserved during cleanup)
  * 
- * This ensures bookmarks and favorites don't pollute the main feed cache.
+ * Expiration Policy:
+ * - Public tweets in main feed: Expire after 30 days
+ * - Public profile tweets: Expire after 30 days
+ * - Bookmarks: NEVER expire
+ * - Favorites: NEVER expire
+ * - AppUser's private tweets: NEVER expire
+ * - User cache: Expires after 30 minutes
+ * 
+ * This ensures bookmarks and favorites don't pollute the main feed cache,
+ * and important personal content is preserved indefinitely.
  */
 object TweetCacheManager {
 
     // Cache expiration time (30 days in milliseconds)
+    // Note: Does not apply to bookmarks, favorites, or appUser's private tweets
     private const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
 
     // User cache expiration time (30 minutes in milliseconds)
     internal const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
     
-    // Special cache ID suffixes for bookmarks and favorites
+    // Special cache ID suffixes for bookmarks and favorites (never expire)
     private const val BOOKMARKS_SUFFIX = "_bookmarks"
     private const val FAVORITES_SUFFIX = "_favorites"
 
