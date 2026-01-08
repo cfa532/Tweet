@@ -2356,6 +2356,90 @@ object HproseInstance {
     }
 
     /**
+     * Load cached bookmarks for the app user
+     * Bookmarks are cached with special userId to prevent main feed pollution
+     */
+    suspend fun loadCachedBookmarks(
+        startRank: Int,
+        count: Int
+    ): List<Tweet> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val bookmarksCacheId = TweetCacheManager.getBookmarksCacheId(appUser.mid)
+            Timber.tag("loadCachedBookmarks").d("Loading cached bookmarks from cache ID: $bookmarksCacheId")
+            
+            dao.getCachedTweetsByUser(bookmarksCacheId, startRank, count).mapNotNull { cachedTweet ->
+                val tweet = cachedTweet.originalTweet
+                
+                // Skip tweets with null authorId
+                if (tweet.authorId.isEmpty()) {
+                    Timber.tag("loadCachedBookmarks").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
+                    return@mapNotNull null
+                }
+                
+                // Populate author from user cache
+                if (tweet.authorId == appUser.mid) {
+                    tweet.author = appUser
+                } else {
+                    tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                    
+                    // If no cached user found, create a skeleton user object
+                    if (tweet.author == null) {
+                        tweet.author = getUserInstance(tweet.authorId)
+                        Timber.tag("loadCachedBookmarks").w("Created skeleton user placeholder for bookmarked tweet ${tweet.mid}, authorId: ${tweet.authorId}")
+                    }
+                }
+                
+                tweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedBookmarks").e("❌ Error loading cached bookmarks: $e")
+            emptyList()
+        }
+    }
+
+    /**
+     * Load cached favorites for the app user
+     * Favorites are cached with special userId to prevent main feed pollution
+     */
+    suspend fun loadCachedFavorites(
+        startRank: Int,
+        count: Int
+    ): List<Tweet> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val favoritesCacheId = TweetCacheManager.getFavoritesCacheId(appUser.mid)
+            Timber.tag("loadCachedFavorites").d("Loading cached favorites from cache ID: $favoritesCacheId")
+            
+            dao.getCachedTweetsByUser(favoritesCacheId, startRank, count).mapNotNull { cachedTweet ->
+                val tweet = cachedTweet.originalTweet
+                
+                // Skip tweets with null authorId
+                if (tweet.authorId.isEmpty()) {
+                    Timber.tag("loadCachedFavorites").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
+                    return@mapNotNull null
+                }
+                
+                // Populate author from user cache
+                if (tweet.authorId == appUser.mid) {
+                    tweet.author = appUser
+                } else {
+                    tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
+                    
+                    // If no cached user found, create a skeleton user object
+                    if (tweet.author == null) {
+                        tweet.author = getUserInstance(tweet.authorId)
+                        Timber.tag("loadCachedFavorites").w("Created skeleton user placeholder for favorited tweet ${tweet.mid}, authorId: ${tweet.authorId}")
+                    }
+                }
+                
+                tweet
+            }
+        } catch (e: Exception) {
+            Timber.tag("loadCachedFavorites").e("❌ Error loading cached favorites: $e")
+            emptyList()
+        }
+    }
+
+    /**
      * Increase/decrease the retweetCount of the original tweet mimei.
      * @param originalTweet is the original tweet
      * @param retweetId of the retweet.
@@ -2768,6 +2852,7 @@ object HproseInstance {
     /**
      * Load favorite tweets, bookmarks or comments of an user.
      * Handles null elements in the response list and preserves their positions.
+     * Caches bookmarks and favorites separately from main feed to prevent pollution.
      * */
     suspend fun getUserTweetsByType(
         user: User,
@@ -2796,6 +2881,13 @@ object HproseInstance {
             }
             val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
 
+            // Determine cache ID based on content type
+            val cacheUserId = when (type) {
+                UserContentType.BOOKMARKS -> TweetCacheManager.getBookmarksCacheId(user.mid)
+                UserContentType.FAVORITES -> TweetCacheManager.getFavoritesCacheId(user.mid)
+                else -> user.mid // Regular tweets cached by authorId
+            }
+
             response?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
@@ -2804,21 +2896,26 @@ object HproseInstance {
                     // Try to decode the tweet
                     try {
                         val tweet = Tweet.from(tweetJson)
-                        
+
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
                         tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
-                        
+
                         // Then fetch fresh author from server (slow network call)
                         val fetchedAuthor = fetchUser(tweet.authorId)
                         if (fetchedAuthor != null) {
                             tweet.author = fetchedAuthor
                         }
-                        
+
                         // Log warning if author is still null
                         if (tweet.author == null) {
                             Timber.tag("getUserTweetsByType").w("⚠️ Failed to get author for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
                         }
-                        
+
+                        // Cache the tweet with appropriate cache ID
+                        // Bookmarks and favorites use special cache IDs to prevent main feed pollution
+                        TweetCacheManager.saveTweet(tweet, cacheUserId)
+                        Timber.tag("getUserTweetsByType").d("Cached tweet ${tweet.mid} under userId: $cacheUserId (type: ${type.value})")
+
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")

@@ -651,14 +651,23 @@ class UserViewModel @AssistedInject constructor(
      * Get bookmarks of the user
      * */
     suspend fun getBookmarks(pageNumber: Int) {
+        // Load cached bookmarks first for instant display (only on first page)
+        if (pageNumber == 0 && userId == appUser.mid) {
+            val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
+            if (cachedBookmarks.isNotEmpty()) {
+                _bookmarks.value = cachedBookmarks
+                Timber.tag("getBookmarks").d("📦 Loaded ${cachedBookmarks.size} cached bookmarks")
+            }
+        }
+        
         // Ensure we have the latest user data before loading bookmarks
         if (userId == appUser.mid) {
             refreshFromAppUser()
         }
-        
+
         // Use the most up-to-date user data (appUser) instead of potentially stale user.value
         val currentUser = if (userId == appUser.mid) appUser else user.value
-        
+
         val tweetsWithNulls = getUserTweetsByType(
             currentUser,
             UserContentType.BOOKMARKS,
@@ -761,14 +770,23 @@ class UserViewModel @AssistedInject constructor(
      * Get favorite Tweets of the user.
      * */
     suspend fun getFavorites(pageNumber: Int) {
+        // Load cached favorites first for instant display (only on first page)
+        if (pageNumber == 0 && userId == appUser.mid) {
+            val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
+            if (cachedFavorites.isNotEmpty()) {
+                _favorites.value = cachedFavorites
+                Timber.tag("getFavorites").d("📦 Loaded ${cachedFavorites.size} cached favorites")
+            }
+        }
+        
         // Ensure we have the latest user data before loading favorites
         if (userId == appUser.mid) {
             refreshFromAppUser()
         }
-        
+
         // Use the most up-to-date user data (appUser) instead of potentially stale user.value
         val currentUser = if (userId == appUser.mid) appUser else user.value
-        
+
         val tweetsWithNulls = getUserTweetsByType(
             currentUser,
             UserContentType.FAVORITES,

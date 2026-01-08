@@ -15,6 +15,14 @@ import java.util.Locale
 /**
  * TweetCacheManager handles tweet and user caching with expiration management.
  * Provides methods to save, retrieve, and manage cached tweets and users with automatic cleanup.
+ * 
+ * Caching Strategy:
+ * - Main feed tweets: Cached by `appUser.mid`
+ * - Profile tweets: Cached by tweet's `authorId`
+ * - Bookmarks: Cached by `appUser.mid + "_bookmarks"`
+ * - Favorites: Cached by `appUser.mid + "_favorites"`
+ * 
+ * This ensures bookmarks and favorites don't pollute the main feed cache.
  */
 object TweetCacheManager {
 
@@ -23,6 +31,10 @@ object TweetCacheManager {
 
     // User cache expiration time (30 minutes in milliseconds)
     internal const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
+    
+    // Special cache ID suffixes for bookmarks and favorites
+    private const val BOOKMARKS_SUFFIX = "_bookmarks"
+    private const val FAVORITES_SUFFIX = "_favorites"
 
     // In-memory cache for frequently accessed tweets
     private val memoryCache = mutableMapOf<String, CachedTweet>()
@@ -37,6 +49,20 @@ object TweetCacheManager {
     private val userStateFlows = mutableMapOf<String, MutableStateFlow<User?>>()
     private val userStateFlowsLock = Any()
 
+    /**
+     * Generate special cache ID for bookmarks
+     */
+    fun getBookmarksCacheId(userId: MimeiId): MimeiId {
+        return userId + BOOKMARKS_SUFFIX
+    }
+    
+    /**
+     * Generate special cache ID for favorites
+     */
+    fun getFavoritesCacheId(userId: MimeiId): MimeiId {
+        return userId + FAVORITES_SUFFIX
+    }
+    
     /**
      * Save or update a tweet in cache
      * @param shouldCache If false, the tweet will not be cached (for profile screens)
