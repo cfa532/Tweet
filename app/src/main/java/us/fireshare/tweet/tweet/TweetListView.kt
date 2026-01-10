@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,9 +50,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
@@ -72,6 +76,74 @@ data class ScrollState(
     val isScrolling: Boolean,
     val direction: ScrollDirection
 )
+
+/**
+ * Skeleton loader for tweets while initial data is loading
+ */
+@Composable
+private fun TweetSkeletonLoader(modifier: Modifier = Modifier, count: Int = 3) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        repeat(count) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column {
+                    // Avatar and header skeleton
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(8.dp))
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 120.dp, height = 12.dp)
+                                    .padding(vertical = 4.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                    )
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 80.dp, height = 10.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                    )
+                            )
+                        }
+                    }
+                    // Content skeleton
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .size(height = 60.dp, width = 1.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            )
+                    )
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+            )
+        }
+    }
+}
 
 /**
  * TweetListView: Self-contained Android Material3 style tweet list with built-in pagination, 
@@ -128,25 +200,15 @@ fun TweetListView(
 
     // Create video-indexed list that maintains feed order and handles retweets properly
     var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }
-    var isInitialLoadingComplete by remember { mutableStateOf(false) }
     
-    // Debug logging and state tracking
-    val previousTweetsSize = remember { mutableIntStateOf(tweets.size) }
-    val previousUserId = remember { mutableStateOf(currentUserId) }
-
-    // Track the first tweet's ID to detect when new tweets are loaded at the top
-    val firstTweetId = remember { mutableStateOf<MimeiId?>(null) }
-
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) } // Use rememberSaveable to persist across recompositions
-    var lastUserId by remember { mutableStateOf<MimeiId?>(null) } // Initialize to null to trigger on first composition
-    var serverDepleted by rememberSaveable { mutableStateOf(false) } // Use rememberSaveable to persist across recompositions
-    var pendingLoadMorePage by remember { mutableIntStateOf(-1) } // Track which page is currently being loaded
-    var externalLoadMoreRequest by remember { mutableStateOf(false) } // Track external loadmore requests
-    var spinnerStartTime by remember { mutableLongStateOf(0L) } // Track when spinner started for minimum display time
-    var wasAtLastTweet by remember { mutableStateOf(false) } // Track if user was previously at last tweet
+    var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
+    var lastUserId by remember { mutableStateOf<MimeiId?>(null) }
+    var serverDepleted by rememberSaveable { mutableStateOf(false) }
+    var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
+    var isInitializingData by remember { mutableStateOf(false) }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -156,185 +218,89 @@ fun TweetListView(
     )
     val coroutineScope = rememberCoroutineScope()
     
+    // Track active jobs for cleanup
+    val activeJobs = remember { mutableListOf<Job>() }
+    
     // Create scroll-to-top function
     val scrollToTop: suspend () -> Unit = {
         listState.animateScrollToItem(0)
     }
-
-    // Consolidated LaunchedEffect for tweets-related operations
-    LaunchedEffect(tweets, tweets.size, currentUserId) {
-        // Debug logging for parameter changes
-        if (tweets.size != previousTweetsSize.intValue || currentUserId != previousUserId.value) {
-            Timber.tag("TweetListView")
-                .d("TweetListView parameters changed: tweets=${tweets.size}->${previousTweetsSize.intValue}, userId=$currentUserId->${previousUserId.value}")
-            previousTweetsSize.intValue = tweets.size
-            previousUserId.value = currentUserId
+    
+    // Cleanup coroutines on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            activeJobs.forEach { it.cancel() }
+            activeJobs.clear()
         }
-        
-        // Track tweets list size changes
-        Timber.tag("TweetListView").d("Tweets list size changed: ${tweets.size} tweets")
-        
-        // Detect when new tweets are added at the top (first tweet changed)
-        val currentFirstTweetId = tweets.firstOrNull()?.mid
-        if (currentFirstTweetId != null && firstTweetId.value != null && currentFirstTweetId != firstTweetId.value) {
-            // New tweets were added at the top - scroll to top
-            Timber.tag("TweetListView").d("First tweet changed from ${firstTweetId.value} to $currentFirstTweetId - scrolling to top")
-            withContext(Dispatchers.Main) {
-                listState.scrollToItem(0, 0)
-                savedScrollPosition.value = Pair(0, 0)
-            }
-        }
-        firstTweetId.value = currentFirstTweetId
-        
-        // Update SharedViewModel's tweetListViewModel with the current tweets
-        tweetListViewModel.setTweetList(tweets)
-        Timber.tag("TweetListView").d("Updated SharedViewModel's tweetListViewModel with our instance and ${tweets.size} tweets")
     }
 
-    // Detect user changes and initialize data
+    // EFFECT 1: Data initialization and user changes (non-blocking)
     LaunchedEffect(currentUserId) {
         if (currentUserId != lastUserId) {
-            Timber.tag("TweetListView")
-                .d("User changed from $lastUserId to $currentUserId, tweets.size=${tweets.size}, initializing data")
             lastUserId = currentUserId
-            lastLoadedPage = -1 // Reset last loaded page
-            serverDepleted = false // Reset server depleted flag for new user
+            lastLoadedPage = -1
+            serverDepleted = false
 
-            // If tweets are already loaded (by initLoad), infer server depletion and skip initialization
+            // If tweets already loaded, infer state
             if (tweets.isNotEmpty()) {
-                Timber.tag("TweetListView")
-                    .d("Tweets already loaded (${tweets.size} tweets), inferring server depletion")
-                
-                // If we have fewer than PAGE_SIZE tweets, server is depleted
-                if (tweets.size < TW_CONST.PAGE_SIZE) {
-                    serverDepleted = true
-                    lastLoadedPage = 0
-                    Timber.tag("TweetListView")
-                        .d("Inferred server depletion: ${tweets.size} < ${TW_CONST.PAGE_SIZE} (PAGE_SIZE)")
-                } else {
-                    lastLoadedPage = 0
-                    Timber.tag("TweetListView")
-                        .d("Server may have more data: ${tweets.size} >= ${TW_CONST.PAGE_SIZE} (PAGE_SIZE)")
-                }
+                serverDepleted = tweets.size < TW_CONST.PAGE_SIZE
+                lastLoadedPage = 0
                 return@LaunchedEffect
             }
 
-            // Initialize with enough data (at least 4 tweets) - with timeout protection
-            var localServerDepleted = false
-            var pageToLoad = 0
-            val startTime = System.currentTimeMillis()
-            val maxInitializationTime = 10000L // 10 seconds timeout
-
-            while (!localServerDepleted &&
-                (System.currentTimeMillis() - startTime) < maxInitializationTime
-            ) {
-
+            // Initialize data asynchronously without blocking
+            isInitializingData = true
+            val initJob = launch(Dispatchers.IO) {
                 try {
-                    val tweetsWithNulls = fetchTweets(pageToLoad)
-
-                    // Only increment lastLoadedPage if we got a full page of results
-                    if (tweetsWithNulls.size >= TW_CONST.PAGE_SIZE) {
-                        lastLoadedPage = pageToLoad
-                    } else {
-                        // Server is depleted (returned fewer tweets than expected)
-                        localServerDepleted = true
-                        serverDepleted = true // Update the shared flag
-                        lastLoadedPage = pageToLoad // This is the last page we can load
-                        Timber.tag("TweetListView")
-                            .d("Server depleted at page $pageToLoad, returned ${tweetsWithNulls.size} tweets")
+                    val result = fetchTweets(0)
+                    if (result.size < TW_CONST.PAGE_SIZE) {
+                        serverDepleted = true
                     }
-
-                    // Check if we have enough visible tweets (for logging purposes)
-                    tweets.filter { tweet ->
-                        if (showPrivateTweets) {
-                            // Profile screen: show private tweets only if it's the app user's own profile
-                            !tweet.isPrivate || tweet.authorId == currentUserId
-                        } else {
-                            // Tweet feed: only show public tweets
-                            !tweet.isPrivate
-                        }
-                    }
-
-                    // Move to next page for next iteration
-                    pageToLoad++
-
-                    Timber.tag("TweetListView")
-                        .d("Page $pageToLoad: fetched ${tweetsWithNulls.size} tweets, total tweets now: ${tweets.size}, lastLoadedPage: $lastLoadedPage")
-
-                    // Add small delay to prevent overwhelming the main thread
-                    if (pageToLoad > 0) {
-                        delay(100)
-                    }
-
+                    lastLoadedPage = 0
                 } catch (e: Exception) {
-                    Timber.tag("TweetListView")
-                        .e(e, "Error during initialization at page $pageToLoad")
-                    localServerDepleted = true
+                    Timber.tag("TweetListView").e(e, "Initialization error")
                     serverDepleted = true
-                    break
+                } finally {
+                    isInitializingData = false
                 }
             }
-
-            if ((System.currentTimeMillis() - startTime) >= maxInitializationTime) {
-                Timber.tag("TweetListView")
-                    .w("Initialization timed out after ${maxInitializationTime}ms")
-            }
-
-            Timber.tag("TweetListView")
-                .d("Initialization completed: total tweets: ${tweets.size}, server depleted: $localServerDepleted, lastLoadedPage: $lastLoadedPage")
+            activeJobs.add(initJob)
         }
     }
 
-    // Consolidated LaunchedEffect for videolist and loading state management
-    LaunchedEffect(tweets, lastLoadedPage, currentUserId, isInitialLoading) {
-        // Initialize lastLoadedPage if it's still -1 and we have tweets
+    // EFFECT 2: Video list creation and ViewModel updates
+    LaunchedEffect(tweets.size, isInitialLoading, currentUserId) {
+        // Initialize lastLoadedPage if needed
         if (lastLoadedPage == -1 && tweets.isNotEmpty()) {
-            Timber.tag("TweetListView")
-                .d("Initializing lastLoadedPage from -1 to 0 since we have ${tweets.size} tweets")
             lastLoadedPage = 0
         }
         
-        // Track when initial loading is complete
-        if (isInitialLoading) {
-            // External loading is still in progress (ProfileScreen case)
-            isInitialLoadingComplete = false
-            Timber.tag("TweetListView").d("External loading in progress, delaying videolist creation")
-        } else if (lastLoadedPage >= 0 && currentUserId == lastUserId) {
-            // Initial loading is complete - now we can create videolist in background
-            isInitialLoadingComplete = true
-            Timber.tag("TweetListView").d("Initial loading complete, will create videolist in background")
-        }
+        // Update ViewModel with current tweets
+        tweetListViewModel.setTweetList(tweets)
         
-        // Create videolist in background task after initial loading is complete
-        if (isInitialLoadingComplete && tweets.isNotEmpty()) {
-            // Run videolist creation in background to avoid blocking UI
-            withContext(Dispatchers.IO) {
-                Timber.tag("TweetListView").d("Creating videolist in background for ${tweets.size} tweets")
-                val newVideoIndexedList = createVideoIndexedList(tweets)
-                
-                // Update on main thread
-                withContext(Dispatchers.Main) {
-                    videoIndexedList = newVideoIndexedList
-                    Timber.tag("TweetListView").d("Background videolist creation completed: ${newVideoIndexedList.size} videos")
+        // Create video list when loading is complete
+        if (!isInitialLoading && !isInitializingData && tweets.isNotEmpty()) {
+            val videoJob = launch(Dispatchers.IO) {
+                try {
+                    val newVideoList = createVideoIndexedListAsync(tweets)
+                    withContext(Dispatchers.Main) {
+                        videoIndexedList = newVideoList
+                        tweetListViewModel.setVideoIndexedList(newVideoList)
+                        onVideoIndexedListChange?.invoke(newVideoList)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Video list creation error")
                 }
             }
+            activeJobs.add(videoJob)
         }
     }
-    
-    // Notify when video-indexed list changes
-    LaunchedEffect(videoIndexedList) {
-        // Pass video list to our TweetListViewModel
-        tweetListViewModel.setVideoIndexedList(videoIndexedList)
-        
-        // Also call the callback if provided
-        onVideoIndexedListChange?.invoke(videoIndexedList)
-        Timber.tag("TweetListView").d("Updated video-indexed list with ${videoIndexedList.size} videos from ${tweets.size} tweets")
-    }
 
-    // Track scroll state and notify parent
+    // EFFECT 3: Scroll tracking with debouncing
     LaunchedEffect(listState) {
         var previousFirstVisibleItem = listState.firstVisibleItemIndex
         var previousScrollOffset = listState.firstVisibleItemScrollOffset
+        var lastSaveTime = 0L
 
         snapshotFlow {
             Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
@@ -342,27 +308,26 @@ fun TweetListView(
             .collect { (firstVisibleItem, scrollOffset) ->
                 val isScrolling = listState.isScrollInProgress
                 
-                // Determine scroll direction with higher thresholds to filter out small gestures
-                val SCROLL_OFFSET_THRESHOLD = 30 // Reduced from 50 to 30 for more sensitivity
-                val ITEM_INDEX_THRESHOLD = 1     // Reduced from 2 to 1 for more sensitivity
-                
+                // Determine scroll direction
                 val indexDelta = firstVisibleItem - previousFirstVisibleItem
                 val offsetDelta = scrollOffset - previousScrollOffset
-
                 val direction = when {
                     !isScrolling -> ScrollDirection.NONE
-                    indexDelta < -ITEM_INDEX_THRESHOLD ||
-                            (indexDelta == 0 && offsetDelta < -SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.UP
-                    indexDelta > ITEM_INDEX_THRESHOLD ||
-                            (indexDelta == 0 && offsetDelta > SCROLL_OFFSET_THRESHOLD) -> ScrollDirection.DOWN
+                    indexDelta < -1 || (indexDelta == 0 && offsetDelta < -30) -> ScrollDirection.UP
+                    indexDelta > 1 || (indexDelta == 0 && offsetDelta > 30) -> ScrollDirection.DOWN
                     else -> ScrollDirection.NONE
                 }
 
-                // Update previous values for next comparison
                 previousFirstVisibleItem = firstVisibleItem
                 previousScrollOffset = scrollOffset
-
                 onScrollStateChange?.invoke(ScrollState(isScrolling, direction))
+                
+                // Debounced scroll position save (every 200ms)
+                val now = System.currentTimeMillis()
+                if (now - lastSaveTime > 200) {
+                    savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
+                    lastSaveTime = now
+                }
             }
     }
 
@@ -379,311 +344,126 @@ fun TweetListView(
         baseUrl = baseUrl
     )
 
-    // Check if we're at the last tweet for gesture detection
+    // Derived states for pagination
     val isAtLastTweet by remember(listState, tweets) {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
             val totalItems = layoutInfo.totalItemsCount
-            val result = lastVisibleItem != null && lastVisibleItem.index == totalItems - 1
-
-            // Debug logging for isAtLastTweet
-            if (result || (lastVisibleItem != null && lastVisibleItem.index >= totalItems - 3)) {
-                Timber.tag("TweetListView")
-                    .d("isAtLastTweet debug: result=$result, lastVisibleIndex=${lastVisibleItem.index}, totalItems=$totalItems, serverDepleted=$serverDepleted")
-            }
-
-            result
+            lastVisibleItem != null && lastVisibleItem.index == totalItems - 1
         }
     }
 
-    // Check if we're at the very top (first item visible and scrolled to top)
-    val isAtTop by remember(listState) {
+    val isNearBottom by remember(listState, tweets) {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
-            val firstVisibleItem = layoutInfo.visibleItemsInfo.firstOrNull()
-            val result = firstVisibleItem != null &&
-                        firstVisibleItem.index == 0 &&
-                        listState.firstVisibleItemScrollOffset == 0
-
-            Timber.tag("TweetListView")
-                .d("isAtTop check: firstVisibleItem=${firstVisibleItem?.index}, offset=${listState.firstVisibleItemScrollOffset}, result=$result")
-
-            result
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val totalItems = layoutInfo.totalItemsCount
+            lastVisibleItem != null && lastVisibleItem.index >= totalItems - 5 && lastVisibleItem.index < totalItems - 1
         }
     }
 
-    // Check if we've reached the beginning (no more old messages to fetch)
-    val hasReachedBeginning by remember(lastLoadedPage, serverDepleted, tweets) {
-        derivedStateOf {
-            // We've reached the beginning if:
-            // 1. We've loaded the first page (lastLoadedPage >= 0)
-            // 2. We have tweets (not empty)
-            // 3. And either server is depleted or we can't load page 0 anymore
-            val result = lastLoadedPage >= 0 && tweets.isNotEmpty() && (
-                (lastLoadedPage == 0 && serverDepleted) ||
-                (lastLoadedPage == 0 && tweets.size < TW_CONST.PAGE_SIZE)
-            )
-
-            Timber.tag("TweetListView")
-                .d("hasReachedBeginning check: lastLoadedPage=$lastLoadedPage, serverDepleted=$serverDepleted, tweets.size=${tweets.size}, PAGE_SIZE=${TW_CONST.PAGE_SIZE}, result=$result")
-
-            if (result) {
-                Timber.tag("TweetListView")
-                    .d("hasReachedBeginning: TRUE - will show 'no more messages' message")
-            }
-
-            result
-        }
-    }
-
-    // Notify caller when isAtLastTweet changes
+    // Notify caller about position
     LaunchedEffect(isAtLastTweet) {
         onIsAtLastTweetChange?.invoke(isAtLastTweet)
-
-        // Track when user was at last tweet
-        if (wasAtLastTweet) {
-            // User was at last tweet but now scrolled away - reset serverDepleted
-            if (serverDepleted) {
-                Timber.tag("TweetListView")
-                    .d("User scrolled away from last tweet, resetting serverDepleted to false to allow loadmore attempts")
-                serverDepleted = false
-            }
-        }
-    }
-
-    // Handle external loadmore triggers
-    LaunchedEffect(Unit) {
-        onTriggerLoadMore?.let { _ ->
-            // This will be called when the caller wants to trigger loadmore
-            // We'll use a shared flow or state to communicate this
-            externalLoadMoreRequest = true
-        }
     }
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
-            coroutineScope.launch {
+            val refreshJob = coroutineScope.launch {
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        serverDepleted = false // User-initiated: allow loading again
-                        lastLoadedPage = -1 // Reset last loaded page for fresh start
-                        val result = fetchTweets(0) // Await the suspend function
-                        Timber.tag("TweetListView")
-                            .d("Pull refresh: fetchTweets completed, returned ${result.size} tweets")
+                        serverDepleted = false
+                        lastLoadedPage = -1
+                        fetchTweets(0)
                     }
-                    // Reset scroll position to top after refresh
-                    withContext(Dispatchers.Main) {
-                        listState.scrollToItem(0, 0)
-                        savedScrollPosition.value = Pair(0, 0)
-                        Timber.tag("TweetListView").d("Reset scroll position to top after refresh")
-                    }
+                    listState.scrollToItem(0, 0)
+                    savedScrollPosition.value = Pair(0, 0)
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Error during pull refresh")
                 } finally {
                     isRefreshingAtTop = false
-                    Timber.tag("TweetListView")
-                        .d("Pull refresh completed, isRefreshingAtTop set to false")
                 }
             }
+            activeJobs.add(refreshJob)
         }
     )
 
-    // Safety timeout to reset top loading state if it gets stuck
-    LaunchedEffect(isRefreshingAtTop) {
-        if (isRefreshingAtTop) {
-            delay(10000) // 10 second timeout
-            if (isRefreshingAtTop) {
-                Timber.tag("TweetListView")
-                    .w("Top loading state stuck for 10 seconds, forcing reset")
-                isRefreshingAtTop = false
-            }
-        }
-    }
-
-    // Safety timeout to reset bottom loading state if it gets stuck
-    LaunchedEffect(isRefreshingAtBottom) {
-        if (isRefreshingAtBottom) {
-            delay(10000) // 10 second timeout
-            if (isRefreshingAtBottom) {
-                Timber.tag("TweetListView")
-                    .w("Bottom loading state stuck for 10 seconds, forcing reset")
-                isRefreshingAtBottom = false
-            }
-        }
-    }
-
-    // Preload next page when user is approaching the bottom
-    val isNearBottom by remember(tweets) {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val totalItems = layoutInfo.totalItemsCount
-
-            // Check if we're near the bottom (within 5 items of the end) but not at the last tweet
-            val isNearBottom = lastVisibleItem != null &&
-                    lastVisibleItem.index >= totalItems - 5 &&
-                    lastVisibleItem.index < totalItems - 1
-
-            isNearBottom
-        }
-    }
-
-    // Preload next page when approaching bottom
-    LaunchedEffect(isNearBottom, serverDepleted) {
-        if (isNearBottom && !serverDepleted && tweets.size >= 4) {
+    // EFFECT 4: Preload next page when near bottom
+    LaunchedEffect(isNearBottom, serverDepleted, lastLoadedPage) {
+        if (isNearBottom && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
             val nextPage = lastLoadedPage + 1
-
-            // Check if we're already loading this page
-            if (pendingLoadMorePage == nextPage) {
-                Timber.tag("TweetListView")
-                    .d("Preload skipped: page $nextPage is already being loaded")
-                return@LaunchedEffect
-            }
-
-            Timber.tag("TweetListView").d("Near bottom detected, preloading page $nextPage...")
-
-            coroutineScope.launch {
+            pendingLoadMorePage = nextPage
+            
+            val preloadJob = launch(Dispatchers.IO) {
                 try {
-                    withContext(Dispatchers.IO) {
-                        val nextPage = lastLoadedPage + 1
-                        Timber.tag("TweetListView").d("Preloading page: $nextPage")
-
-                        // Preload the next page and cache it
-                        val preloadedTweets = fetchTweets(nextPage)
-                        val validTweetsCount = preloadedTweets.count { it != null }
-
-                        if (validTweetsCount > 0) {
-                            Timber.tag("TweetListView")
-                                .d("Preloaded $validTweetsCount valid tweets from page $nextPage")
-                        } else if (preloadedTweets.size < TW_CONST.PAGE_SIZE) {
-                            // Server is depleted, but only set it if we're still near bottom
-                            // This prevents setting serverDepleted when user has scrolled away
-                            serverDepleted = true
-                            Timber.tag("TweetListView")
-                                .d("Server depleted during preload at page $nextPage")
-                        } else {
-                            Timber.tag("TweetListView")
-                                .d("Preloaded page $nextPage but no valid tweets found")
-                        }
+                    Timber.tag("TweetListView").d("Preloading page: $nextPage")
+                    val result = fetchTweets(nextPage)
+                    val validCount = result.count { it != null }
+                    
+                    if (validCount > 0) {
+                        lastLoadedPage = nextPage
+                        Timber.tag("TweetListView").d("Preloaded $validCount tweets from page $nextPage")
+                    } else if (result.size < TW_CONST.PAGE_SIZE) {
+                        serverDepleted = true
+                        Timber.tag("TweetListView").d("Server depleted during preload at page $nextPage")
                     }
                 } catch (e: Exception) {
-                    Timber.tag("TweetListView").e(e, "Error during preload")
-                }
-            }
-        }
-    }
-
-    // Track scroll position changes and save them
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            Pair(
-                listState.firstVisibleItemIndex,
-                listState.firstVisibleItemScrollOffset
-            )
-        }
-            .collect { position ->
-                savedScrollPosition.value = position
-            }
-    }
-
-    // Infinite scroll - Only trigger when last tweet is visible and server not depleted
-    LaunchedEffect(isAtLastTweet, isRefreshingAtBottom, serverDepleted, externalLoadMoreRequest) {
-        // Allow loading if last tweet is visible, not already refreshing, and no pending load for the same page
-        // OR if there's an external loadmore request (even when serverDepleted is true)
-        if ((isAtLastTweet && !isRefreshingAtBottom && tweets.isNotEmpty() && !serverDepleted) ||
-            (externalLoadMoreRequest && !isRefreshingAtBottom && tweets.isNotEmpty())
-        ) {
-
-            val nextPage = lastLoadedPage + 1
-
-            // Check if we're already loading this page
-            if (pendingLoadMorePage == nextPage) {
-                Timber.tag("TweetListView")
-                    .d("Load more skipped: page $nextPage is already being loaded")
-                return@LaunchedEffect
-            }
-
-            if (externalLoadMoreRequest) {
-                Timber.tag("TweetListView")
-                    .d("External loadmore request detected, triggering loadmore...")
-            }
-
-            Timber.tag("TweetListView").d("Triggering load more for page $nextPage...")
-            pendingLoadMorePage = nextPage // Mark this page as being loaded
-            isRefreshingAtBottom = true // Set loading state immediately
-            spinnerStartTime = System.currentTimeMillis() // Track when spinner started
-
-            coroutineScope.launch {
-                try {
-                    withContext(Dispatchers.IO) {
-                        var currentPage =
-                            lastLoadedPage + 1 // Start with the next page after the last loaded page
-                        var foundValidTweets = false
-
-                        // Keep trying pages until we find valid tweets or server is depleted
-                        while (!foundValidTweets && !serverDepleted) {
-                            Timber.tag("TweetListView")
-                                .d("Loading tweets, page: $currentPage, lastLoadedPage: $lastLoadedPage, current tweets: ${tweets.size}")
-                            val tweetsWithNulls = fetchTweets(currentPage)
-
-                            // Count valid (non-null) tweets
-                            val validTweetsCount = tweetsWithNulls.count { it != null }
-                            Timber.tag("TweetListView")
-                                .d("Page $currentPage: returned ${tweetsWithNulls.size} tweets, valid tweets: $validTweetsCount")
-
-                            if (validTweetsCount > 0) {
-                                // Found valid tweets, stop searching and reset serverDepleted flag
-                                foundValidTweets = true
-                                lastLoadedPage = currentPage
-                                serverDepleted = false // Reset flag since we found new data
-                                Timber.tag("TweetListView")
-                                    .d("Found valid tweets on page $currentPage, resetting serverDepleted flag")
-                            } else if (tweetsWithNulls.size < TW_CONST.PAGE_SIZE) {
-                                // Partial page with no valid tweets - server is depleted
-                                serverDepleted = true
-                                // Don't increment lastLoadedPage since we didn't get new data
-                                Timber.tag("TweetListView")
-                                    .d("Server depleted at page $currentPage, returned ${tweetsWithNulls.size} tweets (all null)")
-                            } else {
-                                // Full page with all null tweets, try next page
-                                Timber.tag("TweetListView")
-                                    .d("Page $currentPage has all null tweets, trying next page")
-                                currentPage++
-                            }
-                        }
-
-                        if (serverDepleted) {
-                            Timber.tag("TweetListView")
-                                .d("Server depleted after searching through pages")
-                        } else {
-                            Timber.tag("TweetListView")
-                                .d("Successfully loaded valid tweets from page $currentPage")
-                        }
-                    }
+                    Timber.tag("TweetListView").e(e, "Preload error")
                 } finally {
-                    // Ensure spinner shows for at least 0.5 seconds for smoother scrolling experience
-                    val elapsedTime = System.currentTimeMillis() - spinnerStartTime
-                    val minDisplayTime = 500L // 0.5 second minimum for smoother feel
-
-                    if (elapsedTime < minDisplayTime) {
-                        val remainingTime = minDisplayTime - elapsedTime
-                        Timber.tag("TweetListView")
-                            .d("Spinner shown for ${elapsedTime}ms, waiting ${remainingTime}ms more for minimum display time")
-                        delay(remainingTime)
-                    }
-
-                    isRefreshingAtBottom = false // Ensure state is reset
-                    pendingLoadMorePage = -1 // Clear pending page
-                    Timber.tag("TweetListView")
-                        .d("Load more completed, isRefreshingAtBottom set to false, pendingLoadMorePage cleared")
+                    pendingLoadMorePage = -1
                 }
             }
-        } else if (isAtLastTweet && serverDepleted) {
-            Timber.tag("TweetListView")
-                .d("Last tweet visible with serverDepleted=true - waiting for manual gesture to trigger loadmore")
+            activeJobs.add(preloadJob)
+        }
+    }
+    
+    // EFFECT 5: Load more when at last tweet
+    LaunchedEffect(isAtLastTweet, isRefreshingAtBottom, serverDepleted, lastLoadedPage) {
+        if (isAtLastTweet && !isRefreshingAtBottom && !serverDepleted && tweets.isNotEmpty() && pendingLoadMorePage == -1) {
+            val nextPage = lastLoadedPage + 1
+            pendingLoadMorePage = nextPage
+            isRefreshingAtBottom = true
+            
+            val loadJob = launch(Dispatchers.IO) {
+                try {
+                    var currentPage = nextPage
+                    var foundValidTweets = false
+                    
+                    Timber.tag("TweetListView").d("Loading more, starting at page: $currentPage")
+                    
+                    while (!foundValidTweets && !serverDepleted && currentPage < lastLoadedPage + 5) {
+                        val result = fetchTweets(currentPage)
+                        val validCount = result.count { it != null }
+                        
+                        Timber.tag("TweetListView").d("Page $currentPage: ${result.size} tweets, $validCount valid")
+                        
+                        if (validCount > 0) {
+                            foundValidTweets = true
+                            lastLoadedPage = currentPage
+                            serverDepleted = false
+                        } else if (result.size < TW_CONST.PAGE_SIZE) {
+                            serverDepleted = true
+                        } else {
+                            currentPage++
+                        }
+                    }
+                    
+                    if (!foundValidTweets) {
+                        Timber.tag("TweetListView").d("No valid tweets found after checking pages $nextPage to $currentPage")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Load more error")
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isRefreshingAtBottom = false
+                        pendingLoadMorePage = -1
+                    }
+                }
+            }
+            activeJobs.add(loadJob)
         }
     }
 
@@ -707,8 +487,14 @@ fun TweetListView(
                 }
             }
 
-            // Show empty state if no tweets
-            if (tweets.isEmpty() && !isRefreshingAtTop) {
+            // Show skeleton loader during initial loading
+            if (tweets.isEmpty() && (isInitializingData || isInitialLoading)) {
+                item(key = "skeleton_loader") {
+                    TweetSkeletonLoader(count = 5)
+                }
+            }
+            // Show empty state if no tweets and not loading
+            else if (tweets.isEmpty() && !isRefreshingAtTop) {
                 item(key = "empty_state") {
                     EmptyStateContent(
                         modifier = Modifier
@@ -791,46 +577,48 @@ data class VideoInfo(
 )
 
 /**
- * Creates a video-indexed list that maintains feed order and handles retweets properly.
+ * Creates a video-indexed list asynchronously, fetching retweet data in parallel.
  * Returns a list of pairs: (MimeiId, MediaType) sorted by tweet timestamp (newest first).
- * 
- * For retweets: Uses the retweet's timestamp (when it was shared), not the original tweet's timestamp
- * This ensures videos are ordered by when they appeared in the feed, not when they were originally created
  */
-private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<MimeiId, MediaType>> {
+private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<MimeiId, MediaType>> = withContext(Dispatchers.IO) {
     val videoInfoList = mutableListOf<VideoInfo>()
     
-    tweets.forEachIndexed { feedIndex, tweet ->
-        // Check if this tweet has videos
-        var tweetToCheck = tweet
-        var hasVideo = tweet.attachments?.any { attachment ->
+    // Fetch all retweets in parallel
+    val retweetFetches = tweets.mapIndexed { index, tweet ->
+        async {
+            val hasVideo = tweet.attachments?.any { attachment ->
+                val mediaType = inferMediaTypeFromAttachment(attachment)
+                mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+            } == true
+            
+            // Fetch original tweet if this is a pure retweet without videos
+            val tweetToCheck = if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
+                tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
+                try {
+                    HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: tweet
+                } catch (e: Exception) {
+                    Timber.tag("TweetListView").e(e, "Failed to fetch retweet")
+                    tweet
+                }
+            } else {
+                tweet
+            }
+            
+            Triple(index, tweet, tweetToCheck)
+        }
+    }
+    
+    // Wait for all fetches to complete
+    val results = retweetFetches.awaitAll()
+    
+    // Process results and build video list
+    results.forEach { (feedIndex, originalTweet, tweetToCheck) ->
+        val hasVideo = tweetToCheck.attachments?.any { attachment ->
             val mediaType = inferMediaTypeFromAttachment(attachment)
             mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
         } == true
         
-        // If this is a retweet without attachments, fetch the original tweet
-        Timber.tag("TweetListView").d("Checking retweet at feed index $feedIndex: ${tweet.mid}, hasVideo: $hasVideo, originalTweetId: ${tweet.originalTweetId}, content: '${tweet.content}', attachments: ${tweet.attachments?.size}")
-        
-        if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
-            tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
-            Timber.tag("TweetListView").d("Pure retweet detected at feed index $feedIndex: ${tweet.mid}, fetching original tweet: ${tweet.originalTweetId}")
-            
-            val originalTweet = HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-            if (originalTweet != null) {
-                tweetToCheck = originalTweet
-                hasVideo = originalTweet.attachments?.any { attachment ->
-                    val mediaType = inferMediaTypeFromAttachment(attachment)
-                    mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-                } == true
-                
-                Timber.tag("TweetListView").d("Fetched original tweet: ${originalTweet.mid}, attachments: ${originalTweet.attachments?.size}, hasVideo: $hasVideo")
-            } else {
-                Timber.tag("TweetListView").w("Failed to fetch original tweet: ${tweet.originalTweetId}")
-            }
-        }
-        
         if (hasVideo) {
-            // Add each video attachment as a separate entry
             tweetToCheck.attachments?.forEach { attachment ->
                 val mediaType = inferMediaTypeFromAttachment(attachment)
                 if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
@@ -838,36 +626,17 @@ private suspend fun createVideoIndexedList(tweets: List<Tweet>): List<Pair<Mimei
                         mid = attachment.mid,
                         mediaType = mediaType,
                         feedIndex = feedIndex,
-                        tweetTimestamp = tweet.timestamp // Use retweet's timestamp, not original tweet's timestamp
+                        tweetTimestamp = originalTweet.timestamp
                     ))
-                    val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
-                    Timber.tag("TweetListView").d("Added video at feed index $feedIndex: ${attachment.mid}, tweet: ${tweetToCheck.mid}, timestamp: ${tweet.timestamp} (${tweetType}), mediaType: $mediaType")
                 }
             }
-        } else {
-            // Log why this tweet was skipped
-            val tweetType = if (tweet.originalTweetId != null) "retweet" else "original"
-            Timber.tag("TweetListView").d("Skipped $tweetType at feed index $feedIndex: ${tweet.mid}, attachments: ${tweet.attachments?.size}, originalTweetId: ${tweet.originalTweetId}")
         }
     }
     
-    // Sort videos by timestamp (newest first) before converting
-    val sortedVideoInfoList = videoInfoList.sortedByDescending { it.tweetTimestamp }
-    
-    // Convert VideoInfo list to the required format (MimeiId, MediaType)
-    val result = sortedVideoInfoList.map { videoInfo -> 
-        Pair(videoInfo.mid, videoInfo.mediaType) 
-    }
-    
-    Timber.tag("TweetListView").d("Created video list with ${result.size} videos sorted by timestamp (newest first)")
-    result.forEachIndexed { index, (videoMid, mediaType) ->
-        val videoInfo = sortedVideoInfoList[index]
-        val tweet = tweets.getOrNull(videoInfo.feedIndex)
-        val tweetType = if (tweet?.originalTweetId != null) "retweet" else "original"
-        Timber.tag("TweetListView").d("Video $index: $videoMid, timestamp: ${videoInfo.tweetTimestamp}, type: $tweetType, mediaType: $mediaType")
-    }
-    
-    return result
+    // Sort and convert
+    videoInfoList
+        .sortedByDescending { it.tweetTimestamp }
+        .map { Pair(it.mid, it.mediaType) }
 }
 
 /**
