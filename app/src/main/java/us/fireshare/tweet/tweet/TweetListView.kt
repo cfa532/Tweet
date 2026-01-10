@@ -4,6 +4,12 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +44,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -51,6 +59,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -167,7 +176,7 @@ fun TweetListView(
     fetchTweets: suspend (Int) -> List<Tweet?>, // Changed to suspend function
     modifier: Modifier = Modifier,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    contentPadding: PaddingValues = PaddingValues(bottom = 60.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = 96.dp), // FIX: Increased from 60dp to 96dp to prevent action buttons being covered by bottom nav bar (72dp height + 24dp padding)
     showPrivateTweets: Boolean = false,
     parentEntry: NavBackStackEntry? = null,
     onScrollStateChange: ((ScrollState) -> Unit)? = null,
@@ -211,6 +220,8 @@ fun TweetListView(
     var serverDepleted by rememberSaveable { mutableStateOf(false) }
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
     var isInitializingData by remember { mutableStateOf(false) }
+    var showNoMoreTweetsMessage by remember { mutableStateOf(false) }
+    var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -223,6 +234,8 @@ fun TweetListView(
     // Track active jobs for cleanup - using map to easily manage by ID
     val activeJobs = remember { mutableMapOf<String, Job>() }
     var lastCleanupTime by remember { mutableLongStateOf(0L) }
+    var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
+    val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup
     fun addJob(id: String, job: Job) {
@@ -248,6 +261,13 @@ fun TweetListView(
         onDispose {
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
+            // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
+            isRefreshingAtBottom = false
+            isRefreshingAtTop = false
+            pendingLoadMorePage = -1
+            lastLoadMoreTrigger = 0L
+            showNoMoreTweetsMessage = false
+            Timber.tag("TweetListView").d("Cleared loading states on dispose")
         }
     }
 
@@ -432,31 +452,130 @@ fun TweetListView(
     var isNearBottom by remember { mutableStateOf(false) }
     
     // PERF FIX: Skip expensive layout info access during active scrolling
-    // Update pagination states with debouncing to reduce calculations during fast scrolling
+    // Trigger load more on every scroll stop when at bottom
     LaunchedEffect(listState, tweets.size) {
         snapshotFlow { 
             if (!listState.isScrollInProgress) {
-                // Only calculate when scroll stops to avoid expensive layoutInfo access
+                // Only calculate when scroll stops
                 val layoutInfo = listState.layoutInfo
                 val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
                 val totalItems = layoutInfo.totalItemsCount
                 Pair(lastVisibleItem?.index ?: -1, totalItems)
             } else {
-                null  // Skip calculation during scrolling
+                null  // Skip during scrolling
             }
         }
         .collect { pair ->
             pair?.let { (lastIndex, totalItems) ->
+                val wasAtBottom = isAtLastTweet
                 isAtLastTweet = lastIndex == totalItems - 1
                 isNearBottom = lastIndex >= totalItems - 5 && lastIndex < totalItems - 1
+                
+                // Notify caller on state change
+                if (isAtLastTweet != wasAtBottom) {
+                    Timber.tag("TweetListView-Position").d("📍 isAtLastTweet=$isAtLastTweet")
+                    onIsAtLastTweetChange?.invoke(isAtLastTweet)
+                }
+                
+                // ALWAYS try load when at bottom (even if already there)
+                if (!isAtLastTweet) return@collect
+                if (isRefreshingAtBottom) return@collect
+                if (tweets.isEmpty()) return@collect
+                if (pendingLoadMorePage != -1) return@collect
+                
+                val now = System.currentTimeMillis()
+                val timeSinceLastTrigger = now - lastLoadMoreTrigger
+                val timeSinceLastMessage = now - lastNoMoreTweetsShown
+                
+                Timber.tag("TweetListView-LoadMore").d("""
+                    ═══ Load More Check ═══
+                    tweets.size: ${tweets.size}
+                    timeSinceLastTrigger: ${timeSinceLastTrigger}ms
+                    timeSinceLastMessage: ${timeSinceLastMessage}ms
+                """.trimIndent())
+                
+                // Check cooldowns
+                if (timeSinceLastMessage <= 2000) {
+                    Timber.tag("TweetListView-LoadMore").d("🔒 BLOCKED: Message cooldown")
+                    return@collect
+                }
+                
+                if (timeSinceLastTrigger < loadMoreDebounceMs) {
+                    Timber.tag("TweetListView-LoadMore").d("⏱️ DEBOUNCED")
+                    return@collect
+                }
+                
+                // Trigger load
+                lastLoadMoreTrigger = now
+                val nextPage = lastLoadedPage + 1
+                pendingLoadMorePage = nextPage
+                
+                Timber.tag("TweetListView-LoadMore").d("🚀 TRIGGERING: page=$nextPage")
+                
+                isRefreshingAtBottom = true
+                Timber.tag("TweetListView-LoadMore").d("🎡 Spinner ON (isRefreshingAtBottom=$isRefreshingAtBottom)")
+                val spinnerShowTime = System.currentTimeMillis()
+                
+                // Scroll to ensure spinner is visible (with delay for compose to add the item)
+                coroutineScope.launch {
+                    delay(50)  // Wait for spinner item to be added
+                    listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
+                }
+                
+                val loadJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                    var foundValidTweets = false
+                    try {
+                        var currentPage = nextPage
+                        Timber.tag("TweetListView-LoadMore").d("📥 Fetching page=$currentPage")
+                        
+                        while (!foundValidTweets && !serverDepleted && currentPage < lastLoadedPage + 5) {
+                            val result = fetchTweets(currentPage)
+                            val validCount = result.count { it != null }
+                            
+                            if (validCount > 0) {
+                                foundValidTweets = true
+                                lastLoadedPage = currentPage
+                                serverDepleted = false
+                                Timber.tag("TweetListView-LoadMore").d("✅ Found $validCount tweets")
+                            } else if (result.size < TW_CONST.PAGE_SIZE) {
+                                serverDepleted = true
+                                Timber.tag("TweetListView-LoadMore").d("🏁 Server depleted")
+                            } else {
+                                currentPage++
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("TweetListView-LoadMore").e(e, "💥 Error")
+                    } finally {
+                        withContext(NonCancellable + Dispatchers.Main) {
+                            // Min 500ms spinner
+                            val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
+                            if (spinnerDuration < 500L) {
+                                delay(500L - spinnerDuration)
+                            }
+                            
+                            // Clear spinner
+                            isRefreshingAtBottom = false
+                            pendingLoadMorePage = -1
+                            Timber.tag("TweetListView-LoadMore").d("🎡 Spinner OFF (isRefreshingAtBottom=$isRefreshingAtBottom)")
+                            
+                            // Show message if no tweets
+                            if (!foundValidTweets) {
+                                showNoMoreTweetsMessage = true
+                                delay(1000)
+                                showNoMoreTweetsMessage = false
+                                lastNoMoreTweetsShown = System.currentTimeMillis()
+                                Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
+                            }
+                        }
+                    }
+                }
+                
+                addJob("loadMore-$nextPage", loadJob)
             }
         }
     }
 
-    // Notify caller about position
-    LaunchedEffect(isAtLastTweet) {
-        onIsAtLastTweetChange?.invoke(isAtLastTweet)
-    }
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
@@ -507,53 +626,6 @@ fun TweetListView(
                 }
             }
             addJob("preload-$nextPage", preloadJob)
-        }
-    }
-    
-    // EFFECT 5: Load more when at last tweet
-    LaunchedEffect(isAtLastTweet, isRefreshingAtBottom, serverDepleted, lastLoadedPage) {
-        if (isAtLastTweet && !isRefreshingAtBottom && !serverDepleted && tweets.isNotEmpty() && pendingLoadMorePage == -1) {
-            val nextPage = lastLoadedPage + 1
-            pendingLoadMorePage = nextPage
-            isRefreshingAtBottom = true
-            
-            val loadJob = launch(Dispatchers.IO) {
-                try {
-                    var currentPage = nextPage
-                    var foundValidTweets = false
-                    
-                    Timber.tag("TweetListView").d("Loading more, starting at page: $currentPage")
-                    
-                    while (!foundValidTweets && !serverDepleted && currentPage < lastLoadedPage + 5) {
-                        val result = fetchTweets(currentPage)
-                        val validCount = result.count { it != null }
-                        
-                        Timber.tag("TweetListView").d("Page $currentPage: ${result.size} tweets, $validCount valid")
-                        
-                        if (validCount > 0) {
-                            foundValidTweets = true
-                            lastLoadedPage = currentPage
-                            serverDepleted = false
-                        } else if (result.size < TW_CONST.PAGE_SIZE) {
-                            serverDepleted = true
-                        } else {
-                            currentPage++
-                        }
-                    }
-                    
-                    if (!foundValidTweets) {
-                        Timber.tag("TweetListView").d("No valid tweets found after checking pages $nextPage to $currentPage")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("TweetListView").e(e, "Load more error")
-                } finally {
-                    withContext(Dispatchers.Main) {
-                        isRefreshingAtBottom = false
-                        pendingLoadMorePage = -1
-                    }
-                }
-            }
-            addJob("loadMore-$nextPage", loadJob)
         }
     }
 
@@ -627,19 +699,47 @@ fun TweetListView(
                 }
             }
 
-            // Loading spinner at bottom - use key to make it stable
-            // Use fixed-height container to prevent layout shifts
-            if (isRefreshingAtBottom) {
-                item(key = "loading_spinner") {
+            // Loading spinner at bottom with animation
+            item(key = "loading_spinner") {
+                AnimatedVisibility(
+                    visible = isRefreshingAtBottom,
+                    enter = fadeIn(animationSpec = tween(300)) + slideInVertically(
+                        animationSpec = tween(300),
+                        initialOffsetY = { it / 2 }
+                    ),
+                    exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(
+                        animationSpec = tween(200),
+                        targetOffsetY = { it / 2 }
+                    )
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 40.dp, bottom = 16.dp),
+                            .padding(top = 16.dp, bottom = 40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
                             color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Show "no more tweets" message
+            if (showNoMoreTweetsMessage) {
+                item(key = "no_more_tweets") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.no_more_tweets),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
                 }

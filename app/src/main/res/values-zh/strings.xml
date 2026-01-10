@@ -107,5 +107,6 @@
     <string name="request_timeout">請求超時。請重試。</string>
     <string name="server_unreachable">無法連接到伺服器。請稍後重試。</string>
     <string name="connection_error">連接錯誤。請重試。</string>
+    <string name="no_more_tweets">沒有更多推文了</string>
 </resources>
 

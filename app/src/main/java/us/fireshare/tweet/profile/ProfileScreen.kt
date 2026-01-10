@@ -289,7 +289,7 @@ private fun ProfileContentWithTweetListView(
         },
         modifier = Modifier.fillMaxSize(),
         scrollBehavior = scrollBehavior,
-        contentPadding = PaddingValues(bottom = 60.dp),
+        contentPadding = PaddingValues(bottom = 96.dp), // FIX: Increased from 60dp to 96dp to prevent action buttons being covered by bottom nav bar (72dp height + 24dp padding)
         showPrivateTweets = true, // Show private tweets in profile
         parentEntry = parentEntry,
         onScrollStateChange = onScrollStateChange,
