@@ -200,6 +200,8 @@ fun TweetListView(
 
     // Create video-indexed list that maintains feed order and handles retweets properly
     var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }
+    val processedTweetIds = remember { mutableSetOf<MimeiId>() }
+    var lastProcessedTweetCount by remember { mutableIntStateOf(0) }
     
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
@@ -218,8 +220,15 @@ fun TweetListView(
     )
     val coroutineScope = rememberCoroutineScope()
     
-    // Track active jobs for cleanup
-    val activeJobs = remember { mutableListOf<Job>() }
+    // Track active jobs for cleanup - using map to easily manage by ID
+    val activeJobs = remember { mutableMapOf<String, Job>() }
+    
+    // Helper to add job and clean up completed ones
+    fun addJob(id: String, job: Job) {
+        // Clean up completed jobs before adding new one
+        activeJobs.entries.removeAll { !it.value.isActive }
+        activeJobs[id] = job
+    }
     
     // Create scroll-to-top function
     val scrollToTop: suspend () -> Unit = {
@@ -229,7 +238,7 @@ fun TweetListView(
     // Cleanup coroutines on dispose
     DisposableEffect(Unit) {
         onDispose {
-            activeJobs.forEach { it.cancel() }
+            activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
         }
     }
@@ -264,11 +273,11 @@ fun TweetListView(
                     isInitializingData = false
                 }
             }
-            activeJobs.add(initJob)
+            addJob("init", initJob)
         }
     }
 
-    // EFFECT 2: Video list creation and ViewModel updates
+    // EFFECT 2: Video list creation and ViewModel updates (incremental)
     LaunchedEffect(tweets.size, isInitialLoading, currentUserId) {
         // Initialize lastLoadedPage if needed
         if (lastLoadedPage == -1 && tweets.isNotEmpty()) {
@@ -278,21 +287,50 @@ fun TweetListView(
         // Update ViewModel with current tweets
         tweetListViewModel.setTweetList(tweets)
         
-        // Create video list when loading is complete
+        // Create or update video list when loading is complete
         if (!isInitialLoading && !isInitializingData && tweets.isNotEmpty()) {
+            // Detect if this is a user change (need full rebuild)
+            val needsFullRebuild = currentUserId != null && 
+                                   (processedTweetIds.isEmpty() || lastProcessedTweetCount > tweets.size)
+            
             val videoJob = launch(Dispatchers.IO) {
                 try {
-                    val newVideoList = createVideoIndexedListAsync(tweets)
-                    withContext(Dispatchers.Main) {
-                        videoIndexedList = newVideoList
-                        tweetListViewModel.setVideoIndexedList(newVideoList)
-                        onVideoIndexedListChange?.invoke(newVideoList)
+                    if (needsFullRebuild) {
+                        // Full rebuild for user change or initial load
+                        Timber.tag("TweetListView").d("Full video list rebuild for ${tweets.size} tweets")
+                        processedTweetIds.clear()
+                        val newVideoList = createVideoIndexedListAsync(tweets)
+                        tweets.forEach { processedTweetIds.add(it.mid) }
+                        lastProcessedTweetCount = tweets.size
+                        
+                        withContext(Dispatchers.Main) {
+                            videoIndexedList = newVideoList
+                            tweetListViewModel.setVideoIndexedList(newVideoList)
+                            onVideoIndexedListChange?.invoke(newVideoList)
+                        }
+                    } else if (tweets.size > lastProcessedTweetCount) {
+                        // Incremental update - only process new tweets
+                        val newTweets = tweets.filter { !processedTweetIds.contains(it.mid) }
+                        if (newTweets.isNotEmpty()) {
+                            Timber.tag("TweetListView").d("Incremental video list update: ${newTweets.size} new tweets")
+                            val newVideos = createVideoIndexedListAsync(newTweets)
+                            newTweets.forEach { processedTweetIds.add(it.mid) }
+                            lastProcessedTweetCount = tweets.size
+                            
+                            withContext(Dispatchers.Main) {
+                                // Merge and re-sort
+                                val mergedList = (videoIndexedList + newVideos).distinct()
+                                videoIndexedList = mergedList
+                                tweetListViewModel.setVideoIndexedList(mergedList)
+                                onVideoIndexedListChange?.invoke(mergedList)
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Video list creation error")
                 }
             }
-            activeJobs.add(videoJob)
+            addJob("videoList-${tweets.size}", videoJob)
         }
     }
 
@@ -332,34 +370,43 @@ fun TweetListView(
     }
 
     // Use VideoLoadingManager to preload videos from upcoming tweets
+    // Throttle to only trigger every 3 items to reduce overhead
     val currentVisibleIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
-    val baseUrl = if (tweets.isNotEmpty() && currentVisibleIndex >= 0 && currentVisibleIndex < tweets.size) {
-        tweets[currentVisibleIndex].author?.baseUrl ?: ""
+    val throttledVisibleIndex by remember { 
+        derivedStateOf { 
+            // Round down to nearest multiple of 3 to throttle preloader
+            (currentVisibleIndex / 3) * 3 
+        } 
+    }
+    val baseUrl = if (tweets.isNotEmpty() && throttledVisibleIndex >= 0 && throttledVisibleIndex < tweets.size) {
+        tweets[throttledVisibleIndex].author?.baseUrl ?: ""
     } else {
         ""
     }
     rememberTweetVideoPreloader(
         tweets = tweets,
-        currentVisibleIndex = currentVisibleIndex,
+        currentVisibleIndex = throttledVisibleIndex,
         baseUrl = baseUrl
     )
 
-    // Derived states for pagination
-    val isAtLastTweet by remember(listState, tweets) {
-        derivedStateOf {
+    // Derived states for pagination - optimized with throttling
+    var isAtLastTweet by remember { mutableStateOf(false) }
+    var isNearBottom by remember { mutableStateOf(false) }
+    
+    // Update pagination states with debouncing to reduce calculations during fast scrolling
+    LaunchedEffect(listState, tweets.size) {
+        snapshotFlow { 
             val layoutInfo = listState.layoutInfo
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
             val totalItems = layoutInfo.totalItemsCount
-            lastVisibleItem != null && lastVisibleItem.index == totalItems - 1
+            Pair(lastVisibleItem?.index ?: -1, totalItems)
         }
-    }
-
-    val isNearBottom by remember(listState, tweets) {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val totalItems = layoutInfo.totalItemsCount
-            lastVisibleItem != null && lastVisibleItem.index >= totalItems - 5 && lastVisibleItem.index < totalItems - 1
+        .collect { (lastIndex, totalItems) ->
+            // Only update when scroll settles (debounce effect)
+            if (!listState.isScrollInProgress || lastIndex >= totalItems - 10) {
+                isAtLastTweet = lastIndex == totalItems - 1
+                isNearBottom = lastIndex >= totalItems - 5 && lastIndex < totalItems - 1
+            }
         }
     }
 
@@ -387,7 +434,7 @@ fun TweetListView(
                     isRefreshingAtTop = false
                 }
             }
-            activeJobs.add(refreshJob)
+            addJob("pullRefresh", refreshJob)
         }
     )
 
@@ -416,7 +463,7 @@ fun TweetListView(
                     pendingLoadMorePage = -1
                 }
             }
-            activeJobs.add(preloadJob)
+            addJob("preload-$nextPage", preloadJob)
         }
     }
     
@@ -463,7 +510,7 @@ fun TweetListView(
                     }
                 }
             }
-            activeJobs.add(loadJob)
+            addJob("loadMore-$nextPage", loadJob)
         }
     }
 
@@ -577,57 +624,62 @@ data class VideoInfo(
 )
 
 /**
- * Creates a video-indexed list asynchronously, fetching retweet data in parallel.
+ * Creates a video-indexed list asynchronously, fetching retweet data in parallel with batching.
+ * Limits concurrent requests to 10 to prevent network congestion.
  * Returns a list of pairs: (MimeiId, MediaType) sorted by tweet timestamp (newest first).
  */
 private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<MimeiId, MediaType>> = withContext(Dispatchers.IO) {
     val videoInfoList = mutableListOf<VideoInfo>()
+    val batchSize = 10
     
-    // Fetch all retweets in parallel
-    val retweetFetches = tweets.mapIndexed { index, tweet ->
-        async {
-            val hasVideo = tweet.attachments?.any { attachment ->
+    // Process tweets in batches to limit concurrent network requests
+    tweets.chunked(batchSize).forEach { batch ->
+        val retweetFetches = batch.mapIndexed { batchIndex, tweet ->
+            async {
+                val index = tweets.indexOf(tweet)
+                val hasVideo = tweet.attachments?.any { attachment ->
+                    val mediaType = inferMediaTypeFromAttachment(attachment)
+                    mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+                } == true
+                
+                // Fetch original tweet if this is a pure retweet without videos
+                val tweetToCheck = if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
+                    tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
+                    try {
+                        HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: tweet
+                    } catch (e: Exception) {
+                        Timber.tag("TweetListView").e(e, "Failed to fetch retweet")
+                        tweet
+                    }
+                } else {
+                    tweet
+                }
+                
+                Triple(index, tweet, tweetToCheck)
+            }
+        }
+        
+        // Wait for this batch to complete
+        val results = retweetFetches.awaitAll()
+        
+        // Process results and build video list
+        results.forEach { (feedIndex, originalTweet, tweetToCheck) ->
+            val hasVideo = tweetToCheck.attachments?.any { attachment ->
                 val mediaType = inferMediaTypeFromAttachment(attachment)
                 mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
             } == true
             
-            // Fetch original tweet if this is a pure retweet without videos
-            val tweetToCheck = if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
-                tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
-                try {
-                    HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: tweet
-                } catch (e: Exception) {
-                    Timber.tag("TweetListView").e(e, "Failed to fetch retweet")
-                    tweet
-                }
-            } else {
-                tweet
-            }
-            
-            Triple(index, tweet, tweetToCheck)
-        }
-    }
-    
-    // Wait for all fetches to complete
-    val results = retweetFetches.awaitAll()
-    
-    // Process results and build video list
-    results.forEach { (feedIndex, originalTweet, tweetToCheck) ->
-        val hasVideo = tweetToCheck.attachments?.any { attachment ->
-            val mediaType = inferMediaTypeFromAttachment(attachment)
-            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-        } == true
-        
-        if (hasVideo) {
-            tweetToCheck.attachments?.forEach { attachment ->
-                val mediaType = inferMediaTypeFromAttachment(attachment)
-                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
-                    videoInfoList.add(VideoInfo(
-                        mid = attachment.mid,
-                        mediaType = mediaType,
-                        feedIndex = feedIndex,
-                        tweetTimestamp = originalTweet.timestamp
-                    ))
+            if (hasVideo) {
+                tweetToCheck.attachments?.forEach { attachment ->
+                    val mediaType = inferMediaTypeFromAttachment(attachment)
+                    if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
+                        videoInfoList.add(VideoInfo(
+                            mid = attachment.mid,
+                            mediaType = mediaType,
+                            feedIndex = feedIndex,
+                            tweetTimestamp = originalTweet.timestamp
+                        ))
+                    }
                 }
             }
         }
