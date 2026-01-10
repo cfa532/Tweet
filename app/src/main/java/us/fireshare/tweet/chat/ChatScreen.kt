@@ -1148,13 +1148,20 @@ fun ChatMediaPreview(
                         
                         LaunchedEffect(localUri) {
                             withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                // FIX P0-3: Ensure MediaMetadataRetriever is always released
+                                val retriever = android.media.MediaMetadataRetriever()
                                 try {
-                                    val retriever = android.media.MediaMetadataRetriever()
                                     retriever.setDataSource(context, localUri)
                                     videoThumbnail = retriever.getFrameAtTime(0)
-                                    retriever.release()
                                 } catch (e: Exception) {
                                     Timber.tag("ChatMediaPreview").e(e, "Error loading video thumbnail")
+                                } finally {
+                                    try {
+                                        retriever.release()
+                                    } catch (e: Exception) {
+                                        // Ignore release errors
+                                        Timber.tag("ChatMediaPreview").w(e, "Error releasing MediaMetadataRetriever")
+                                    }
                                 }
                             }
                         }
