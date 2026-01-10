@@ -305,15 +305,33 @@ object ImageCacheManager {
                     semaphoreAcquired = false
                 }
             } catch (e: Exception) {
-                // Handle cancellation by cleaning up download queue
+                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
                 if (e is kotlinx.coroutines.CancellationException) {
-                    // Clean up download queue and release resources
+                    // Clean up download queue and release resources atomically
                     synchronized(downloadQueueMutex) {
-                        if (downloadQueue.containsKey(mid)) {
-                            downloadQueue.remove(mid)
-                            activeInvisibleDownloads--
+                        val wasInQueue = downloadQueue.containsKey(mid)
+                        
+                        // Recycle any cached result for this download
+                        downloadResults[mid]?.let { bitmap ->
+                            if (!bitmap.isRecycled) {
+                                try {
+                                    bitmap.recycle()
+                                } catch (ex: Exception) {
+                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
+                                }
+                            }
                         }
+                        
+                        downloadQueue.remove(mid)
+                        downloadResults.remove(mid)
+                        downloadPriorityQueue.remove(mid)
+                        resultTimestamps.remove(mid)
                         ongoingDownloads.remove(mid)
+                        
+                        // Update counter ONLY if we were in the queue
+                        if (wasInQueue) {
+                            activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
+                        }
                     }
                     
                     if (semaphoreAcquired) {
@@ -369,8 +387,27 @@ object ImageCacheManager {
                 }
                 return@withContext null
             } catch (e: OutOfMemoryError) {
+                // FIX P2-6: Aggressive cleanup on OOM to prevent cascading failures
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading image")
+                
+                // Clear all caches and intermediate results
                 clearMemoryCache()
+                synchronized(downloadQueueMutex) {
+                    // Recycle all cached download results
+                    downloadResults.values.forEach { bitmap ->
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (ex: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                    downloadResults.clear()
+                    resultTimestamps.clear()
+                }
+                System.gc()  // Suggest immediate garbage collection
+                
                 return@withContext null
             } catch (e: Exception) {
                 return@withContext null
@@ -492,11 +529,28 @@ object ImageCacheManager {
                 }
                 return@withContext null
             } catch (e: OutOfMemoryError) {
-                // FIX P0-2: Clear large allocations before handling OOM
+                // FIX P0-2 & P2-6: Aggressive cleanup on OOM to prevent cascading failures
                 imageData = null
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
+                
+                // Clear all caches and intermediate results
                 clearMemoryCache()
-                System.gc()  // Suggest immediate GC
+                synchronized(downloadQueueMutex) {
+                    // Recycle all cached download results
+                    downloadResults.values.forEach { bitmap ->
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (ex: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                    downloadResults.clear()
+                    resultTimestamps.clear()
+                }
+                System.gc()  // Suggest immediate garbage collection
+                
                 return@withContext null
             } catch (e: java.net.SocketTimeoutException) {
                 // FIX P0-2: Clear on timeout
@@ -669,33 +723,36 @@ object ImageCacheManager {
                     }
                 }
             } catch (e: Exception) {
-                // Handle cancellation by cleaning up download queue
+                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
                 if (e is kotlinx.coroutines.CancellationException) {
                     val originalMid = "${mid}_original"
                     
-                    // Clean up download queue and release resources
+                    // Clean up download queue and release resources atomically
                     synchronized(downloadQueueMutex) {
-                        if (downloadQueue.containsKey(originalMid)) {
-                            // Get visibility BEFORE removing from queue
-                            val wasVisible = downloadPriorityQueue[originalMid] ?: false
-                            
-                            // FIX P1-4: Recycle bitmap before removing from results
-                            downloadResults[originalMid]?.let { bitmap ->
-                                if (!bitmap.isRecycled) {
-                                    try {
-                                        bitmap.recycle()
-                                    } catch (e: Exception) {
-                                        // Ignore recycle errors
-                                    }
+                        // Check if we're actually in the download queue
+                        val wasInQueue = downloadQueue.containsKey(originalMid)
+                        val wasVisible = downloadPriorityQueue[originalMid] ?: false
+                        
+                        // Recycle bitmap before removing from results
+                        downloadResults[originalMid]?.let { bitmap ->
+                            if (!bitmap.isRecycled) {
+                                try {
+                                    bitmap.recycle()
+                                } catch (ex: Exception) {
+                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
                                 }
                             }
-                            
-                            downloadQueue.remove(originalMid)
-                            downloadResults.remove(originalMid)
-                            downloadPriorityQueue.remove(originalMid)
-                            resultTimestamps.remove(originalMid)
-                            
-                            // Update priority counters with safety check
+                        }
+                        
+                        // Remove all references atomically
+                        downloadQueue.remove(originalMid)
+                        downloadResults.remove(originalMid)
+                        downloadPriorityQueue.remove(originalMid)
+                        resultTimestamps.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
+                        
+                        // Update priority counters ONLY if we were in the queue
+                        if (wasInQueue) {
                             if (wasVisible) {
                                 activeVisibleDownloads = maxOf(0, activeVisibleDownloads - 1)
                             } else {
