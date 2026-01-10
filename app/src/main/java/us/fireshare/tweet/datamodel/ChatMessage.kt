@@ -181,12 +181,14 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val sessionId: String? = null,  // reference to the chat session (created locally)
     val success: Boolean = true,  // whether the message was sent successfully
-    val errorMsg: String? = null  // error message if sending failed
+    val errorMsg: String? = null,  // error message if sending failed
+    @kotlinx.serialization.Transient
+    val localAttachmentUri: String? = null  // local file Uri for optimistic display (not serialized, not stored in DB)
 ) {
     init {
-        // Validate that either content or attachments must be present
-        require(content?.isNotBlank() == true || !attachments.isNullOrEmpty()) {
-            "ChatMessage must have either non-empty content or attachments"
+        // Validate that either content or attachments or localAttachmentUri must be present
+        require(content?.isNotBlank() == true || !attachments.isNullOrEmpty() || localAttachmentUri != null) {
+            "ChatMessage must have either non-empty content, attachments, or localAttachmentUri"
         }
     }
     

@@ -154,6 +154,51 @@ object VideoManager {
         return "${cacheSize / (1024 * 1024)}MB / ${maxCacheSize / (1024 * 1024)}MB ($usedPercentage%)"
     }
 
+    /**
+     * Cache a local video file from Uri directly by mid
+     * This is used when sending a video - cache it immediately without downloading
+     * 
+     * @param context Android context
+     * @param mid The media ID to cache under
+     * @param uri The local file Uri
+     */
+    suspend fun cacheLocalVideoFile(context: Context, mid: MimeiId, uri: Uri) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // Create a cache directory specific to this video
+                val videoCacheDir = File(context.cacheDir, "$VIDEO_CACHE_DIR/$mid")
+                if (!videoCacheDir.exists()) {
+                    videoCacheDir.mkdirs()
+                }
+                
+                // Copy the local video file to our cache directory
+                val cachedFile = File(videoCacheDir, "local_video.mp4")
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    cachedFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                
+                Timber.d("VideoManager - Cached local video file for mid: $mid")
+            } catch (e: Exception) {
+                Timber.e("VideoManager - Error caching local video file: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Check if a local video file is cached
+     * 
+     * @param context Android context
+     * @param mid The media ID
+     * @return The cached file if it exists, null otherwise
+     */
+    fun getCachedLocalVideoFile(context: Context, mid: MimeiId): File? {
+        val videoCacheDir = File(context.cacheDir, "$VIDEO_CACHE_DIR/$mid")
+        val cachedFile = File(videoCacheDir, "local_video.mp4")
+        return if (cachedFile.exists()) cachedFile else null
+    }
+
     // ===== VISIBILITY-BASED LOADING CONTROL =====
 
     /**

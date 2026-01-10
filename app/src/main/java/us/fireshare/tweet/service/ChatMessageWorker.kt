@@ -41,8 +41,9 @@ class SendChatMessageWorker @AssistedInject constructor(
         val content = inputData.getString("content") ?: ""
         val attachmentUri = inputData.getString("attachmentUri")
         val messageTimestamp = inputData.getLong("messageTimestamp", System.currentTimeMillis())
+        val optimisticMessageId = inputData.getString("optimisticMessageId")
 
-        Timber.tag("SendChatMessageWorker").d("Starting message send: receiptId=$receiptId, content=$content, attachmentUri=$attachmentUri")
+        Timber.tag("SendChatMessageWorker").d("Starting message send: receiptId=$receiptId, content=$content, attachmentUri=$attachmentUri, optimisticMessageId=$optimisticMessageId")
 
         val powerManager =
             applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -59,13 +60,53 @@ class SendChatMessageWorker @AssistedInject constructor(
             if (attachmentUri != null) {
                 try {
                     Timber.tag("SendChatMessageWorker").d("Starting attachment upload: $attachmentUri")
+                    val uri = attachmentUri.toUri()
                     val uploadedFile = withContext(Dispatchers.IO) {
-                        uploadToIPFS(attachmentUri.toUri())
+                        uploadToIPFS(uri)
                     }
                     if (uploadedFile != null) {
                         attachments = listOf(uploadedFile)
                         Timber.tag("SendChatMessageWorker")
                             .d("File uploaded successfully: ${uploadedFile.mid}")
+                        
+                        // Cache the local file immediately with the uploaded mid
+                        // This way it's available instantly when the message is displayed
+                        withContext(Dispatchers.IO) {
+                            try {
+                                when (uploadedFile.type) {
+                                    us.fireshare.tweet.datamodel.MediaType.Image -> {
+                                        // Cache local image file
+                                        us.fireshare.tweet.widget.ImageCacheManager.cacheLocalImageFile(
+                                            applicationContext,
+                                            uploadedFile.mid,
+                                            uri
+                                        )
+                                        Timber.tag("SendChatMessageWorker")
+                                            .d("Cached local image for mid: ${uploadedFile.mid}")
+                                    }
+                                    us.fireshare.tweet.datamodel.MediaType.Video,
+                                    us.fireshare.tweet.datamodel.MediaType.HLS_VIDEO -> {
+                                        // Cache local video file
+                                        us.fireshare.tweet.widget.VideoManager.cacheLocalVideoFile(
+                                            applicationContext,
+                                            uploadedFile.mid,
+                                            uri
+                                        )
+                                        Timber.tag("SendChatMessageWorker")
+                                            .d("Cached local video for mid: ${uploadedFile.mid}")
+                                    }
+                                    else -> {
+                                        // For other file types, we don't need to cache
+                                        Timber.tag("SendChatMessageWorker")
+                                            .d("Skipping cache for non-media file type: ${uploadedFile.type}")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("SendChatMessageWorker")
+                                    .w(e, "Failed to cache local file, will download from network later")
+                                // Don't fail the whole operation if caching fails
+                            }
+                        }
                     } else {
                         Timber.tag("SendChatMessageWorker").e("Failed to upload file - uploadToIPFS returned null")
                         // Show localized error message to user

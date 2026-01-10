@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.net.Uri
 import androidx.core.graphics.createBitmap
 import androidx.exifinterface.media.ExifInterface
 import io.ktor.client.HttpClient
@@ -724,6 +725,82 @@ object ImageCacheManager {
     // Initialize the paused download resumer
     init {
         startPausedDownloadResumer()
+    }
+
+    /**
+     * Cache a local image file from Uri directly by mid
+     * This is used when sending an image - cache it immediately without downloading
+     * 
+     * @param context Android context
+     * @param mid The media ID to cache under
+     * @param uri The local file Uri
+     * @return Cached bitmap if successful, null otherwise
+     */
+    suspend fun cacheLocalImageFile(context: Context, mid: String, uri: Uri): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                // Load bitmap from local Uri with orientation correction
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    decodeBitmapFromStreamWithOrientation(inputStream, uri, context)
+                }
+                
+                if (bitmap != null && !bitmap.isRecycled) {
+                    // Cache the bitmap
+                    cacheImage(context, mid, bitmap)
+                    Timber.tag("ImageCacheManager").d("Cached local image file for mid: $mid")
+                    return@withContext bitmap
+                } else {
+                    Timber.tag("ImageCacheManager").w("Failed to load bitmap from local Uri: $uri")
+                    return@withContext null
+                }
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e(e, "Error caching local image file")
+                return@withContext null
+            }
+        }
+
+    /**
+     * Decode bitmap from stream with EXIF orientation correction
+     */
+    private fun decodeBitmapFromStreamWithOrientation(
+        inputStream: InputStream,
+        uri: Uri,
+        context: Context
+    ): Bitmap? {
+        try {
+            // First, decode without orientation to get bitmap
+            val bitmap = BitmapFactory.decodeStream(inputStream) ?: return null
+            
+            // Try to read EXIF data for orientation
+            val orientation = try {
+                context.contentResolver.openInputStream(uri)?.use { exifStream ->
+                    val exif = ExifInterface(exifStream)
+                    exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                }
+            } catch (e: Exception) {
+                ExifInterface.ORIENTATION_NORMAL
+            }
+            
+            // Apply orientation correction if needed
+            return when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(bitmap, 90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(bitmap, 180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(bitmap, 270f)
+                else -> bitmap
+            }
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").e(e, "Error decoding bitmap with orientation")
+            return null
+        }
+    }
+
+    /**
+     * Rotate bitmap by degrees
+     */
+    private fun rotateBitmap(source: Bitmap, degrees: Float): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(degrees)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
     /**

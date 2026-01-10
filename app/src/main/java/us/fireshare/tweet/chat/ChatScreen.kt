@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -71,6 +72,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -682,6 +684,7 @@ fun ChatItem(
                             ) {
                                 ChatMediaPreview(
                                     attachments = attachments,
+                                    localAttachmentUri = message.localAttachmentUri,
                                     onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
                                     onVideoClick = { onVideoClick(attachments.first()) }
                                 )
@@ -1040,15 +1043,22 @@ private fun isDocumentType(type: MediaType): Boolean {
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
+    localAttachmentUri: String? = null,  // Add parameter for local Uri
     onImageClick: ((android.graphics.Bitmap?) -> Unit)? = null,
     onVideoClick: (() -> Unit)? = null
 ) {
-    if (attachments.isEmpty()) return
+    if (attachments.isEmpty() && localAttachmentUri == null) return
 
+    // Determine if we're displaying from local Uri or from network
+    val isLocalDisplay = localAttachmentUri != null && attachments.isEmpty()
+    
     // For chat messages, we'll show a simple preview of the first attachment
-    val attachment = attachments.first()
-    val mediaUrl =
+    val attachment = if (attachments.isNotEmpty()) attachments.first() else null
+    val mediaUrl = if (attachment != null) {
         us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+    } else {
+        null
+    }
 
     // Video preloading is handled by the main ChatScreen component with debouncing
 
@@ -1061,7 +1071,7 @@ fun ChatMediaPreview(
         }
     }
 
-    val adjustedAspectRatio = applyAspectRatioRule(attachment.aspectRatio)
+    val adjustedAspectRatio = applyAspectRatioRule(attachment?.aspectRatio)
 
     Box(
         modifier = Modifier
@@ -1070,8 +1080,143 @@ fun ChatMediaPreview(
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
     ) {
-        when (attachment.type) {
-            MediaType.Image -> {
+        // Handle local display (optimistic UI)
+        when {
+            isLocalDisplay && localAttachmentUri != null -> {
+                // Display from local Uri
+                val context = LocalContext.current
+                val localUri = remember(localAttachmentUri) { android.net.Uri.parse(localAttachmentUri) }
+                
+                // Detect media type from local file
+                val mediaType = remember(localUri) {
+                    try {
+                        us.fireshare.tweet.service.FileTypeDetector.detectFileType(context, localUri)
+                    } catch (e: Exception) {
+                        Timber.tag("ChatMediaPreview").e(e, "Error detecting file type")
+                        MediaType.Unknown
+                    }
+                }
+                
+                when (mediaType) {
+                    MediaType.Image -> {
+                        // Display local image
+                        var localBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                        
+                        LaunchedEffect(localUri) {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    context.contentResolver.openInputStream(localUri)?.use { stream ->
+                                        localBitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.tag("ChatMediaPreview").e(e, "Error loading local image")
+                                }
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onImageClick?.invoke(localBitmap) }
+                        ) {
+                            localBitmap?.let { bitmap ->
+                                androidx.compose.foundation.Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Local image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } ?: run {
+                                // Show loading placeholder
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    MediaType.Video, MediaType.HLS_VIDEO -> {
+                        // Display local video preview (thumbnail)
+                        var videoThumbnail by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                        
+                        LaunchedEffect(localUri) {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val retriever = android.media.MediaMetadataRetriever()
+                                    retriever.setDataSource(context, localUri)
+                                    videoThumbnail = retriever.getFrameAtTime(0)
+                                    retriever.release()
+                                } catch (e: Exception) {
+                                    Timber.tag("ChatMediaPreview").e(e, "Error loading video thumbnail")
+                                }
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onVideoClick?.invoke() }
+                        ) {
+                            videoThumbnail?.let { bitmap ->
+                                androidx.compose.foundation.Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Video thumbnail",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                                // Play icon overlay
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play",
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(48.dp)
+                                        .background(Color.Black.copy(alpha = 0.5f), androidx.compose.foundation.shape.CircleShape),
+                                    tint = Color.White
+                                )
+                            } ?: run {
+                                // Show loading placeholder
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        // Unknown file type, show placeholder
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Uploading...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            attachment != null && mediaUrl != null -> {
+                // Display from network (normal flow)
+                when (attachment.type) {
+                    MediaType.Image -> {
                 // Track visibility for priority-based loading (same as MediaItemView)
                 var isVisible by remember { mutableStateOf(true) }
                 var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -1151,6 +1296,7 @@ fun ChatMediaPreview(
                         if (mediaAttachments.isNotEmpty()) {
                             ChatMediaPreview(
                                 attachments = mediaAttachments,
+                                localAttachmentUri = null, // This is for existing messages, no local Uri
                                 onImageClick = onImageClick,
                                 onVideoClick = onVideoClick
                             )
@@ -1187,6 +1333,11 @@ fun ChatMediaPreview(
                         )
                     }
                 }
+            }
+                }
+            }
+            else -> {
+                // No valid display source
             }
         }
     }

@@ -130,23 +130,47 @@ class ChatViewModel @AssistedInject constructor(
                     is TweetEvent.ChatMessageSent -> {
                         if (event.message.receiptId == receiptId) {
                             Timber.tag("ChatViewModel").d("Received ChatMessageSent event: ${event.message.id}")
-                            // Deduplication using unique message IDs
-                            if (isNewMessage(event.message, _chatMessages.value)) {
-                                // Add the real message to UI and database only if it's new
+                            
+                            // Check if this is replacing an optimistic message
+                            val hasOptimisticMessage = _chatMessages.value.any { 
+                                it.timestamp == event.message.timestamp && 
+                                it.localAttachmentUri != null &&
+                                it.attachments == null
+                            }
+                            
+                            if (hasOptimisticMessage) {
+                                // Replace optimistic message with real message
+                                _chatMessages.update { messages ->
+                                    messages.map { msg ->
+                                        if (msg.timestamp == event.message.timestamp && 
+                                            msg.localAttachmentUri != null &&
+                                            msg.attachments == null) {
+                                            // Replace with real message
+                                            event.message
+                                        } else {
+                                            msg
+                                        }
+                                    }.sortedBy { it.timestamp }
+                                }
+                                Timber.tag("ChatViewModel").d("Replaced optimistic message with real message: ${event.message.id}")
+                            } else if (isNewMessage(event.message, _chatMessages.value)) {
+                                // Add the real message to UI only if it's new
                                 _chatMessages.update { messages ->
                                     (messages + event.message).sortedBy { it.timestamp }
                                 }
-
-                                // Insert message to database
-                                chatRepository.insertMessage(event.message)
-                                
-                                // Trigger scroll to bottom for messages from current user
-                                if (event.message.authorId == appUser.mid) {
-                                    _shouldScrollToBottom.value = true
-                                }
+                                Timber.tag("ChatViewModel").d("Added new message: ${event.message.id}")
                             } else {
                                 Timber.tag("ChatViewModel").d("Skipping duplicate message: ${event.message.id}")
                             }
+
+                            // Insert message to database
+                            chatRepository.insertMessage(event.message)
+                            
+                            // Trigger scroll to bottom for messages from current user
+                            if (event.message.authorId == appUser.mid) {
+                                _shouldScrollToBottom.value = true
+                            }
+                            
                             // Update chat session (always update, even if message already exists)
                             val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
                                 appUser.mid,
@@ -253,6 +277,29 @@ class ChatViewModel @AssistedInject constructor(
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        
+        val messageTimestamp = System.currentTimeMillis()
+
+        // Create optimistic message with local Uri for immediate display
+        val optimisticMessage = ChatMessage(
+            receiptId = receiptId,
+            authorId = appUser.mid,
+            timestamp = messageTimestamp,
+            content = content.trim().ifBlank { null },
+            attachments = null, // Will be filled in when upload completes
+            sessionId = sessionId,
+            localAttachmentUri = attachmentUri.toString() // Store local Uri for immediate display
+        )
+        
+        // Add optimistic message to UI immediately for instant feedback
+        _chatMessages.update { messages ->
+            (messages + optimisticMessage).sortedBy { it.timestamp }
+        }
+        
+        // Trigger scroll to bottom
+        _shouldScrollToBottom.value = true
+        
+        Timber.tag("ChatViewModel").d("Created optimistic message with local Uri: ${optimisticMessage.id}")
 
         // Create work request for background processing
         val workRequest = OneTimeWorkRequestBuilder<SendChatMessageWorker>()
@@ -262,7 +309,8 @@ class ChatViewModel @AssistedInject constructor(
                     "content" to content,
                     "attachmentUri" to attachmentUri.toString(),
                     "sessionId" to sessionId,
-                    "messageTimestamp" to System.currentTimeMillis()
+                    "messageTimestamp" to messageTimestamp,
+                    "optimisticMessageId" to optimisticMessage.id // Pass message ID to replace later
                 )
             )
             .setBackoffCriteria(
