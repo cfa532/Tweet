@@ -522,6 +522,14 @@ fun TweetListView(
                     listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
                 }
                 
+                // Timeout job to force-hide spinner after 30 seconds if server hangs
+                val timeoutJob = coroutineScope.launch {
+                    delay(10000) // 10 seconds
+                    Timber.tag("TweetListView-LoadMore").w("⚠️ TIMEOUT: Loading took longer than 30s - forcing spinner to hide")
+                    isRefreshingAtBottom = false
+                    pendingLoadMorePage = -1
+                }
+                
                 val loadJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
                     var foundValidTweets = false
                     try {
@@ -546,29 +554,32 @@ fun TweetListView(
                         }
                     } catch (e: Exception) {
                         Timber.tag("TweetListView-LoadMore").e(e, "💥 Error")
-                    } finally {
-                        withContext(NonCancellable + Dispatchers.Main) {
-                            // Min 500ms spinner
-                            val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
-                            if (spinnerDuration < 500L) {
-                                delay(500L - spinnerDuration)
-                            }
-                            
-                            // Clear spinner
-                            isRefreshingAtBottom = false
-                            pendingLoadMorePage = -1
-                            Timber.tag("TweetListView-LoadMore").d("🎡 Spinner OFF (isRefreshingAtBottom=$isRefreshingAtBottom)")
-                            
-                            // Show message if no tweets
-                            if (!foundValidTweets) {
-                                showNoMoreTweetsMessage = true
-                                delay(1000)
-                                showNoMoreTweetsMessage = false
-                                lastNoMoreTweetsShown = System.currentTimeMillis()
-                                Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
-                            }
+                } finally {
+                    withContext(NonCancellable + Dispatchers.Main) {
+                        // Cancel timeout job since loading completed
+                        timeoutJob.cancel()
+                        
+                        // Min 500ms spinner
+                        val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
+                        if (spinnerDuration < 500L) {
+                            delay(500L - spinnerDuration)
+                        }
+                        
+                        // Clear spinner
+                        isRefreshingAtBottom = false
+                        pendingLoadMorePage = -1
+                        Timber.tag("TweetListView-LoadMore").d("🎡 Spinner OFF (displayed for ${spinnerDuration}ms)")
+                        
+                        // Show message if no tweets
+                        if (!foundValidTweets) {
+                            showNoMoreTweetsMessage = true
+                            delay(2000)
+                            showNoMoreTweetsMessage = false
+                            lastNoMoreTweetsShown = System.currentTimeMillis()
+                            Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
                         }
                     }
+                }
                 }
                 
                 addJob("loadMore-$nextPage", loadJob)
