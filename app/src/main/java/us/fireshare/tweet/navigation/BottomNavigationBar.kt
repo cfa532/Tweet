@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.ActivityViewModel
@@ -110,27 +111,30 @@ fun BottomNavigationBar(
         )
     }
 
-    // Stabilize the current route to prevent unnecessary recompositions
-    val currentRoute by remember {
-        derivedStateOf {
-            navController.currentBackStackEntry?.destination?.route
-        }
-    }
+    // Track current route from NavController state
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
-    // Stabilize navigation callback to prevent unnecessary recompositions
-    val onNavigationClick = remember(navController) {
-        { targetRoute: NavTweet ->
-            if (appUser.isGuest() && targetRoute != NavTweet.TweetFeed) {
-                // Handle guest warning
-                return@remember
+    // Navigation callback uses latest route state
+    val onNavigationClick: (NavTweet) -> Unit = onNavigationClick@{ targetRoute ->
+        if (appUser.isGuest() && targetRoute != NavTweet.TweetFeed) {
+            // Handle guest warning
+            return@onNavigationClick
+        }
+        
+        // Only navigate if we're not already on the target route
+        val targetRouteName = targetRoute::class.qualifiedName
+        if (currentRoute != targetRouteName) {
+            if (targetRoute == NavTweet.ChatList) {
+                BadgeStateManager.clearBadge()
             }
-            
-            // Only navigate if we're not already on the target route
-            if (currentRoute != targetRoute.toString()) {
-                if (targetRoute == NavTweet.ChatList) {
-                    BadgeStateManager.clearBadge()
+            // Preserve scroll/state when switching tabs (main feed should keep position)
+            navController.navigate(targetRoute) {
+                launchSingleTop = true
+                restoreState = true
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
                 }
-                navController.navigate(targetRoute)
             }
         }
     }

@@ -189,7 +189,8 @@ fun TweetListView(
     context: String = "default", // Context to determine where this list is shown
     onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
-    onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top programmatically
+    onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top programmatically
+    scrollToTopTrigger: Int = 0 // Increment to trigger scroll-to-top from parent
 ) {
     // Inject SharedViewModel to get TweetListViewModel
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -249,6 +250,14 @@ fun TweetListView(
             if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
                 listState.scrollToItem(0, 0)
             }
+            savedScrollPosition.value = Pair(0, 0)
+        }
+    }
+    
+    // Scroll to top when parent requests it (e.g., app icon tap in main feed)
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0) {
+            listState.scrollToItem(0, 0)
             savedScrollPosition.value = Pair(0, 0)
         }
     }

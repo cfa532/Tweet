@@ -99,6 +99,7 @@ fun TweetFeedScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
+    var scrollToTopTrigger by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
     LaunchedEffect(selectedTabIndex) {
@@ -119,7 +120,9 @@ fun TweetFeedScreen(
             topBar = {
                 MainTopAppBar(
                     navController,
-                    onScrollToTop = null,
+                    onScrollToTop = {
+                        scrollToTopTrigger += 1
+                    },
                     scrollBehavior = scrollBehavior
                 )
             },
@@ -220,7 +223,9 @@ fun TweetFeedScreen(
                                                         // Only restore when user starts scrolling up
                                                     }
                                                 }
-                                            })
+                                            },
+                                            scrollToTopTrigger = scrollToTopTrigger
+                                        )
                                     }
                                 } else {
                                     // Fallback for API < 30

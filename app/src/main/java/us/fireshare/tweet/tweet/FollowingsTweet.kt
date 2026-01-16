@@ -40,6 +40,7 @@ fun FollowingsTweet(
     scrollBehavior: TopAppBarScrollBehavior,
     viewModel: TweetFeedViewModel,
     onScrollStateChange: (ScrollState) -> Unit = {},
+    scrollToTopTrigger: Int = 0,
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val coroutineScope = rememberCoroutineScope()
@@ -112,7 +113,8 @@ fun FollowingsTweet(
                 isAtLastTweet = isAtLast
             },
             onTriggerLoadMore = triggerLoadMore,
-            context = "followingsTweet"
+            context = "followingsTweet",
+            scrollToTopTrigger = scrollToTopTrigger
         )
     }
     
