@@ -57,7 +57,8 @@ fun TweetItemBody(
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
     context: String = "default",
     currentUserId: us.fireshare.tweet.datamodel.MimeiId? = null, // Current profile userId to prevent duplicate navigation
-    onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
+    onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top
+    containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -224,7 +225,12 @@ fun TweetItemBody(
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {
-                                MediaGrid(mediaAttachments, viewModel)
+                                MediaGrid(
+                                    mediaAttachments,
+                                    viewModel,
+                                    parentTweetId = parentTweet?.mid,
+                                    containerTopY = containerTopY
+                                )
                             }
                         }
                         

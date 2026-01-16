@@ -164,7 +164,11 @@ fun CommentItem(
                         tonalElevation = 4.dp,
                         shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaGrid(comment.attachments!!, viewModel)
+                        MediaGrid(
+                            comment.attachments!!,
+                            viewModel,
+                            parentTweetId = comment.mid
+                        )
                     }
                 }
             }

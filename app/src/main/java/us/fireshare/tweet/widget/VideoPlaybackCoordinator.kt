@@ -4,11 +4,31 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
+
+/**
+ * Video playback command - similar to iOS NotificationCenter notifications
+ */
+sealed class VideoPlaybackCommand {
+    data class ShouldPlayVideo(
+        val tweetId: String,
+        val videoMid: MimeiId,
+        val videoIndex: Int,
+        val isPrimary: Boolean
+    ) : VideoPlaybackCommand()
+
+    data class ShouldPauseVideo(val videoMid: MimeiId) : VideoPlaybackCommand()
+    data class ShouldStopVideo(val videoMid: MimeiId) : VideoPlaybackCommand()
+    object ShouldStopAllVideos : VideoPlaybackCommand()
+}
 
 /**
  * Video playback info for tracking individual videos
@@ -47,7 +67,9 @@ object VideoPlaybackCoordinator {
     // Singleton state
     private var visibleVideos = mutableListOf<VideoPlaybackInfo>()
     private var allVideos = mutableListOf<VideoPlaybackInfo>()
-    private var visibleTweetIds = mutableSetOf<String>()
+    private val videoMetaMap = mutableMapOf<String, VideoPlaybackInfo>()
+    private val videoVisibilityMap = mutableMapOf<String, Boolean>()
+    private val videoPositionMap = mutableMapOf<String, Float>()
     
     // Currently playing video identifier
     private var primaryVideoId: String? = null
@@ -55,6 +77,10 @@ object VideoPlaybackCoordinator {
     // Playback debounce timer
     private var playbackDebounceJob: Job? = null
     private const val PLAYBACK_DEBOUNCE_MS = 200L
+
+    // Command flow - similar to iOS NotificationCenter
+    private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 1, extraBufferCapacity = 64)
+    val playbackCommands: SharedFlow<VideoPlaybackCommand> = _playbackCommands.asSharedFlow()
     
     /**
      * Build video list from tweets
@@ -88,45 +114,35 @@ object VideoPlaybackCoordinator {
             val hasTweetContent = tweet.attachments != null && tweet.attachments!!.isNotEmpty()
             val hasOriginalTweet = tweet.originalTweetId != null
             val isPureRetweet = hasOriginalTweet && !hasTweetContent
-            
-            if (isPureRetweet && tweet.originalTweetId != null) {
-                // PURE RETWEET: Get attachments from original tweet, use retweet's ID for positioning
-                // Note: For now, we'll process the retweet's own attachments if any
-                // In a full implementation, you might want to fetch the original tweet
-                tweet.attachments?.forEachIndexed { index, attachment ->
-                    if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                        val videoInfo = VideoPlaybackInfo(
-                            tweetId = tweet.mid,
-                            videoMid = attachment.mid,
-                            index = index
-                        )
-                        
-                        if (!seenVideoIdentifiers.contains(videoInfo.identifier)) {
-                            videos.add(videoInfo)
-                            seenVideoIdentifiers.add(videoInfo.identifier)
-                        }
-                    }
-                }
+
+            val attachmentsToProcess = if (isPureRetweet && tweet.originalTweetId != null) {
+                // Retweet: track by retweet id + video mid
+                // Use cached original tweet attachments if available
+                TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)?.attachments ?: tweet.attachments
             } else {
-                // REGULAR TWEET: Process the tweet's own attachments
-                tweet.attachments?.forEachIndexed { index, attachment ->
-                    if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                        val videoInfo = VideoPlaybackInfo(
-                            tweetId = tweet.mid,
-                            videoMid = attachment.mid,
-                            index = index
-                        )
-                        
-                        if (!seenVideoIdentifiers.contains(videoInfo.identifier)) {
-                            videos.add(videoInfo)
-                            seenVideoIdentifiers.add(videoInfo.identifier)
-                        }
+                tweet.attachments
+            }
+
+            attachmentsToProcess?.forEachIndexed { index, attachment ->
+                if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                    val videoInfo = VideoPlaybackInfo(
+                        tweetId = tweet.mid,
+                        videoMid = attachment.mid,
+                        index = index
+                    )
+
+                    if (!seenVideoIdentifiers.contains(videoInfo.identifier)) {
+                        videos.add(videoInfo)
+                        seenVideoIdentifiers.add(videoInfo.identifier)
                     }
                 }
             }
         }
         
         allVideos = videos
+        videos.forEach { videoInfo ->
+            videoMetaMap[videoInfo.identifier] = videoInfo
+        }
         
         // Share the video list with FullScreenPlayerManager to avoid duplicate tracking
         // This consolidates video tracking in one place, similar to iOS implementation
@@ -145,36 +161,68 @@ object VideoPlaybackCoordinator {
     }
     
     /**
-     * Update visible tweets
-     * Similar to iOS updateVisibleTweets(_:)
+     * Update individual video visibility (called by VideoPreview's onGloballyPositioned)
      */
-    fun updateVisibleTweets(tweetIds: Set<String>) {
-        visibleTweetIds = tweetIds.toMutableSet()
-        updateVisibleVideos()
+    fun updateVideoVisibility(
+        videoMid: MimeiId,
+        tweetId: String,
+        isVisible: Boolean,
+        topY: Float? = null
+    ) {
+        val identifier = "${tweetId}_$videoMid"
+        val previousVisibility = videoVisibilityMap[identifier] ?: false
+
+        if (videoMetaMap[identifier] == null) {
+            videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
+        }
+
+        topY?.let { videoPositionMap[identifier] = it }
+        if (previousVisibility != isVisible) {
+            videoVisibilityMap[identifier] = isVisible
+            Timber.d("VideoPlaybackCoordinator: Video $videoMid (identifier: $identifier, tweet: $tweetId) visibility changed: $previousVisibility -> $isVisible (topY=$topY)")
+            updateVisibleVideos()
+        }
     }
-    
+
     /**
-     * Update visible videos based on visible tweet IDs
+     * Update visible videos based on video visibility reports
      */
     private fun updateVisibleVideos() {
-        visibleVideos = allVideos.filter { visibleTweetIds.contains(it.tweetId) }.toMutableList()
-        
-        // Stop videos that are no longer visible
-        primaryVideoId?.let { currentPrimary ->
-            val primaryStillVisible = visibleVideos.any { it.identifier == currentPrimary }
-            if (!primaryStillVisible) {
-                stopAllVideos()
-            }
-        }
-        
-        // If no videos visible, stop all
+        val previousVisibleIds = visibleVideos.map { it.identifier }.toSet()
+
+        visibleVideos = videoMetaMap.values.filter { videoInfo ->
+            videoVisibilityMap[videoInfo.identifier] == true
+        }.sortedBy { videoInfo ->
+            videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
+        }.toMutableList()
+
         if (visibleVideos.isEmpty()) {
             stopAllVideos()
             return
         }
-        
-        // Start playback with debounce if we have visible videos and no primary
-        if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
+
+        // Stop videos no longer visible
+        val currentVisibleIds = visibleVideos.map { it.identifier }.toSet()
+        val videosToStop = previousVisibleIds - currentVisibleIds
+        videosToStop.forEach { identifier ->
+            val info = videoMetaMap[identifier]
+            if (info != null) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.videoMid))
+                }
+            }
+        }
+
+        val topmostIdentifier = visibleVideos.first().identifier
+
+        // If primary not visible or not topmost, reset and reselect
+        if (primaryVideoId != null) {
+            if (primaryVideoId !in currentVisibleIds || primaryVideoId != topmostIdentifier) {
+                primaryVideoId = null
+            }
+        }
+
+        if (primaryVideoId == null) {
             startPlaybackWithDebounce()
         }
     }
@@ -211,9 +259,24 @@ object VideoPlaybackCoordinator {
         primaryVideoId = primary.identifier
         
         Timber.d("VideoPlaybackCoordinator: Starting playback for primary video: ${primary.videoMid}")
-        
-        // Playback is handled by individual VideoPreview components
-        // They will check if they should autoplay based on coordinator state
+
+        // Pause other visible videos and play primary
+        CoroutineScope(Dispatchers.Main).launch {
+            visibleVideos.forEach { videoInfo ->
+                if (videoInfo.identifier == primary.identifier) {
+                    _playbackCommands.emit(
+                        VideoPlaybackCommand.ShouldPlayVideo(
+                            tweetId = videoInfo.tweetId,
+                            videoMid = videoInfo.videoMid,
+                            videoIndex = videoInfo.index,
+                            isPrimary = true
+                        )
+                    )
+                } else {
+                    _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(videoInfo.videoMid))
+                }
+            }
+        }
     }
     
     /**
@@ -222,8 +285,6 @@ object VideoPlaybackCoordinator {
      */
     fun shouldAutoPlay(videoMid: MimeiId, tweetId: String): Boolean {
         val identifier = "${tweetId}_$videoMid"
-        
-        // Only autoplay if this is the primary video
         return primaryVideoId == identifier && visibleVideos.isNotEmpty()
     }
     
@@ -241,6 +302,16 @@ object VideoPlaybackCoordinator {
                 val nextVideo = visibleVideos[currentIndex + 1]
                 primaryVideoId = nextVideo.identifier
                 Timber.d("VideoPlaybackCoordinator: Moving to next video: ${nextVideo.videoMid}")
+                CoroutineScope(Dispatchers.Main).launch {
+                    _playbackCommands.emit(
+                        VideoPlaybackCommand.ShouldPlayVideo(
+                            tweetId = nextVideo.tweetId,
+                            videoMid = nextVideo.videoMid,
+                            videoIndex = nextVideo.index,
+                            isPrimary = true
+                        )
+                    )
+                }
             } else {
                 // No more videos, stop playback
                 stopAllVideos()
@@ -256,6 +327,9 @@ object VideoPlaybackCoordinator {
         playbackDebounceJob?.cancel()
         playbackDebounceJob = null
         primaryVideoId = null
+        CoroutineScope(Dispatchers.Main).launch {
+            _playbackCommands.emit(VideoPlaybackCommand.ShouldStopAllVideos)
+        }
         Timber.d("VideoPlaybackCoordinator: Stopped all videos")
     }
     
@@ -266,7 +340,9 @@ object VideoPlaybackCoordinator {
         stopAllVideos()
         visibleVideos.clear()
         allVideos.clear()
-        visibleTweetIds.clear()
+        videoMetaMap.clear()
+        videoVisibilityMap.clear()
+        videoPositionMap.clear()
     }
 }
 

@@ -50,6 +50,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -74,7 +75,10 @@ fun MediaItemView(
     onVideoCompleted: (() -> Unit)? = null,
     useIndependentVideoMute: Boolean = false, // For TweetDetailView - videos independent of global mute
     enableTapToShowControls: Boolean = false, // For TweetDetailView - enable tap-to-show controls
-    allMediaItems: List<MimeiFileType>? = null // All media items for full screen navigation (if different from mediaItems)
+    allMediaItems: List<MimeiFileType>? = null, // All media items for full screen navigation (if different from mediaItems)
+    parentTweetId: MimeiId? = null,
+    enableCoordinator: Boolean = true,
+    containerTopY: Float? = null
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
@@ -90,6 +94,7 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val playbackTweetId = if (enableCoordinator) (parentTweetId ?: tweet.mid) else null
     /**
      * Action to take when any media item is clicked.
      * Images and videos open in full-screen mode, audio files navigate to tweet detail page, 
@@ -212,7 +217,9 @@ fun MediaItemView(
                         videoType = attachment.type,
                         onVideoCompleted = onVideoCompleted,
                         useIndependentMuteState = useIndependentVideoMute,
-                        enableTapToShowControls = enableTapToShowControls
+                        enableTapToShowControls = enableTapToShowControls,
+                        playbackTweetId = playbackTweetId,
+                        containerTopY = containerTopY
                     )
                 }
             }

@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -99,6 +100,7 @@ fun TweetItem(
 
     // Optimize: Use remember for visibility state to reduce recomposition
     var isVisible by remember { mutableStateOf(false) }
+    var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
     val debounceMs = 100L // 100ms debounce for visibility detection
     
@@ -138,6 +140,7 @@ fun TweetItem(
                     isVisible = isElementVisible(layoutCoordinates, 50)
                     lastVisibilityUpdate = now
                 }
+                tweetTopY = layoutCoordinates.boundsInRoot().top
             }
     ) {
         when {
@@ -150,7 +153,8 @@ fun TweetItem(
                     onTweetUnavailable = onTweetUnavailable,
                     context = context,
                     currentUserId = currentUserId,
-                    onScrollToTop = onScrollToTop
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
                 )
             }
             isRetweetWithContent -> {
@@ -161,12 +165,20 @@ fun TweetItem(
                     onTweetUnavailable = onTweetUnavailable,
                     context = context,
                     currentUserId = currentUserId,
-                    onScrollToTop = onScrollToTop
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
                 )
             }
             else -> {
                 // Original tweet
-                TweetItemBody(viewModel, parentEntry = parentEntry, context = context, currentUserId = currentUserId, onScrollToTop = onScrollToTop)
+                TweetItemBody(
+                    viewModel,
+                    parentEntry = parentEntry,
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
+                )
             }
         }
     }
@@ -181,7 +193,8 @@ private fun RetweetContent(
     onTweetUnavailable: ((MimeiId) -> Unit)?,
     context: String = "default",
     currentUserId: MimeiId? = null,
-    onScrollToTop: (suspend () -> Unit)? = null
+    onScrollToTop: (suspend () -> Unit)? = null,
+    containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
     Surface(
@@ -298,7 +311,8 @@ private fun RetweetContent(
                             modifier = Modifier.offset(y = (-8).dp),
                             context = context,
                             currentUserId = currentUserId,
-                            onScrollToTop = onScrollToTop
+                            onScrollToTop = onScrollToTop,
+                            containerTopY = containerTopY
                         )
                     }
                 }
@@ -322,7 +336,8 @@ private fun RetweetWithContent(
     onTweetUnavailable: ((MimeiId) -> Unit)?,
     context: String = "default",
     currentUserId: MimeiId? = null,
-    onScrollToTop: (suspend () -> Unit)? = null
+    onScrollToTop: (suspend () -> Unit)? = null,
+    containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -475,10 +490,12 @@ private fun RetweetWithContent(
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {
-                                MediaGrid(
-                                    tweet.attachments!!,
-                                    viewModel
-                                )
+                MediaGrid(
+                    tweet.attachments!!,
+                    viewModel,
+                    parentTweetId = tweet.mid,
+                    containerTopY = containerTopY
+                )
                             }
                         }
                     }
@@ -489,7 +506,8 @@ private fun RetweetWithContent(
                     tweet = tweet,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    containerTopY = containerTopY
                 )
 
                 Row(
@@ -516,7 +534,8 @@ private fun QuotedTweetContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    containerTopY: Float? = null
 ) {
     // Use remember with a stable key based on originalTweetId to maintain state across recompositions
     val originalTweetId = tweet.originalTweetId
@@ -596,7 +615,9 @@ private fun QuotedTweetContent(
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     isQuoted = true,
                     parentEntry = parentEntry,
-                    context = context
+                    parentTweet = tweet,
+                    context = context,
+                    containerTopY = containerTopY
                 )
             }
         }

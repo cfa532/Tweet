@@ -46,6 +46,7 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -77,7 +78,10 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 @Composable
 fun MediaGrid(
     mediaItems: List<MimeiFileType>,
-    viewModel: TweetViewModel
+    viewModel: TweetViewModel,
+    parentTweetId: MimeiId? = null,
+    enableCoordinator: Boolean = true,
+    containerTopY: Float? = null
 ) {
     Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
@@ -227,6 +231,9 @@ fun MediaGrid(
                     inPreviewGrid = true,
                     loadOriginalImage = true, // Load original high-res image for single image
                     viewModel = viewModel,
+                    parentTweetId = parentTweetId,
+                    enableCoordinator = enableCoordinator,
+                    containerTopY = containerTopY,
                     allMediaItems = mediaItems // Pass all items for full screen navigation
                 )
             }
@@ -266,6 +273,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -283,6 +293,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -325,6 +338,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -342,6 +358,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -382,6 +401,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -399,6 +421,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -442,6 +467,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -459,6 +487,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                                 allMediaItems = mediaItems
                             )
                         }
@@ -507,6 +538,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                             )
                         }
                         // Second and third: right side (38.2%), stacked with proportional heights
@@ -526,7 +560,10 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                             Box(
@@ -541,7 +578,10 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                         }
@@ -575,6 +615,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                             )
                         }
                         // Second and third: bottom (38.2%), side by side with proportional widths
@@ -596,7 +639,10 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                             Box(
@@ -611,7 +657,10 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                         }
@@ -648,6 +697,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                             )
                         }
                         // Second and third: right side (38.2%), stacked with proportional heights
@@ -667,7 +719,10 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                             Box(
@@ -682,7 +737,10 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                         }
@@ -717,6 +775,9 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
+                                parentTweetId = parentTweetId,
+                                enableCoordinator = enableCoordinator,
+                                containerTopY = containerTopY,
                             )
                         }
                         // Second and third: bottom (38.2%), side by side with proportional widths
@@ -738,7 +799,10 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                             Box(
@@ -753,7 +817,10 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    parentTweetId = parentTweetId,
+                                    enableCoordinator = enableCoordinator,
+                                    containerTopY = containerTopY,
                                 )
                             }
                         }
@@ -820,6 +887,9 @@ fun MediaGrid(
                             autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
+                            parentTweetId = parentTweetId,
+                            enableCoordinator = enableCoordinator,
+                            containerTopY = containerTopY,
                             allMediaItems = mediaItems // Pass all items for full screen navigation
                         )
                     }

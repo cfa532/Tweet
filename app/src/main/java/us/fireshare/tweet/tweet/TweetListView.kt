@@ -74,6 +74,7 @@ import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import us.fireshare.tweet.widget.rememberTweetVideoPreloader
 
@@ -364,6 +365,7 @@ fun TweetListView(
                             videoIndexedList = newVideoList
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
+                            VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = emptyList())
                         }
                     } else if (tweets.size > lastProcessedTweetCount) {
                         // PERF FIX: Use takeLast instead of filter for O(1) slice
@@ -382,6 +384,7 @@ fun TweetListView(
                                 videoIndexedList = videoIndexedList + newVideos
                                 tweetListViewModel.setVideoIndexedList(videoIndexedList)
                                 onVideoIndexedListChange?.invoke(videoIndexedList)
+                                VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = emptyList())
                             }
                         }
                     }

@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -78,7 +79,9 @@ fun VideoPreview(
     onLoadComplete: (() -> Unit)? = null,
     onVideoCompleted: (() -> Unit)? = null,
     useIndependentMuteState: Boolean = false, // For TweetDetailView - independent of global mute state
-    enableTapToShowControls: Boolean = false // New parameter for tap-to-show controls
+    enableTapToShowControls: Boolean = false, // New parameter for tap-to-show controls
+    playbackTweetId: MimeiId? = null, // Container tweet id for coordinator tracking
+    containerTopY: Float? = null
 ) {
     val context = LocalContext.current
 
@@ -98,6 +101,35 @@ fun VideoPreview(
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
     var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
     val maxRetries = 3
+    val shouldUseCoordinator = playbackTweetId != null && videoMid != null
+    var coordinatorWantsToPlay by remember(videoMid, playbackTweetId) { mutableStateOf(false) }
+    val shouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
+    LaunchedEffect(videoMid, playbackTweetId) {
+        if (!shouldUseCoordinator) {
+            coordinatorWantsToPlay = false
+            return@LaunchedEffect
+        }
+        VideoPlaybackCoordinator.playbackCommands.collect { command ->
+            when (command) {
+                is VideoPlaybackCommand.ShouldPlayVideo -> {
+                    coordinatorWantsToPlay = command.videoMid == videoMid && command.tweetId == playbackTweetId
+                }
+                is VideoPlaybackCommand.ShouldPauseVideo -> {
+                    if (command.videoMid == videoMid) {
+                        coordinatorWantsToPlay = false
+                    }
+                }
+                is VideoPlaybackCommand.ShouldStopVideo -> {
+                    if (command.videoMid == videoMid) {
+                        coordinatorWantsToPlay = false
+                    }
+                }
+                VideoPlaybackCommand.ShouldStopAllVideos -> {
+                    coordinatorWantsToPlay = false
+                }
+            }
+        }
+    }
     
     // Use lifecycle-aware coroutine scope for retry operations to prevent memory leaks
     val retryScope = rememberCoroutineScope()
@@ -142,8 +174,9 @@ fun VideoPreview(
                 }
 
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                    // Resume video playback if it was playing before
-                    if (isVideoVisible && autoPlay) {
+                    // Resume video playback if coordinator/autoPlay wants it
+                    val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+                    if (effectivelyVisible && shouldPlay) {
                         exoPlayer.playWhenReady = true
                     }
                 }
@@ -162,8 +195,9 @@ fun VideoPreview(
         }
     }
 
-    LaunchedEffect(isVideoVisible) {
-        if (isVideoVisible) {
+    LaunchedEffect(isVideoVisible, shouldPlay) {
+        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+        if (effectivelyVisible) {
             // Mark video as active in VideoManager
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
@@ -176,7 +210,7 @@ fun VideoPreview(
             when (exoPlayer.playbackState) {
                 androidx.media3.common.Player.STATE_READY -> {
                     // Player is ready, just start playing if needed
-                    exoPlayer.playWhenReady = autoPlay
+                    exoPlayer.playWhenReady = shouldPlay
                     isLoading = false
                     hasError = false // Clear any previous errors when becoming visible
                 }
@@ -198,7 +232,7 @@ fun VideoPreview(
                 }
                 androidx.media3.common.Player.STATE_BUFFERING -> {
                     // Player is buffering, just set play state
-                    exoPlayer.playWhenReady = autoPlay
+                    exoPlayer.playWhenReady = shouldPlay
                     isLoading = true
                     hasError = false
                 }
@@ -234,8 +268,9 @@ fun VideoPreview(
     }
 
     // React to changes in autoPlay while visible (for sequential playback)
-    LaunchedEffect(autoPlay, isVideoVisible) {
-        if (!isVideoVisible) return@LaunchedEffect
+    LaunchedEffect(shouldPlay, isVideoVisible) {
+        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+        if (!effectivelyVisible) return@LaunchedEffect
         try {
             // Always keep repeat mode off for previews
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
@@ -244,7 +279,7 @@ fun VideoPreview(
             when (exoPlayer.playbackState) {
                 androidx.media3.common.Player.STATE_READY -> {
                     // Player is ready, safe to play/pause
-                    exoPlayer.playWhenReady = autoPlay
+                    exoPlayer.playWhenReady = shouldPlay
                 }
                 androidx.media3.common.Player.STATE_IDLE -> {
                     // Player is idle, check if we have media items
@@ -260,7 +295,7 @@ fun VideoPreview(
                 }
                 androidx.media3.common.Player.STATE_BUFFERING -> {
                     // Player is buffering, safe to set play state
-                    exoPlayer.playWhenReady = autoPlay
+                    exoPlayer.playWhenReady = shouldPlay
                 }
                 androidx.media3.common.Player.STATE_ENDED -> {
                     // Video ended - rewind is handled by CreateExoPlayer listener
@@ -268,7 +303,7 @@ fun VideoPreview(
                 }
                 else -> {
                     // For other states, just set play state
-                    exoPlayer.playWhenReady = autoPlay
+                    exoPlayer.playWhenReady = shouldPlay
                 }
             }
         } catch (e: Exception) {
@@ -356,6 +391,9 @@ fun VideoPreview(
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)
                         }
+                    if (videoMid != null && playbackTweetId != null) {
+                        VideoPlaybackCoordinator.handleVideoFinished(videoMid, playbackTweetId)
+                    }
                         // Call the completion callback for sequential playback
                         onVideoCompleted?.invoke()
                     }
@@ -509,6 +547,10 @@ fun VideoPreview(
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
                     isVideoVisible = newVisibility
+                }
+                if (videoMid != null && playbackTweetId != null) {
+                    val topY = containerTopY ?: layoutCoordinates.boundsInRoot().top
+                    VideoPlaybackCoordinator.updateVideoVisibility(videoMid, playbackTweetId, newVisibility, topY)
                 }
             }
             .clickable {

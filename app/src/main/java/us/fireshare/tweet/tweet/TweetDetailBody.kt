@@ -334,7 +334,8 @@ fun AttachmentBrowser(
                     viewModel = viewModel,
                     onVideoCompleted = null,
                     useIndependentVideoMute = true,
-                    enableTapToShowControls = true
+                    enableTapToShowControls = true,
+                    enableCoordinator = false
                 )
             }
         }
