@@ -150,13 +150,14 @@ fun MediaGrid(
     // Preload videos and images
     LaunchedEffect(limitedMediaList) {
         // Preload videos to reduce memory pressure
+        // Use LaunchedEffect's coroutine scope (launch) so children are cancelled when composable is disposed
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
             if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                 if (!VideoManager.isVideoPreloaded(item.mid)) {
-                    // Use application scope to avoid blocking the UI thread
-                    CoroutineScope(Dispatchers.IO).launch {
+                    // Launch in LaunchedEffect's scope so it's cancelled when composable is disposed
+                    launch(Dispatchers.IO) {
                         try {
                             VideoManager.preloadVideo(context, item.mid, mediaUrl, item.type)
                         } catch (e: Exception) {
@@ -173,8 +174,8 @@ fun MediaGrid(
             val mediaType = inferMediaTypeFromAttachment(item)
             if (mediaType == MediaType.Image) {
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-                // Use application scope to avoid blocking the UI thread
-                CoroutineScope(Dispatchers.IO).launch {
+                // Launch in LaunchedEffect's scope so it's cancelled when composable is disposed
+                launch(Dispatchers.IO) {
                     try {
                         ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
                     } catch (e: Exception) {

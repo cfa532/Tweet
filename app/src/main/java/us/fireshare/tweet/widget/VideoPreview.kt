@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,6 +98,9 @@ fun VideoPreview(
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
     var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
     val maxRetries = 3
+    
+    // Use lifecycle-aware coroutine scope for retry operations to prevent memory leaks
+    val retryScope = rememberCoroutineScope()
 
     // Use VideoLoadingManager to track visibility and manage loading
     videoMid?.let { mid ->
@@ -423,7 +427,8 @@ fun VideoPreview(
                     hasError = false
                     
                     // Force recreate with software decoder with delay to prevent rapid retries
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                    retryScope.launch {
                         try {
                             // Add delay before retry to prevent rapid retry loops
                             delay(1000) // Wait 1 second before MediaCodec recovery attempt
@@ -462,7 +467,8 @@ fun VideoPreview(
                     hasError = false
                     
                     // Retry after a delay
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                    retryScope.launch {
                         delay(1000) // Wait 1 second before retry
                         if (isLoading && !hasError) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
@@ -600,7 +606,8 @@ fun VideoPreview(
                                 Timber.tag("VideoPreview").d("Manual retry attempt $retryCount for video: $videoMid")
                                 
                                 // Attempt recovery on the main thread (required for ExoPlayer)
-                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                                retryScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                     try {
                                         // Force recreate with software decoder for manual retry
                                         val success = VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
