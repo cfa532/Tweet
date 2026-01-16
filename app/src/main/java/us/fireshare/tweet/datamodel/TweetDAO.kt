@@ -141,8 +141,20 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet ORDER BY tweetTimestamp DESC LIMIT :limit")
     fun getRecentCachedTweets(limit: Int): List<CachedTweet>
 
-    @Query("SELECT * FROM CachedTweet WHERE uid = :userId ORDER BY tweetTimestamp DESC" +
-            " LIMIT :count OFFSET :offset")
+    /**
+     * Get cached tweets by user ID.
+     * For bookmarks and favorites, order by cache timestamp to preserve server order
+     * (cache timestamp reflects the order they were saved, which matches server order).
+     * For regular tweets, order by tweet creation timestamp.
+     */
+    @Query("SELECT * FROM CachedTweet WHERE uid = :userId " +
+            "ORDER BY " +
+            "CASE " +
+            "  WHEN uid LIKE '%_bookmarks' THEN timestamp " +
+            "  WHEN uid LIKE '%_favorites' THEN timestamp " +
+            "  ELSE tweetTimestamp " +
+            "END DESC " +
+            "LIMIT :count OFFSET :offset")
     fun getCachedTweetsByUser(userId: MimeiId, offset: Int, count: Int): List<CachedTweet>
 
     /**

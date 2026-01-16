@@ -224,10 +224,16 @@ fun TweetListView(
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Remember scroll position across recompositions and configuration changes
-    val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
+    val isBookmarksOrFavorites = context == "appUserBookmarks" || context == "appUserFavorites"
+    val shouldRestoreScroll = restoreScrollPosition && !isBookmarksOrFavorites
+    val savedScrollPosition = if (shouldRestoreScroll) {
+        rememberSaveable(key = context) { mutableStateOf(Pair(0, 0)) }
+    } else {
+        remember { mutableStateOf(Pair(0, 0)) }
+    }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = if (restoreScrollPosition) savedScrollPosition.value.first else 0,
-        initialFirstVisibleItemScrollOffset = if (restoreScrollPosition) savedScrollPosition.value.second else 0
+        initialFirstVisibleItemIndex = if (shouldRestoreScroll) savedScrollPosition.value.first else 0,
+        initialFirstVisibleItemScrollOffset = if (shouldRestoreScroll) savedScrollPosition.value.second else 0
     )
     val coroutineScope = rememberCoroutineScope()
     
@@ -236,6 +242,16 @@ fun TweetListView(
     var lastCleanupTime by remember { mutableLongStateOf(0L) }
     var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
     val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
+    
+    // Ensure bookmarks/favorites always start at top (no scroll restore)
+    LaunchedEffect(context, tweets.isNotEmpty(), shouldRestoreScroll) {
+        if (!shouldRestoreScroll && tweets.isNotEmpty()) {
+            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+                listState.scrollToItem(0, 0)
+            }
+            savedScrollPosition.value = Pair(0, 0)
+        }
+    }
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup
     fun addJob(id: String, job: Job) {

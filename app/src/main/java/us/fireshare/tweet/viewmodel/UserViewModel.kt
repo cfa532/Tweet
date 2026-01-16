@@ -681,11 +681,11 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list and sort it
-            _bookmarks.value = validTweets.sortedByDescending { it.timestamp }
+            // For refresh (page 0), replace the list and preserve server order
+            _bookmarks.value = validTweets
             // Don't override the count - it should come from server data, not local list size
         } else {
-            // For load more (page > 0), append to the list
+            // For load more (page > 0), append to the list while preserving order
             _bookmarks.update { currentBookmarks ->
                 val newTweetsMap = validTweets.associateBy { it.mid }
                 val updatedBookmarks = currentBookmarks.map { bookmark ->
@@ -693,7 +693,6 @@ class UserViewModel @AssistedInject constructor(
                 }
                 val finalBookmarks = (updatedBookmarks + validTweets)
                     .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
 
                 // Don't override the count - it should come from server data, not local list size
                 finalBookmarks
@@ -800,11 +799,11 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list and sort it
-            _favorites.value = validTweets.sortedByDescending { it.timestamp }
+            // For refresh (page 0), replace the list and preserve server order
+            _favorites.value = validTweets
             // Don't override the count - it should come from server data, not local list size
         } else {
-            // For load more (page > 0), append to the list
+            // For load more (page > 0), append to the list while preserving order
             _favorites.update { currentFavorites ->
                 val newTweetsMap = validTweets.associateBy { it.mid }
                 val updatedFavorites = currentFavorites.map { favorite ->
@@ -812,7 +811,6 @@ class UserViewModel @AssistedInject constructor(
                 }
                 val finalFavorites = (updatedFavorites + validTweets)
                     .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
 
                 // Don't override the count - it should come from server data, not local list size
                 finalFavorites
@@ -1658,10 +1656,10 @@ class UserViewModel @AssistedInject constructor(
             _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
         }
         if (inFavorites && !favorites.value.any { it.mid == tweet.mid }) {
-            _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }
         }
         if (inBookmarks && !bookmarks.value.any { it.mid == tweet.mid }) {
-            _bookmarks.value = (listOf(tweet) + bookmarks.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            _bookmarks.value = (listOf(tweet) + bookmarks.value).distinctBy { it.mid }
         }
     }
 }

@@ -111,7 +111,8 @@ fun UserBookmarks(
                 },
                 context = "appUserBookmarks",
                 showPrivateTweets = true,
-                parentEntry = parentEntry
+                parentEntry = parentEntry,
+                restoreScrollPosition = false // Always start from top for bookmarks
             )
         }
     }
