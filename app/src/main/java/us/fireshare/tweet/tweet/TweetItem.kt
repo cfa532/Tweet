@@ -391,14 +391,14 @@ private fun RetweetWithContent(
                             }
                         }
                     },
-                    modifier = Modifier.width(44.dp)
+                    modifier = Modifier.width(48.dp)
                 ) {
                     UserAvatar(
                         user = author ?: us.fireshare.tweet.datamodel.User(
                             mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                             baseUrl = appUser.baseUrl
                         ),
-                        size = 32
+                        size = 38
                     )
                 }
             }
@@ -546,19 +546,10 @@ private fun QuotedTweetContent(
         if (originalTweetId != null && tweet.originalAuthorId != null) {
             try {
                 withContext(IO) {
-                    Timber.tag("TweetItem")
-                        .d("Fetching quoted original tweet: $originalTweetId from author: ${tweet.originalAuthorId}")
                     originalTweet = HproseInstance.fetchTweet(
                         originalTweetId,
                         tweet.originalAuthorId!!
                     )
-                    if (originalTweet != null) {
-                        Timber.tag("TweetItem")
-                            .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
-                    } else {
-                        Timber.tag("TweetItem")
-                            .w("Quoted original tweet not found: $originalTweetId")
-                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetItem").e(

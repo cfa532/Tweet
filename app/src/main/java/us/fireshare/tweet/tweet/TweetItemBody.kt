@@ -88,7 +88,6 @@ fun TweetItemBody(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
-            .padding(start = 4.dp, end = 4.dp)
             .clickable(enabled = canNavigate, onClick = {
                 // necessary to deal with corrupted data.
                 if (canNavigate) {
@@ -125,7 +124,7 @@ fun TweetItemBody(
                             mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                             baseUrl = appUser.baseUrl
                         ),
-                        size = 36
+                        size = 38
                     )
                 }
             }
@@ -133,6 +132,7 @@ fun TweetItemBody(
             // Right column: User info, content, and actions
             Column(
                 modifier = Modifier.fillMaxWidth()
+                    .padding(end = 4.dp)
             ) {
                 // Top row: User info and dropdown menu
                 Row(
