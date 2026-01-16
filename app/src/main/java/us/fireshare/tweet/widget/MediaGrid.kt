@@ -81,7 +81,6 @@ fun MediaGrid(
 ) {
     Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
-    val savedVideoIndex by viewModel.mediaGridVideoIndex.collectAsState()
     val navController = LocalNavController.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
@@ -142,81 +141,27 @@ fun MediaGrid(
             }.takeIf { it >= 0 } ?: -1
         }
     }
-    
-    // Set up sequential playback for multiple videos
-    val videoMids by remember(limitedMediaList) {
-        derivedStateOf {
-            limitedMediaList.mapIndexedNotNull { index, item ->
-                val mediaType = inferMediaTypeFromAttachment(item)
-                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) item.mid else null
-            }
-        }
-    }
-    
-    // Build mapping between video-only list and grid indices
-    val videoGridIndices by remember(limitedMediaList) {
-        derivedStateOf {
-            limitedMediaList.mapIndexedNotNull { index, item ->
-                val mediaType = inferMediaTypeFromAttachment(item)
-                if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) index else null
-            }
-        }
-    }
-
-    // Track current playing video as index within videoGridIndices
-    var currentVideoListIndex by remember { mutableStateOf(-1) }
-
-    LaunchedEffect(videoMids, savedVideoIndex) {
-        currentVideoListIndex = when {
-            videoMids.isEmpty() -> -1
-            savedVideoIndex in videoGridIndices.indices -> savedVideoIndex
-            firstVideoIndex >= 0 -> 0
-            else -> -1
-        }
-    }
-
-    LaunchedEffect(currentVideoListIndex) {
-        viewModel.updateMediaGridVideoIndex(currentVideoListIndex)
-    }
 
     fun isAutoPlayForGridIndex(gridIndex: Int): Boolean {
-        return currentVideoListIndex >= 0 &&
-            currentVideoListIndex < videoGridIndices.size &&
-            videoGridIndices[currentVideoListIndex] == gridIndex
+        // Only autoplay the first video in the grid
+        return firstVideoIndex >= 0 && gridIndex == firstVideoIndex
     }
     
-    // Optimize: Use LaunchedEffect with proper keys to avoid unnecessary video setup
-    LaunchedEffect(videoMids) {
-        if (videoMids.size > 1) {
-            // For multiple videos, only the first one should autoplay initially
-            if (currentVideoListIndex == -1) {
-                currentVideoListIndex = 0
-            }
-            VideoManager.setupSequentialPlayback(videoMids)
-        } else if (videoMids.size == 1) {
-            // Single video - no sequential playback needed
-            if (currentVideoListIndex == -1) {
-                currentVideoListIndex = 0
-            }
-            VideoManager.stopSequentialPlayback()
-        } else {
-            currentVideoListIndex = -1
-            VideoManager.stopSequentialPlayback()
-        }
-        
-        // Preload only visible videos to reduce memory pressure
-        videoMids.forEachIndexed { index, videoMid ->
-            val mediaItem = limitedMediaList.find { it.mid == videoMid }
-            mediaItem?.let { item ->
+    // Preload videos and images
+    LaunchedEffect(limitedMediaList) {
+        // Preload videos to reduce memory pressure
+        limitedMediaList.forEach { item ->
+            val mediaType = inferMediaTypeFromAttachment(item)
+            if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-                if (!VideoManager.isVideoPreloaded(videoMid)) {
+                if (!VideoManager.isVideoPreloaded(item.mid)) {
                     // Use application scope to avoid blocking the UI thread
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            VideoManager.preloadVideo(context, videoMid, mediaUrl, item.type)
+                            VideoManager.preloadVideo(context, item.mid, mediaUrl, item.type)
                         } catch (e: Exception) {
                             // Log error but don't block UI
-                            Timber.tag("MediaGrid").e(e, "Failed to preload video: $videoMid")
+                            Timber.tag("MediaGrid").e(e, "Failed to preload video: ${item.mid}")
                         }
                     }
                 }
@@ -224,66 +169,19 @@ fun MediaGrid(
         }
         
         // Preload images for faster loading
-        val imageMids = limitedMediaList.mapNotNull { item ->
+        limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
-            if (mediaType == MediaType.Image) item.mid else null
-        }
-        
-        imageMids.forEach { imageMid ->
-            val mediaItem = limitedMediaList.find { it.mid == imageMid }
-            mediaItem?.let { item ->
+            if (mediaType == MediaType.Image) {
                 val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
                 // Use application scope to avoid blocking the UI thread
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        ImageCacheManager.preloadImages(context, imageMid, mediaUrl)
+                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
                     } catch (e: Exception) {
                         // Log error but don't block UI
-                        Timber.tag("MediaGrid").e(e, "Failed to preload image: $imageMid")
+                        Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
                     }
                 }
-            }
-        }
-    }
-    
-    // Handle sequential video completion
-    LaunchedEffect(currentVideoListIndex) {
-        if (videoMids.size > 1 && currentVideoListIndex >= 0) {
-            // Set up completion listener for current video
-            val currentVideoMid = videoMids[currentVideoListIndex]
-            currentVideoMid?.let { mid ->
-                // Wait for video to complete and then move to next
-                delay(100) // Small delay to ensure video is loaded
-                // The actual completion handling will be done in VideoPreview
-            }
-        }
-    }
-    
-    // Clean up sequential playback when component is disposed
-    DisposableEffect(Unit) {
-        onDispose {
-            VideoManager.stopSequentialPlayback()
-        }
-    }
-    
-    // Function to handle video completion and move to next
-    fun onVideoCompleted(gridIndex: Int) {
-        if (videoMids.isEmpty()) return
-        // Translate grid index to video list index
-        val completedVideoListIndex = videoGridIndices.indexOf(gridIndex)
-        if (completedVideoListIndex == -1) return
-        if (currentVideoListIndex == completedVideoListIndex) {
-            // Notify VideoManager about completion
-            val completedVideoMid = videoMids.getOrNull(completedVideoListIndex)
-            completedVideoMid?.let { mid ->
-                VideoManager.onVideoCompleted(mid)
-            }
-
-            // Advance to next video without looping; stop after last
-            val nextListIndex = completedVideoListIndex + 1
-            currentVideoListIndex = if (nextListIndex < videoGridIndices.size) nextListIndex else -1
-            if (currentVideoListIndex == -1) {
-                VideoManager.stopSequentialPlayback()
             }
         }
     }
@@ -328,7 +226,6 @@ fun MediaGrid(
                     inPreviewGrid = true,
                     loadOriginalImage = true, // Load original high-res image for single image
                     viewModel = viewModel,
-                    onVideoCompleted = { onVideoCompleted(0) },
                     allMediaItems = mediaItems // Pass all items for full screen navigation
                 )
             }
@@ -368,7 +265,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -386,7 +282,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(1) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -429,7 +324,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -447,7 +341,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(1) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -488,7 +381,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -506,7 +398,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(1) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -550,7 +441,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -568,7 +458,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(1),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(1) },
                                 allMediaItems = mediaItems
                             )
                         }
@@ -617,7 +506,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: right side (38.2%), stacked with proportional heights
@@ -637,8 +525,7 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -653,8 +540,7 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(2) }
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -688,7 +574,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: bottom (38.2%), side by side with proportional widths
@@ -710,8 +595,7 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -726,8 +610,7 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(2) }
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -764,7 +647,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: right side (38.2%), stacked with proportional heights
@@ -784,8 +666,7 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -800,8 +681,7 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(2) }
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -836,7 +716,6 @@ fun MediaGrid(
                                 autoPlay = isAutoPlayForGridIndex(0),
                                 inPreviewGrid = true,
                                 viewModel = viewModel,
-                                onVideoCompleted = { onVideoCompleted(0) }
                             )
                         }
                         // Second and third: bottom (38.2%), side by side with proportional widths
@@ -858,8 +737,7 @@ fun MediaGrid(
                                     index = 1,
                                     autoPlay = isAutoPlayForGridIndex(1),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(1) }
+                                    viewModel = viewModel
                                 )
                             }
                             Box(
@@ -874,8 +752,7 @@ fun MediaGrid(
                                     index = 2,
                                     autoPlay = isAutoPlayForGridIndex(2),
                                     inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    onVideoCompleted = { onVideoCompleted(2) }
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -942,7 +819,6 @@ fun MediaGrid(
                             autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
-                            onVideoCompleted = { onVideoCompleted(index) },
                             allMediaItems = mediaItems // Pass all items for full screen navigation
                         )
                     }

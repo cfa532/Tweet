@@ -7,6 +7,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.Tweet
 
 /**
  * Singleton manager for the independent fullscreen video player.
@@ -67,6 +68,29 @@ object FullScreenPlayerManager {
         kotlinx.coroutines.runBlocking {
             playCurrentVideo()
         }
+    }
+    
+    /**
+     * Update video list from VideoPlaybackCoordinator (consolidated tracking)
+     * Similar to iOS FullScreenVideoManager.updateVideoList()
+     * This allows VideoPlaybackCoordinator to share its video list with FullScreenPlayerManager
+     */
+    fun updateVideoList(videoList: List<Pair<MimeiId, MediaType>>, tweets: List<Tweet>) {
+        Timber.d("FullScreenPlayerManager - Updating video list from VideoPlaybackCoordinator: ${videoList.size} videos, ${tweets.size} tweets")
+        // Only update the list if we don't have a current list or if the current video is no longer in the new list
+        if (currentVideoList == null || getCurrentVideoMid()?.let { currentMid ->
+            !videoList.any { it.first == currentMid }
+        } == true) {
+            // Current video not in new list, update but don't auto-play
+            currentVideoList = videoList
+            if (currentVideoIndex >= videoList.size) {
+                currentVideoIndex = 0
+            }
+        } else {
+            // Current video still in list, just update the list reference
+            currentVideoList = videoList
+        }
+        // Note: tweets parameter is kept for API compatibility with iOS, but not currently used
     }
     
     /**
