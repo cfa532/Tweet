@@ -47,16 +47,23 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    private const val MAX_MEMORY_CACHE_SIZE =
-        150 * 1024 * 1024 // Reduced to 150MB for better memory management
+    // Match iOS configuration: 35MB total cost limit, 100 image count limit
+    private const val MAX_MEMORY_CACHE_SIZE = 35 * 1024 * 1024 // 35MB (matches iOS totalCostLimit)
+    private const val MAX_MEMORY_CACHE_COUNT = 100 // Maximum number of images in memory (matches iOS countLimit)
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
     private const val READ_TIMEOUT = 20000 // 20 seconds - IPFS can be slow, give it more time
-    private const val MAX_CONCURRENT_DOWNLOADS = 24 // Increased for faster parallel loading
+    // Reduced from 24 to 8 for better memory management (iOS uses 4 for avatars, no explicit limit for regular images)
+    private const val MAX_CONCURRENT_DOWNLOADS = 8 // Reduced for better memory management
     private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
     private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
     private const val MAX_DOWNLOAD_RESULTS = 20 // FIX P1-4: Limit size of downloadResults map
+    
+    // Memory checking thresholds (similar to iOS MemoryCapManager)
+    // iOS blocks duplicate requests at 60% of 2GB limit (1.2GB)
+    // Android heap is typically smaller, so we use 60% of max heap as threshold
+    private const val MEMORY_BLOCK_THRESHOLD_PERCENT = 60 // Block new downloads when memory usage > 60%
     
     // Separate timeout for avatar images (smaller, should be faster)
     private const val AVATAR_READ_TIMEOUT = 15000 // 15 seconds for avatars
@@ -121,12 +128,25 @@ object ImageCacheManager {
     private var currentMemoryUsage = AtomicInteger(0)
     
     /**
-     * Add bitmap to memory cache with size management
+     * Add bitmap to memory cache with size and count management (matches iOS NSCache limits)
      */
     private fun addToMemoryCache(mid: String, bitmap: Bitmap) {
         if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
-            // Check if we need to free memory
             val bitmapSize = bitmap.byteCount
+            
+            // Enforce count limit first (iOS uses countLimit = 100)
+            if (memoryCache.size >= MAX_MEMORY_CACHE_COUNT && !memoryCache.containsKey(mid)) {
+                // Remove oldest entries to make room (simple FIFO approach)
+                val iterator = memoryCache.entries.iterator()
+                while (iterator.hasNext() && memoryCache.size >= MAX_MEMORY_CACHE_COUNT) {
+                    val entry = iterator.next()
+                    val oldBitmap = entry.value
+                    iterator.remove()
+                    currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
+                }
+            }
+            
+            // Enforce size limit (iOS uses totalCostLimit = 35MB)
             if (currentMemoryUsage.get() + bitmapSize > MAX_MEMORY_CACHE_SIZE) {
                 // Remove some entries to free memory (simple FIFO approach)
                 // Don't recycle bitmaps here to avoid crashes - let Android handle memory management
@@ -138,6 +158,12 @@ object ImageCacheManager {
                     iterator.remove()
                     currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
                 }
+            }
+            
+            // Remove existing entry if present (to update)
+            val existingBitmap = memoryCache.remove(mid)
+            if (existingBitmap != null) {
+                currentMemoryUsage.addAndGet(-existingBitmap.byteCount)
             }
             
             memoryCache[mid] = bitmap
@@ -241,6 +267,49 @@ object ImageCacheManager {
     }
 
     /**
+     * Check memory usage and wait if necessary (similar to iOS waitForMemoryWindow)
+     * Returns true if memory is available, false if we should skip the download
+     */
+    private suspend fun waitForMemoryWindow(cacheKey: String, retryLabel: String): Boolean {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val usedMemory = runtime.totalMemory() - runtime.freeMemory()
+        val memoryUsagePercent = (usedMemory * 100.0 / maxMemory).toInt()
+        
+        // Fast-path if we're comfortably below the threshold (iOS uses 60%)
+        if (memoryUsagePercent < MEMORY_BLOCK_THRESHOLD_PERCENT) {
+            return true
+        }
+        
+        // Memory is high, wait and retry (similar to iOS exponential backoff)
+        val maxAttempts = 3
+        for (attempt in 0 until maxAttempts) {
+            val currentUsed = runtime.totalMemory() - runtime.freeMemory()
+            val currentPercent = (currentUsed * 100.0 / maxMemory).toInt()
+            
+            if (currentPercent < MEMORY_BLOCK_THRESHOLD_PERCENT) {
+                if (attempt > 0) {
+                    Timber.tag("ImageCacheManager").d("✅ Memory cooled down after $attempt backoff attempts for $retryLabel $cacheKey")
+                }
+                return true
+            }
+            
+            val delaySeconds = Math.pow(2.0, attempt.toDouble()) * 0.4
+            Timber.tag("ImageCacheManager").w("⏳ Memory at $currentPercent% (threshold $MEMORY_BLOCK_THRESHOLD_PERCENT%) - delaying new image download $retryLabel $cacheKey by ${String.format("%.1f", delaySeconds)}s")
+            delay((delaySeconds * 1000).toLong())
+        }
+        
+        val finalUsed = runtime.totalMemory() - runtime.freeMemory()
+        val finalPercent = (finalUsed * 100.0 / maxMemory).toInt()
+        if (finalPercent >= MEMORY_BLOCK_THRESHOLD_PERCENT) {
+            Timber.tag("ImageCacheManager").w("🚫 Aborting new image download $retryLabel $cacheKey - memory still high at $finalPercent%")
+            return false
+        }
+        
+        return true
+    }
+
+    /**
      * Download and cache image from URL with improved error handling and retry logic
      * Includes deduplication to prevent multiple concurrent downloads of the same image
      */
@@ -266,6 +335,14 @@ object ImageCacheManager {
                 return@withContext waitForConcurrentDownload(context, mid)
             }
 
+                // Check memory availability before starting download (similar to iOS)
+                if (!waitForMemoryWindow(mid, "[thumbnail]")) {
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
+                    return@withContext null
+                }
+
                 // Acquire semaphore to limit concurrent downloads
                 downloadSemaphore.acquire()
                 semaphoreAcquired = true
@@ -279,7 +356,7 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            bitmap = performDownload(imageUrl)
+                            bitmap = performDownload(imageUrl, context)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
@@ -348,8 +425,9 @@ object ImageCacheManager {
 
     /**
      * Perform the actual download with OkHttp connection pooling
+     * FIX: Now streams to disk to avoid OOM for large compressed images
      */
-    private suspend fun performDownload(imageUrl: String): Bitmap? =
+    private suspend fun performDownload(imageUrl: String, context: Context): Bitmap? =
         withContext(Dispatchers.IO) {
             var inputStream: InputStream? = null
 
@@ -368,7 +446,7 @@ object ImageCacheManager {
 
                 inputStream = response.bodyAsChannel().toInputStream()
 
-                val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
+                val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream, context)
 
                 // FIX P1-5: Validate bitmap before returning
                 if (bitmap != null) {
@@ -419,6 +497,7 @@ object ImageCacheManager {
     /**
      * Perform download for original quality images with progressive loading
      * Shows low-quality preview first, then full quality
+     * FIX: Streams directly to disk to avoid OOM (matches iOS URLSession.shared.download behavior)
      */
     private suspend fun performDownloadOriginalProgressive(
         imageUrl: String,
@@ -428,7 +507,7 @@ object ImageCacheManager {
     ): Bitmap? =
         withContext(Dispatchers.IO) {
             var inputStream: InputStream? = null
-            var imageData: ByteArray? = null  // FIX P0-2: Track for explicit cleanup
+            var tempFile: File? = null
 
             try {
                 // Check if download is paused before starting
@@ -454,24 +533,33 @@ object ImageCacheManager {
 
                 inputStream = response.bodyAsChannel().toInputStream()
 
-                // Read the image data
-                imageData = inputStream.readBytes()
+                // FIX OOM: Stream directly to temporary file instead of loading into memory
+                // This matches iOS URLSession.shared.download behavior
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                tempFile = File.createTempFile("img_${mid}_", ".tmp", dir)
                 
-                // Check if download was paused during reading
+                // Stream download directly to file (avoids loading entire image into memory)
+                FileOutputStream(tempFile).use { out ->
+                    inputStream?.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
+                }
+                
+                // Check if download was paused during streaming
                 if (isDownloadPaused(mid)) {
-                    imageData = null  // FIX P0-2: Clear reference before returning
+                    tempFile?.delete()
                     return@withContext null
                 }
                 
-                // Progressive loading: First decode low-quality preview (1/4 resolution)
-                if (onProgressiveLoad != null && imageData.size > 50 * 1024) { // Only for images > 50KB
+                // Progressive loading: First decode low-quality preview (1/4 resolution) from file
+                if (onProgressiveLoad != null && tempFile != null && tempFile!!.length() > 50 * 1024) { // Only for images > 50KB
                     var preview: Bitmap? = null
                     try {
                         val previewOptions = BitmapFactory.Options().apply {
                             inSampleSize = PROGRESSIVE_SAMPLE_SIZE // 1/4 resolution
                             inPreferredConfig = Bitmap.Config.RGB_565
                         }
-                        preview = BitmapFactory.decodeByteArray(imageData, 0, imageData.size, previewOptions)
+                        // Decode preview directly from file (no memory load)
+                        preview = BitmapFactory.decodeFile(tempFile!!.absolutePath, previewOptions)
                         if (preview != null && !preview.isRecycled) {
                             withContext(Dispatchers.Main) {
                                 try {
@@ -500,17 +588,14 @@ object ImageCacheManager {
                     }
                 }
                 
-                // Save original data directly
-                val dir = File(context.cacheDir, CACHE_DIR)
-                if (!dir.exists()) dir.mkdirs()
-                val file = File(dir, "$mid.jpg")
-
-                FileOutputStream(file).use { out ->
-                    out.write(imageData)
+                // Move temp file to final location
+                val finalFile = File(dir, "$mid.jpg")
+                if (tempFile != null && tempFile!!.exists()) {
+                    tempFile!!.renameTo(finalFile)
                 }
 
-                // Decode full quality bitmap
-                val bitmap = decodeBitmapFromByteArrayWithCorrectOrientation(imageData)
+                // Decode full quality bitmap from file (no memory load of raw bytes)
+                val bitmap = decodeBitmapFromFileWithCorrectOrientation(finalFile.absolutePath)
 
                 // FIX P1-5: Validate bitmap before returning
                 if (bitmap != null) {
@@ -530,7 +615,6 @@ object ImageCacheManager {
                 return@withContext null
             } catch (e: OutOfMemoryError) {
                 // FIX P0-2 & P2-6: Aggressive cleanup on OOM to prevent cascading failures
-                imageData = null
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 
                 // Clear all caches and intermediate results
@@ -553,31 +637,34 @@ object ImageCacheManager {
                 
                 return@withContext null
             } catch (e: java.net.SocketTimeoutException) {
-                // FIX P0-2: Clear on timeout
-                imageData = null
                 // Timeout - let caller handle retry logic
                 val timeoutType = if (e.message?.contains("connect") == true) "connection" else "read"
                 Timber.tag("ImageCacheManager").w("⏱️ Image download $timeoutType timeout for $imageUrl")
                 throw e // Re-throw to allow retry logic to handle it
             } catch (e: java.io.IOException) {
-                // FIX P0-2: Clear on network error
-                imageData = null
                 // Network errors - let caller retry
                 Timber.tag("ImageCacheManager").w("🌐 Network error downloading image from $imageUrl: ${e.message}")
                 throw e // Re-throw to allow retry logic to handle it
             } catch (e: Exception) {
-                // FIX P0-2: Clear on any exception
-                imageData = null
                 // Log other exceptions with stack trace for debugging
                 Timber.tag("ImageCacheManager").w(e, "Error downloading original image from $imageUrl")
                 return@withContext null
             } finally {
-                // FIX P0-2: Always clear imageData and close stream
-                imageData = null
+                // Clean up resources: close stream and delete temp file if it exists
                 try {
                     inputStream?.close()
                 } catch (e: Exception) {
                     // Ignore close errors
+                }
+                // Clean up temp file if download failed or was cancelled
+                tempFile?.let { file ->
+                    if (file.exists()) {
+                        try {
+                            file.delete()
+                        } catch (e: Exception) {
+                            // Ignore delete errors
+                        }
+                    }
                 }
             }
         }
@@ -647,6 +734,15 @@ object ImageCacheManager {
                 }
                 
                 // This thread won - it will perform the download
+                // Check memory availability before starting download (similar to iOS)
+                if (!waitForMemoryWindow(originalMid, "[original]")) {
+                    synchronized(downloadQueueMutex) {
+                        downloadQueue.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
+                    }
+                    return@withContext null
+                }
+                
                 downloadSemaphore.acquire()
                 semaphoreAcquired = true
                 
@@ -1261,42 +1357,65 @@ object ImageCacheManager {
 
     /**
      * Decode bitmap from stream with correct EXIF orientation handling
+     * FIX: Streams to temp file to avoid OOM for large compressed images
      */
-    private fun decodeBitmapFromStreamWithCorrectOrientation(inputStream: InputStream): Bitmap? {
-        return try {
-            // Read the entire stream into a byte array to handle mark/reset issues
-            val byteArray = inputStream.readBytes()
-            val byteArrayInputStream = java.io.ByteArrayInputStream(byteArray)
-
-            // Create options to decode bounds first
-            val options = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
-
-            // Mark the stream so we can reset it
-            byteArrayInputStream.mark(byteArray.size)
-            BitmapFactory.decodeStream(byteArrayInputStream, null, options)
-            byteArrayInputStream.reset()
-
-            // Decode the actual bitmap
-            val decodeOptions = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
-            }
-
-            val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
-            if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
-                // Apply EXIF orientation correction
-                val correctedBitmap = applyExifOrientation(byteArray, bitmap)
-                if (correctedBitmap != bitmap) {
-                    // If we created a new bitmap, recycle the original
-                    bitmap.recycle()
+    private suspend fun decodeBitmapFromStreamWithCorrectOrientation(inputStream: InputStream, context: Context): Bitmap? {
+        return withContext(Dispatchers.IO) {
+            var tempFile: File? = null
+            try {
+                // FIX OOM: Stream to temp file instead of loading into memory
+                // This prevents OOM for unexpectedly large compressed images
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                tempFile = File.createTempFile("img_compressed_", ".tmp", dir)
+                
+                // Stream download directly to file (avoids loading entire image into memory)
+                FileOutputStream(tempFile).use { out ->
+                    inputStream.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
                 }
-                return correctedBitmap
+                
+                // Decode from file (supports multiple reads for bounds checking)
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                
+                // Check bounds first
+                BitmapFactory.decodeFile(tempFile.absolutePath, options)
+                if (options.outWidth <= 0 || options.outHeight <= 0) {
+                    return@withContext null
+                }
+                
+                // Decode the actual bitmap
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
+                }
+                
+                val bitmap = BitmapFactory.decodeFile(tempFile.absolutePath, decodeOptions)
+                if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                    // Apply EXIF orientation correction from file
+                    val correctedBitmap = applyExifOrientation(tempFile.absolutePath, bitmap)
+                    if (correctedBitmap != bitmap) {
+                        // If we created a new bitmap, recycle the original
+                        bitmap.recycle()
+                    }
+                    return@withContext correctedBitmap
                 }
                 null
             } catch (e: Exception) {
                 null
+            } finally {
+                // Clean up temp file
+                tempFile?.let { file ->
+                    if (file.exists()) {
+                        try {
+                            file.delete()
+                        } catch (e: Exception) {
+                            // Ignore delete errors
+                        }
+                    }
+                }
             }
+        }
     }
 
     /**

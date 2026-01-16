@@ -25,6 +25,7 @@ import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
+import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
 
@@ -154,9 +155,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         super.onLowMemory()
         // This is called when the system is running very low on memory
         // and is about to kill background processes
-        Timber.w("Memory warning: onLowMemory - System about to kill background processes")
-        // In modern Android, we rely on onTrimMemory for memory management
-        // onLowMemory is still called but we preserve cache for better UX
+        // Match iOS behavior: clear image cache on low memory (similar to iOS emergency cleanup)
+        Timber.w("Memory warning: onLowMemory - Clearing image cache to free memory")
+        ImageCacheManager.clearMemoryCache()
     }
 
     // Note: Cache clearing methods removed as modern Android (API 34+) 
