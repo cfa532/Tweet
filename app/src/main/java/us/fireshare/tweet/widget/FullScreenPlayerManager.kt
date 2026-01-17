@@ -245,6 +245,11 @@ object FullScreenPlayerManager {
     fun getTotalVideos(): Int = currentVideoList?.size ?: 0
     
     /**
+     * Get the current video list (from VideoPlaybackCoordinator)
+     */
+    fun getVideoList(): List<Pair<MimeiId, MediaType>>? = currentVideoList
+    
+    /**
      * Set callback for when video changes
      */
     fun setOnVideoChanged(callback: (MimeiId, Int) -> Unit) {

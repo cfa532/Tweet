@@ -63,12 +63,13 @@ data class VideoPlaybackInfo(
  * 2. Manages playback state for videos
  * 3. Coordinates video playback via notifications/events
  * 4. Switches to next video when current video is 50% off screen
- * 5. Selects primary video based on scroll direction (topmost when scrolling down, bottommost when scrolling up)
+ * 5. Selects primary video based on scroll direction (bottommost when scrolling down, topmost when scrolling up)
  */
 object VideoPlaybackCoordinator {
     // Singleton state
     private var visibleVideos = mutableListOf<VideoPlaybackInfo>()
     private var allVideos = mutableListOf<VideoPlaybackInfo>()
+    private var currentTweets = listOf<Tweet>() // Store current tweet list for retweet lookup
     private val videoMetaMap = mutableMapOf<String, VideoPlaybackInfo>()
     private val videoVisibilityMap = mutableMapOf<String, Boolean>()
     private val videoVisibilityRatioMap = mutableMapOf<String, Float>() // Store visibility ratio (0.0 to 1.0)
@@ -101,9 +102,11 @@ object VideoPlaybackCoordinator {
      * Build video list from tweets
      * Similar to iOS buildVideoList(from:tweets:pinnedTweets:)
      */
-    fun buildVideoList(tweets: List<Tweet>, pinnedTweets: List<Tweet> = emptyList()) {
+    suspend fun buildVideoList(tweets: List<Tweet>, pinnedTweets: List<Tweet> = emptyList()) {
+        // Store tweet list for retweet lookup in updateVideoVisibility
+        currentTweets = tweets + pinnedTweets
+        
         val videos = mutableListOf<VideoPlaybackInfo>()
-        val seenVideoIdentifiers = mutableSetOf<String>()
         
         // Process pinned tweets first (they appear at the top)
         for (tweet in pinnedTweets) {
@@ -114,41 +117,91 @@ object VideoPlaybackCoordinator {
                         videoMid = attachment.mid,
                         index = index
                     )
-                    
-                    if (!seenVideoIdentifiers.contains(videoInfo.identifier)) {
-                        videos.add(videoInfo)
-                        seenVideoIdentifiers.add(videoInfo.identifier)
-                    }
+                    videos.add(videoInfo)
                 }
             }
         }
         
-        // Process regular tweets
+        // Process regular tweets IN ORDER - videos appear as many times as they appear in the feed
         for (tweet in tweets) {
-            // Check if this is a pure retweet (no own content, just forwarding)
-            val hasTweetContent = tweet.attachments != null && tweet.attachments!!.isNotEmpty()
+            // Determine if this is a pure retweet (no own content, just forwarding)
+            // A pure retweet has originalTweetId AND (no content text AND no attachments)
+            // A quoted tweet has originalTweetId AND (has content text OR has attachments)
+            val hasContentText = !tweet.content.isNullOrEmpty()
+            val hasAttachments = tweet.attachments != null && tweet.attachments!!.isNotEmpty()
+            val hasOwnContent = hasContentText || hasAttachments
             val hasOriginalTweet = tweet.originalTweetId != null
-            val isPureRetweet = hasOriginalTweet && !hasTweetContent
+            val isPureRetweet = hasOriginalTweet && !hasOwnContent
+            val isQuotedTweet = hasOriginalTweet && hasOwnContent
 
-            val attachmentsToProcess = if (isPureRetweet && tweet.originalTweetId != null) {
-                // Retweet: track by retweet id + video mid
-                // Use cached original tweet attachments if available
-                TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)?.attachments ?: tweet.attachments
+            if (isPureRetweet) {
+                // PURE RETWEET: Get attachments from original tweet, use retweet's ID for positioning
+                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+                    // Try cache first, then fetch if needed
+                    var originalTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+                    
+                    // If not in cache, try to fetch it
+                    if (originalTweet == null) {
+                        try {
+                            originalTweet = us.fireshare.tweet.HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                        } catch (e: Exception) {
+                            Timber.w("VideoPlaybackCoordinator: Failed to fetch original tweet for retweet: ${tweet.mid}, error: ${e.message}")
+                        }
+                    }
+                    
+                    originalTweet?.attachments?.forEachIndexed { index, attachment ->
+                        if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                            val videoInfo = VideoPlaybackInfo(
+                                tweetId = tweet.mid,  // Use retweet's ID for positioning
+                                videoMid = attachment.mid,
+                                index = index
+                            )
+                            videos.add(videoInfo)
+                            Timber.d("VideoPlaybackCoordinator: Added retweet video: identifier=${videoInfo.identifier}, tweetId=${tweet.mid}, originalTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
+                        }
+                    }
+                    if (originalTweet == null) {
+                        Timber.w("VideoPlaybackCoordinator: Original tweet not found for retweet: ${tweet.mid}")
+                    }
+                }
             } else {
-                tweet.attachments
-            }
-
-            attachmentsToProcess?.forEachIndexed { index, attachment ->
-                if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                    val videoInfo = VideoPlaybackInfo(
-                        tweetId = tweet.mid,
-                        videoMid = attachment.mid,
-                        index = index
-                    )
-
-                    if (!seenVideoIdentifiers.contains(videoInfo.identifier)) {
+                // REGULAR TWEET or QUOTED TWEET: Process the tweet's own attachments
+                tweet.attachments?.forEachIndexed { index, attachment ->
+                    if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                        val videoInfo = VideoPlaybackInfo(
+                            tweetId = tweet.mid,
+                            videoMid = attachment.mid,
+                            index = index
+                        )
                         videos.add(videoInfo)
-                        seenVideoIdentifiers.add(videoInfo.identifier)
+                    }
+                }
+                
+                // For quoted tweets, also process embedded tweet's videos separately
+                // Use quoting tweet's ID to distinguish from standalone original tweet
+                if (isQuotedTweet && tweet.originalTweetId != null) {
+                    var embeddedTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+                    
+                    // If not in cache, try to fetch it
+                    if (embeddedTweet == null && tweet.originalAuthorId != null) {
+                        try {
+                            embeddedTweet = us.fireshare.tweet.HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                        } catch (e: Exception) {
+                            Timber.w("VideoPlaybackCoordinator: Failed to fetch embedded tweet: ${tweet.originalTweetId}, error: ${e.message}")
+                        }
+                    }
+                    
+                    embeddedTweet?.attachments?.forEachIndexed { index, attachment ->
+                        if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                            // Use quoting tweet's ID for tracking to distinguish from standalone original tweet
+                            val videoInfo = VideoPlaybackInfo(
+                                tweetId = tweet.mid,  // Use quoting tweet's ID
+                                videoMid = attachment.mid,
+                                index = index
+                            )
+                            videos.add(videoInfo)
+                            Timber.d("VideoPlaybackCoordinator: Added embedded tweet video: identifier=${videoInfo.identifier}, quotingTweetId=${tweet.mid}, embeddedTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
+                        }
                     }
                 }
             }
@@ -196,13 +249,105 @@ object VideoPlaybackCoordinator {
         topY: Float? = null,
         visibilityRatio: Float? = null
     ) {
-        val identifier = "${tweetId}_$videoMid"
+        // CRITICAL FIX: If tweetId is an original tweet ID, check if this video is actually in a retweet
+        // and use the retweet ID instead to match buildVideoList behavior
+        var actualTweetId: String = tweetId
+        var identifier = "${tweetId}_$videoMid"
+        
+        // Check if this identifier doesn't exist, which might mean we're using the wrong tweet ID
+        if (videoMetaMap[identifier] == null) {
+            // First, try to find if this video is already in allVideos (by videoMid)
+            // This is the source of truth - buildVideoList creates entries with the correct retweet ID
+            val matchingVideo = allVideos.find { it.videoMid == videoMid }
+            if (matchingVideo != null) {
+                // Found the video in allVideos - use its identifier (which has the correct retweet ID)
+                actualTweetId = matchingVideo.tweetId
+                identifier = matchingVideo.identifier
+                if (matchingVideo.tweetId != tweetId) {
+                    Timber.d("VideoPlaybackCoordinator: Corrected identifier from ${tweetId}_$videoMid to $identifier (found existing video with retweet ID: $actualTweetId)")
+                }
+            } else {
+                // Video not found in allVideos - search for retweet containing this video
+                // buildVideoList always uses retweet ID, so if tweetId is original, we need to find the retweet
+                val retweet = currentTweets.find { retweetTweet ->
+                    val retweetOriginalId = retweetTweet.originalTweetId
+                    // Check if this retweet's originalTweetId matches the incoming tweetId
+                    retweetOriginalId != null && retweetOriginalId == tweetId &&
+                    // Check if this retweet contains the video (either in its own attachments or original tweet's attachments)
+                    (retweetTweet.attachments?.any { it.mid == videoMid } == true ||
+                     TweetCacheManager.getCachedTweet(retweetOriginalId)?.attachments?.any { it.mid == videoMid } == true)
+                }
+                
+                if (retweet != null) {
+                    // Found retweet containing this video - use retweet ID
+                    actualTweetId = retweet.mid
+                    identifier = "${retweet.mid}_$videoMid"
+                    Timber.d("VideoPlaybackCoordinator: Corrected identifier from ${tweetId}_$videoMid to $identifier (found retweet: ${retweet.mid}, originalTweetId: $tweetId)")
+                    
+                    // Create the entry with correct identifier
+                    if (videoMetaMap[identifier] == null) {
+                        videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
+                        allVideos.add(videoMetaMap[identifier]!!)
+                    }
+                } else {
+                    // Check if tweetId itself is a retweet in currentTweets that contains this video
+                    val tweetInList = currentTweets.find { it.mid == tweetId }
+                    if (tweetInList != null) {
+                        val originalId = tweetInList.originalTweetId
+                        if (originalId != null) {
+                            // tweetId is a retweet - check if it contains this video
+                            val originalTweet = TweetCacheManager.getCachedTweet(originalId)
+                            val hasVideo = tweetInList.attachments?.any { it.mid == videoMid } == true ||
+                                          originalTweet?.attachments?.any { it.mid == videoMid } == true
+                            
+                            if (hasVideo) {
+                                // tweetId is already the retweet ID and contains the video - use it directly
+                                actualTweetId = tweetId
+                                identifier = "${tweetId}_$videoMid"
+                                Timber.d("VideoPlaybackCoordinator: tweetId=$tweetId is a retweet containing video $videoMid, using it directly")
+                                
+                                if (videoMetaMap[identifier] == null) {
+                                    videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
+                                    allVideos.add(videoMetaMap[identifier]!!)
+                                }
+                            } else {
+                                // Retweet doesn't contain this video - create entry but warn
+                                Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - retweet doesn't contain this video!")
+                                videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
+                                allVideos.add(videoMetaMap[identifier]!!)
+                            }
+                        } else {
+                            // tweetId is a regular tweet (not a retweet) - check if it contains the video
+                            val hasVideo = tweetInList.attachments?.any { it.mid == videoMid } == true
+                            if (hasVideo) {
+                                // Use it directly as it's a regular tweet containing the video
+                                actualTweetId = tweetId
+                                identifier = "${tweetId}_$videoMid"
+                                Timber.d("VideoPlaybackCoordinator: tweetId=$tweetId is a regular tweet containing video $videoMid, using it directly")
+                                
+                                if (videoMetaMap[identifier] == null) {
+                                    videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
+                                    allVideos.add(videoMetaMap[identifier]!!)
+                                }
+                            } else {
+                                // Regular tweet doesn't contain this video - create entry but warn
+                                Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - regular tweet doesn't contain this video!")
+                                videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
+                                allVideos.add(videoMetaMap[identifier]!!)
+                            }
+                        }
+                    } else {
+                        // tweetId is not in currentTweets - create new entry but warn
+                        Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - tweet not found in currentTweets!")
+                        videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
+                        allVideos.add(videoMetaMap[identifier]!!)
+                    }
+                }
+            }
+        }
+        
         val previousVisibility = videoVisibilityMap[identifier] ?: false
         val previousRatio = videoVisibilityRatioMap[identifier] ?: 0f
-
-        if (videoMetaMap[identifier] == null) {
-            videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
-        }
 
         topY?.let { videoPositionMap[identifier] = it }
         visibilityRatio?.let { videoVisibilityRatioMap[identifier] = it }
@@ -241,13 +386,48 @@ object VideoPlaybackCoordinator {
     private fun updateVisibleVideos() {
         val previousVisibleIds = visibleVideos.map { it.identifier }.toSet()
 
-        // Filter videos by 50% visibility threshold
+        // Filter videos by 50% visibility threshold and ensure they have valid positions
+        // Exclude videos without position data (Float.MAX_VALUE) unless they're already the primary video
         visibleVideos = videoMetaMap.values.filter { videoInfo ->
             val visibilityRatio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
-            visibilityRatio >= VISIBILITY_THRESHOLD
+            val hasValidPosition = videoPositionMap[videoInfo.identifier] != null && 
+                                  videoPositionMap[videoInfo.identifier] != Float.MAX_VALUE
+            val isCurrentPrimary = videoInfo.identifier == primaryVideoId
+            val hasVisibilityData = videoVisibilityRatioMap.containsKey(videoInfo.identifier) || 
+                                   videoPositionMap.containsKey(videoInfo.identifier)
+            
+            val passesFilter = visibilityRatio >= VISIBILITY_THRESHOLD && (hasValidPosition || isCurrentPrimary)
+            
+            // Debug: Log videos that fail the filter
+            if (!passesFilter && hasVisibilityData) {
+                Timber.w("VideoPlaybackCoordinator: Video filtered out: ${videoInfo.identifier.substring(0, minOf(20, videoInfo.identifier.length))}, ratio=$visibilityRatio, hasPos=$hasValidPosition, isPrimary=$isCurrentPrimary")
+            }
+            
+            passesFilter
         }.sortedBy { videoInfo ->
             videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
         }.toMutableList()
+        
+        // Debug log to verify ordering
+        if (visibleVideos.isNotEmpty()) {
+            val orderDebug = visibleVideos.joinToString(", ") { videoInfo ->
+                val pos = videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
+                val ratio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
+                val ratioStr = if (videoVisibilityRatioMap.containsKey(videoInfo.identifier)) "${(ratio * 100).toInt()}%" else "N/A"
+                val inMap = if (videoMetaMap.containsKey(videoInfo.identifier)) "✓" else "✗"
+                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${ratioStr}]${inMap}"
+            }
+            Timber.d("VideoPlaybackCoordinator: Visible videos order (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}): $orderDebug")
+            
+            // Also log all videos in videoMetaMap to see if there are mismatches
+            val allVideosDebug = videoMetaMap.values.joinToString(", ") { videoInfo ->
+                val pos = videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
+                val ratio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
+                val ratioStr = if (videoVisibilityRatioMap.containsKey(videoInfo.identifier)) "${(ratio * 100).toInt()}%" else "N/A"
+                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}[${videoInfo.tweetId.substring(0, minOf(8, videoInfo.tweetId.length))}]@${pos.toInt()}[${ratioStr}]"
+            }
+            Timber.d("VideoPlaybackCoordinator: All videos in videoMetaMap: $allVideosDebug")
+        }
 
         if (visibleVideos.isEmpty()) {
             stopAllVideos()
@@ -267,12 +447,32 @@ object VideoPlaybackCoordinator {
         }
 
         // Identify primary video based on scroll direction
-        val primaryIdentifier = identifyPrimaryVideo()?.identifier
+        val newPrimary = identifyPrimaryVideo()
+        val newPrimaryIdentifier = newPrimary?.identifier
 
-        // If primary not visible or changed, reset and reselect
+        // Only reset primary if it's no longer visible, not just because sorting changed slightly
         if (primaryVideoId != null) {
-            if (primaryVideoId !in currentVisibleIds || primaryVideoId != primaryIdentifier) {
+            val currentPrimaryIsVisible = primaryVideoId in currentVisibleIds
+            if (!currentPrimaryIsVisible) {
+                // Current primary is no longer visible, switch to new primary
                 primaryVideoId = null
+            } else if (newPrimaryIdentifier != null && newPrimaryIdentifier != primaryVideoId) {
+                // Check if new primary is significantly better positioned than current
+                val currentPrimaryPos = videoPositionMap[primaryVideoId] ?: Float.MAX_VALUE
+                val newPrimaryPos = videoPositionMap[newPrimaryIdentifier] ?: Float.MAX_VALUE
+                
+                val shouldSwitch = if (scrollDirection) {
+                    // Scrolling DOWN: switch if new is significantly higher (lower Y)
+                    newPrimaryPos < currentPrimaryPos - 50f // 50px threshold
+                } else {
+                    // Scrolling UP: switch if new is significantly lower (higher Y)
+                    newPrimaryPos > currentPrimaryPos + 50f // 50px threshold
+                }
+                
+                if (shouldSwitch) {
+                    Timber.d("VideoPlaybackCoordinator: Switching primary from ${primaryVideoId} to ${newPrimaryIdentifier} (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}, currentPos=${currentPrimaryPos.toInt()}, newPos=${newPrimaryPos.toInt()})")
+                    primaryVideoId = null // Will trigger reselection
+                }
             }
         }
 
@@ -283,18 +483,20 @@ object VideoPlaybackCoordinator {
     
     /**
      * Identify primary video based on scroll direction
-     * Scrolling DOWN: topmost video (lowest Y)
-     * Scrolling UP: bottommost video (highest Y)
+     * Scrolling DOWN: bottommost video (highest Y) - new content entering from bottom
+     * Scrolling UP: topmost video (lowest Y) - new content entering from top
      */
     private fun identifyPrimaryVideo(): VideoPlaybackInfo? {
         if (visibleVideos.isEmpty()) return null
         
         return if (scrollDirection) {
-            // Scrolling DOWN: return topmost (first in sorted list)
-            visibleVideos.first()
-        } else {
-            // Scrolling UP: return bottommost (last in sorted list)
+            // Scrolling DOWN: return bottommost (last in sorted list - highest Y)
+            // because new videos are entering the viewport from the bottom
             visibleVideos.last()
+        } else {
+            // Scrolling UP: return topmost (first in sorted list - lowest Y)
+            // because new videos are entering the viewport from the top
+            visibleVideos.first()
         }
     }
     
@@ -368,7 +570,7 @@ object VideoPlaybackCoordinator {
         val primary = identifyPrimaryVideo() ?: visibleVideos.first()
         primaryVideoId = primary.identifier
         
-        val direction = if (scrollDirection) "topmost (scrolling DOWN)" else "bottommost (scrolling UP)"
+        val direction = if (scrollDirection) "bottommost (scrolling DOWN)" else "topmost (scrolling UP)"
         Timber.d("VideoPlaybackCoordinator: Starting playback for primary video: ${primary.videoMid} ($direction)")
 
         // Pause other visible videos and play primary
@@ -468,6 +670,7 @@ object VideoPlaybackCoordinator {
         stopAllVideos()
         visibleVideos.clear()
         allVideos.clear()
+        currentTweets = emptyList()
         videoMetaMap.clear()
         videoVisibilityMap.clear()
         videoVisibilityRatioMap.clear()

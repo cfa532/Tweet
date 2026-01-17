@@ -31,6 +31,7 @@ import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
@@ -228,7 +229,9 @@ fun TweetItemBody(
                                 MediaGrid(
                                     mediaAttachments,
                                     viewModel,
-                                    parentTweetId = parentTweet?.mid,
+                                    // For retweets/quotes, parentTweet.mid is the container tweet ID which must be used for video tracking
+                                    // This ensures videos are identified by the parent (retweet/quote) ID and video mid
+                                    parentTweetId = parentTweet?.mid?.takeIf { it.isNotEmpty() },
                                     containerTopY = containerTopY
                                 )
                             }

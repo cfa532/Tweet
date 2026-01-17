@@ -94,7 +94,18 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
-    val playbackTweetId = if (enableCoordinator) (parentTweetId ?: tweet.mid) else null
+    // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
+    // If parentTweetId is provided, it represents the retweet/quote container tweet
+    // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
+    val playbackTweetId = if (enableCoordinator) {
+        if (parentTweetId != null && parentTweetId.isNotEmpty()) {
+            // Always use parentTweetId (retweet/quote ID) when available
+            parentTweetId
+        } else {
+            // Only use tweet.mid if parentTweetId is not provided (direct tweet, not retweet/quote)
+            tweet.mid
+        }
+    } else null
     /**
      * Action to take when any media item is clicked.
      * Images and videos open in full-screen mode, audio files navigate to tweet detail page, 

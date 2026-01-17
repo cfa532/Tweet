@@ -77,27 +77,8 @@ fun IndependentFullScreenPlayer(
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
     
-    // Observe the video list from TweetListViewModel
-    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
-    val actualVideoList = videoIndexedList // Use the full video list with MediaType info
-    val actualStartIndex = if (tappedTweet != null) {
-        // Find the video mid from the tapped tweet's attachments
-        val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
-            val mediaType = inferMediaTypeFromAttachment(attachment)
-            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-        }?.mid
-        if (videoMid != null) {
-            val foundIndex = sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
-            Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in video list")
-            foundIndex
-        } else {
-            Timber.d("IndependentFullScreenPlayer - No video found in tapped tweet, using startIndex: $startIndex")
-            startIndex
-        }
-    } else {
-        Timber.d("IndependentFullScreenPlayer - No tapped tweet, using startIndex: $startIndex")
-        startIndex
-    }
+    // Fallback: Observe the video list from TweetListViewModel (used only if FullScreenPlayerManager doesn't have a list)
+    val videoIndexedListFromViewModel by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
     val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
     
@@ -117,14 +98,59 @@ fun IndependentFullScreenPlayer(
     
     // Initialize the singleton player
     LaunchedEffect(Unit) {
-        Timber.d("IndependentFullScreenPlayer - Initializing with ${actualVideoList.size} videos, start index: $actualStartIndex")
         Timber.d("IndependentFullScreenPlayer - Tapped tweet: ${tappedTweet?.mid}")
         
         FullScreenPlayerManager.initialize(context)
         
-        // Set the video list
-        Timber.d("IndependentFullScreenPlayer - Setting video list with ${actualVideoList.size} videos")
-        FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
+        // CRITICAL: Use video list from FullScreenPlayerManager (updated by VideoPlaybackCoordinator)
+        // This ensures all videos including embedded videos (4th video) are included
+        val videoListFromManager = FullScreenPlayerManager.getVideoList()
+        val actualVideoList = videoListFromManager ?: videoIndexedListFromViewModel
+        
+        Timber.d("IndependentFullScreenPlayer - Using video list: ${actualVideoList.size} videos (from ${if (videoListFromManager != null) "FullScreenPlayerManager" else "TweetListViewModel"})")
+        
+        // Find start index
+        val actualStartIndex = if (tappedTweet != null) {
+            // Find the video mid from the tapped tweet's attachments
+            val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
+                val mediaType = inferMediaTypeFromAttachment(attachment)
+                mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+            }?.mid
+            if (videoMid != null) {
+                // Find index in the actual video list being used
+                val foundIndex = actualVideoList.indexOfFirst { it.first == videoMid }
+                if (foundIndex >= 0) {
+                    Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in actualVideoList")
+                    foundIndex
+                } else {
+                    // Fallback to TweetListViewModel's findStartIndexForVideoMid
+                    val fallbackIndex = sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+                    Timber.d("IndependentFullScreenPlayer - Video not found in actualVideoList, using fallback index: $fallbackIndex")
+                    fallbackIndex
+                }
+            } else {
+                Timber.d("IndependentFullScreenPlayer - No video found in tapped tweet, using startIndex: $startIndex")
+                startIndex
+            }
+        } else {
+            Timber.d("IndependentFullScreenPlayer - No tapped tweet, using startIndex: $startIndex")
+            startIndex
+        }
+        
+        Timber.d("IndependentFullScreenPlayer - Initializing with ${actualVideoList.size} videos, start index: $actualStartIndex")
+        
+        // Set the video list (only if FullScreenPlayerManager doesn't already have it, or if it's different)
+        val currentList = FullScreenPlayerManager.getVideoList()
+        if (currentList == null || currentList.size != actualVideoList.size) {
+            Timber.d("IndependentFullScreenPlayer - Setting video list with ${actualVideoList.size} videos")
+            FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
+        } else {
+            Timber.d("IndependentFullScreenPlayer - FullScreenPlayerManager already has ${currentList.size} videos, using existing list")
+            // Just update the index if needed
+            if (actualStartIndex != FullScreenPlayerManager.getCurrentIndex()) {
+                FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
+            }
+        }
         
         // Set up callbacks
         FullScreenPlayerManager.setOnVideoChanged { videoMid, index ->
@@ -204,7 +230,7 @@ fun IndependentFullScreenPlayer(
                                 Timber.d("IndependentFullScreenPlayer - Large drag down detected, closing player")
                                 isClosing = true
                                 onClose()
-                            } else if (actualVideoList.size == 1) {
+                            } else if (totalVideos == 1) {
                                 // Only one video - any gesture should exit
                                 Timber.d("IndependentFullScreenPlayer - Single video detected, exiting player")
                                 isClosing = true
