@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -16,6 +17,7 @@ import us.fireshare.tweet.datamodel.Tweet
 object FullScreenPlayerManager {
     private var exoPlayer: ExoPlayer? = null
     private var currentVideoList: List<Pair<MimeiId, MediaType>>? = null
+    private var videoBaseUrlMap: Map<MimeiId, String> = emptyMap() // Map videoMid to author's baseUrl
     private var currentVideoIndex: Int = 0
     private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
@@ -77,6 +79,10 @@ object FullScreenPlayerManager {
      */
     fun updateVideoList(videoList: List<Pair<MimeiId, MediaType>>, tweets: List<Tweet>) {
         Timber.d("FullScreenPlayerManager - Updating video list from VideoPlaybackCoordinator: ${videoList.size} videos, ${tweets.size} tweets")
+        
+        // Build map from videoMid to author's baseUrl
+        videoBaseUrlMap = buildBaseUrlMap(videoList, tweets)
+        
         // Only update the list if we don't have a current list or if the current video is no longer in the new list
         if (currentVideoList == null || getCurrentVideoMid()?.let { currentMid ->
             !videoList.any { it.first == currentMid }
@@ -90,7 +96,44 @@ object FullScreenPlayerManager {
             // Current video still in list, just update the list reference
             currentVideoList = videoList
         }
-        // Note: tweets parameter is kept for API compatibility with iOS, but not currently used
+    }
+    
+    /**
+     * Build a map from videoMid to author's baseUrl by finding the tweet containing each video
+     */
+    private fun buildBaseUrlMap(videoList: List<Pair<MimeiId, MediaType>>, tweets: List<Tweet>): Map<MimeiId, String> {
+        val baseUrlMap = mutableMapOf<MimeiId, String>()
+        
+        for ((videoMid, _) in videoList) {
+            val tweet = findTweetContainingVideo(videoMid, tweets)
+            val baseUrl = tweet?.author?.baseUrl ?: HproseInstance.appUser.baseUrl
+            if (baseUrl != null) {
+                baseUrlMap[videoMid] = baseUrl
+                Timber.d("FullScreenPlayerManager - Mapped video $videoMid to baseUrl: $baseUrl (from tweet ${tweet?.mid})")
+            }
+        }
+        
+        return baseUrlMap
+    }
+    
+    /**
+     * Find the tweet containing the given video, checking both own attachments and original tweet's attachments (for retweets/quotes)
+     */
+    private fun findTweetContainingVideo(videoMid: MimeiId, tweets: List<Tweet>): Tweet? {
+        for (tweet in tweets) {
+            // Check if video is in this tweet's own attachments
+            if (tweet.attachments?.any { it.mid == videoMid } == true) {
+                return tweet
+            }
+            // Check if video is in this tweet's original tweet (for retweets/quotes)
+            tweet.originalTweetId?.let { originalId ->
+                val originalTweet = tweets.find { it.mid == originalId }
+                if (originalTweet?.attachments?.any { it.mid == videoMid } == true) {
+                    return originalTweet // Use original tweet's author baseUrl
+                }
+            }
+        }
+        return null
     }
     
     /**
@@ -151,9 +194,12 @@ object FullScreenPlayerManager {
         
         Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
         
-        // Generate video URL using the video mid with a default base URL
-        // TODO: Get base URL from TweetListViewModel or pass it as parameter
-        val baseUrl = "http://125.229.161.122:8080" // Default base URL for now
+        // Get baseUrl from map (author's baseUrl), with fallback chain: author -> appUser -> BuildConfig
+        val baseUrl = videoBaseUrlMap[videoMid] 
+            ?: HproseInstance.appUser.baseUrl 
+            ?: "http://${BuildConfig.BASE_URL}"
+        Timber.d("FullScreenPlayerManager - Using baseUrl for video $videoMid: $baseUrl")
+        
         val videoUrl = HproseInstance.getMediaUrl(videoMid, baseUrl)
         if (videoUrl != null) {
             Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
@@ -274,6 +320,7 @@ object FullScreenPlayerManager {
         exoPlayer?.release()
         exoPlayer = null
         currentVideoList = null
+        videoBaseUrlMap = emptyMap()
         currentVideoIndex = 0
         applicationContext = null
         onVideoChanged = null
