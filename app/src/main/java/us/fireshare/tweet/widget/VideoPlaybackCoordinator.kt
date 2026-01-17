@@ -103,6 +103,44 @@ object VideoPlaybackCoordinator {
     val playbackCommands: SharedFlow<VideoPlaybackCommand> = _playbackCommands.asSharedFlow()
     
     /**
+     * Add embedded tweet videos to the video list when they become available
+     * Called by TweetItem when embedded tweets are loaded
+     */
+    fun addEmbeddedTweetVideos(quotingTweetId: MimeiId, embeddedTweet: Tweet) {
+        val videosToAdd = mutableListOf<VideoPlaybackInfo>()
+
+        embeddedTweet.attachments?.forEachIndexed { index, attachment ->
+            if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                val videoInfo = VideoPlaybackInfo(
+                    tweetId = quotingTweetId,  // Use quoting tweet's ID
+                    videoMid = attachment.mid,
+                    index = index
+                )
+                videosToAdd.add(videoInfo)
+                Timber.d("VideoPlaybackCoordinator: Added embedded tweet video after load: identifier=${videoInfo.identifier}, quotingTweetId=${quotingTweetId}, embeddedTweetId=${embeddedTweet.mid}, videoMid=${attachment.mid}")
+            }
+        }
+
+        if (videosToAdd.isNotEmpty()) {
+            allVideos.addAll(videosToAdd)
+            videosToAdd.forEach { videoInfo ->
+                videoMetaMap[videoInfo.identifier] = videoInfo
+            }
+
+            // Update FullScreenPlayerManager with the new video list
+            val videoListForFullScreen = allVideos.map { videoInfo ->
+                val tweet = currentTweets.find { it.mid == videoInfo.tweetId }
+                val attachment = tweet?.attachments?.getOrNull(videoInfo.index)
+                val mediaType = attachment?.type ?: MediaType.Video
+                Pair(videoInfo.videoMid, mediaType)
+            }
+            FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
+
+            Timber.d("VideoPlaybackCoordinator: Added ${videosToAdd.size} embedded tweet videos, total videos now: ${allVideos.size}")
+        }
+    }
+
+    /**
      * Build video list from tweets
      * Similar to iOS buildVideoList(from:tweets:pinnedTweets:)
      */
@@ -140,19 +178,12 @@ object VideoPlaybackCoordinator {
 
             if (isPureRetweet) {
                 // PURE RETWEET: Get attachments from original tweet, use retweet's ID for positioning
-                if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                    // Try cache first, then fetch if needed
-                    var originalTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
-                    
-                    // If not in cache, try to fetch it
-                    if (originalTweet == null) {
-                        try {
-                            originalTweet = us.fireshare.tweet.HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                        } catch (e: Exception) {
-                            Timber.w("VideoPlaybackCoordinator: Failed to fetch original tweet for retweet: ${tweet.mid}, error: ${e.message}")
-                        }
-                    }
-                    
+                if (tweet.originalTweetId != null) {
+                    // Try to get original tweet from cache only (non-blocking)
+                    val originalTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+
+                    // Only add original tweet videos if they're already cached
+                    // They will be added later when fetched asynchronously by TweetItem
                     originalTweet?.attachments?.forEachIndexed { index, attachment ->
                         if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
                             val videoInfo = VideoPlaybackInfo(
@@ -164,8 +195,10 @@ object VideoPlaybackCoordinator {
                             Timber.d("VideoPlaybackCoordinator: Added retweet video: identifier=${videoInfo.identifier}, tweetId=${tweet.mid}, originalTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
                         }
                     }
+
+                    // If original tweet is not cached, log that we'll add it later when it's fetched
                     if (originalTweet == null) {
-                        Timber.w("VideoPlaybackCoordinator: Original tweet not found for retweet: ${tweet.mid}")
+                        Timber.d("VideoPlaybackCoordinator: Original tweet ${tweet.originalTweetId} not cached yet for retweet ${tweet.mid}, will be added later when fetched by TweetItem")
                     }
                 }
             } else {
@@ -184,17 +217,11 @@ object VideoPlaybackCoordinator {
                 // For quoted tweets, also process embedded tweet's videos separately
                 // Use quoting tweet's ID to distinguish from standalone original tweet
                 if (isQuotedTweet && tweet.originalTweetId != null) {
-                    var embeddedTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
-                    
-                    // If not in cache, try to fetch it
-                    if (embeddedTweet == null && tweet.originalAuthorId != null) {
-                        try {
-                            embeddedTweet = us.fireshare.tweet.HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
-                        } catch (e: Exception) {
-                            Timber.w("VideoPlaybackCoordinator: Failed to fetch embedded tweet: ${tweet.originalTweetId}, error: ${e.message}")
-                        }
-                    }
-                    
+                    // Try to get embedded tweet from cache first (non-blocking)
+                    val embeddedTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+
+                    // Only add embedded tweet videos if they're already cached
+                    // They will be added later when fetched asynchronously by TweetItem
                     embeddedTweet?.attachments?.forEachIndexed { index, attachment ->
                         if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
                             // Use quoting tweet's ID for tracking to distinguish from standalone original tweet
@@ -206,6 +233,11 @@ object VideoPlaybackCoordinator {
                             videos.add(videoInfo)
                             Timber.d("VideoPlaybackCoordinator: Added embedded tweet video: identifier=${videoInfo.identifier}, quotingTweetId=${tweet.mid}, embeddedTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
                         }
+                    }
+
+                    // If embedded tweet is not cached, log that we'll add it later when it's fetched
+                    if (embeddedTweet == null) {
+                        Timber.d("VideoPlaybackCoordinator: Embedded tweet ${tweet.originalTweetId} not cached yet, will be added later when fetched by TweetItem")
                     }
                 }
             }

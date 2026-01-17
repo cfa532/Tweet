@@ -237,6 +237,8 @@ private fun RetweetContent(
                         if (originalTweet != null) {
                             Timber.tag("TweetItem")
                                 .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
+                            // Notify VideoPlaybackCoordinator about the loaded original tweet for retweet
+                            us.fireshare.tweet.widget.VideoPlaybackCoordinator.addEmbeddedTweetVideos(tweet.mid, originalTweet!!)
                         } else {
                             Timber.tag("TweetItem")
                                 .w("Original tweet not found: $originalTweetId")
@@ -559,6 +561,10 @@ private fun QuotedTweetContent(
                         originalTweetId,
                         tweet.originalAuthorId!!
                     )
+                }
+                // Notify VideoPlaybackCoordinator about the loaded embedded tweet
+                originalTweet?.let { loadedTweet ->
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.addEmbeddedTweetVideos(tweet.mid, loadedTweet)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetItem").e(
