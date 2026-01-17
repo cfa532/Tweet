@@ -562,22 +562,9 @@ fun VideoPreview(
                     isVideoVisible = newVisibility
                 }
                 
-                // Only do expensive calculations and coordinator updates if throttled time has passed
-                // or if visibility state changed (important transitions)
-                if (timeSinceLastUpdate >= visibilityUpdateThrottleMs || isVideoVisible != newVisibility) {
-                    val visibilityRatio = calculateVisibilityRatio(layoutCoordinates)
-                    val ratioChange = kotlin.math.abs(visibilityRatio - lastVisibilityRatio)
-                    
-                    // Only update coordinator if ratio changed significantly or visibility state changed
-                    if (videoMid != null && playbackTweetId != null && 
-                        (ratioChange >= visibilityRatioThreshold || isVideoVisible != newVisibility)) {
-                        val topY = containerTopY ?: layoutCoordinates.boundsInRoot().top
-                        VideoPlaybackCoordinator.updateVideoVisibility(videoMid, playbackTweetId, newVisibility, topY, visibilityRatio)
-                        lastVisibilityRatio = visibilityRatio
-                    }
-                    
+                    // Video visibility is now tracked at the TweetItem level
+                    // No need to call VideoPlaybackCoordinator.updateVideoVisibility anymore
                     lastVisibilityUpdate = now
-                }
             }
             .clickable {
                 // Auto-start video in full screen

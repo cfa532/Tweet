@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -238,9 +239,12 @@ fun TweetListView(
         initialFirstVisibleItemScrollOffset = if (shouldRestoreScroll) savedScrollPosition.value.second else 0
     )
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Track active jobs for cleanup - using map to easily manage by ID
     val activeJobs = remember { mutableMapOf<String, Job>() }
+
+    // Track LazyColumn viewport size for VideoPlaybackCoordinator
+    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     var lastCleanupTime by remember { mutableLongStateOf(0L) }
     var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
     val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
@@ -684,7 +688,15 @@ fun TweetListView(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .let { if (scrollBehavior != null) it.nestedScroll(scrollBehavior.nestedScrollConnection) else it },
+                .let { if (scrollBehavior != null) it.nestedScroll(scrollBehavior.nestedScrollConnection) else it }
+                .onSizeChanged { size ->
+                    viewportSize = size
+                    // Update VideoPlaybackCoordinator with viewport size
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateViewportSize(
+                        size.width.toFloat(),
+                        size.height.toFloat()
+                    )
+                },
             state = listState,
             contentPadding = contentPadding,
         ) {

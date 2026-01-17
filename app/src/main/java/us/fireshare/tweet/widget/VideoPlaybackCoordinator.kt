@@ -71,9 +71,13 @@ object VideoPlaybackCoordinator {
     private var allVideos = mutableListOf<VideoPlaybackInfo>()
     private var currentTweets = listOf<Tweet>() // Store current tweet list for retweet lookup
     private val videoMetaMap = mutableMapOf<String, VideoPlaybackInfo>()
-    private val videoVisibilityMap = mutableMapOf<String, Boolean>()
-    private val videoVisibilityRatioMap = mutableMapOf<String, Float>() // Store visibility ratio (0.0 to 1.0)
-    private val videoPositionMap = mutableMapOf<String, Float>()
+    // Tweet cell tracking (iOS-style) - maps tweetId to cell bounds and visibility
+    private val tweetCellBoundsMap = mutableMapOf<String, android.graphics.RectF>() // tweetId -> cell bounds in LazyColumn coordinates
+    private val tweetVisibilityMap = mutableMapOf<String, Boolean>() // tweetId -> isVisible
+
+    // Viewport dimensions for visibility calculations (updated dynamically)
+    private var viewportWidth = 1080f // Default fallback
+    private var viewportHeight = 2340f // Default fallback
     
     // Currently playing video identifier
     private var primaryVideoId: String? = null
@@ -237,196 +241,75 @@ object VideoPlaybackCoordinator {
         }
         previousContentOffset = currentOffset
     }
+
+    /**
+     * Update viewport size (called by TweetListView)
+     */
+    fun updateViewportSize(width: Float, height: Float) {
+        viewportWidth = width
+        viewportHeight = height
+        Timber.d("VideoPlaybackCoordinator: Updated viewport size: ${width.toInt()}x${height.toInt()}")
+    }
     
     /**
-     * Update individual video visibility (called by VideoPreview's onGloballyPositioned)
-     * @param visibilityRatio: 0.0 = completely out of view, 1.0 = fully visible
+     * Update tweet cell position and visibility (called by TweetItem's onGloballyPositioned)
+     * This replaces the old video-based tracking with cell-based tracking like iOS
      */
-    fun updateVideoVisibility(
-        videoMid: MimeiId,
+    fun updateTweetCellPosition(
         tweetId: String,
-        isVisible: Boolean,
-        topY: Float? = null,
-        visibilityRatio: Float? = null
+        cellTopY: Float,
+        cellHeight: Float,
+        isVisible: Boolean
     ) {
-        // CRITICAL FIX: If tweetId is an original tweet ID, check if this video is actually in a retweet
-        // and use the retweet ID instead to match buildVideoList behavior
-        var actualTweetId: String = tweetId
-        var identifier = "${tweetId}_$videoMid"
-        
-        // Check if this identifier doesn't exist, which might mean we're using the wrong tweet ID
-        if (videoMetaMap[identifier] == null) {
-            // First, try to find if this video is already in allVideos (by videoMid)
-            // This is the source of truth - buildVideoList creates entries with the correct retweet ID
-            val matchingVideo = allVideos.find { it.videoMid == videoMid }
-            if (matchingVideo != null) {
-                // Found the video in allVideos - use its identifier (which has the correct retweet ID)
-                actualTweetId = matchingVideo.tweetId
-                identifier = matchingVideo.identifier
-                if (matchingVideo.tweetId != tweetId) {
-                    Timber.d("VideoPlaybackCoordinator: Corrected identifier from ${tweetId}_$videoMid to $identifier (found existing video with retweet ID: $actualTweetId)")
-                }
-            } else {
-                // Video not found in allVideos - search for retweet containing this video
-                // buildVideoList always uses retweet ID, so if tweetId is original, we need to find the retweet
-                val retweet = currentTweets.find { retweetTweet ->
-                    val retweetOriginalId = retweetTweet.originalTweetId
-                    // Check if this retweet's originalTweetId matches the incoming tweetId
-                    retweetOriginalId != null && retweetOriginalId == tweetId &&
-                    // Check if this retweet contains the video (either in its own attachments or original tweet's attachments)
-                    (retweetTweet.attachments?.any { it.mid == videoMid } == true ||
-                     TweetCacheManager.getCachedTweet(retweetOriginalId)?.attachments?.any { it.mid == videoMid } == true)
-                }
-                
-                if (retweet != null) {
-                    // Found retweet containing this video - use retweet ID
-                    actualTweetId = retweet.mid
-                    identifier = "${retweet.mid}_$videoMid"
-                    Timber.d("VideoPlaybackCoordinator: Corrected identifier from ${tweetId}_$videoMid to $identifier (found retweet: ${retweet.mid}, originalTweetId: $tweetId)")
-                    
-                    // Create the entry with correct identifier
-                    if (videoMetaMap[identifier] == null) {
-                        videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
-                        allVideos.add(videoMetaMap[identifier]!!)
-                    }
-                } else {
-                    // Check if tweetId itself is a retweet in currentTweets that contains this video
-                    val tweetInList = currentTweets.find { it.mid == tweetId }
-                    if (tweetInList != null) {
-                        val originalId = tweetInList.originalTweetId
-                        if (originalId != null) {
-                            // tweetId is a retweet - check if it contains this video
-                            val originalTweet = TweetCacheManager.getCachedTweet(originalId)
-                            val hasVideo = tweetInList.attachments?.any { it.mid == videoMid } == true ||
-                                          originalTweet?.attachments?.any { it.mid == videoMid } == true
-                            
-                            if (hasVideo) {
-                                // tweetId is already the retweet ID and contains the video - use it directly
-                                actualTweetId = tweetId
-                                identifier = "${tweetId}_$videoMid"
-                                Timber.d("VideoPlaybackCoordinator: tweetId=$tweetId is a retweet containing video $videoMid, using it directly")
-                                
-                                if (videoMetaMap[identifier] == null) {
-                                    videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
-                                    allVideos.add(videoMetaMap[identifier]!!)
-                                }
-                            } else {
-                                // Retweet doesn't contain this video - create entry but warn
-                                Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - retweet doesn't contain this video!")
-                                videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
-                                allVideos.add(videoMetaMap[identifier]!!)
-                            }
-                        } else {
-                            // tweetId is a regular tweet (not a retweet) - check if it contains the video
-                            val hasVideo = tweetInList.attachments?.any { it.mid == videoMid } == true
-                            if (hasVideo) {
-                                // Use it directly as it's a regular tweet containing the video
-                                actualTweetId = tweetId
-                                identifier = "${tweetId}_$videoMid"
-                                Timber.d("VideoPlaybackCoordinator: tweetId=$tweetId is a regular tweet containing video $videoMid, using it directly")
-                                
-                                if (videoMetaMap[identifier] == null) {
-                                    videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = actualTweetId, videoMid = videoMid, index = 0)
-                                    allVideos.add(videoMetaMap[identifier]!!)
-                                }
-                            } else {
-                                // Regular tweet doesn't contain this video - create entry but warn
-                                Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - regular tweet doesn't contain this video!")
-                                videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
-                                allVideos.add(videoMetaMap[identifier]!!)
-                            }
-                        }
-                    } else {
-                        // tweetId is not in currentTweets - create new entry but warn
-                        Timber.w("VideoPlaybackCoordinator: Creating new videoMetaMap entry for identifier=$identifier (tweetId=$tweetId, videoMid=$videoMid) - tweet not found in currentTweets!")
-                        videoMetaMap[identifier] = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
-                        allVideos.add(videoMetaMap[identifier]!!)
-                    }
-                }
-            }
-        }
-        
-        val previousVisibility = videoVisibilityMap[identifier] ?: false
-        val previousRatio = videoVisibilityRatioMap[identifier] ?: 0f
+        // Store cell bounds in LazyColumn coordinates (equivalent to iOS cell.frame in tableView coordinates)
+        val cellBounds = android.graphics.RectF(
+            0f, // Left edge (full width)
+            cellTopY, // Top Y in LazyColumn coordinates
+            viewportWidth, // Right edge (use current viewport width)
+            cellTopY + cellHeight // Bottom Y
+        )
+        tweetCellBoundsMap[tweetId] = cellBounds
+        tweetVisibilityMap[tweetId] = isVisible
 
-        topY?.let { videoPositionMap[identifier] = it }
-        visibilityRatio?.let { videoVisibilityRatioMap[identifier] = it }
-        
-        // Update visibility map (for backward compatibility)
-        videoVisibilityMap[identifier] = isVisible
-        
-        // PERF FIX: Only trigger debounced update if visibility changed or ratio changed significantly
-        // This reduces expensive filtering/sorting operations during scrolling
-        if (previousVisibility != isVisible || 
-            (visibilityRatio != null && kotlin.math.abs(previousRatio - visibilityRatio) > 0.1f)) {
-            // Mark this video as needing update
-            pendingVisibilityUpdates.add(identifier)
-            
-            // Cancel existing debounce job
-            visibilityUpdateDebounceJob?.cancel()
-            
-            // Debounce updates to batch multiple visibility changes together
-            visibilityUpdateDebounceJob = CoroutineScope(Dispatchers.Main).launch {
-                delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
-                
-                // Process all pending updates together
-                if (pendingVisibilityUpdates.isNotEmpty()) {
-                    updateVisibleVideos()
-                    checkAndSwitchVideoIfNeeded()
-                    pendingVisibilityUpdates.clear()
-                }
-            }
+        // PERF FIX: Debounced update to batch multiple cell updates together
+        visibilityUpdateDebounceJob?.cancel()
+        visibilityUpdateDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+            delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
+            updateVisibleVideos()
+            checkAndSwitchVideoIfNeeded()
         }
     }
 
     /**
-     * Update visible videos based on video visibility reports
-     * Only includes videos that are at least 50% visible
+     * Update visible videos based on tweet cell visibility
+     * Only includes videos whose tweet cells are visible and meet the 50% threshold
      */
     private fun updateVisibleVideos() {
         val previousVisibleIds = visibleVideos.map { it.identifier }.toSet()
 
-        // Filter videos by 50% visibility threshold and ensure they have valid positions
-        // Exclude videos without position data (Float.MAX_VALUE) unless they're already the primary video
-        visibleVideos = videoMetaMap.values.filter { videoInfo ->
-            val visibilityRatio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
-            val hasValidPosition = videoPositionMap[videoInfo.identifier] != null && 
-                                  videoPositionMap[videoInfo.identifier] != Float.MAX_VALUE
-            val isCurrentPrimary = videoInfo.identifier == primaryVideoId
-            val hasVisibilityData = videoVisibilityRatioMap.containsKey(videoInfo.identifier) || 
-                                   videoPositionMap.containsKey(videoInfo.identifier)
-            
-            val passesFilter = visibilityRatio >= VISIBILITY_THRESHOLD && (hasValidPosition || isCurrentPrimary)
-            
-            // Debug: Log videos that fail the filter
-            if (!passesFilter && hasVisibilityData) {
-                Timber.w("VideoPlaybackCoordinator: Video filtered out: ${videoInfo.identifier.substring(0, minOf(20, videoInfo.identifier.length))}, ratio=$visibilityRatio, hasPos=$hasValidPosition, isPrimary=$isCurrentPrimary")
-            }
-            
-            passesFilter
+        // Get visible tweet IDs (tweets that have videos and are visible)
+        val tweetsWithVideos = allVideos.map { it.tweetId }.toSet()
+        val visibleTweetIds = tweetVisibilityMap.filter { (tweetId, isVisible) ->
+            isVisible && tweetsWithVideos.contains(tweetId)
+        }.keys
+
+        // Filter videos to only those whose tweet cells are visible
+        visibleVideos = allVideos.filter { videoInfo ->
+            visibleTweetIds.contains(videoInfo.tweetId)
         }.sortedBy { videoInfo ->
-            videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
+            // Sort by cell top Y position
+            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
         }.toMutableList()
         
         // Debug log to verify ordering
         if (visibleVideos.isNotEmpty()) {
             val orderDebug = visibleVideos.joinToString(", ") { videoInfo ->
-                val pos = videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
-                val ratio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
-                val ratioStr = if (videoVisibilityRatioMap.containsKey(videoInfo.identifier)) "${(ratio * 100).toInt()}%" else "N/A"
-                val inMap = if (videoMetaMap.containsKey(videoInfo.identifier)) "✓" else "✗"
-                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${ratioStr}]${inMap}"
+                val bounds = tweetCellBoundsMap[videoInfo.tweetId]
+                val pos = bounds?.top ?: Float.MAX_VALUE
+                val visible = tweetVisibilityMap[videoInfo.tweetId] ?: false
+                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${if (visible) "V" else "H"}]"
             }
             Timber.d("VideoPlaybackCoordinator: Visible videos order (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}): $orderDebug")
-            
-            // Also log all videos in videoMetaMap to see if there are mismatches
-            val allVideosDebug = videoMetaMap.values.joinToString(", ") { videoInfo ->
-                val pos = videoPositionMap[videoInfo.identifier] ?: Float.MAX_VALUE
-                val ratio = videoVisibilityRatioMap[videoInfo.identifier] ?: 0f
-                val ratioStr = if (videoVisibilityRatioMap.containsKey(videoInfo.identifier)) "${(ratio * 100).toInt()}%" else "N/A"
-                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}[${videoInfo.tweetId.substring(0, minOf(8, videoInfo.tweetId.length))}]@${pos.toInt()}[${ratioStr}]"
-            }
-            Timber.d("VideoPlaybackCoordinator: All videos in videoMetaMap: $allVideosDebug")
         }
 
         if (visibleVideos.isEmpty()) {
@@ -446,57 +329,43 @@ object VideoPlaybackCoordinator {
             }
         }
 
-        // Identify primary video based on scroll direction
-        val newPrimary = identifyPrimaryVideo()
-        val newPrimaryIdentifier = newPrimary?.identifier
+        // If we have a primary video that's no longer visible, clear it
+        if (primaryVideoId != null && primaryVideoId !in currentVisibleIds) {
+            primaryVideoId = null
+        }
 
-        // Only reset primary if it's no longer visible, not just because sorting changed slightly
-        if (primaryVideoId != null) {
-            val currentPrimaryIsVisible = primaryVideoId in currentVisibleIds
-            if (!currentPrimaryIsVisible) {
-                // Current primary is no longer visible, switch to new primary
-                primaryVideoId = null
-            } else if (newPrimaryIdentifier != null && newPrimaryIdentifier != primaryVideoId) {
-                // Check if new primary is significantly better positioned than current
-                val currentPrimaryPos = videoPositionMap[primaryVideoId] ?: Float.MAX_VALUE
-                val newPrimaryPos = videoPositionMap[newPrimaryIdentifier] ?: Float.MAX_VALUE
-                
-                val shouldSwitch = if (scrollDirection) {
-                    // Scrolling DOWN: switch if new is significantly higher (lower Y)
-                    newPrimaryPos < currentPrimaryPos - 50f // 50px threshold
-                } else {
-                    // Scrolling UP: switch if new is significantly lower (higher Y)
-                    newPrimaryPos > currentPrimaryPos + 50f // 50px threshold
-                }
-                
-                if (shouldSwitch) {
-                    Timber.d("VideoPlaybackCoordinator: Switching primary from ${primaryVideoId} to ${newPrimaryIdentifier} (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}, currentPos=${currentPrimaryPos.toInt()}, newPos=${newPrimaryPos.toInt()})")
-                    primaryVideoId = null // Will trigger reselection
-                }
+        // Always ensure we have the correct primary video based on current visible videos
+        if (visibleVideos.isNotEmpty()) {
+            val correctPrimary = identifyPrimaryVideo()
+            if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
+                Timber.d("VideoPlaybackCoordinator: Updating primary video to: ${correctPrimary.videoMid}")
+                primaryVideoId = correctPrimary.identifier
+                startPlaybackWithDebounce()
             }
         }
 
-        if (primaryVideoId == null) {
+        // Start playback if we don't have a primary video
+        if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
             startPlaybackWithDebounce()
         }
     }
     
     /**
-     * Identify primary video based on scroll direction
-     * Scrolling DOWN: bottommost video (highest Y) - new content entering from bottom
-     * Scrolling UP: topmost video (lowest Y) - new content entering from top
+     * Identify primary video based on scroll direction (iOS implementation)
+     * Since Android already filters videos to only include those >=50% visible,
+     * we can simplify to just pick the topmost/bottommost from visible videos
      */
     private fun identifyPrimaryVideo(): VideoPlaybackInfo? {
         if (visibleVideos.isEmpty()) return null
-        
+
+        // Since updateVisibleVideos already filters to >=50% visible videos,
+        // we can just pick the topmost/bottommost based on scroll direction
         return if (scrollDirection) {
-            // Scrolling DOWN: return bottommost (last in sorted list - highest Y)
-            // because new videos are entering the viewport from the bottom
-            visibleVideos.last()
+            // Scrolling DOWN: return topmost (first in sorted list - lowest Y)
+            visibleVideos.firstOrNull()
         } else {
-            // Scrolling UP: return topmost (first in sorted list - lowest Y)
-            // because new videos are entering the viewport from the top
-            visibleVideos.first()
+            // Scrolling UP: return bottommost (last in sorted list - highest Y)
+            visibleVideos.lastOrNull()
         }
     }
     
@@ -507,7 +376,20 @@ object VideoPlaybackCoordinator {
         val primaryId = primaryVideoId ?: return
         val primaryVideo = visibleVideos.find { it.identifier == primaryId } ?: return
         
-        val visibilityRatio = videoVisibilityRatioMap[primaryId] ?: 1f
+        // Calculate visibility ratio using cell bounds like iOS
+        val cellBounds = tweetCellBoundsMap[primaryVideo.tweetId] ?: return
+
+        val visibleRect = android.graphics.RectF(
+            0f,
+            previousContentOffset,
+            viewportWidth,
+            previousContentOffset + viewportHeight
+        )
+
+        // Calculate intersection like iOS: cellFrame.intersection(visibleRect)
+        val intersection = android.graphics.RectF()
+        intersection.setIntersect(cellBounds, visibleRect)
+        val visibilityRatio = if (cellBounds.height() > 0) intersection.height() / cellBounds.height() else 0f
         
         // If video is 50% or less visible, switch to appropriate video based on scroll direction
         if (visibilityRatio <= VISIBILITY_THRESHOLD) {
@@ -533,7 +415,7 @@ object VideoPlaybackCoordinator {
                 }
                 
                 val direction = if (scrollDirection) "next (scrolling DOWN)" else "previous (scrolling UP)"
-                Timber.d("VideoPlaybackCoordinator: Switched from ${primaryVideo.videoMid} to ${newPrimary.videoMid} ($direction, visibility: ${visibilityRatio * 100}%%)")
+                Timber.d("VideoPlaybackCoordinator: Switched from ${primaryVideo.videoMid} to ${newPrimary.videoMid} ($direction, cell visibility: ${(visibilityRatio * 100).toInt()}%)")
             }
         }
     }
@@ -570,7 +452,7 @@ object VideoPlaybackCoordinator {
         val primary = identifyPrimaryVideo() ?: visibleVideos.first()
         primaryVideoId = primary.identifier
         
-        val direction = if (scrollDirection) "bottommost (scrolling DOWN)" else "topmost (scrolling UP)"
+        val direction = if (scrollDirection) "topmost (scrolling DOWN)" else "bottommost (scrolling UP)"
         Timber.d("VideoPlaybackCoordinator: Starting playback for primary video: ${primary.videoMid} ($direction)")
 
         // Pause other visible videos and play primary
@@ -672,9 +554,8 @@ object VideoPlaybackCoordinator {
         allVideos.clear()
         currentTweets = emptyList()
         videoMetaMap.clear()
-        videoVisibilityMap.clear()
-        videoVisibilityRatioMap.clear()
-        videoPositionMap.clear()
+        tweetCellBoundsMap.clear()
+        tweetVisibilityMap.clear()
         previousContentOffset = 0f
         scrollDirection = true
     }

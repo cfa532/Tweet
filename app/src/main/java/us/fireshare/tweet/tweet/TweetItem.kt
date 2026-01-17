@@ -139,6 +139,15 @@ fun TweetItem(
                 if (now - lastVisibilityUpdate > debounceMs) {
                     isVisible = isElementVisible(layoutCoordinates, 50)
                     lastVisibilityUpdate = now
+
+                    // Update VideoPlaybackCoordinator with cell position and visibility
+                    // This replaces the old video-based tracking with cell-based tracking like iOS
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateTweetCellPosition(
+                        tweetId = tweet.mid,
+                        cellTopY = layoutCoordinates.boundsInRoot().top,
+                        cellHeight = layoutCoordinates.size.height.toFloat(),
+                        isVisible = isVisible
+                    )
                 }
                 tweetTopY = layoutCoordinates.boundsInRoot().top
             }
