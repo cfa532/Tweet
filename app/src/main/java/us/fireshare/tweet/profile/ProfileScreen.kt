@@ -298,8 +298,9 @@ private fun ProfileContentWithTweetListView(
             viewModel.removeTweetFromAllLists(tweetId)
         },
         headerContent = headerContent,
-        restoreScrollPosition = true, // Remember scroll position when navigating back to profile
+        restoreScrollPosition = false, // Always start at top for user profiles
         context = if (userId == appUser.mid) "appUserProfile" else "userProfile",
-        isInitialLoading = initState // Pass the initialization state to delay videolist creation
+        isInitialLoading = initState, // Pass the initialization state to delay videolist creation
+        pinnedTweets = pinnedTweets // Include pinned tweets in video navigation
     )
 }

@@ -27,6 +27,8 @@ class TweetListViewModel @Inject constructor() : ViewModel() {
     }
     
     fun findStartIndexForVideoMid(videoMid: MimeiId): Int {
-        return _videoIndexedList.value.indexOfFirst { (mid, _) -> mid == videoMid }
+        val index = _videoIndexedList.value.indexOfFirst { (mid, _) -> mid == videoMid }
+        // Return 0 instead of -1 to prevent IndexOutOfBoundsException in pager
+        return if (index >= 0) index else 0
     }
 }

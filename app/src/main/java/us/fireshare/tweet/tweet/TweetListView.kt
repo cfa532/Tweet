@@ -192,7 +192,8 @@ fun TweetListView(
     onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
     onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top programmatically
-    scrollToTopTrigger: Int = 0 // Increment to trigger scroll-to-top from parent
+    scrollToTopTrigger: Int = 0, // Increment to trigger scroll-to-top from parent
+    pinnedTweets: List<Tweet> = emptyList() // Pinned tweets to include in video navigation
 ) {
     // Inject SharedViewModel to get TweetListViewModel
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -369,7 +370,7 @@ fun TweetListView(
                             videoIndexedList = newVideoList
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
-                            VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = emptyList())
+                            VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                         }
                     } else if (tweets.size > lastProcessedTweetCount) {
                         // PERF FIX: Use takeLast instead of filter for O(1) slice
@@ -388,7 +389,7 @@ fun TweetListView(
                                 videoIndexedList = videoIndexedList + newVideos
                                 tweetListViewModel.setVideoIndexedList(videoIndexedList)
                                 onVideoIndexedListChange?.invoke(videoIndexedList)
-                                VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = emptyList())
+                                VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                             }
                         }
                     }
