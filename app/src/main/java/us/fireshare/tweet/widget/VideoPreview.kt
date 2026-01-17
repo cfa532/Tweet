@@ -58,6 +58,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.widget.Gadget.isElementVisible
+import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -87,6 +88,13 @@ fun VideoPreview(
 
     // Use completely stable state that doesn't change during recompositions
     var isVideoVisible by remember(videoMid) { mutableStateOf(false) }
+    
+    // PERF FIX: Throttle visibility updates to reduce expensive calculations during scrolling
+    var lastVisibilityUpdate by remember(videoMid) { mutableLongStateOf(0L) }
+    var lastVisibilityRatio by remember(videoMid) { mutableStateOf(0f) }
+    val visibilityUpdateThrottleMs = 100L // Only update every 100ms during scrolling
+    val visibilityRatioThreshold = 0.15f // Only trigger coordinator update if ratio changes by 15%
+    
     // If using independent mute state (TweetDetailView/FullScreen), start unmuted and don't sync with global state
     // Otherwise (MediaItem in feeds), use global mute state
     var isMuted by remember(videoMid) { 
@@ -544,13 +552,31 @@ fun VideoPreview(
             .clipToBounds()
             .background(MaterialTheme.colorScheme.surfaceVariant) // Material3 surface variant for loading background
             .onGloballyPositioned { layoutCoordinates ->
+                // PERF FIX: Throttle visibility calculations during scrolling
+                val now = System.currentTimeMillis()
+                val timeSinceLastUpdate = now - lastVisibilityUpdate
+                
+                // Always update local visibility state for UI (lightweight check)
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
                     isVideoVisible = newVisibility
                 }
-                if (videoMid != null && playbackTweetId != null) {
-                    val topY = containerTopY ?: layoutCoordinates.boundsInRoot().top
-                    VideoPlaybackCoordinator.updateVideoVisibility(videoMid, playbackTweetId, newVisibility, topY)
+                
+                // Only do expensive calculations and coordinator updates if throttled time has passed
+                // or if visibility state changed (important transitions)
+                if (timeSinceLastUpdate >= visibilityUpdateThrottleMs || isVideoVisible != newVisibility) {
+                    val visibilityRatio = calculateVisibilityRatio(layoutCoordinates)
+                    val ratioChange = kotlin.math.abs(visibilityRatio - lastVisibilityRatio)
+                    
+                    // Only update coordinator if ratio changed significantly or visibility state changed
+                    if (videoMid != null && playbackTweetId != null && 
+                        (ratioChange >= visibilityRatioThreshold || isVideoVisible != newVisibility)) {
+                        val topY = containerTopY ?: layoutCoordinates.boundsInRoot().top
+                        VideoPlaybackCoordinator.updateVideoVisibility(videoMid, playbackTweetId, newVisibility, topY, visibilityRatio)
+                        lastVisibilityRatio = visibilityRatio
+                    }
+                    
+                    lastVisibilityUpdate = now
                 }
             }
             .clickable {

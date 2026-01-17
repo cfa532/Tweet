@@ -431,6 +431,13 @@ fun TweetListView(
                 previousFirstVisibleItem = firstVisibleItem
                 previousScrollOffset = scrollOffset
                 
+                // PERF FIX: Throttle scroll direction updates to reduce coordinator calls
+                // Only update on significant scroll changes (>2 items or >200px) to reduce overhead
+                if (isScrolling && Math.abs(indexDelta) >= 2 || Math.abs(offsetDelta) > 200) {
+                    val currentOffset = firstVisibleItem * 1000f + scrollOffset // Approximate offset
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateScrollDirection(currentOffset)
+                }
+                
                 // PERF FIX: Only invoke callback if state actually changed
                 if (direction != lastDirection || isScrolling != lastScrollingState) {
                     onScrollStateChange?.invoke(ScrollState(isScrolling, direction))

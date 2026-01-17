@@ -264,4 +264,30 @@ object Gadget {
         }
         return false
     }
+    
+    /**
+     * Calculate visibility ratio (0.0 = completely out of view, 1.0 = fully visible)
+     */
+    fun calculateVisibilityRatio(layoutCoordinates: LayoutCoordinates): Float {
+        val layoutHeight = layoutCoordinates.size.height.toFloat()
+        if (layoutHeight <= 0) return 0f
+        
+        val layoutTop = layoutCoordinates.positionInRoot().y
+        val layoutBottom = layoutTop + layoutHeight
+        val parent = layoutCoordinates.parentLayoutCoordinates
+
+        parent?.boundsInRoot()?.let { rect: Rect ->
+            val parentTop = rect.top
+            val parentBottom = rect.bottom
+            
+            // Calculate intersection
+            val visibleTop = kotlin.math.max(layoutTop, parentTop)
+            val visibleBottom = kotlin.math.min(layoutBottom, parentBottom)
+            val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
+            
+            // Return ratio of visible height to total height
+            return (visibleHeight / layoutHeight).coerceIn(0f, 1f)
+        }
+        return 0f
+    }
 }
