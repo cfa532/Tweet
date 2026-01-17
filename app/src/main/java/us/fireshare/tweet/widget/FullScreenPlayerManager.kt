@@ -194,12 +194,8 @@ object FullScreenPlayerManager {
         
         Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
         
-        // Get baseUrl from map (author's baseUrl), with fallback chain: author -> appUser -> BuildConfig
-        val baseUrl = videoBaseUrlMap[videoMid] 
-            ?: HproseInstance.appUser.baseUrl 
-            ?: "http://${BuildConfig.BASE_URL}"
-        Timber.d("FullScreenPlayerManager - Using baseUrl for video $videoMid: $baseUrl")
-        
+        // Get baseUrl from map (author's baseUrl), with fallback to appUser's baseUrl
+        val baseUrl = videoBaseUrlMap[videoMid] ?: HproseInstance.appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
         val videoUrl = HproseInstance.getMediaUrl(videoMid, baseUrl)
         if (videoUrl != null) {
             Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
