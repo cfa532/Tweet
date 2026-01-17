@@ -340,7 +340,8 @@ object VideoPlaybackCoordinator {
             if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
                 Timber.d("VideoPlaybackCoordinator: Updating primary video to: ${correctPrimary.videoMid}")
                 primaryVideoId = correctPrimary.identifier
-                startPlaybackWithDebounce()
+                // Start playback immediately for the new primary video
+                startPrimaryVideoPlayback()
             }
         }
 
