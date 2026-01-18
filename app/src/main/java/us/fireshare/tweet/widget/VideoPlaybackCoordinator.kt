@@ -98,6 +98,7 @@ object VideoPlaybackCoordinator {
     private const val VISIBILITY_THRESHOLD = 0.5f
     
     // PERF FIX: Batch visibility updates to reduce expensive filtering/sorting operations
+    // Reduced to 100ms for more responsive playback during scrolling
     private var visibilityUpdateDebounceJob: Job? = null
     private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L // Batch updates every 150ms
     private var pendingVisibilityUpdates = mutableSetOf<String>() // Track videos that need update
@@ -297,7 +298,18 @@ object VideoPlaybackCoordinator {
      */
     fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, visibilityRatio: Float) {
         val identifier = "${tweetId}_$videoMid"
+        val previousRatio = videoVisibilityMap[identifier] ?: 0f
         videoVisibilityMap[identifier] = visibilityRatio
+        
+        // Check if this visibility change affects primary video immediately during scroll
+        // This makes playback more responsive even while scrolling
+        val crossesThreshold = (previousRatio < VISIBILITY_THRESHOLD && visibilityRatio >= VISIBILITY_THRESHOLD) ||
+                               (previousRatio >= VISIBILITY_THRESHOLD && visibilityRatio < VISIBILITY_THRESHOLD)
+        
+        if (crossesThreshold && visibleVideos.isNotEmpty()) {
+            // Immediately check for primary video change when threshold is crossed
+            checkPrimaryVideoDuringScroll()
+        }
         
         // PERF FIX: Debounced update to batch multiple visibility updates together
         visibilityUpdateDebounceJob?.cancel()
@@ -305,6 +317,57 @@ object VideoPlaybackCoordinator {
             delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
             updateVisibleVideos()
             checkAndSwitchVideoIfNeeded()
+        }
+    }
+    
+    /**
+     * Immediately check and set primary video during scroll when visibility threshold is crossed
+     * This makes playback start immediately even while scrolling, not waiting for debounce
+     */
+    private fun checkPrimaryVideoDuringScroll() {
+        // Build current visible videos list based on current visibility ratios
+        val currentVisible = allVideos.filter { videoInfo ->
+            val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
+            visibilityRatio >= VISIBILITY_THRESHOLD
+        }.sortedBy { videoInfo ->
+            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
+        }
+        
+        if (currentVisible.isNotEmpty()) {
+            val correctPrimary = if (scrollDirection) {
+                // Scrolling DOWN: return topmost (first in sorted list - lowest Y)
+                currentVisible.firstOrNull()
+            } else {
+                // Scrolling UP: return bottommost (last in sorted list - highest Y)
+                currentVisible.lastOrNull()
+            }
+            
+            if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
+                Timber.d("VideoPlaybackCoordinator: Detected primary video change during scroll to: ${correctPrimary.videoMid}")
+                // Immediately start playback for the new primary video
+                val previousPrimaryId = primaryVideoId
+                primaryVideoId = correctPrimary.identifier
+                
+                CoroutineScope(Dispatchers.Main).launch {
+                    // Stop previous primary if different
+                    if (previousPrimaryId != null && previousPrimaryId != correctPrimary.identifier) {
+                        val previousPrimary = videoMetaMap[previousPrimaryId]
+                        if (previousPrimary != null) {
+                            _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(previousPrimary.videoMid))
+                        }
+                    }
+                    
+                    // Start new primary video immediately
+                    _playbackCommands.emit(
+                        VideoPlaybackCommand.ShouldPlayVideo(
+                            tweetId = correctPrimary.tweetId,
+                            videoMid = correctPrimary.videoMid,
+                            videoIndex = correctPrimary.index,
+                            isPrimary = true
+                        )
+                    )
+                }
+            }
         }
     }
     

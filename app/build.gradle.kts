@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 102  // Play version code increased for release
+            versionCode = 103  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
