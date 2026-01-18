@@ -102,6 +102,10 @@ object VideoPlaybackCoordinator {
     private var visibilityUpdateDebounceJob: Job? = null
     private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L // Batch updates every 150ms
     private var pendingVisibilityUpdates = mutableSetOf<String>() // Track videos that need update
+    
+    // Throttle immediate primary video checks during scroll to avoid expensive operations on every update
+    private var immediateCheckThrottleJob: Job? = null
+    private const val IMMEDIATE_CHECK_THROTTLE_MS = 50L // Throttle immediate checks to 50ms for smooth scrolling
 
     // Command flow - similar to iOS NotificationCenter
     private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 1, extraBufferCapacity = 64)
@@ -306,9 +310,14 @@ object VideoPlaybackCoordinator {
         val crossesThreshold = (previousRatio < VISIBILITY_THRESHOLD && visibilityRatio >= VISIBILITY_THRESHOLD) ||
                                (previousRatio >= VISIBILITY_THRESHOLD && visibilityRatio < VISIBILITY_THRESHOLD)
         
-        if (crossesThreshold && visibleVideos.isNotEmpty()) {
-            // Immediately check for primary video change when threshold is crossed
-            checkPrimaryVideoDuringScroll()
+        if (crossesThreshold) {
+            // Throttle immediate checks to avoid expensive operations on every update during fast scrolling
+            // This keeps scrolling smooth while still being responsive
+            immediateCheckThrottleJob?.cancel()
+            immediateCheckThrottleJob = CoroutineScope(Dispatchers.Main).launch {
+                delay(IMMEDIATE_CHECK_THROTTLE_MS)
+                checkPrimaryVideoDuringScroll()
+            }
         }
         
         // PERF FIX: Debounced update to batch multiple visibility updates together
@@ -323,23 +332,41 @@ object VideoPlaybackCoordinator {
     /**
      * Immediately check and set primary video during scroll when visibility threshold is crossed
      * This makes playback start immediately even while scrolling, not waiting for debounce
+     * Optimized to avoid expensive operations during fast scrolling
      */
     private fun checkPrimaryVideoDuringScroll() {
-        // Build current visible videos list based on current visibility ratios
-        val currentVisible = allVideos.filter { videoInfo ->
-            val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
-            visibilityRatio >= VISIBILITY_THRESHOLD
-        }.sortedBy { videoInfo ->
-            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
+        // PERF: Use existing visibleVideos if available and recent, otherwise build efficiently
+        // Only rebuild if we don't have a valid list or if it's significantly outdated
+        val currentVisible = if (visibleVideos.isNotEmpty()) {
+            // Use cached visible videos but verify they're still valid
+            visibleVideos.filter { videoInfo ->
+                val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
+                visibilityRatio >= VISIBILITY_THRESHOLD
+            }
+        } else {
+            // Build list only if we don't have cached visible videos
+            allVideos.filter { videoInfo ->
+                val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
+                visibilityRatio >= VISIBILITY_THRESHOLD
+            }
         }
         
-        if (currentVisible.isNotEmpty()) {
+        // Sort only if we have videos and need to determine primary
+        val sortedVisible = if (currentVisible.isNotEmpty()) {
+            currentVisible.sortedBy { videoInfo ->
+                tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
+            }
+        } else {
+            emptyList()
+        }
+        
+        if (sortedVisible.isNotEmpty()) {
             val correctPrimary = if (scrollDirection) {
                 // Scrolling DOWN: return topmost (first in sorted list - lowest Y)
-                currentVisible.firstOrNull()
+                sortedVisible.firstOrNull()
             } else {
                 // Scrolling UP: return bottommost (last in sorted list - highest Y)
-                currentVisible.lastOrNull()
+                sortedVisible.lastOrNull()
             }
             
             if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
@@ -348,6 +375,7 @@ object VideoPlaybackCoordinator {
                 val previousPrimaryId = primaryVideoId
                 primaryVideoId = correctPrimary.identifier
                 
+                // Use Dispatchers.Main for immediate response during scroll
                 CoroutineScope(Dispatchers.Main).launch {
                     // Stop previous primary if different
                     if (previousPrimaryId != null && previousPrimaryId != correctPrimary.identifier) {
