@@ -383,13 +383,8 @@ fun VideoPreview(
                     }
 
                     androidx.media3.common.Player.STATE_BUFFERING -> {
-                        // Only show loading if not already cached/preloaded
-                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-                            isLoading = true
-                        } else {
-                            // Video is preloaded, no need to show loading
-                            isLoading = false
-                        }
+                        // Show loading spinner when video is buffering data
+                        isLoading = true
                     }
 
                     androidx.media3.common.Player.STATE_ENDED -> {
@@ -407,13 +402,8 @@ fun VideoPreview(
                     }
 
                     androidx.media3.common.Player.STATE_IDLE -> {
-                        // Only show loading if not already cached/preloaded
-                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-                            isLoading = true
-                        } else {
-                            // Video is preloaded/cached, clear loading state
-                            isLoading = false
-                        }
+                        // Show loading spinner when video is idle and preparing
+                        isLoading = true
                     }
                 }
             }
