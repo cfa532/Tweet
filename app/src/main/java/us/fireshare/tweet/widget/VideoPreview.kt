@@ -581,13 +581,19 @@ fun VideoPreview(
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
                     // Keep last frame to avoid black flashes when resetting/pausing
                     setKeepContentOnPlayerReset(true)
-                    // Only show buffering indicator when playing and buffering
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    // Disable built-in buffering indicator - we show our own CircularProgressIndicator
+                    // This prevents duplicate loading spinners
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 }
             },
             update = { playerView ->
+                // Update player reference in case it changes (e.g., after recovery)
+                // This fixes black screen issue when player is recreated
+                if (playerView.player != exoPlayer) {
+                    playerView.player = exoPlayer
+                }
                 // Update controller visibility when state changes
                 if (enableTapToShowControls) {
                     playerView.useController = showControls // Use state for tap-to-show controls
