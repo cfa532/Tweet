@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -115,11 +116,42 @@ fun BottomNavigationBar(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // Resolve selection from the current route so Profile can be "no tab selected".
+    // We keep `selectedIndex` as a fallback for any route we don't recognize.
+    val resolvedSelectedIndex by remember(currentRoute, selectedIndex) {
+        derivedStateOf {
+            when {
+                currentRoute == null -> selectedIndex
+
+                // User profile should not highlight the Home tab.
+                currentRoute.contains("UserProfile") -> -1
+
+                // Main bottom tabs (and common subroutes that should keep tab context)
+                currentRoute.contains("TweetFeed") || currentRoute.contains("TweetDetail") -> 0
+                currentRoute.contains("ChatList") || currentRoute.contains("ChatBox") -> 1
+                currentRoute.contains("ComposeTweet") || currentRoute.contains("ComposeComment") -> 2
+                currentRoute.contains("Search") -> 3
+
+                else -> selectedIndex
+            }
+        }
+    }
+
     // Navigation callback uses latest route state
     val onNavigationClick: (NavTweet) -> Unit = onNavigationClick@{ targetRoute ->
         if (appUser.isGuest() && targetRoute != NavTweet.TweetFeed) {
             // Handle guest warning
             return@onNavigationClick
+        }
+
+        // Home should always bring you back to the main feed, even from deep stacks like UserProfile.
+        // Prefer popping back to an existing TweetFeed instance (keeps its state/scroll), otherwise navigate.
+        if (targetRoute == NavTweet.TweetFeed) {
+            val tweetFeedRouteName = NavTweet.TweetFeed::class.qualifiedName
+            val didPopToFeed = tweetFeedRouteName?.let { routeName ->
+                navController.popBackStack(routeName, inclusive = false)
+            } ?: false
+            if (didPopToFeed) return@onNavigationClick
         }
         
         // Only navigate if we're not already on the target route
@@ -132,7 +164,7 @@ fun BottomNavigationBar(
             navController.navigate(targetRoute) {
                 launchSingleTop = true
                 restoreState = true
-                popUpTo(navController.graph.startDestinationId) {
+                popUpTo(navController.graph.findStartDestination().id) {
                     saveState = true
                 }
             }
@@ -166,7 +198,7 @@ fun BottomNavigationBar(
             val context = LocalContext.current
 
             items.forEachIndexed { index, item ->
-                val isSelected = index == selectedIndex
+                val isSelected = index == resolvedSelectedIndex
                 val baseSize = when (index) {
                     0 -> 28.dp  // Home button - larger
                     2 -> 20.dp  // Compose button - smaller
