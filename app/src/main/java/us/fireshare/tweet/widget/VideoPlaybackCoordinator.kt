@@ -384,8 +384,7 @@ object VideoPlaybackCoordinator {
             val correctPrimary = identifyPrimaryVideo()
             if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
                 Timber.d("VideoPlaybackCoordinator: Updating primary video to: ${correctPrimary.videoMid}")
-                primaryVideoId = correctPrimary.identifier
-                // Start playback immediately for the new primary video
+                // Start playback immediately for the new primary video (this will pause the previous one)
                 startPrimaryVideoPlayback()
             }
         }
@@ -430,15 +429,23 @@ object VideoPlaybackCoordinator {
         if (visibilityRatio < VISIBILITY_THRESHOLD) {
             val newPrimary = identifyPrimaryVideo()
             if (newPrimary != null && newPrimary.identifier != primaryId) {
-                // Pause current video
+                // Stop current primary video and pause all other visible videos
                 CoroutineScope(Dispatchers.Main).launch {
-                    _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(primaryVideo.videoMid))
-                }
-                
-                // Switch to new primary video
-                primaryVideoId = newPrimary.identifier
-                
-                CoroutineScope(Dispatchers.Main).launch {
+                    // Stop the current primary video (use Stop for immediate effect)
+                    _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(primaryVideo.videoMid))
+                    
+                    // Pause all other visible videos (including the new primary temporarily, then we'll play it)
+                    visibleVideos.forEach { videoInfo ->
+                        if (videoInfo.identifier != newPrimary.identifier) {
+                            _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(videoInfo.videoMid))
+                        }
+                    }
+                    
+                    // Add a small delay to ensure stop/pause commands are processed before starting new video
+                    delay(50L)
+                    
+                    // Switch to new primary video and play it
+                    primaryVideoId = newPrimary.identifier
                     _playbackCommands.emit(
                         VideoPlaybackCommand.ShouldPlayVideo(
                             tweetId = newPrimary.tweetId,
@@ -485,27 +492,44 @@ object VideoPlaybackCoordinator {
         
         // Get primary video based on scroll direction
         val primary = identifyPrimaryVideo() ?: visibleVideos.first()
+        val previousPrimaryId = primaryVideoId
         primaryVideoId = primary.identifier
         
         val direction = if (scrollDirection) "topmost (scrolling DOWN)" else "bottommost (scrolling UP)"
         Timber.d("VideoPlaybackCoordinator: Starting playback for primary video: ${primary.videoMid} ($direction)")
 
         // Pause other visible videos and play primary
+        // Also explicitly stop the previous primary video if it exists and is different
         CoroutineScope(Dispatchers.Main).launch {
+            // First, stop the previous primary video (use Stop instead of Pause for immediate effect)
+            if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
+                val previousPrimary = videoMetaMap[previousPrimaryId]
+                if (previousPrimary != null) {
+                    Timber.d("VideoPlaybackCoordinator: Stopping previous primary video: ${previousPrimary.videoMid}")
+                    _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(previousPrimary.videoMid))
+                }
+            }
+            
+            // Pause all visible videos except the new primary
             visibleVideos.forEach { videoInfo ->
-                if (videoInfo.identifier == primary.identifier) {
-                    _playbackCommands.emit(
-                        VideoPlaybackCommand.ShouldPlayVideo(
-                            tweetId = videoInfo.tweetId,
-                            videoMid = videoInfo.videoMid,
-                            videoIndex = videoInfo.index,
-                            isPrimary = true
-                        )
-                    )
-                } else {
+                if (videoInfo.identifier != primary.identifier) {
                     _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(videoInfo.videoMid))
                 }
             }
+            
+            // Add a small delay to ensure pause/stop commands are processed before starting new video
+            // This prevents multiple videos from playing simultaneously
+            delay(50L)
+            
+            // Finally, start the new primary video
+            _playbackCommands.emit(
+                VideoPlaybackCommand.ShouldPlayVideo(
+                    tweetId = primary.tweetId,
+                    videoMid = primary.videoMid,
+                    videoIndex = primary.index,
+                    isPrimary = true
+                )
+            )
         }
     }
     
