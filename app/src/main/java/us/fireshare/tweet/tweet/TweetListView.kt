@@ -73,6 +73,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
@@ -872,6 +873,12 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
         // PERF FIX: Cache media type inference (call once instead of 3×)
         // Process results and build video list
         results.forEach { (feedIndex, originalTweet, tweetToCheck) ->
+            // Determine if this is a quoted tweet (has originalTweetId AND has own content)
+            val hasContentText = !originalTweet.content.isNullOrEmpty()
+            val hasAttachments = originalTweet.attachments != null && originalTweet.attachments!!.isNotEmpty()
+            val hasOwnContent = hasContentText || hasAttachments
+            val isQuotedTweet = originalTweet.originalTweetId != null && hasOwnContent
+            
             // Cache media types for all attachments (single pass)
             val attachmentsWithTypes = tweetToCheck.attachments?.map { attachment ->
                 Pair(attachment.mid, inferMediaTypeFromAttachment(attachment))
@@ -882,7 +889,7 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
                 mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
             }
             
-            // Add to video list
+            // Add quoting tweet's own videos to the list
             videoAttachments.forEach { (mid, mediaType) ->
                 videoInfoList.add(VideoInfo(
                     mid = mid,
@@ -890,6 +897,36 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
                     feedIndex = feedIndex,
                     tweetTimestamp = originalTweet.timestamp
                 ))
+            }
+            
+            // For quoted tweets, also add embedded tweet's videos right after the quoting tweet's videos
+            // This ensures embedded videos appear at the quoting tweet's position in the feed,
+            // so the next video after an embedded video is the video behind the quoting tweet
+            if (isQuotedTweet && originalTweet.originalTweetId != null) {
+                // Try to get embedded tweet from cache (non-blocking)
+                val embeddedTweet = TweetCacheManager.getCachedTweet(originalTweet.originalTweetId!!)
+                
+                // Only add embedded tweet videos if they're already cached
+                // They will be added later when fetched asynchronously by TweetItem
+                embeddedTweet?.attachments?.forEach { attachment ->
+                    val mediaType = inferMediaTypeFromAttachment(attachment)
+                    if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
+                        // Use quoting tweet's feedIndex and timestamp so embedded video appears
+                        // at the quoting tweet's position, not the original tweet's position
+                        videoInfoList.add(VideoInfo(
+                            mid = attachment.mid,
+                            mediaType = mediaType,
+                            feedIndex = feedIndex,  // Use quoting tweet's position
+                            tweetTimestamp = originalTweet.timestamp  // Use quoting tweet's timestamp
+                        ))
+                        Timber.tag("TweetListView").d("Added embedded tweet video: mid=${attachment.mid}, quotingTweetId=${originalTweet.mid}, embeddedTweetId=${originalTweet.originalTweetId}, feedIndex=$feedIndex")
+                    }
+                }
+                
+                // If embedded tweet is not cached, log that we'll add it later when it's fetched
+                if (embeddedTweet == null) {
+                    Timber.tag("TweetListView").d("Embedded tweet ${originalTweet.originalTweetId} not cached yet for quoting tweet ${originalTweet.mid}, will be added later when fetched by TweetItem")
+                }
             }
         }
     }
