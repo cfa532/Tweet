@@ -925,7 +925,6 @@ fun ImageViewer(
                         }
                         
                         onLoadComplete?.invoke()
-                        Timber.tag("ImageViewer").d("Successfully loaded compressed image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
                     } else {
                         // Server load failed - show error
                         if (initialBitmap == null) {

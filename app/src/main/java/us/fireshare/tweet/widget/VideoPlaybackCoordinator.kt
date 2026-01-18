@@ -126,7 +126,6 @@ object VideoPlaybackCoordinator {
                     index = index
                 )
                 videosToAdd.add(videoInfo)
-                Timber.d("VideoPlaybackCoordinator: Added embedded tweet video after load: identifier=${videoInfo.identifier}, quotingTweetId=${quotingTweetId}, embeddedTweetId=${embeddedTweet.mid}, videoMid=${attachment.mid}")
             }
         }
 
@@ -144,8 +143,6 @@ object VideoPlaybackCoordinator {
                 Pair(videoInfo.videoMid, mediaType)
             }
             FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
-
-            Timber.d("VideoPlaybackCoordinator: Added ${videosToAdd.size} embedded tweet videos, total videos now: ${allVideos.size}")
         }
     }
 
@@ -201,7 +198,6 @@ object VideoPlaybackCoordinator {
                                 index = index
                             )
                             videos.add(videoInfo)
-                            Timber.d("VideoPlaybackCoordinator: Added retweet video: identifier=${videoInfo.identifier}, tweetId=${tweet.mid}, originalTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
                         }
                     }
 
@@ -240,13 +236,7 @@ object VideoPlaybackCoordinator {
                                 index = index
                             )
                             videos.add(videoInfo)
-                            Timber.d("VideoPlaybackCoordinator: Added embedded tweet video: identifier=${videoInfo.identifier}, quotingTweetId=${tweet.mid}, embeddedTweetId=${tweet.originalTweetId}, videoMid=${attachment.mid}")
                         }
-                    }
-
-                    // If embedded tweet is not cached, log that we'll add it later when it's fetched
-                    if (embeddedTweet == null) {
-                        Timber.d("VideoPlaybackCoordinator: Embedded tweet ${tweet.originalTweetId} not cached yet, will be added later when fetched by TweetItem")
                     }
                 }
             }
@@ -289,7 +279,6 @@ object VideoPlaybackCoordinator {
     fun updateViewportSize(width: Float, height: Float) {
         viewportWidth = width
         viewportHeight = height
-        Timber.d("VideoPlaybackCoordinator: Updated viewport size: ${width.toInt()}x${height.toInt()}")
     }
     
     /**
@@ -445,7 +434,6 @@ object VideoPlaybackCoordinator {
                 val visibility = videoVisibilityMap[videoInfo.identifier] ?: 0f
                 "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${(visibility * 100).toInt()}%]"
             }
-            Timber.d("VideoPlaybackCoordinator: Visible videos (>=50%) order (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}): $orderDebug")
         }
 
         if (visibleVideos.isEmpty()) {
@@ -587,7 +575,6 @@ object VideoPlaybackCoordinator {
         primaryVideoId = primary.identifier
         
         val direction = if (scrollDirection) "topmost (scrolling DOWN)" else "bottommost (scrolling UP)"
-        Timber.d("VideoPlaybackCoordinator: Starting playback for primary video: ${primary.videoMid} ($direction)")
 
         // Pause other visible videos and play primary
         // Also explicitly stop the previous primary video if it exists and is different

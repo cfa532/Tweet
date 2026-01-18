@@ -109,7 +109,6 @@ object FullScreenPlayerManager {
             val baseUrl = tweet?.author?.baseUrl ?: HproseInstance.appUser.baseUrl
             if (baseUrl != null) {
                 baseUrlMap[videoMid] = baseUrl
-                Timber.d("FullScreenPlayerManager - Mapped video $videoMid to baseUrl: $baseUrl (from tweet ${tweet?.mid})")
             }
         }
         
