@@ -74,6 +74,10 @@ object VideoPlaybackCoordinator {
     // Tweet cell tracking (iOS-style) - maps tweetId to cell bounds and visibility
     private val tweetCellBoundsMap = mutableMapOf<String, android.graphics.RectF>() // tweetId -> cell bounds in LazyColumn coordinates
     private val tweetVisibilityMap = mutableMapOf<String, Boolean>() // tweetId -> isVisible
+    
+    // Video visibility tracking - maps video identifier to visibility ratio (0.0 to 1.0)
+    // This stores the MediaGrid's visibility ratio for each video
+    private val videoVisibilityMap = mutableMapOf<String, Float>() // video identifier -> visibility ratio
 
     // Viewport dimensions for visibility calculations (updated dynamically)
     private var viewportWidth = 1080f // Default fallback
@@ -88,7 +92,7 @@ object VideoPlaybackCoordinator {
     
     // Playback debounce timer
     private var playbackDebounceJob: Job? = null
-    private const val PLAYBACK_DEBOUNCE_MS = 200L
+    private const val PLAYBACK_DEBOUNCE_MS = 100L
     
     // Visibility threshold (50% = 0.5)
     private const val VISIBILITY_THRESHOLD = 0.5f
@@ -284,8 +288,30 @@ object VideoPlaybackCoordinator {
     }
     
     /**
+     * Update video visibility based on MediaGrid visibility
+     * Called by MediaGrid when its visibility changes
+     * 
+     * @param videoMid The video's mid identifier
+     * @param tweetId The parent tweet ID (for identifying the video in the list)
+     * @param visibilityRatio The visibility ratio of the MediaGrid (0.0 to 1.0)
+     */
+    fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, visibilityRatio: Float) {
+        val identifier = "${tweetId}_$videoMid"
+        videoVisibilityMap[identifier] = visibilityRatio
+        
+        // PERF FIX: Debounced update to batch multiple visibility updates together
+        visibilityUpdateDebounceJob?.cancel()
+        visibilityUpdateDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+            delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
+            updateVisibleVideos()
+            checkAndSwitchVideoIfNeeded()
+        }
+    }
+    
+    /**
      * Update tweet cell position and visibility (called by TweetItem's onGloballyPositioned)
      * This replaces the old video-based tracking with cell-based tracking like iOS
+     * NOTE: This is kept for backward compatibility but video visibility now comes from MediaGrid
      */
     fun updateTweetCellPosition(
         tweetId: String,
@@ -302,46 +328,33 @@ object VideoPlaybackCoordinator {
         )
         tweetCellBoundsMap[tweetId] = cellBounds
         tweetVisibilityMap[tweetId] = isVisible
-
-        // PERF FIX: Debounced update to batch multiple cell updates together
-        visibilityUpdateDebounceJob?.cancel()
-        visibilityUpdateDebounceJob = CoroutineScope(Dispatchers.Main).launch {
-            delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
-            updateVisibleVideos()
-            checkAndSwitchVideoIfNeeded()
-        }
     }
 
     /**
-     * Update visible videos based on tweet cell visibility
-     * Only includes videos whose tweet cells are visible and meet the 50% threshold
+     * Update visible videos based on MediaGrid visibility
+     * Only includes videos with >= 50% visibility (based on MediaGrid visibility ratio)
      */
     private fun updateVisibleVideos() {
         val previousVisibleIds = visibleVideos.map { it.identifier }.toSet()
 
-        // Get visible tweet IDs (tweets that have videos and are visible)
-        val tweetsWithVideos = allVideos.map { it.tweetId }.toSet()
-        val visibleTweetIds = tweetVisibilityMap.filter { (tweetId, isVisible) ->
-            isVisible && tweetsWithVideos.contains(tweetId)
-        }.keys
-
-        // Filter videos to only those whose tweet cells are visible
+        // Filter videos to only those with >= 50% visibility from MediaGrid
         visibleVideos = allVideos.filter { videoInfo ->
-            visibleTweetIds.contains(videoInfo.tweetId)
+            val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
+            visibilityRatio >= VISIBILITY_THRESHOLD
         }.sortedBy { videoInfo ->
-            // Sort by cell top Y position
+            // Sort by cell top Y position for primary video selection
             tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
         }.toMutableList()
         
-        // Debug log to verify ordering
+        // Debug log to verify ordering and visibility
         if (visibleVideos.isNotEmpty()) {
             val orderDebug = visibleVideos.joinToString(", ") { videoInfo ->
                 val bounds = tweetCellBoundsMap[videoInfo.tweetId]
                 val pos = bounds?.top ?: Float.MAX_VALUE
-                val visible = tweetVisibilityMap[videoInfo.tweetId] ?: false
-                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${if (visible) "V" else "H"}]"
+                val visibility = videoVisibilityMap[videoInfo.identifier] ?: 0f
+                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${(visibility * 100).toInt()}%]"
             }
-            Timber.d("VideoPlaybackCoordinator: Visible videos order (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}): $orderDebug")
+            Timber.d("VideoPlaybackCoordinator: Visible videos (>=50%) order (scrollDirection=${if (scrollDirection) "DOWN" else "UP"}): $orderDebug")
         }
 
         if (visibleVideos.isEmpty()) {
@@ -404,28 +417,17 @@ object VideoPlaybackCoordinator {
     
     /**
      * Check if current primary video is 50% off screen and switch to next video if needed
+     * Uses MediaGrid visibility ratio instead of cell bounds
      */
     private fun checkAndSwitchVideoIfNeeded() {
         val primaryId = primaryVideoId ?: return
         val primaryVideo = visibleVideos.find { it.identifier == primaryId } ?: return
         
-        // Calculate visibility ratio using cell bounds like iOS
-        val cellBounds = tweetCellBoundsMap[primaryVideo.tweetId] ?: return
-
-        val visibleRect = android.graphics.RectF(
-            0f,
-            previousContentOffset,
-            viewportWidth,
-            previousContentOffset + viewportHeight
-        )
-
-        // Calculate intersection like iOS: cellFrame.intersection(visibleRect)
-        val intersection = android.graphics.RectF()
-        intersection.setIntersect(cellBounds, visibleRect)
-        val visibilityRatio = if (cellBounds.height() > 0) intersection.height() / cellBounds.height() else 0f
+        // Get visibility ratio from MediaGrid
+        val visibilityRatio = videoVisibilityMap[primaryId] ?: 0f
         
-        // If video is 50% or less visible, switch to appropriate video based on scroll direction
-        if (visibilityRatio <= VISIBILITY_THRESHOLD) {
+        // If video is less than 50% visible, switch to appropriate video based on scroll direction
+        if (visibilityRatio < VISIBILITY_THRESHOLD) {
             val newPrimary = identifyPrimaryVideo()
             if (newPrimary != null && newPrimary.identifier != primaryId) {
                 // Pause current video
@@ -448,7 +450,7 @@ object VideoPlaybackCoordinator {
                 }
                 
                 val direction = if (scrollDirection) "next (scrolling DOWN)" else "previous (scrolling UP)"
-                Timber.d("VideoPlaybackCoordinator: Switched from ${primaryVideo.videoMid} to ${newPrimary.videoMid} ($direction, cell visibility: ${(visibilityRatio * 100).toInt()}%)")
+                Timber.d("VideoPlaybackCoordinator: Switched from ${primaryVideo.videoMid} to ${newPrimary.videoMid} ($direction, MediaGrid visibility: ${(visibilityRatio * 100).toInt()}%)")
             }
         }
     }
@@ -589,8 +591,11 @@ object VideoPlaybackCoordinator {
         videoMetaMap.clear()
         tweetCellBoundsMap.clear()
         tweetVisibilityMap.clear()
+        videoVisibilityMap.clear()
+        primaryVideoId = null
         previousContentOffset = 0f
         scrollDirection = true
+        Timber.d("VideoPlaybackCoordinator: Cleared all state")
     }
 }
 

@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,8 @@ import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.MediaItemView
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 
 /**
  * MediaGrid displays a grid of media items with intelligent layout based on aspect ratios.
@@ -191,6 +195,18 @@ fun MediaGrid(
         }
     }
 
+    // Track MediaGrid visibility and report it for all videos
+    var gridVisibilityRatio by remember { mutableStateOf(0f) }
+    
+    // Get the tweet ID to use for video visibility reporting
+    val tweetIdForVisibility = if (enableCoordinator) {
+        if (parentTweetId != null && parentTweetId.isNotEmpty()) {
+            parentTweetId
+        } else {
+            tweet.mid
+        }
+    } else null
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,6 +215,25 @@ fun MediaGrid(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { layoutCoordinates ->
+                    // Calculate MediaGrid visibility ratio
+                    val visibility = calculateVisibilityRatio(layoutCoordinates)
+                    gridVisibilityRatio = visibility
+                    
+                    // Report visibility for all videos in this MediaGrid
+                    if (enableCoordinator && tweetIdForVisibility != null) {
+                        limitedMediaList.forEachIndexed { index, item ->
+                            val mediaType = inferMediaTypeFromAttachment(item)
+                            if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
+                                VideoPlaybackCoordinator.updateVideoVisibility(
+                                    videoMid = item.mid,
+                                    tweetId = tweetIdForVisibility,
+                                    visibilityRatio = visibility
+                                )
+                            }
+                        }
+                    }
+                }
         ) {
             when (limitedMediaList.size) {
             1 -> {
