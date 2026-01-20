@@ -238,7 +238,7 @@ private fun RetweetContent(
                             Timber.tag("TweetItem")
                                 .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
                             // Notify VideoPlaybackCoordinator about the loaded original tweet for retweet
-                            us.fireshare.tweet.widget.VideoPlaybackCoordinator.addEmbeddedTweetVideos(tweet.mid, originalTweet!!)
+                            us.fireshare.tweet.widget.VideoPlaybackCoordinator.addRetweetVideos(tweet.mid, originalTweet!!)
                         } else {
                             Timber.tag("TweetItem")
                                 .w("Original tweet not found: $originalTweetId")

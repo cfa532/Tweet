@@ -130,19 +130,38 @@ object VideoPlaybackCoordinator {
         }
 
         if (videosToAdd.isNotEmpty()) {
-            allVideos.addAll(videosToAdd)
-            videosToAdd.forEach { videoInfo ->
-                videoMetaMap[videoInfo.identifier] = videoInfo
+            // Rebuild the complete video list to ensure correct feed ordering
+            // This is necessary because embedded videos may be loaded after initial list building
+            kotlinx.coroutines.runBlocking {
+                buildVideoList(currentTweets, emptyList())
             }
+        }
+    }
 
-            // Update FullScreenPlayerManager with the new video list
-            val videoListForFullScreen = allVideos.map { videoInfo ->
-                val tweet = currentTweets.find { it.mid == videoInfo.tweetId }
-                val attachment = tweet?.attachments?.getOrNull(videoInfo.index)
-                val mediaType = attachment?.type ?: MediaType.Video
-                Pair(videoInfo.videoMid, mediaType)
+    /**
+     * Add retweet videos to the video list when the original tweet becomes available
+     * Called by TweetItem when retweet original tweets are loaded
+     */
+    fun addRetweetVideos(retweetId: MimeiId, originalTweet: Tweet) {
+        val videosToAdd = mutableListOf<VideoPlaybackInfo>()
+
+        originalTweet.attachments?.forEachIndexed { index, attachment ->
+            if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
+                val videoInfo = VideoPlaybackInfo(
+                    tweetId = retweetId,  // Use retweet's ID for positioning
+                    videoMid = attachment.mid,
+                    index = index
+                )
+                videosToAdd.add(videoInfo)
             }
-            FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
+        }
+
+        if (videosToAdd.isNotEmpty()) {
+            // Rebuild the complete video list to ensure correct feed ordering
+            // This is necessary because retweet videos may be loaded after initial list building
+            kotlinx.coroutines.runBlocking {
+                buildVideoList(currentTweets, emptyList())
+            }
         }
     }
 
