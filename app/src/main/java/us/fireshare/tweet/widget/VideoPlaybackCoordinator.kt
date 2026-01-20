@@ -98,10 +98,9 @@ object VideoPlaybackCoordinator {
     private const val VISIBILITY_THRESHOLD = 0.5f
     
     // PERF FIX: Batch visibility updates to reduce expensive filtering/sorting operations
-    // Reduced to 100ms for more responsive playback during scrolling
+    // Reduced to 150ms for more responsive playback during scrolling
     private var visibilityUpdateDebounceJob: Job? = null
     private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L // Batch updates every 150ms
-    private var pendingVisibilityUpdates = mutableSetOf<String>() // Track videos that need update
     
     // Throttle immediate primary video checks during scroll to avoid expensive operations on every update
     private var immediateCheckThrottleJob: Job? = null
@@ -447,12 +446,12 @@ object VideoPlaybackCoordinator {
         
         // Debug log to verify ordering and visibility
         if (visibleVideos.isNotEmpty()) {
-            val orderDebug = visibleVideos.joinToString(", ") { videoInfo ->
+            Timber.d("VideoPlaybackCoordinator: Visible videos order: ${visibleVideos.joinToString(", ") { videoInfo ->
                 val bounds = tweetCellBoundsMap[videoInfo.tweetId]
                 val pos = bounds?.top ?: Float.MAX_VALUE
                 val visibility = videoVisibilityMap[videoInfo.identifier] ?: 0f
                 "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${(visibility * 100).toInt()}%]"
-            }
+            }}")
         }
 
         if (visibleVideos.isEmpty()) {
@@ -592,8 +591,6 @@ object VideoPlaybackCoordinator {
         val primary = identifyPrimaryVideo() ?: visibleVideos.first()
         val previousPrimaryId = primaryVideoId
         primaryVideoId = primary.identifier
-        
-        val direction = if (scrollDirection) "topmost (scrolling DOWN)" else "bottommost (scrolling UP)"
 
         // Pause other visible videos and play primary
         // Also explicitly stop the previous primary video if it exists and is different
@@ -702,9 +699,22 @@ object VideoPlaybackCoordinator {
     }
     
     /**
+     * Cancel all active jobs to prevent resource leaks
+     */
+    private fun cancelAllJobs() {
+        playbackDebounceJob?.cancel()
+        playbackDebounceJob = null
+        visibilityUpdateDebounceJob?.cancel()
+        visibilityUpdateDebounceJob = null
+        immediateCheckThrottleJob?.cancel()
+        immediateCheckThrottleJob = null
+    }
+
+    /**
      * Clear all state
      */
     fun clear() {
+        cancelAllJobs()
         stopAllVideos()
         visibleVideos.clear()
         allVideos.clear()
