@@ -83,13 +83,8 @@ fun UserFavorites(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // Navigate back to user profile's tweetlist view
-                        navController.navigate(NavTweet.UserProfile(appUser.mid)) {
-                            // Pop back stack up to and including the current screen
-                            popUpTo(NavTweet.Favorites(appUser.mid)) { inclusive = true }
-                            // Avoid creating duplicate entries if UserProfile is already in stack
-                            launchSingleTop = true
-                        }
+                        // Simply pop back to the previous screen (user profile)
+                        navController.popBackStack()
                     })
                     {
                         Icon(

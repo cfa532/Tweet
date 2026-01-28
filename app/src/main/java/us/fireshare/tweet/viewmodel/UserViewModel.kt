@@ -652,7 +652,7 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun getBookmarks(pageNumber: Int): List<Tweet?> {
         // Load cached bookmarks first for instant display (only on initial load, not refresh)
-        // Skip cache if bookmarks list already has items (indicates this is a refresh, not initial load)
+        // Skip cache if bookmarks list already has items to avoid reordering during refresh
         if (pageNumber == 0 && userId == appUser.mid && _bookmarks.value.isEmpty()) {
             val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
             if (cachedBookmarks.isNotEmpty()) {
@@ -775,7 +775,7 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun getFavorites(pageNumber: Int): List<Tweet?> {
         // Load cached favorites first for instant display (only on initial load, not refresh)
-        // Skip cache if favorites list already has items (indicates this is a refresh, not initial load)
+        // Skip cache if favorites list already has items to avoid reordering during refresh
         if (pageNumber == 0 && userId == appUser.mid && _favorites.value.isEmpty()) {
             val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
             if (cachedFavorites.isNotEmpty()) {

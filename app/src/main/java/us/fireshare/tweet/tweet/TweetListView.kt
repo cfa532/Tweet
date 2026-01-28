@@ -462,10 +462,11 @@ fun TweetListView(
                 
                 // PERF FIX: Save scroll position less frequently (1 sec throttle + immediate on scroll stop)
                 // Reduces state updates from 5/sec to 1/sec during scroll (80% reduction)
+                // IMPORTANT: Skip saving during refresh to prevent scroll position corruption
                 val now = System.currentTimeMillis()
-                val shouldSave = !isScrolling || (now - lastSaveTime > 1000)
-                
-                if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first || 
+                val shouldSave = !isRefreshingAtTop && (!isScrolling || (now - lastSaveTime > 1000))
+
+                if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
                     savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
                     lastSaveTime = now
