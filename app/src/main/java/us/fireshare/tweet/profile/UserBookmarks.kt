@@ -21,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -45,8 +48,12 @@ fun UserBookmarks(
 ) {
     val navController = LocalNavController.current
     val bookmarks by viewModel.bookmarks.collectAsState()
+    val bookmarksInitialLoadComplete by viewModel.bookmarksInitialLoadComplete.collectAsState()
     val user = appUser
-    
+
+    // Track scroll-to-top trigger
+    var scrollToTopTrigger by remember { mutableIntStateOf(0) }
+
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
@@ -59,6 +66,13 @@ fun UserBookmarks(
             withContext(Dispatchers.IO) {
                 viewModel.getBookmarks(0) // Load first page only if empty
             }
+        }
+    }
+
+    // Scroll to top when initial server load completes (after cached data)
+    LaunchedEffect(bookmarksInitialLoadComplete) {
+        if (bookmarksInitialLoadComplete) {
+            scrollToTopTrigger++
         }
     }
 
@@ -109,7 +123,8 @@ fun UserBookmarks(
                 context = "appUserBookmarks",
                 showPrivateTweets = true,
                 parentEntry = parentEntry,
-                restoreScrollPosition = true // Remember scroll position when navigating back
+                restoreScrollPosition = true, // Remember scroll position when navigating back
+                scrollToTopTrigger = scrollToTopTrigger // Scroll to top when server data loads
             )
         }
     }

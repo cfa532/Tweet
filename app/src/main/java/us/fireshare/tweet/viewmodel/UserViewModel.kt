@@ -78,6 +78,12 @@ class UserViewModel @AssistedInject constructor(
     private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
 
+    // Track if initial server load completed (to trigger scroll to top after cached data)
+    private val _bookmarksInitialLoadComplete = MutableStateFlow(false)
+    val bookmarksInitialLoadComplete: StateFlow<Boolean> get() = _bookmarksInitialLoadComplete.asStateFlow()
+    private val _favoritesInitialLoadComplete = MutableStateFlow(false)
+    val favoritesInitialLoadComplete: StateFlow<Boolean> get() = _favoritesInitialLoadComplete.asStateFlow()
+
     // Public count variables for UI display
     private val _bookmarksCount = MutableStateFlow(0)
     val bookmarksCount: StateFlow<Int> get() = _bookmarksCount.asStateFlow()
@@ -685,6 +691,8 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list and preserve server order
             _bookmarks.value = validTweets
+            // Signal that initial server load is complete (for scroll-to-top)
+            _bookmarksInitialLoadComplete.value = true
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list while preserving order
@@ -808,6 +816,8 @@ class UserViewModel @AssistedInject constructor(
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list and preserve server order
             _favorites.value = validTweets
+            // Signal that initial server load is complete (for scroll-to-top)
+            _favoritesInitialLoadComplete.value = true
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list while preserving order
