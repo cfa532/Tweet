@@ -229,8 +229,7 @@ fun TweetListView(
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Remember scroll position across recompositions and configuration changes
-    val isBookmarksOrFavorites = context == "appUserBookmarks" || context == "appUserFavorites"
-    val shouldRestoreScroll = restoreScrollPosition && !isBookmarksOrFavorites
+    val shouldRestoreScroll = restoreScrollPosition
     val savedScrollPosition = if (shouldRestoreScroll) {
         rememberSaveable(key = context) { mutableStateOf(Pair(0, 0)) }
     } else {

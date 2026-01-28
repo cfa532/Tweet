@@ -113,7 +113,7 @@ fun UserFavorites(
                 showPrivateTweets = true, // Show private tweets in favorites since they are user's own favorites
                 context = "appUserFavorites",
                 parentEntry = parentEntry,
-                restoreScrollPosition = false // Always start from top for favorites
+                restoreScrollPosition = true // Remember scroll position when navigating back
             )
         }
     }
