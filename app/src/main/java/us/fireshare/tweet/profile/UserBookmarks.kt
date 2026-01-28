@@ -52,10 +52,13 @@ fun UserBookmarks(
         viewModel.startListeningToNotifications()
     }
 
+    // Only load bookmarks if the list is empty (initial load)
+    // TweetListView handles pagination, so we don't reload on navigation back
     LaunchedEffect(Unit) {
-        // load bookmarked tweets
-        withContext(Dispatchers.IO) {
-            viewModel.getBookmarks(0) // Load first page
+        if (bookmarks.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                viewModel.getBookmarks(0) // Load first page only if empty
+            }
         }
     }
 
@@ -107,7 +110,6 @@ fun UserBookmarks(
                 tweets = bookmarks,
                 fetchTweets = { pageNumber ->
                     viewModel.getBookmarks(pageNumber)
-                    emptyList() // Return empty list since getBookmarks updates the state
                 },
                 context = "appUserBookmarks",
                 showPrivateTweets = true,

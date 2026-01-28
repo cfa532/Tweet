@@ -648,8 +648,9 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Get bookmarks of the user
+     * Returns List<Tweet?> for pagination logic
      * */
-    suspend fun getBookmarks(pageNumber: Int) {
+    suspend fun getBookmarks(pageNumber: Int): List<Tweet?> {
         // Load cached bookmarks first for instant display (only on first page)
         if (pageNumber == 0 && userId == appUser.mid) {
             val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
@@ -698,6 +699,9 @@ class UserViewModel @AssistedInject constructor(
                 finalBookmarks
             }
         }
+
+        // Return the raw list from server for pagination logic
+        return tweetsWithNulls
     }
 
     /**
@@ -766,8 +770,9 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Get favorite Tweets of the user.
+     * Returns List<Tweet?> for pagination logic
      * */
-    suspend fun getFavorites(pageNumber: Int) {
+    suspend fun getFavorites(pageNumber: Int): List<Tweet?> {
         // Load cached favorites first for instant display (only on first page)
         if (pageNumber == 0 && userId == appUser.mid) {
             val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
@@ -816,6 +821,9 @@ class UserViewModel @AssistedInject constructor(
                 finalFavorites
             }
         }
+
+        // Return the raw list from server for pagination logic
+        return tweetsWithNulls
     }
 
     /**

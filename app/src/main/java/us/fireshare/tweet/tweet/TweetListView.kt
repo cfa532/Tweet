@@ -220,20 +220,30 @@ fun TweetListView(
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
     var lastUserId by remember { mutableStateOf<MimeiId?>(null) }
-    var serverDepleted by rememberSaveable { mutableStateOf(false) }
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
     var isInitializingData by remember { mutableStateOf(false) }
     var showNoMoreTweetsMessage by remember { mutableStateOf(false) }
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
-    // Remember scroll position across recompositions and configuration changes
+    // Remember scroll position and pagination state across recompositions and configuration changes
     val shouldRestoreScroll = restoreScrollPosition
     val savedScrollPosition = if (shouldRestoreScroll) {
         rememberSaveable(key = context) { mutableStateOf(Pair(0, 0)) }
     } else {
         remember { mutableStateOf(Pair(0, 0)) }
+    }
+
+    // Key pagination states by context when restoring scroll to maintain independent state per list
+    var lastLoadedPage by if (shouldRestoreScroll) {
+        rememberSaveable(key = "${context}_lastLoadedPage") { mutableIntStateOf(-1) }
+    } else {
+        rememberSaveable { mutableIntStateOf(-1) }
+    }
+    var serverDepleted by if (shouldRestoreScroll) {
+        rememberSaveable(key = "${context}_serverDepleted") { mutableStateOf(false) }
+    } else {
+        rememberSaveable { mutableStateOf(false) }
     }
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = if (shouldRestoreScroll) savedScrollPosition.value.first else 0,

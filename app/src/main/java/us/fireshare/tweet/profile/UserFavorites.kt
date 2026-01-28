@@ -54,9 +54,13 @@ fun UserFavorites(
         viewModel.startListeningToNotifications()
     }
 
+    // Only load favorites if the list is empty (initial load)
+    // TweetListView handles pagination, so we don't reload on navigation back
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            viewModel.getFavorites(0) // Load first page
+        if (favorites.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                viewModel.getFavorites(0) // Load first page only if empty
+            }
         }
     }
 
@@ -108,7 +112,6 @@ fun UserFavorites(
                 tweets = favorites,
                 fetchTweets = { pageNumber ->
                     viewModel.getFavorites(pageNumber)
-                    emptyList<Tweet?>() // Return empty list since getFavorites updates the state
                 },
                 showPrivateTweets = true, // Show private tweets in favorites since they are user's own favorites
                 context = "appUserFavorites",
