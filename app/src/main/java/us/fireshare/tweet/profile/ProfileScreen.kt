@@ -263,7 +263,7 @@ private fun ProfileContentWithTweetListView(
                         TweetItem(
                             tweet,
                             parentEntry,
-                            context = if (userId == appUser.mid) "appUserProfile" else "default",
+                            context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId",
                             currentUserId = userId
                         )
                     }
@@ -298,8 +298,8 @@ private fun ProfileContentWithTweetListView(
             viewModel.removeTweetFromAllLists(tweetId)
         },
         headerContent = headerContent,
-        restoreScrollPosition = false, // Always start at top for user profiles
-        context = if (userId == appUser.mid) "appUserProfile" else "userProfile",
+        restoreScrollPosition = true, // Remember scroll position when navigating back from tweet details
+        context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId", // Each user profile maintains its own scroll position
         isInitialLoading = initState, // Pass the initialization state to delay videolist creation
         pinnedTweets = pinnedTweets // Include pinned tweets in video navigation
     )
