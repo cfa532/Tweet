@@ -24,8 +24,8 @@ import kotlin.concurrent.write
 object HproseClientPool {
     private const val TAG = "HproseClientPool"
     
-    // Pool configuration  
-    private const val DEFAULT_CLIENT_TIMEOUT = 15_000 // 15 seconds for regular operations
+    // Pool configuration
+    private const val DEFAULT_CLIENT_TIMEOUT = 30_000 // 30 seconds for regular operations
     private const val UPLOAD_CLIENT_TIMEOUT = 3_000_000 // 50 minutes for upload operations
     private const val CLIENTS_PER_URL = 8 // Number of clients per URL (matches iOS)
     private const val MAX_URLS = 50 // Maximum number of different URLs to track

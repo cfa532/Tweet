@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -70,6 +71,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import kotlin.math.abs
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -131,6 +133,9 @@ fun TweetDetailScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
+    // Track LazyColumn viewport size for VideoPlaybackCoordinator
+    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+
     // Scroll-based top app bar visibility
     var previousFirstVisibleItemIndex by remember { mutableStateOf(0) }
     var previousScrollOffset by remember { mutableStateOf(0) }
@@ -145,27 +150,33 @@ fun TweetDetailScreen(
 
     // Track scroll direction with improved logic
     LaunchedEffect(listState) {
-        snapshotFlow { 
+        snapshotFlow {
             Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         }.collect { (currentIndex, currentOffset) ->
             val indexDelta = currentIndex - previousFirstVisibleItemIndex
             val offsetDelta = currentOffset - previousScrollOffset
-            
+
             // Update previous values for next comparison
             previousFirstVisibleItemIndex = currentIndex
             previousScrollOffset = currentOffset
-            
+
             // Determine scroll direction based on both index and offset changes
             // Scrolling down: index increases OR (index same and offset increases significantly)
             // Scrolling up: index decreases OR (index same and offset decreases significantly)
             val isScrollingDown = indexDelta > 0 || (indexDelta == 0 && offsetDelta > 10)
             val isScrollingUp = indexDelta < 0 || (indexDelta == 0 && offsetDelta < -10)
-            
+
             // Only change state if there's significant scroll movement
             if (isScrollingDown && abs(offsetDelta) > 5) {
                 showTopAppBar = false
             } else if (isScrollingUp && abs(offsetDelta) > 5) {
                 showTopAppBar = true
+            }
+
+            // Update VideoPlaybackCoordinator scroll direction for video autoplay
+            if (abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
+                val approximateOffset = currentIndex * 1000f + currentOffset
+                VideoPlaybackCoordinator.updateScrollDirection(approximateOffset)
             }
         }
     }
@@ -304,6 +315,23 @@ fun TweetDetailScreen(
         viewModel.startListeningToNotifications()
     }
 
+    // Build video list from comments for VideoPlaybackCoordinator
+    LaunchedEffect(comments) {
+        if (comments.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                VideoPlaybackCoordinator.buildVideoList(comments)
+            }
+            Timber.tag("TweetDetailScreen").d("Built video list from ${comments.size} comments")
+        }
+    }
+
+    // Clear VideoPlaybackCoordinator state when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            VideoPlaybackCoordinator.clear()
+            Timber.tag("TweetDetailScreen").d("Cleared VideoPlaybackCoordinator on dispose")
+        }
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -385,7 +413,15 @@ fun TweetDetailScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
+                    .background(MaterialTheme.colorScheme.background)
+                    .onSizeChanged { size ->
+                        viewportSize = size
+                        // Update VideoPlaybackCoordinator with viewport size
+                        VideoPlaybackCoordinator.updateViewportSize(
+                            size.width.toFloat(),
+                            size.height.toFloat()
+                        )
+                    },
                 state = listState,
                 contentPadding = PaddingValues(bottom = 60.dp)
             ) {
@@ -396,7 +432,7 @@ fun TweetDetailScreen(
                         parentEntry = parentEntry,
                         parentTweetId = parentTweetId,
                         parentAuthorId = parentAuthorId,
-                        onExpandReply = { }
+                        onExpandReply = { isReplyBoxExpanded = true }
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 1.dp),

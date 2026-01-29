@@ -124,11 +124,13 @@ fun BottomNavigationBar(
             when {
                 currentRoute == null -> selectedIndex
 
-                // User profile should not highlight the Home tab.
+                // User profile and tweet detail should not highlight any tab
+                // (TweetDetail can be accessed from multiple places)
                 currentRoute.contains("UserProfile") -> -1
+                currentRoute.contains("TweetDetail") -> -1
 
                 // Main bottom tabs (and common subroutes that should keep tab context)
-                currentRoute.contains("TweetFeed") || currentRoute.contains("TweetDetail") -> 0
+                currentRoute.contains("TweetFeed") -> 0
                 currentRoute.contains("ChatList") || currentRoute.contains("ChatBox") -> 1
                 currentRoute.contains("ComposeTweet") || currentRoute.contains("ComposeComment") -> 2
                 currentRoute.contains("Search") -> 3
