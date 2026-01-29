@@ -259,7 +259,15 @@ class TweetViewModel @AssistedInject constructor(
 
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0): Int {
         val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
-            it.author = HproseInstance.fetchUser(it.authorId)
+            // Check for cached author first (expired or not) and use it if available
+            // This prevents unnecessary server updates when TweetDetailScreen opens
+            val cachedAuthor = TweetCacheManager.getCachedUser(it.authorId)
+            if (cachedAuthor != null) {
+                it.author = cachedAuthor
+            } else {
+                // Only fetch from server if no cached author exists
+                it.author = HproseInstance.fetchUser(it.authorId)
+            }
             it
         } ?: emptyList()
 
