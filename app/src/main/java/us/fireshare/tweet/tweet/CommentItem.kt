@@ -144,7 +144,11 @@ fun CommentItem(
                 }
 
                 if (!comment.content.isNullOrEmpty()) {
-                    SelectableText(text = comment.content!!, maxLines = 7) { username ->
+                    SelectableText(
+                        text = comment.content!!,
+                        maxLines = 7,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp)
+                    ) { username ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {
                                 withContext(Dispatchers.Main) {

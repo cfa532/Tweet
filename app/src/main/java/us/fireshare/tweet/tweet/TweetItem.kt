@@ -468,6 +468,7 @@ private fun RetweetWithContent(
                             SelectableText(
                                 text = tweet.content!!,
                                 maxLines = 7,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
                                 onTextClick = {
                                     // Navigate to detail view when text (not username) is clicked
                                     navController.navigate(
