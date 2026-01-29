@@ -39,10 +39,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
@@ -98,8 +97,25 @@ fun TweetFeedScreen(
     var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
     val coroutineScope = rememberCoroutineScope()
 
+    // Track stable direction to prevent jittering - only change opacity after direction is stable
+    var lastStableDirection by remember { mutableStateOf(ScrollDirection.NONE) }
+    var directionChangeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Track when DOWN was last applied to ignore bounce-back UP movements
+    var lastDownAppliedTime by remember { mutableStateOf(0L) }
+
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     var scrollToTopTrigger by remember { mutableIntStateOf(0) }
+
+    // Reset toolbar and navbar state when scroll-to-top is triggered
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0) {
+            // Reset navbar to fully visible
+            bottomBarTransparency = 0.98f
+            lastStableDirection = ScrollDirection.NONE
+            // Reset top bar scroll state (expand the toolbar)
+            scrollBehavior.state.heightOffset = 0f
+        }
+    }
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
     LaunchedEffect(selectedTabIndex) {
@@ -198,29 +214,55 @@ fun TweetFeedScreen(
                                             viewModel,
                                             onScrollStateChange = { newScrollState ->
                                                 scrollState = newScrollState
-                                                
-                                                // Update bottom bar transparency based on scroll direction
-                                                when (newScrollState.direction) {
-                                                    ScrollDirection.UP -> {
-                                                        // Scroll UP (content moves down): restore header and bottom bar immediately
-                                                        bottomBarTransparency = 0.98f
+
+                                                // Ignore NONE - when scroll stops, keep current opacity
+                                                if (newScrollState.direction == ScrollDirection.NONE) {
+                                                    // Cancel any pending opacity change when scroll stops
+                                                    directionChangeJob?.cancel()
+                                                    return@FollowingsTweet
+                                                }
+
+                                                // Ignore UP if it's within 1 second of last DOWN (likely bounce-back or settling)
+                                                if (newScrollState.direction == ScrollDirection.UP) {
+                                                    val timeSinceDown = System.currentTimeMillis() - lastDownAppliedTime
+                                                    if (lastStableDirection == ScrollDirection.DOWN && timeSinceDown < 1000) {
+                                                        return@FollowingsTweet
                                                     }
-                                                    
-                                                    ScrollDirection.DOWN -> {
-                                                        // Scroll DOWN (content moves up): reduce bottom bar opacity
-                                                        coroutineScope.launch {
-                                                            withContext(Dispatchers.Main) {
-                                                                delay(100) // Small delay for smooth transition
-                                                                if (scrollState.direction == ScrollDirection.DOWN) {
-                                                                    bottomBarTransparency = 0.2f
-                                                                }
-                                                            }
+                                                }
+
+                                                // Only process if direction actually changed
+                                                if (newScrollState.direction == lastStableDirection) return@FollowingsTweet
+
+                                                // Cancel any pending direction change
+                                                directionChangeJob?.cancel()
+
+                                                // Debounce direction changes to prevent jittering
+                                                // DOWN: 150ms debounce, UP: 300ms debounce (stricter to prevent false positives)
+                                                val debounceTime = if (newScrollState.direction == ScrollDirection.UP) 300L else 150L
+                                                directionChangeJob = coroutineScope.launch {
+                                                    delay(debounceTime)
+
+                                                    // Verify still actively scrolling in the same direction
+                                                    if (!scrollState.isScrolling) return@launch
+                                                    if (scrollState.direction != newScrollState.direction) return@launch
+
+                                                    lastStableDirection = newScrollState.direction
+
+                                                    when (newScrollState.direction) {
+                                                        ScrollDirection.UP -> {
+                                                            // Scroll UP (content moves down): restore navbar
+                                                            bottomBarTransparency = 0.98f
                                                         }
-                                                    }
-                                                    
-                                                    ScrollDirection.NONE -> {
-                                                        // Idle state: keep current opacity, don't restore automatically
-                                                        // Only restore when user starts scrolling up
+
+                                                        ScrollDirection.DOWN -> {
+                                                            // Scroll DOWN (content moves up): fade navbar
+                                                            bottomBarTransparency = 0.2f
+                                                            lastDownAppliedTime = System.currentTimeMillis()
+                                                        }
+
+                                                        ScrollDirection.NONE -> {
+                                                            // Already filtered out above
+                                                        }
                                                     }
                                                 }
                                             },
