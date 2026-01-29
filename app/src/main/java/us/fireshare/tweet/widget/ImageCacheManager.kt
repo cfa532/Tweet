@@ -17,9 +17,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -683,7 +681,6 @@ object ImageCacheManager {
      * First returns low-quality preview, then full quality
      * Handles cancellation properly by cleaning up download queue
      */
-    @OptIn(DelicateCoroutinesApi::class)
     suspend fun loadOriginalImage(
         context: Context, 
         imageUrl: String, 
@@ -912,12 +909,11 @@ object ImageCacheManager {
     /**
      * Start background task to periodically resume paused downloads and clean up stuck downloads
      */
-    @OptIn(DelicateCoroutinesApi::class)
     private fun startPausedDownloadResumer() {
-        GlobalScope.launch(Dispatchers.IO) {
+        imageLoadingScope.launch {
             while (true) {
                 delay(5000L) // Check every 5 seconds
-                
+
                 synchronized(pausedDownloadMutex) {
                     if (pausedDownloads.isNotEmpty()) {
                         // Resume paused downloads if we have available slots
@@ -933,7 +929,7 @@ object ImageCacheManager {
                         }
                     }
                 }
-                
+
                 // Clean up stuck downloads
                 cleanupStuckDownloads()
             }

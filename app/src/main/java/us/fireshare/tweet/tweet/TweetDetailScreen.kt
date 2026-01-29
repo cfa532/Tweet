@@ -62,6 +62,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -295,19 +296,29 @@ fun TweetDetailScreen(
     }
 
     // Refresh handler: refresh immediately when opened, then every 5 minutes
+    // This LaunchedEffect will be automatically cancelled when the screen is disposed
     LaunchedEffect(Unit) {
-        // Refresh immediately when screen is opened
-        withContext(Dispatchers.IO) {
-            viewModel.refreshTweetAndOriginal()
-            Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
-        }
-        // Then refresh periodically every 5 minutes
-        while (true) {
-            delay(5 * 60 * 1000)
+        try {
+            // Refresh immediately when screen is opened
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweetAndOriginal()
-                Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+                Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
             }
+            // Then refresh periodically every 5 minutes
+            // The delay() function will throw CancellationException when the coroutine is cancelled
+            while (isActive) {
+                delay(5 * 60 * 1000)
+                if (isActive) {
+                    withContext(Dispatchers.IO) {
+                        viewModel.refreshTweetAndOriginal()
+                        Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+                    }
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Expected when the screen is disposed - cleanup is automatic
+            Timber.tag("TweetDetailScreen").d("Periodic refresh cancelled (screen disposed)")
+            throw e // Re-throw to properly complete cancellation
         }
     }
 

@@ -12,10 +12,9 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,6 +42,10 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @OptIn(UnstableApi::class)
 object VideoManager {
+
+    // ===== COROUTINE SCOPE =====
+    // Coroutine scope for video loading that can be cancelled when needed
+    private val videoLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // ===== PLAYER MANAGEMENT =====
     // Thread-safe map to store ExoPlayer instances by video mid
@@ -458,7 +461,6 @@ object VideoManager {
      * Preload a video in the background
      * Only preloads videos that are not visible to avoid resource waste
      */
-    @kotlin.OptIn(DelicateCoroutinesApi::class)
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
         // Don't preload if video is already visible
         if (isVideoVisible(videoMid)) {
@@ -475,7 +477,7 @@ object VideoManager {
             preloadQueue.add(videoMid)
 
             // Start preloading in background
-            val job = GlobalScope.launch(Dispatchers.Main) {
+            val job = videoLoadingScope.launch {
                 try {
                     // Throttle concurrent player creation on main thread
                     preloadSemaphore.acquire()
