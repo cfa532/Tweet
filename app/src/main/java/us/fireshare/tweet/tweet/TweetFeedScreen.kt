@@ -245,7 +245,8 @@ fun TweetFeedScreen(
                 .alpha(bottomBarTransparency)
                 .align(Alignment.BottomCenter),
             navController,
-            selectedBottomBarItemIndex
+            selectedBottomBarItemIndex,
+            onScrollToTop = { scrollToTopTrigger += 1 }
         )
     }
 }

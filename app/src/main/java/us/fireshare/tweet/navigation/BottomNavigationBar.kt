@@ -67,7 +67,8 @@ data class BottomNavigationItem(
 fun BottomNavigationBar(
     modifier: Modifier = Modifier,
     navController: NavController,
-    selectedIndex: Int = 100
+    selectedIndex: Int = 100,
+    onScrollToTop: () -> Unit = {}
 ) {
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
@@ -152,8 +153,14 @@ fun BottomNavigationBar(
                 navController.popBackStack(routeName, inclusive = false)
             } ?: false
             if (didPopToFeed) return@onNavigationClick
+
+            // Already on TweetFeed - scroll to top
+            if (currentRoute?.contains("TweetFeed") == true) {
+                onScrollToTop()
+                return@onNavigationClick
+            }
         }
-        
+
         // Only navigate if we're not already on the target route
         val targetRouteName = targetRoute::class.qualifiedName
         if (currentRoute != targetRouteName) {
