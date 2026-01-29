@@ -210,9 +210,11 @@ fun TweetDetailScreen(
         }
     }
 
-    // Set context for notifications
+    // PERFORMANCE FIX: Consolidated initialization effects
+    // Set context for notifications and start listening - run once when screen opens
     LaunchedEffect(Unit) {
         viewModel.setNotificationContext(context)
+        viewModel.startListeningToNotifications()
     }
 
     // Track scroll position changes and save them
@@ -320,10 +322,6 @@ fun TweetDetailScreen(
             Timber.tag("TweetDetailScreen").d("Periodic refresh cancelled (screen disposed)")
             throw e // Re-throw to properly complete cancellation
         }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.startListeningToNotifications()
     }
 
     // Build video list from comments for VideoPlaybackCoordinator

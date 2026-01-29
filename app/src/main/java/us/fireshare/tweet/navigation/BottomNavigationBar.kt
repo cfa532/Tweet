@@ -80,8 +80,9 @@ fun BottomNavigationBar(
     val guestReminderText = stringResource(R.string.guest_reminder)
     val coroutineScope = rememberCoroutineScope()
 
-    // Items list - must depend on badgeCount to update when badge changes
-    val items = remember(badgeCount) {
+    // PERFORMANCE FIX: Create items list once without badgeCount dependency
+    // Badge count will be accessed directly when rendering to avoid recreating all items
+    val items = remember {
         listOf(
             BottomNavigationItem(
                 title = "Home",
@@ -96,7 +97,7 @@ fun BottomNavigationBar(
                 selectedIcon = Icons.Filled.Email,
                 unselectedIcon = Icons.Outlined.Email,
                 hasNews = false,
-                badgeCount = badgeCount,
+                badgeCount = null,  // Will be replaced with actual badgeCount during rendering
             ),
             BottomNavigationItem(
                 title = "Post",
@@ -251,9 +252,12 @@ fun BottomNavigationBar(
                 ) {
                     BadgedBox(
                         badge = {
-                            if (item.badgeCount != null && item.badgeCount > 0) {
+                            // PERFORMANCE FIX: Use actual badgeCount from state for Chat item (index 1)
+                            // instead of from item object to avoid recreating entire items list
+                            val actualBadgeCount = if (index == 1) badgeCount else item.badgeCount
+                            if (actualBadgeCount != null && actualBadgeCount > 0) {
                                 Badge {
-                                    Text(text = item.badgeCount.toString())
+                                    Text(text = actualBadgeCount.toString())
                                 }
                             } else if (item.hasNews) {
                                 Badge()

@@ -265,7 +265,9 @@ class TweetViewModel @AssistedInject constructor(
 
         // Always merge new comments with existing ones, keeping newly fetched ones over existing duplicates
         _comments.update { currentComments ->
-            val mergedComments = newComments + currentComments.filter { it.mid !in newComments.map { new -> new.mid } }
+            // PERFORMANCE FIX: Use Set for O(n) lookup instead of O(n²)
+            val newCommentIds = newComments.map { it.mid }.toSet()
+            val mergedComments = newComments + currentComments.filterNot { it.mid in newCommentIds }
             val finalComments = mergedComments.sortedByDescending { it.timestamp }
             // Only log when there are actually new comments or when comments count changes significantly
             if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
