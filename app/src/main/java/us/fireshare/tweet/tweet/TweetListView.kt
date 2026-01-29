@@ -737,33 +737,41 @@ fun TweetListView(
                     )
                 }
             } else {
-                itemsIndexed(
-                    items = tweets,
-                    key = { _, tweet -> tweet.mid },
-                    contentType = { _, _ -> "tweet" }  // Help Compose reuse compositions efficiently
-                ) { index, tweet ->
+                // Render tweets and dividers as separate items for better recomposition performance
+                // Each tweet and divider has its own stable key and contentType
+                tweets.forEachIndexed { index, tweet ->
                     if (showPrivateTweets || !tweet.isPrivate) {
-                        parentEntry?.let {
-                            TweetItem(
-                                tweet = tweet,
-                                parentEntry = it,
-                                onTweetUnavailable = onTweetUnavailable,
-                                context = context,
-                                currentUserId = currentUserId,
-                                onScrollToTop = scrollToTop
-                            )
+                        // Tweet item
+                        item(
+                            key = tweet.mid,
+                            contentType = "tweet"
+                        ) {
+                            parentEntry?.let {
+                                TweetItem(
+                                    tweet = tweet,
+                                    parentEntry = it,
+                                    onTweetUnavailable = onTweetUnavailable,
+                                    context = context,
+                                    currentUserId = currentUserId,
+                                    onScrollToTop = scrollToTop
+                                )
+                            }
                         }
 
-                        // Add divider after each tweet item (except the last one)
-                        // Use index instead of indexOf for O(1) performance
+                        // Divider item (except after last tweet)
                         if (index < tweets.size - 1) {
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .padding(bottom = 8.dp)
-                                    .padding(horizontal = 1.dp),
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                            )
+                            item(
+                                key = "divider_${tweet.mid}",
+                                contentType = "divider"
+                            ) {
+                                HorizontalDivider(
+                                    modifier = Modifier
+                                        .padding(bottom = 8.dp)
+                                        .padding(horizontal = 1.dp),
+                                    thickness = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                                )
+                            }
                         }
                     }
                 }

@@ -34,6 +34,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +78,7 @@ fun BottomNavigationBar(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val guestReminderText = stringResource(R.string.guest_reminder)
+    val coroutineScope = rememberCoroutineScope()
 
     // Items list - must depend on badgeCount to update when badge changes
     val items = remember(badgeCount) {
@@ -222,11 +224,10 @@ fun BottomNavigationBar(
                         .fillMaxHeight() // Full height touchable area
                         .clickable {
                             if (appUser.isGuest() && index > 0) {
-                                // Use a coroutine scope for guest warning
-                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
-                                    .launch {
-                                        guestWarning(context, navController, guestReminderText)
-                                    }
+                                // Use remembered coroutine scope for guest warning
+                                coroutineScope.launch {
+                                    guestWarning(context, navController, guestReminderText)
+                                }
                                 return@clickable
                             }
                             

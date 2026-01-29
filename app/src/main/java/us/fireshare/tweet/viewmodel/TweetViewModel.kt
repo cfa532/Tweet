@@ -835,8 +835,9 @@ class TweetViewModel @AssistedInject constructor(
                 favoriteCount = if (isFavorite) tweetState.value.favoriteCount + 1
                 else max(0, tweetState.value.favoriteCount - 1),
             )
-            // Show error toast
-            notificationContextRef?.get()?.let { context ->
+            // Show error toast - check both WeakReference and Context are available
+            val context = notificationContextRef?.get()
+            if (context != null) {
                 Toast.makeText(
                     context,
                     "Failed to update favorite",
@@ -875,8 +876,9 @@ class TweetViewModel @AssistedInject constructor(
                 bookmarkCount = if (hasBookmarked) tweetState.value.bookmarkCount + 1
                 else max(0, tweetState.value.bookmarkCount - 1),
             )
-            // Show error toast
-            notificationContextRef?.get()?.let { context ->
+            // Show error toast - check both WeakReference and Context are available
+            val context = notificationContextRef?.get()
+            if (context != null) {
                 Toast.makeText(
                     context,
                     "Failed to update bookmark",
