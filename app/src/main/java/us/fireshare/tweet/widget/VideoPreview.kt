@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -58,7 +57,6 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.widget.Gadget.isElementVisible
-import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -69,7 +67,7 @@ import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
 @OptIn(UnstableApi::class)
 @Composable
 fun VideoPreview(
-    url: String,
+    url: String?,
     modifier: Modifier,
     index: Int,
     autoPlay: Boolean = false,
@@ -152,10 +150,13 @@ fun VideoPreview(
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
-        val player = if (videoMid != null) {
+        val player = if (videoMid != null && url != null) {
             VideoManager.getVideoPlayer(context, videoMid, url, videoType)
-        } else {
+        } else if (url != null) {
             createExoPlayer(context, url, videoType ?: MediaType.Video)
+        } else {
+            // Fallback to an empty player if url is null
+            createExoPlayer(context, "", videoType ?: MediaType.Video)
         }
 
         // Explicitly disable repeat mode to prevent auto-replay
@@ -229,8 +230,8 @@ fun VideoPreview(
                     hasError = false
                     if (exoPlayer.mediaItemCount == 0) {
                         // Player was released completely, need to recreate media source
-                        videoMid?.let { mid ->
-                            VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
+                        if (videoMid != null && url != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     } else {
                         // Player has media items (retained after stop()), just re-prepare
@@ -252,9 +253,9 @@ fun VideoPreview(
                     // For other states, try to recover
                     isLoading = true
                     hasError = false
-                    
-                    videoMid?.let { mid ->
-                        VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
+
+                    if (videoMid != null && url != null) {
+                        VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                     }
                 }
             }
@@ -296,8 +297,8 @@ fun VideoPreview(
                         // Don't set playWhenReady yet, wait for STATE_READY
                     } else {
                         // No media items, need to recover
-                        videoMid?.let { mid ->
-                            VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
+                        if (videoMid != null && url != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     }
                 }
@@ -470,7 +471,11 @@ fun VideoPreview(
                             delay(1000) // Wait 1 second before MediaCodec recovery attempt
                             
                             // Force recreate the entire player with software decoder
-                            val recreateSuccess = VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                            val recreateSuccess = if (videoMid != null && url != null) {
+                                VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                            } else {
+                                false
+                            }
                             
                             if (recreateSuccess) {
                                 Timber.tag("VideoPreview").d("Player force recreated with software decoder for video: $videoMid")
@@ -506,7 +511,7 @@ fun VideoPreview(
                     // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
                     retryScope.launch {
                         delay(1000) // Wait 1 second before retry
-                        if (isLoading && !hasError) {
+                        if (isLoading && !hasError && videoMid != null && url != null) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     }
@@ -661,7 +666,11 @@ fun VideoPreview(
                                 retryScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                     try {
                                         // Force recreate with software decoder for manual retry
-                                        val success = VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                                        val success = if (videoMid != null && url != null) {
+                                            VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                                        } else {
+                                            false
+                                        }
                                         if (success) {
                                             // Ensure playback resumes if visible and allowed
                                             if (isVideoVisible && autoPlay) {

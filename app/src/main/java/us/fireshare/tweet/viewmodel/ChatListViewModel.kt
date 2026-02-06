@@ -24,7 +24,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
     private val chatSessionRepository: ChatSessionRepository,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
     // chat between pair of users
     private val _chatSessions = MutableStateFlow<List<ChatSession>>(emptyList())

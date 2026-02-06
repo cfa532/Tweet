@@ -111,7 +111,7 @@ object Gadget {
      * Only considers public IPs with ports between 8000 and 9000.
      * Treats IPv4 and IPv6 equally.
      * */
-    fun filterIpAddresses(nodeList: List<String>): String? {
+    fun filterIpAddresses(nodeList: List<*>): String? {
         var bestIp: String? = null
         var bestResponseTime = Double.MAX_VALUE
 

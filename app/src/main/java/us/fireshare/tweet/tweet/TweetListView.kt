@@ -79,6 +79,7 @@ import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import us.fireshare.tweet.widget.rememberTweetVideoPreloader
+import kotlin.math.abs
 
 enum class ScrollDirection {
     UP, DOWN, NONE
@@ -229,19 +230,19 @@ fun TweetListView(
     // Remember scroll position and pagination state across recompositions and configuration changes
     val shouldRestoreScroll = restoreScrollPosition
     val savedScrollPosition = if (shouldRestoreScroll) {
-        rememberSaveable(key = context) { mutableStateOf(Pair(0, 0)) }
+        rememberSaveable { mutableStateOf(Pair(0, 0)) }
     } else {
         remember { mutableStateOf(Pair(0, 0)) }
     }
 
-    // Key pagination states by context when restoring scroll to maintain independent state per list
+    // Pagination states - using positional scoping for state management
     var lastLoadedPage by if (shouldRestoreScroll) {
-        rememberSaveable(key = "${context}_lastLoadedPage") { mutableIntStateOf(-1) }
+        rememberSaveable { mutableIntStateOf(-1) }
     } else {
         rememberSaveable { mutableIntStateOf(-1) }
     }
     var serverDepleted by if (shouldRestoreScroll) {
-        rememberSaveable(key = "${context}_serverDepleted") { mutableStateOf(false) }
+        rememberSaveable { mutableStateOf(false) }
     } else {
         rememberSaveable { mutableStateOf(false) }
     }
@@ -255,7 +256,6 @@ fun TweetListView(
     val activeJobs = remember { mutableMapOf<String, Job>() }
 
     // Track LazyColumn viewport size for VideoPlaybackCoordinator
-    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     var lastCleanupTime by remember { mutableLongStateOf(0L) }
     var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
     val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
@@ -315,7 +315,6 @@ fun TweetListView(
     // EFFECT 1: Data initialization and user changes (non-blocking)
     LaunchedEffect(currentUserId) {
         if (currentUserId != lastUserId) {
-            lastUserId = currentUserId
             lastLoadedPage = -1
             serverDepleted = false
             
@@ -374,10 +373,8 @@ fun TweetListView(
                         processedTweetIds.clear()
                         val newVideoList = createVideoIndexedListAsync(tweets)
                         tweets.forEach { processedTweetIds.add(it.mid) }
-                        lastProcessedTweetCount = tweets.size
-                        
+
                         withContext(Dispatchers.Main) {
-                            videoIndexedList = newVideoList
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
                             VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
@@ -392,8 +389,7 @@ fun TweetListView(
                             Timber.tag("TweetListView").d("Incremental video list update: ${newTweets.size} new tweets")
                             val newVideos = createVideoIndexedListAsync(newTweets)
                             newTweets.forEach { processedTweetIds.add(it.mid) }
-                            lastProcessedTweetCount = tweets.size
-                            
+
                             withContext(Dispatchers.Main) {
                                 // Simple append (already sorted by timestamp in creation)
                                 videoIndexedList = videoIndexedList + newVideos
@@ -443,12 +439,9 @@ fun TweetListView(
                     lastDirection
                 }
 
-                previousFirstVisibleItem = firstVisibleItem
-                previousScrollOffset = scrollOffset
-                
                 // PERF FIX: Throttle scroll direction updates to reduce coordinator calls
                 // Only update on significant scroll changes (>2 items or >200px) to reduce overhead
-                if (isScrolling && Math.abs(indexDelta) >= 2 || Math.abs(offsetDelta) > 200) {
+                if (isScrolling && abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                     val currentOffset = firstVisibleItem * 1000f + scrollOffset // Approximate offset
                     us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateScrollDirection(currentOffset)
                 }
@@ -456,8 +449,6 @@ fun TweetListView(
                 // PERF FIX: Only invoke callback if state actually changed
                 if (direction != lastDirection || isScrolling != lastScrollingState) {
                     onScrollStateChange?.invoke(ScrollState(isScrolling, direction))
-                    lastDirection = direction
-                    lastScrollingState = isScrolling
                 }
                 
                 // PERF FIX: Save scroll position less frequently (1 sec throttle + immediate on scroll stop)
@@ -469,7 +460,6 @@ fun TweetListView(
                 if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
                     savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
-                    lastSaveTime = now
                 }
             }
     }
@@ -557,7 +547,6 @@ fun TweetListView(
                 }
                 
                 // Trigger load
-                lastLoadMoreTrigger = now
                 val nextPage = lastLoadedPage + 1
                 pendingLoadMorePage = nextPage
                 
@@ -626,7 +615,6 @@ fun TweetListView(
                             showNoMoreTweetsMessage = true
                             delay(2000)
                             showNoMoreTweetsMessage = false
-                            lastNoMoreTweetsShown = System.currentTimeMillis()
                             Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
                         }
                     }
@@ -702,9 +690,8 @@ fun TweetListView(
                 .fillMaxSize()
                 .let { if (scrollBehavior != null) it.nestedScroll(scrollBehavior.nestedScrollConnection) else it }
                 .onSizeChanged { size ->
-                    viewportSize = size
                     // Update VideoPlaybackCoordinator with viewport size
-                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateViewportSize(
+                    VideoPlaybackCoordinator.updateViewportSize(
                         size.width.toFloat(),
                         size.height.toFloat()
                     )

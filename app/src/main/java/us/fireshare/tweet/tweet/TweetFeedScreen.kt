@@ -13,9 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -46,6 +47,7 @@ import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import androidx.compose.ui.res.stringResource
 
 data class TabItem(
     val title: String = "Followings",
@@ -63,8 +65,8 @@ fun TweetFeedScreen(
 ) {
     val context = LocalContext.current
     val tabs = listOf(
-        TabItem(title = context.getString(R.string.your_followings)),
-        TabItem(title = context.getString(R.string.recommendation))
+        TabItem(title = stringResource(R.string.your_followings)),
+        TabItem(title = stringResource(R.string.recommendation))
     )
 
     // Set context reference for the ViewModel (for string resources)
@@ -155,7 +157,7 @@ fun TweetFeedScreen(
                     enter = fadeIn(animationSpec = tween(durationMillis = 150)),
                     exit = fadeOut(animationSpec = tween(durationMillis = 150))
                 ) {
-                    TabRow(
+                    PrimaryTabRow(
                         modifier = Modifier.padding(bottom = 8.dp),
                         selectedTabIndex = selectedTabIndex,
                     ) {

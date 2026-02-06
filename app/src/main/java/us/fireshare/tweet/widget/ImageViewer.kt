@@ -1,5 +1,6 @@
 package us.fireshare.tweet.widget
 
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.view.View
 import android.widget.Toast
@@ -151,6 +152,8 @@ fun AdvancedImageViewer(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
+    val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
+    val imageFailedMessage = stringResource(R.string.failed_to_save_image)
     var loadState by remember(mid) { 
         mutableStateOf(
             if (initialBitmap != null) {
@@ -653,9 +656,9 @@ fun AdvancedImageViewer(
                                     loadState.bitmap?.let { bitmap ->
                                         val success = saveImageToGallery(context, bitmap)
                                         val message = if (success) {
-                                            context.getString(R.string.image_saved_to_gallery)
+                                            imageSavedMessage
                                         } else {
-                                            context.getString(R.string.failed_to_save_image)
+                                            imageFailedMessage
                                         }
                                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
@@ -736,22 +739,24 @@ fun AdvancedImageViewer(
  */
 @Composable
 fun ImageViewer(
-    imageUrl: String,
+    imageUrl: String?,
     modifier: Modifier = Modifier,
     isFullScreen: Boolean = false,
     enableLongPress: Boolean = true,
     useFillMode: Boolean = false,
     inPreviewGrid: Boolean = true,
     isVisible: Boolean = true,
-    initialBitmap: android.graphics.Bitmap? = null,
+    initialBitmap: Bitmap? = null,
     loadOriginalImage: Boolean = false, // force load original high-res image instead of compressed
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null,
-    onBitmapLoaded: ((android.graphics.Bitmap?) -> Unit)? = null
+    onBitmapLoaded: ((Bitmap?) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
+    val mid = remember(imageUrl) { imageUrl?.getMimeiKeyFromUrl() }
+    val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
+    val imageFailedMessage = stringResource(R.string.failed_to_save_image)
     var loadState by remember(mid) { 
         mutableStateOf(
             if (initialBitmap != null) {
@@ -792,25 +797,32 @@ fun ImageViewer(
     // Update visibility state when it changes and retry if needed
     LaunchedEffect(isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
-        
-        if (isVisible) {
-            // If image becomes visible again, resume any paused download
-            ImageCacheManager.resumeDownload(mid)
-            
-            // If previous load failed, retry
-            if (loadState.hasError && retryCount <= 3) {
-                Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
-                retryCount++
+
+        if (mid != null) {
+            if (isVisible) {
+                // If image becomes visible again, resume any paused download
+                ImageCacheManager.resumeDownload(mid)
+
+                // If previous load failed, retry
+                if (loadState.hasError && retryCount <= 3) {
+                    Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+                    retryCount++
+                }
+            } else {
+                // If image becomes invisible, pause the download instead of cancelling
+                ImageCacheManager.pauseDownload(mid)
+                Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
             }
-        } else {
-            // If image becomes invisible, pause the download instead of cancelling
-            ImageCacheManager.pauseDownload(mid)
-            Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
         }
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
+        // Early return if imageUrl or mid is null
+        if (imageUrl == null || mid == null) {
+            return@LaunchedEffect
+        }
+
         // Store the current job for potential cancellation
         try {
             // If we already have an initial bitmap, use it immediately
@@ -1113,8 +1125,6 @@ fun ImageViewer(
                                 val newWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
                                 val newHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
                                 
-                                Timber.tag("ImageViewer").d("Downscaling bitmap for preview: ${bitmap.width}x${bitmap.height} -> ${newWidth}x${newHeight} (scale: $scale)")
-                                
                                 try {
                                     bitmap.scale(newWidth, newHeight)
                                 } catch (e: Exception) {
@@ -1177,12 +1187,11 @@ fun ImageViewer(
                             if (success) {
                                 Toast.makeText(
                                     context,
-                                    "Image saved to gallery",
+                                    imageSavedMessage,
                                     Toast.LENGTH_SHORT
                                 ).show()
                             } else {
-                                val failedMessage = context.getString(R.string.failed_to_save_image)
-                                Toast.makeText(context, failedMessage, Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, imageFailedMessage, Toast.LENGTH_SHORT).show()
                             }
                         }
                         showMenu = false

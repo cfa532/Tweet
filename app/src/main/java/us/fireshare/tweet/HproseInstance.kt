@@ -474,7 +474,7 @@ object HproseInstance {
                          * bestIp is the IP with the smallest response time from valid public IPs.
                          * */
                         Timber.tag("findEntryIP").d("Successfully parsed paramMap: $paramMap")
-                        val entryIP = filterIpAddresses(paramMap["addrs"] as List<String>)
+                        val entryIP = filterIpAddresses(paramMap["addrs"] as List<*>)
                         if (entryIP != null) {
                             return entryIP
                         } else {

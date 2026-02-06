@@ -102,7 +102,7 @@ class MessageCheckWorker @AssistedInject constructor(
             
             // Create message preview text
             val messagePreview = when {
-                !firstMessage.content.isNullOrBlank() -> firstMessage.content!!
+                !firstMessage.content.isNullOrBlank() -> firstMessage.content
                 !firstMessage.attachments.isNullOrEmpty() -> {
                     // Show attachment type in preview
                     val attachmentType = firstMessage.attachments.first().type.name.lowercase()

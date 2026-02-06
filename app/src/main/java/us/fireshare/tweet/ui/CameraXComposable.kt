@@ -3,7 +3,6 @@ package us.fireshare.tweet.ui
 import android.Manifest
 import android.content.Context
 import android.net.Uri
-import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,7 +40,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +49,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import us.fireshare.tweet.R
 import us.fireshare.tweet.utils.CameraXManager
@@ -75,7 +74,6 @@ fun CameraXPreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val configuration = LocalConfiguration.current
     val view = LocalView.current
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
@@ -114,7 +112,6 @@ fun CameraXPreview(
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
             inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
-            inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
@@ -124,13 +121,7 @@ fun CameraXPreview(
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
         windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
         windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
-        
-        // Set full screen flags
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
-        
+
         // Hide action bar and any app navigation
         activity.actionBar?.hide()
         
@@ -171,22 +162,15 @@ fun CameraXPreview(
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
             inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
-            inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
         view.clearFocus()
         
         // Set behavior to prevent system bars from showing
-        windowInsetsController.systemBarsBehavior = 
+        windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        
-        // Additional window flags for full screen
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
-        
+
         // Hide action bar if present
         activity.actionBar?.hide()
         
@@ -195,10 +179,7 @@ fun CameraXPreview(
             windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
             windowInsetsController.show(WindowInsetsCompat.Type.navigationBars())
             windowInsetsController.show(WindowInsetsCompat.Type.statusBars())
-            
-            // Clear full screen flags
-            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            
+
             // Show action bar if it was hidden
             activity.actionBar?.show()
             
@@ -207,7 +188,11 @@ fun CameraXPreview(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         // Camera Preview
         AndroidView(
             factory = { context ->

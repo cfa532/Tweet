@@ -107,6 +107,7 @@ import us.fireshare.tweet.widget.VideoManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.net.toUri
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -574,6 +575,7 @@ fun ChatScreen(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun ChatItem(
     viewModel: ChatViewModel,
@@ -852,15 +854,17 @@ fun ChatInput(
     }
     
     // Function to get filename from URI
+    @Composable
     fun getFileName(uri: Uri): String {
+        val unknownFile = stringResource(R.string.unknown_file)
         return try {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 cursor.moveToFirst()
-                cursor.getString(nameIndex) ?: context.getString(R.string.unknown_file)
-            } ?: context.getString(R.string.unknown_file)
+                cursor.getString(nameIndex) ?: unknownFile
+            } ?: unknownFile
         } catch (_: Exception) {
-            context.getString(R.string.unknown_file)
+            unknownFile
         }
     }
 
@@ -1040,6 +1044,7 @@ private fun isDocumentType(type: MediaType): Boolean {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
@@ -1082,10 +1087,10 @@ fun ChatMediaPreview(
     ) {
         // Handle local display (optimistic UI)
         when {
-            isLocalDisplay && localAttachmentUri != null -> {
+            isLocalDisplay -> {
                 // Display from local Uri
                 val context = LocalContext.current
-                val localUri = remember(localAttachmentUri) { android.net.Uri.parse(localAttachmentUri) }
+                val localUri = remember(localAttachmentUri) { localAttachmentUri.toUri() }
                 
                 // Detect media type from local file
                 val mediaType = remember(localUri) {
@@ -1103,7 +1108,7 @@ fun ChatMediaPreview(
                         var localBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
                         
                         LaunchedEffect(localUri) {
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            withContext(Dispatchers.IO) {
                                 try {
                                     context.contentResolver.openInputStream(localUri)?.use { stream ->
                                         localBitmap = android.graphics.BitmapFactory.decodeStream(stream)
@@ -1147,7 +1152,7 @@ fun ChatMediaPreview(
                         var videoThumbnail by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
                         
                         LaunchedEffect(localUri) {
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            withContext(Dispatchers.IO) {
                                 // FIX P0-3: Ensure MediaMetadataRetriever is always released
                                 val retriever = android.media.MediaMetadataRetriever()
                                 try {
@@ -1220,7 +1225,7 @@ fun ChatMediaPreview(
                     }
                 }
             }
-            attachment != null && mediaUrl != null -> {
+            attachment != null -> {
                 // Display from network (normal flow)
                 when (attachment.type) {
                     MediaType.Image -> {
