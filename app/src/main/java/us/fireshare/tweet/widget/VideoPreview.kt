@@ -223,19 +223,19 @@ fun VideoPreview(
                     hasError = false // Clear any previous errors when becoming visible
                 }
                 androidx.media3.common.Player.STATE_IDLE -> {
-                    // Player is idle, check if we have media items
+                    // Player is idle (e.g., stopped when scrolled off-screen).
+                    // Re-prepare to resume buffering from disk cache.
+                    isLoading = true
+                    hasError = false
                     if (exoPlayer.mediaItemCount == 0) {
-                        // Player was stopped completely, need to recreate media source
-                        isLoading = true
-                        hasError = false
-                        
-                        // Attempt recovery to recreate the media source
+                        // Player was released completely, need to recreate media source
                         videoMid?.let { mid ->
                             VideoManager.attemptVideoRecovery(context, mid, url, videoType, forceSoftwareDecoder = false)
                         }
                     } else {
-                        // Player has media items, just prepare
+                        // Player has media items (retained after stop()), just re-prepare
                         exoPlayer.prepare()
+                        exoPlayer.playWhenReady = shouldPlay
                     }
                 }
                 androidx.media3.common.Player.STATE_BUFFERING -> {

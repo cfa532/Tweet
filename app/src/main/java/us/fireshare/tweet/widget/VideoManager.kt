@@ -221,18 +221,20 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
 
-        // Don't pause the video if it's currently in full-screen mode
+        // Don't stop the video if it's currently in full-screen mode
         if (!isVideoInFullScreen(videoMid)) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
-            // Pause the video but don't stop it completely to avoid state issues
+            // Stop the player to release codec and HTTP connection resources.
+            // In Media3, stop() does NOT clear media items — the playlist is retained
+            // and the player can be re-prepared when visible again.
+            // This prevents resource contention where too many paused players hold
+            // codecs/connections, starving visible players of bandwidth.
             videoPlayers[videoMid]?.let { player ->
                 try {
-                    player.playWhenReady = false
-                    // Don't call stop() as it clears the media source and causes issues
-                    // when the video becomes visible again. Just pause playback.
+                    player.stop()
                 } catch (e: Exception) {
-                    Timber.e("VideoManager - Error pausing video: $e")
+                    Timber.e("VideoManager - Error stopping video: $e")
                 }
             }
         }
@@ -358,20 +360,20 @@ object VideoManager {
      */
     private fun resetPlayerState(player: ExoPlayer) {
         try {
-            // Don't stop if player is already ready - just pause
-            if (player.playbackState == Player.STATE_READY) {
-                player.playWhenReady = false
-                return
-            }
-
-            // Stop playback and reset to beginning
-            player.stop()
-            player.seekTo(0)
-            player.playWhenReady = false
-
-            // Clear any error state
-            if (player.playbackState == Player.STATE_IDLE) {
-                player.prepare()
+            when (player.playbackState) {
+                Player.STATE_READY, Player.STATE_BUFFERING -> {
+                    // Don't stop — just pause to preserve already-buffered data
+                    player.playWhenReady = false
+                }
+                else -> {
+                    // For IDLE or ENDED states, reset and re-prepare
+                    player.stop()
+                    player.seekTo(0)
+                    player.playWhenReady = false
+                    if (player.playbackState == Player.STATE_IDLE) {
+                        player.prepare()
+                    }
+                }
             }
         } catch (e: Exception) {
             Timber.e("VideoManager - Error resetting player state: $e")
@@ -638,15 +640,15 @@ object VideoManager {
                     }
 
                     Player.STATE_BUFFERING -> {
-                        TODO()
+                        // Buffering is normal, no action needed
                     }
 
                     Player.STATE_IDLE -> {
-                        TODO()
+                        // Player idle, no action needed
                     }
 
                     Player.STATE_READY -> {
-                        TODO()
+                        // Player ready, no action needed
                     }
                 }
             }
