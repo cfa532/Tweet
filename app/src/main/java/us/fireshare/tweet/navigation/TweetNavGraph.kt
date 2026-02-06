@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.getAlphaIds
 import us.fireshare.tweet.chat.ChatListScreen
 import us.fireshare.tweet.chat.ChatScreen
 import us.fireshare.tweet.profile.EditProfileScreen
@@ -125,6 +126,16 @@ fun TweetNavGraph(
             lastProcessedUri = ""
         }
     }
+    // Navigate guest user to alphaId profile on app start
+    LaunchedEffect(Unit) {
+        if (deepLinkDestination == null && appUser.isGuest()) {
+            val alphaIds = getAlphaIds()
+            if (alphaIds.isNotEmpty()) {
+                navController.navigate(NavTweet.UserProfile(alphaIds.first()))
+            }
+        }
+    }
+
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
             modifier = modifier,
