@@ -172,7 +172,7 @@ fun MediaBrowser(
         return
     }
     
-    Timber.d("MediaBrowser - tweetAttachments loaded, size: ${tweetAttachments?.size}")
+    Timber.d("MediaBrowser - tweetAttachments loaded, size: ${tweetAttachments.size}")
 
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems?.size ?: 0 })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop

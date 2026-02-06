@@ -393,6 +393,7 @@ fun FullScreenVideoPlayer(
                 }
             }
 
+            @Deprecated("Deprecated in Java")
             override fun onLowMemory() {
                 // Handle low memory if needed
             }

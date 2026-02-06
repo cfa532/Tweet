@@ -539,7 +539,7 @@ object ImageCacheManager {
                 
                 // Stream download directly to file (avoids loading entire image into memory)
                 FileOutputStream(tempFile).use { out ->
-                    inputStream?.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
+                    inputStream.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
                 }
                 
                 // Check if download was paused during streaming
@@ -549,7 +549,7 @@ object ImageCacheManager {
                 }
                 
                 // Progressive loading: First decode low-quality preview (1/4 resolution) from file
-                if (onProgressiveLoad != null && tempFile != null && tempFile!!.length() > 50 * 1024) { // Only for images > 50KB
+                if (onProgressiveLoad != null && tempFile != null && tempFile.length() > 50 * 1024) { // Only for images > 50KB
                     var preview: Bitmap? = null
                     try {
                         val previewOptions = BitmapFactory.Options().apply {
@@ -557,7 +557,7 @@ object ImageCacheManager {
                             inPreferredConfig = Bitmap.Config.RGB_565
                         }
                         // Decode preview directly from file (no memory load)
-                        preview = BitmapFactory.decodeFile(tempFile!!.absolutePath, previewOptions)
+                        preview = BitmapFactory.decodeFile(tempFile.absolutePath, previewOptions)
                         if (preview != null && !preview.isRecycled) {
                             withContext(Dispatchers.Main) {
                                 try {
@@ -588,8 +588,8 @@ object ImageCacheManager {
                 
                 // Move temp file to final location
                 val finalFile = File(dir, "$mid.jpg")
-                if (tempFile != null && tempFile!!.exists()) {
-                    tempFile!!.renameTo(finalFile)
+                if (tempFile != null && tempFile.exists()) {
+                    tempFile.renameTo(finalFile)
                 }
 
                 // Decode full quality bitmap from file (no memory load of raw bytes)

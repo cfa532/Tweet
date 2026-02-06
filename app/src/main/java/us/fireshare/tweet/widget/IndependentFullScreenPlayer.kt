@@ -161,8 +161,18 @@ fun IndependentFullScreenPlayer(
     
     // Handle immersive mode and allow rotation during fullscreen
     LaunchedEffect(Unit) {
-        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        activity?.let { OrientationManager.allowRotation(it) }
+        activity?.let { act ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val controller = act.window.insetsController
+                controller?.hide(android.view.WindowInsets.Type.systemBars())
+                controller?.systemBarsBehavior =
+                    android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                @Suppress("DEPRECATION")
+                act.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            }
+            OrientationManager.allowRotation(act)
+        }
     }
     
     // Pause fullscreen playback when app goes to background
@@ -185,8 +195,15 @@ fun IndependentFullScreenPlayer(
     // Cleanup immersive mode and restore portrait on dispose
     DisposableEffect(Unit) {
         onDispose {
-            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            activity?.let { OrientationManager.lockToPortrait(it) }
+            activity?.let { act ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    act.window.insetsController?.show(android.view.WindowInsets.Type.systemBars())
+                } else {
+                    @Suppress("DEPRECATION")
+                    act.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                }
+                OrientationManager.lockToPortrait(act)
+            }
         }
     }
     
