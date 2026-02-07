@@ -99,11 +99,8 @@ fun TweetFeedScreen(
     var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Track stable direction to prevent jittering - only change opacity after direction is stable
-    var lastStableDirection by remember { mutableStateOf(ScrollDirection.NONE) }
-    var directionChangeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    // Track when DOWN was last applied to ignore bounce-back UP movements
-    var lastDownAppliedTime by remember { mutableStateOf(0L) }
+    // Track current direction for transparency
+    var currentScrollDirection by remember { mutableStateOf(ScrollDirection.NONE) }
 
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     var scrollToTopTrigger by remember { mutableIntStateOf(0) }
@@ -113,7 +110,7 @@ fun TweetFeedScreen(
         if (scrollToTopTrigger > 0) {
             // Reset navbar to fully visible
             bottomBarTransparency = 0.98f
-            lastStableDirection = ScrollDirection.NONE
+            currentScrollDirection = ScrollDirection.NONE
             // Reset top bar scroll state (expand the toolbar)
             scrollBehavior.state.heightOffset = 0f
         }
@@ -219,52 +216,31 @@ fun TweetFeedScreen(
 
                                                 // Ignore NONE - when scroll stops, keep current opacity
                                                 if (newScrollState.direction == ScrollDirection.NONE) {
-                                                    // Cancel any pending opacity change when scroll stops
-                                                    directionChangeJob?.cancel()
                                                     return@FollowingsTweet
                                                 }
 
-                                                // Ignore UP if it's within 1 second of last DOWN (likely bounce-back or settling)
-                                                if (newScrollState.direction == ScrollDirection.UP) {
-                                                    val timeSinceDown = System.currentTimeMillis() - lastDownAppliedTime
-                                                    if (lastStableDirection == ScrollDirection.DOWN && timeSinceDown < 1000) {
-                                                        return@FollowingsTweet
-                                                    }
+                                                // Only process if direction actually changed
+                                                if (newScrollState.direction == currentScrollDirection) {
+                                                    return@FollowingsTweet
                                                 }
 
-                                                // Only process if direction actually changed
-                                                if (newScrollState.direction == lastStableDirection) return@FollowingsTweet
+                                                // Update tracked direction
+                                                currentScrollDirection = newScrollState.direction
 
-                                                // Cancel any pending direction change
-                                                directionChangeJob?.cancel()
+                                                // Apply transparency immediately based on direction
+                                                when (newScrollState.direction) {
+                                                    ScrollDirection.UP -> {
+                                                        // Scroll UP (content moves down): restore navbar
+                                                        bottomBarTransparency = 0.98f
+                                                    }
 
-                                                // Debounce direction changes to prevent jittering
-                                                // DOWN: 150ms debounce, UP: 300ms debounce (stricter to prevent false positives)
-                                                val debounceTime = if (newScrollState.direction == ScrollDirection.UP) 300L else 150L
-                                                directionChangeJob = coroutineScope.launch {
-                                                    delay(debounceTime)
+                                                    ScrollDirection.DOWN -> {
+                                                        // Scroll DOWN (content moves up): fade navbar
+                                                        bottomBarTransparency = 0.2f
+                                                    }
 
-                                                    // Verify still actively scrolling in the same direction
-                                                    if (!scrollState.isScrolling) return@launch
-                                                    if (scrollState.direction != newScrollState.direction) return@launch
-
-                                                    lastStableDirection = newScrollState.direction
-
-                                                    when (newScrollState.direction) {
-                                                        ScrollDirection.UP -> {
-                                                            // Scroll UP (content moves down): restore navbar
-                                                            bottomBarTransparency = 0.98f
-                                                        }
-
-                                                        ScrollDirection.DOWN -> {
-                                                            // Scroll DOWN (content moves up): fade navbar
-                                                            bottomBarTransparency = 0.2f
-                                                            lastDownAppliedTime = System.currentTimeMillis()
-                                                        }
-
-                                                        ScrollDirection.NONE -> {
-                                                            // Already filtered out above
-                                                        }
+                                                    ScrollDirection.NONE -> {
+                                                        // Already filtered out above
                                                     }
                                                 }
                                             },

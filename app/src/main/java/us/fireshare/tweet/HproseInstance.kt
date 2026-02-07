@@ -502,37 +502,33 @@ object HproseInstance {
     }
 
     private suspend fun initAppEntry(onBaseUrlReady: (suspend () -> Unit)? = null) {
-        // Find the best IP by trying URLs
-        val entryIP = findEntryIP()
-        appUser.baseUrl = "http://$entryIP"
-        Timber.tag("initAppEntry").d("Set baseUrl to IP: http://$entryIP")
-
         val userId = preferenceHelper.getUserId()
         Timber.tag("initAppEntry").d("Retrieved userId from preferences: $userId")
+
         if (userId != TW_CONST.GUEST_ID) {
             /**
              * If there is a valid userId in preference, this is a login user.
              * Initiate current account.
              *
-             * Always force refresh of appUser's baseUrl on app start to ensure we have the latest IP.
-             * Pass empty string to force IP re-resolution and bypass cache (matching iOS behavior).
-             * This matches iOS initAppEntry() which calls fetchUser(appUser.mid, baseUrl: "")
+             * OPTIMIZATION: Try cached baseUrl first before resolving new IP.
+             * Only call findEntryIP() if cached baseUrl fails.
              * */
             Timber.tag("initAppEntry")
-                .d("Always refreshing appUser's baseUrl on app start for userId: $userId")
+                .d("Initializing app for userId: $userId")
 
             // appUser was already loaded from cache in initialization step
-            // Just need to set baseUrl if not already set
             val hasCachedData = !appUser.username.isNullOrBlank()
-            
-            if (appUser.baseUrl.isNullOrBlank()) {
-                appUser.baseUrl = "http://$entryIP"
-                User.updateUserInstance(appUser, true)
+            val hasCachedBaseUrl = !appUser.baseUrl.isNullOrBlank()
+
+            if (hasCachedBaseUrl) {
                 Timber.tag("initAppEntry")
-                    .d("Set baseUrl to entry IP: ${appUser.baseUrl}, username: ${appUser.username}")
+                    .d("Found cached baseUrl: ${appUser.baseUrl}, will try it first before resolving new IP")
             } else {
-                Timber.tag("initAppEntry")
-                    .d("appUser already has baseUrl: ${appUser.baseUrl}, username: ${appUser.username}")
+                // No cached baseUrl, resolve new IP immediately
+                val entryIP = findEntryIP()
+                appUser.baseUrl = "http://$entryIP"
+                Timber.tag("initAppEntry").d("No cached baseUrl, resolved new IP: ${appUser.baseUrl}")
+                User.updateUserInstance(appUser, true)
             }
 
             // If we have cached user data, show UI immediately
@@ -548,30 +544,46 @@ object HproseInstance {
             // If we have cached data, this runs in background without blocking UI
             // If no cached data, this still runs but may delay UI briefly
             Timber.tag("initAppEntry").d("Fetching user data from network...")
-            
+
             // Fetch user data from network on IO dispatcher to avoid blocking main thread
             // Retry up to 3 times with exponential backoff if user fetch fails
             var refreshedUser: User? = null
             val maxFetchAttempts = 3
-            
+            var resolvedNewIP = false  // Track if we've already resolved new IP
+
             try {
                 for (attempt in 1..maxFetchAttempts) {
                     Timber.tag("initAppEntry").d("User fetch attempt $attempt/$maxFetchAttempts for userId: $userId")
-                    
+
                     // Use withTimeoutOrNull with 20 second timeout per attempt
                     refreshedUser = withContext(Dispatchers.IO) {
                         withTimeoutOrNull(20_000) {
-                            // Pass empty string to force IP re-resolution (like iOS fetchUser with baseUrl: "")
-                            fetchUser(userId, baseUrl = "", forceRefresh = true)
+                            // First attempt: use cached baseUrl if available
+                            // Subsequent attempts: pass empty string to force IP re-resolution
+                            val baseUrlParam = if (attempt == 1 && hasCachedBaseUrl) {
+                                appUser.baseUrl ?: ""
+                            } else {
+                                ""
+                            }
+                            fetchUser(userId, baseUrl = baseUrlParam, forceRefresh = true)
                         }
                     }
-                    
+
                     // If successful, break out of retry loop
                     if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                         Timber.tag("initAppEntry").d("✅ User fetch successful on attempt $attempt")
                         break
                     }
-                    
+
+                    // If first attempt with cached IP failed, resolve new IP before retry
+                    if (attempt == 1 && hasCachedBaseUrl && !resolvedNewIP) {
+                        Timber.tag("initAppEntry").w("Cached baseUrl failed, resolving new IP...")
+                        val entryIP = findEntryIP()
+                        appUser.baseUrl = "http://$entryIP"
+                        resolvedNewIP = true
+                        Timber.tag("initAppEntry").d("Resolved new IP for retry: ${appUser.baseUrl}")
+                    }
+
                     // If failed and not last attempt, wait before retrying
                     if (attempt < maxFetchAttempts) {
                         val delayMs = 2000L * attempt  // 2s, 4s, 6s
@@ -602,28 +614,36 @@ object HproseInstance {
                         onBaseUrlReady?.invoke()
                     }
                 } else {
-                    // All retry attempts failed - restore entry IP baseUrl if needed
-                    // fetchUser may have cleared baseUrl when user not found
-                    if (appUser.baseUrl.isNullOrBlank()) {
+                    // All retry attempts failed - resolve new IP if we haven't already
+                    if (!resolvedNewIP) {
+                        Timber.tag("initAppEntry").w("All attempts failed with cached IP, resolving new IP as fallback...")
+                        val entryIP = findEntryIP()
+                        appUser.baseUrl = "http://$entryIP"
+                        Timber.tag("initAppEntry").w("Resolved fallback IP: ${appUser.baseUrl}")
+                    } else if (appUser.baseUrl.isNullOrBlank()) {
+                        // fetchUser may have cleared baseUrl when user not found
+                        val entryIP = findEntryIP()
                         appUser.baseUrl = "http://$entryIP"
                         Timber.tag("initAppEntry")
-                            .w("All user fetch attempts failed, restored entry IP baseUrl: ${appUser.baseUrl}")
+                            .w("All user fetch attempts failed, resolved new baseUrl: ${appUser.baseUrl}")
                     } else {
                         Timber.tag("initAppEntry")
                             .w("All user fetch attempts failed, continuing with existing baseUrl: ${appUser.baseUrl}")
                     }
-                    
-                    // Show UI in degraded mode (using entry IP only)
+
+                    // Show UI in degraded mode (using resolved IP)
                     if (!hasCachedData) {
-                        Timber.tag("initAppEntry").w("⚠️ User fetch failed after all retries, showing UI with entry IP only")
+                        Timber.tag("initAppEntry").w("⚠️ User fetch failed after all retries, showing UI with resolved IP")
                         onBaseUrlReady?.invoke()
                     }
                 }
             } catch (e: Exception) {
                 Timber.tag("initAppEntry").e(e, "Error during user fetch retry loop: ${e.message}")
-                // Restore entry IP if needed
+                // Resolve new IP if needed
                 if (appUser.baseUrl.isNullOrBlank()) {
+                    val entryIP = findEntryIP()
                     appUser.baseUrl = "http://$entryIP"
+                    Timber.tag("initAppEntry").w("Exception recovery: resolved new IP ${appUser.baseUrl}")
                 }
                 // Still show UI even if fetch failed
                 if (!hasCachedData) {

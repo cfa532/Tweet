@@ -414,18 +414,22 @@ fun TweetListView(
         var lastSaveTime = 0L
         var lastDirection = ScrollDirection.NONE
         var lastScrollingState = false
+        // Direction stability tracking to prevent flickering
+        var pendingDirection = ScrollDirection.NONE
+        var directionStableCount = 0
+        val stabilityThreshold = 3 // Require 3 consecutive frames to confirm direction change
 
         snapshotFlow {
             Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         }
             .collect { (firstVisibleItem, scrollOffset) ->
                 val isScrolling = listState.isScrollInProgress
-                
+
                 // PERF FIX: Only calculate direction on significant scroll changes
                 val indexDelta = firstVisibleItem - previousFirstVisibleItem
                 val offsetDelta = scrollOffset - previousScrollOffset
-                
-                val direction = if (!isScrolling) {
+
+                val detectedDirection = if (!isScrolling) {
                     ScrollDirection.NONE
                 } else if (Math.abs(indexDelta) > 1 || Math.abs(offsetDelta) > 50) {
                     // Significant movement - update direction
@@ -439,18 +443,43 @@ fun TweetListView(
                     lastDirection
                 }
 
+                // Direction stability check: only change direction after N consecutive frames
+                val confirmedDirection = if (detectedDirection == pendingDirection) {
+                    // Same direction as last frame - increment stability counter
+                    directionStableCount++
+                    if (directionStableCount >= stabilityThreshold) {
+                        // Direction is stable - use it
+                        detectedDirection
+                    } else {
+                        // Not stable yet - keep last confirmed direction
+                        lastDirection
+                    }
+                } else {
+                    // Direction changed - reset stability counter
+                    pendingDirection = detectedDirection
+                    directionStableCount = 1
+                    // Keep last confirmed direction until new one is stable
+                    lastDirection
+                }
+
                 // PERF FIX: Throttle scroll direction updates to reduce coordinator calls
                 // Only update on significant scroll changes (>2 items or >200px) to reduce overhead
                 if (isScrolling && abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                     val currentOffset = firstVisibleItem * 1000f + scrollOffset // Approximate offset
                     us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateScrollDirection(currentOffset)
                 }
-                
+
                 // PERF FIX: Only invoke callback if state actually changed
-                if (direction != lastDirection || isScrolling != lastScrollingState) {
-                    onScrollStateChange?.invoke(ScrollState(isScrolling, direction))
+                if (confirmedDirection != lastDirection || isScrolling != lastScrollingState) {
+                    onScrollStateChange?.invoke(ScrollState(isScrolling, confirmedDirection))
+                    lastDirection = confirmedDirection
+                    lastScrollingState = isScrolling
                 }
-                
+
+                // Update previous values for next delta calculation
+                previousFirstVisibleItem = firstVisibleItem
+                previousScrollOffset = scrollOffset
+
                 // PERF FIX: Save scroll position less frequently (1 sec throttle + immediate on scroll stop)
                 // Reduces state updates from 5/sec to 1/sec during scroll (80% reduction)
                 // IMPORTANT: Skip saving during refresh to prevent scroll position corruption
@@ -460,6 +489,7 @@ fun TweetListView(
                 if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
                     savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
+                    lastSaveTime = now
                 }
             }
     }
@@ -549,9 +579,10 @@ fun TweetListView(
                 // Trigger load
                 val nextPage = lastLoadedPage + 1
                 pendingLoadMorePage = nextPage
-                
+                lastLoadMoreTrigger = now  // FIX: Update trigger time to prevent endless loop
+
                 Timber.tag("TweetListView-LoadMore").d("🚀 TRIGGERING: page=$nextPage")
-                
+
                 isRefreshingAtBottom = true
                 Timber.tag("TweetListView-LoadMore").d("🎡 Spinner ON (isRefreshingAtBottom=$isRefreshingAtBottom)")
                 val spinnerShowTime = System.currentTimeMillis()
