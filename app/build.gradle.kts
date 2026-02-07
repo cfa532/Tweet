@@ -4,7 +4,7 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
+
     id("com.google.dagger.hilt.android")
     alias(libs.plugins.compose.compiler)
     kotlin("plugin.serialization")
@@ -169,10 +169,10 @@ android {
     // Both variants share the same FFmpeg-based video processing code
     sourceSets {
         getByName("full") {
-            java.srcDir("src/fullPlay/java")
+            kotlin.srcDir("src/fullPlay/java")
         }
         getByName("play") {
-            java.srcDir("src/fullPlay/java")
+            kotlin.srcDir("src/fullPlay/java")
         }
     }
     @Suppress("UnstableApiUsage")
