@@ -22,7 +22,7 @@ import javax.inject.Inject
 class ChatSessionRepository @Inject constructor(
     private val chatSessionDao: ChatSessionDao,
     private val chatMessageDao: ChatMessageDao,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
     suspend fun getAllSessions(): List<ChatSession> {
