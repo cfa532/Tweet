@@ -1,16 +1,20 @@
 package us.fireshare.tweet.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
@@ -19,7 +23,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
-    private val chatSessionRepository: ChatSessionRepository
+    private val chatSessionRepository: ChatSessionRepository,
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
     // chat between pair of users
     private val _chatSessions = MutableStateFlow<List<ChatSession>>(emptyList())
@@ -34,9 +39,11 @@ class ChatListViewModel @Inject constructor(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
+            Timber.tag("ChatListViewModel").d("init: Loading sessions from database")
             chatSessionRepository.getAllSessions().forEach { chatSession ->
                 _chatSessions.update { it + chatSession }
             }
+            Timber.tag("ChatListViewModel").d("init: Loaded ${_chatSessions.value.size} sessions, now checking for new messages")
 
             // Check for new messages on initialization
             previewMessages()
@@ -48,79 +55,90 @@ class ChatListViewModel @Inject constructor(
      * If a receiptId is given, update its hasNews message flag to false.
      * */
     fun updateSession(msg: ChatMessage?, hasNews: Boolean = false, receiptId: MimeiId? = null) {
-        val targetReceiptId =
-            receiptId ?: if (msg?.receiptId == appUser.mid) msg.authorId else msg?.receiptId
-
-        val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
-
-        if (existingSession != null) {
-            val updatedSession = existingSession.copy(
-                hasNews = if (receiptId != null) false else hasNews,
-                lastMessage = msg ?: existingSession.lastMessage,
-                timestamp = msg?.timestamp ?: existingSession.timestamp
-            )
-            _chatSessions.update { sessions ->
-                (sessions - existingSession + updatedSession).sortedByDescending { it.timestamp }
-            }
-        } else if (msg != null) { // Only create a new session if a message is provided
-            _chatSessions.update { sessions ->
-                sessions + ChatSession(
-                    id = ChatSession.generateSessionId(), // Generate UUID for session
-                    userId = appUser.mid,
-                    receiptId = msg.receiptId,
-                    hasNews = hasNews,
-                    lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()) // Will be updated when session is saved
-                )
+        if (msg == null && receiptId == null) {
+            return // Nothing to update
+        }
+        
+        // Determine the receiptId for the session to update
+        // For outgoing messages: use msg.receiptId (the recipient)
+        // For incoming messages: use msg.authorId (the sender)
+        // If receiptId parameter is provided, use that
+        val targetReceiptId = receiptId ?: run {
+            when {
+                msg == null -> null
+                msg.authorId == appUser.mid -> msg.receiptId // Outgoing: update session with recipient
+                else -> msg.authorId // Incoming: update session with sender
             }
         }
+        
+        if (targetReceiptId == null) {
+            return
+        }
 
-        // Update 'hasNews' for the sender/receiver session if msg is not null
-        if (msg != null) {
-            val receiptIdForNewsUpdate =
-                if (msg.authorId == appUser.mid) msg.receiptId else msg.authorId
-            _chatSessions.value.find { it.receiptId == receiptIdForNewsUpdate }
-                ?.let { sessionForNewsUpdate ->
-                    val updatedSessionForNewsUpdate = sessionForNewsUpdate.copy(
-                        hasNews = false,
-                        lastMessage = msg,
-                        timestamp = msg.timestamp
-                    )
-                    _chatSessions.update { sessions ->
-                        (sessions - sessionForNewsUpdate + updatedSessionForNewsUpdate)
-                            .sortedByDescending { it.timestamp }
-                    }
+        // Ensure update happens on main thread for proper Compose observation
+        viewModelScope.launch(Dispatchers.Main) {
+            val existingSession = _chatSessions.value.find { it.receiptId == targetReceiptId }
+
+            if (existingSession != null) {
+                // Update existing session
+                val updatedSession = existingSession.copy(
+                    hasNews = if (receiptId != null) false else hasNews,
+                    lastMessage = msg ?: existingSession.lastMessage,
+                    timestamp = msg?.timestamp ?: existingSession.timestamp
+                )
+                _chatSessions.update { sessions ->
+                    (sessions - existingSession + updatedSession).sortedByDescending { it.timestamp }
                 }
+            } else if (msg != null) {
+                // Create new session if message is provided
+                _chatSessions.update { sessions ->
+                    (sessions + ChatSession(
+                        id = ChatSession.generateSessionId(),
+                        userId = appUser.mid,
+                        receiptId = targetReceiptId,
+                        hasNews = hasNews,
+                        lastMessage = msg.copy(sessionId = ChatSession.generateSessionId()),
+                        timestamp = msg.timestamp
+                    )).sortedByDescending { it.timestamp }
+                }
+            }
         }
     }
 
     // check if there are new messages on the server. If so, retrieve the last one for UI update.
     suspend fun previewMessages() {
         val newMessages = HproseInstance.checkNewMessages() ?: return
+        Timber.tag("checkNewMessages").d("previewMessages: Received ${newMessages.size} messages from server")
+        
+        // Log details of each message for debugging
+        newMessages.forEach { message ->
+            Timber.tag("checkNewMessages").d(
+                "previewMessages: Message - id=${message.id}, " +
+                "authorId=${message.authorId}, receiptId=${message.receiptId}, " +
+                "content=${message.content?.take(50)}, " +
+                "appUser.mid=${appUser.mid}, " +
+                "isIncoming=${message.authorId != appUser.mid}"
+            )
+        }
 
         // Filter out messages that already exist in local database
         val trulyNewMessages = chatSessionRepository.filterExistingMessages(newMessages)
+        Timber.tag("ChatListViewModel").d("previewMessages: After filtering, ${trulyNewMessages.size} truly new messages")
 
         if (trulyNewMessages.isEmpty()) {
+            Timber.tag("ChatListViewModel").d("previewMessages: No truly new messages, returning")
             return // No truly new messages
         }
 
         // Notify callback about new messages found
         onNewMessageCallback?.invoke(trulyNewMessages.size)
 
-        // Update timestamps with local system time for received messages
-        val currentTime = System.currentTimeMillis()
-        val updatedNewMessages = trulyNewMessages.map { message ->
-            if (message.authorId != appUser.mid) {
-                // Update timestamp for incoming messages with local time
-                message.copy(timestamp = currentTime)
-            } else {
-                message
-            }
-        }
+        // Note: checkNewMessages already filters to only incoming messages and updates timestamps
+        // So trulyNewMessages contains only incoming messages with updated timestamps
 
         // Create sessions for new messages but don't insert the messages
         val updatedSessions =
-            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, updatedNewMessages)
+            chatSessionRepository.mergeMessagesWithSessions(chatSessions.value, trulyNewMessages)
 
         // Update chat session database (create empty sessions)
         updatedSessions.forEach { chatSession ->
@@ -131,14 +149,14 @@ class ChatListViewModel @Inject constructor(
             )
         }
 
-        // Enhance messages for UI display only
+        // Enhance messages for UI display only (fallback if preview wasn't set)
         val enhancedSessions = updatedSessions.map { chatSession ->
             val lastMessage = chatSession.lastMessage
             if (!lastMessage.attachments.isNullOrEmpty() && lastMessage.content.isNullOrBlank()) {
                 val attachmentText = if (lastMessage.authorId == appUser.mid) {
-                    "Attachment sent"
+                    context.getString(R.string.attachment_sent)
                 } else {
-                    "Attachment received"
+                    context.getString(R.string.attachment_received)
                 }
                 chatSession.copy(lastMessage = lastMessage.copy(content = attachmentText))
             } else {
@@ -152,19 +170,27 @@ class ChatListViewModel @Inject constructor(
         enhancedSessions.forEach { chatSession ->
             val existingSession = existingSessionsMap[chatSession.receiptId]
             if (existingSession != null) {
-                // Update existing session directly
-                val index = updatedChatSessions.indexOf(existingSession)
-                updatedChatSessions[index] = existingSession.copy(
-                    hasNews = chatSession.hasNews,
-                    lastMessage = chatSession.lastMessage,
-                    timestamp = chatSession.timestamp
-                )
+                // Check if we should update (different message ID or newer timestamp)
+                // Message ID comparison is more reliable since all incoming messages get same currentTime
+                val isDifferentMessage = chatSession.lastMessage.id != existingSession.lastMessage.id
+                val isNewerTimestamp = chatSession.lastMessage.timestamp > existingSession.lastMessage.timestamp
+                if (isDifferentMessage || isNewerTimestamp) {
+                    val index = updatedChatSessions.indexOf(existingSession)
+                    if (index >= 0) {
+                        Timber.tag("ChatListViewModel").d("previewMessages: Updating session for receiptId=${chatSession.receiptId}, oldMessageId=${existingSession.lastMessage.id}, newMessageId=${chatSession.lastMessage.id}")
+                        updatedChatSessions[index] = chatSession.copy(
+                            id = existingSession.id // Preserve the existing session ID
+                        )
+                    }
+                }
             } else {
                 // Add new session
+                Timber.tag("ChatListViewModel").d("previewMessages: Adding new session for receiptId=${chatSession.receiptId}")
                 updatedChatSessions.add(chatSession)
             }
         }
-        _chatSessions.value = updatedChatSessions
+        // Sort by timestamp descending and update
+        _chatSessions.value = updatedChatSessions.sortedByDescending { it.timestamp }
     }
 
     /**

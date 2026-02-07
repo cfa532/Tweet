@@ -31,15 +31,21 @@ import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import java.util.concurrent.TimeUnit
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -50,15 +56,21 @@ fun TweetItemBody(
     isQuoted: Boolean = false,     // the block is a quoted tweet or not
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,    // the parent tweet of the quoted original tweet
-    context: String = "default"
+    context: String = "default",
+    currentUserId: us.fireshare.tweet.datamodel.MimeiId? = null, // Current profile userId to prevent duplicate navigation
+    onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top
+    containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val tweet by viewModel.tweetState.collectAsState()
 
-    // Optimize: Use derivedStateOf to avoid unnecessary recomposition
-    val author by remember(tweet.author) {
-        derivedStateOf { tweet.author }
+    // Observe author changes reactively via StateFlow
+    // This ensures all tweets from the same author update when user data becomes available
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
+    val author by authorStateFlow.collectAsState()
 
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }
@@ -77,7 +89,6 @@ fun TweetItemBody(
         // Apply border to the entire TweetBlock
         shape = MaterialTheme.shapes.medium,
         modifier = modifier
-            .padding(start = 4.dp, end = 4.dp)
             .clickable(enabled = canNavigate, onClick = {
                 // necessary to deal with corrupted data.
                 if (canNavigate) {
@@ -95,17 +106,34 @@ fun TweetItemBody(
             ) {
                 IconButton(
                     onClick = {
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        // Only navigate if we're not already on this user's profile
+                        timber.log.Timber.tag("TweetItemBody").d("Avatar clicked: authorId=${tweet.authorId}, currentUserId=$currentUserId")
+                        if (tweet.authorId != currentUserId) {
+                            timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.authorId}")
+                            navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        } else {
+                            timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
+                            coroutineScope.launch {
+                                onScrollToTop?.invoke()
+                            }
+                        }
                     },
                     modifier = Modifier.width(48.dp)
                 ) {
-                    author?.let { UserAvatar(user = it, size = 36) }
+                    UserAvatar(
+                        user = author ?: us.fireshare.tweet.datamodel.User(
+                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                            baseUrl = appUser.baseUrl
+                        ),
+                        size = 38
+                    )
                 }
             }
 
             // Right column: User info, content, and actions
             Column(
                 modifier = Modifier.fillMaxWidth()
+                    .padding(end = 4.dp)
             ) {
                 // Top row: User info and dropdown menu
                 Row(
@@ -147,33 +175,77 @@ fun TweetItemBody(
                 if (hasContent) {
                     SelectableText(
                         text = tweet.content!!,
-                        maxLines = 10,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    ) { username ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            HproseInstance.getUserId(username)?.let {
-                                withContext(Dispatchers.Main) {
-                                    navController.navigate(NavTweet.UserProfile(it))
+                        maxLines = 7,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        onTextClick = {
+                            // Navigate to detail view when text (not username) is clicked
+                            navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                        },
+                        callback = { username ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                HproseInstance.getUserId(username)?.let {
+                                    withContext(Dispatchers.Main) {
+                                        navController.navigate(NavTweet.UserProfile(it))
+                                    }
                                 }
                             }
                         }
-                    }
+                    )
                 }
 
-                // Media files
+                // Media files and documents
                 if (hasAttachments) {
                     // Stabilize attachments to prevent video recomposition
                     val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
                         tweet.attachments!!
                     }
-                    Surface(
+                    
+                    // Separate media (visual) from documents (like iOS)
+                    val mediaAttachments = remember(stableAttachments) {
+                        stableAttachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isMediaType(type)
+                        }
+                    }
+                    val documentAttachments = remember(stableAttachments) {
+                        stableAttachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isDocumentType(type)
+                        }
+                    }
+                    
+                    Column(
                         modifier = Modifier.fillMaxWidth()
                             .padding(top = 4.dp, end = 4.dp)
-                            .heightIn(min = 20.dp, max = 400.dp),
-                        tonalElevation = 4.dp,
-                        shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaGrid(stableAttachments, viewModel)
+                        // MediaGrid for images, videos, and audio (visual content)
+                        if (mediaAttachments.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth()
+                                    .heightIn(min = 20.dp, max = 400.dp),
+                                tonalElevation = 4.dp,
+                                shape = RoundedCornerShape(size = 8.dp)
+                            ) {
+                                MediaGrid(
+                                    mediaAttachments,
+                                    viewModel,
+                                    // For retweets/quotes, parentTweet.mid is the container tweet ID which must be used for video tracking
+                                    // This ensures videos are identified by the parent (retweet/quote) ID and video mid
+                                    parentTweetId = parentTweet?.mid?.takeIf { it.isNotEmpty() },
+                                    containerTopY = containerTopY
+                                )
+                            }
+                        }
+                        
+                        // Document attachments vertically (below media) - limit to 2 in list
+                        if (documentAttachments.isNotEmpty()) {
+                            DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = tweet.author?.baseUrl,
+                                maxDocuments = 2 // Show at most 2 documents in tweet list
+                            )
+                        }
                     }
                 }
 
@@ -184,16 +256,37 @@ fun TweetItemBody(
                             .fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        LikeButton(viewModel)
-                        BookmarkButton(viewModel)
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(40.dp))
                         ShareButton(viewModel)
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Determines if a media type is visual content (should be in MediaGrid)
+ */
+private fun isMediaType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO, MediaType.Audio -> true
+        else -> false
+    }
+}
+
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
     }
 }
 

@@ -27,7 +27,8 @@ fun SelectableText(
     maxLines: Int = Int.MAX_VALUE,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = MaterialTheme.colorScheme.onSurface,
-    callback: (String) -> Unit = {}
+    onTextClick: (() -> Unit)? = null, // Callback for when text (not username) is clicked
+    callback: (String) -> Unit = {} // Callback for when username is clicked
 )
 {
     // fold text content up to 10 lines. Open it upon user click.
@@ -59,7 +60,13 @@ fun SelectableText(
                             if (annotations.isNotEmpty()) {
                                 val username = annotations[0].item
                                 callback(username)  // navigate to the user account
+                            } else {
+                                // Not clicking on a username, trigger text click callback if provided
+                                onTextClick?.invoke()
                             }
+                        } ?: run {
+                            // No layout result yet, trigger text click callback if provided
+                            onTextClick?.invoke()
                         }
                     }
                 },

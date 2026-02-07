@@ -25,6 +25,7 @@ object SystemNotificationManager {
     // Notification IDs
     private const val NOTIFICATION_ID_CHAT_MESSAGE = 1001
     private const val NOTIFICATION_ID_SYSTEM_UPDATE = 1003
+    private const val NOTIFICATION_ID_FOLLOW_OPERATION_FAILED = 1004
     
     /**
      * Initialize default notification channel (required for Android 8+)
@@ -96,22 +97,33 @@ object SystemNotificationManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            val title = if (messageCount == 1) {
-                context.getString(R.string.notification_new_chat_message_simple)
-            } else {
-                context.getString(R.string.notification_new_chat_messages_simple, messageCount)
-            }
+            // Use sender name as title, or fallback to generic title
+            val title = senderName.takeIf { it.isNotBlank() && it != "No One" } 
+                ?: if (messageCount == 1) {
+                    context.getString(R.string.notification_new_chat_message_simple)
+                } else {
+                    context.getString(R.string.notification_new_chat_messages_simple, messageCount)
+                }
             
+            // Use message preview as content text, or fallback message
+            val contentText = messagePreview.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.notification_tap_to_view)
+            
+            // Create notification with BigTextStyle for better preview
             val notification = NotificationCompat.Builder(context, DEFAULT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notice)
                 .setContentTitle(title)
-                .setContentText(context.getString(R.string.notification_tap_to_view))
+                .setContentText(contentText)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(contentText)
+                    .setBigContentTitle(title))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .setNumber(messageCount)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setShowWhen(true)
                 .build()
             
             try {
@@ -125,70 +137,60 @@ object SystemNotificationManager {
             Timber.e(e, "Failed to show chat message notification")
         }
     }
-    
 
-    
+
     /**
-     * Show notification for system updates or important events
+     * Show notification for failed follow operation
+     * Notifies user that the follow operation failed and they should refresh their following list
      */
-    fun showSystemNotification(
+    fun showFollowOperationFailedNotification(
         context: Context,
-        title: String,
-        message: String,
-        notificationId: Int = NOTIFICATION_ID_SYSTEM_UPDATE
+        userId: String
     ) {
+        Timber.d("Attempting to show follow operation failed notification for user: $userId")
+        
         if (!NotificationPermissionManager.isNotificationPermissionGranted(context)) {
-            Timber.d("Notification permission not granted, skipping system notification")
+            Timber.w("Notification permission not granted, skipping follow operation failed notification")
             return
         }
         
         try {
             val intent = Intent(context, TweetActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("navigate_to", "user_profile")
+                putExtra("userId", userId)
             }
             
             val pendingIntent = PendingIntent.getActivity(
                 context,
-                notificationId,
+                NOTIFICATION_ID_FOLLOW_OPERATION_FAILED,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
             val notification = NotificationCompat.Builder(context, DEFAULT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notice)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setContentTitle(context.getString(R.string.follow_operation_failed))
+                .setContentText(context.getString(R.string.follow_operation_failed_refresh_message))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build()
             
             try {
-                NotificationManagerCompat.from(context).notify(notificationId, notification)
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_FOLLOW_OPERATION_FAILED, notification)
             } catch (e: SecurityException) {
                 Timber.e(e, "Security exception when showing notification - permission may be denied")
             }
-            Timber.d("System notification shown: $title")
+            Timber.d("Follow operation failed notification shown for user: $userId")
             
         } catch (e: Exception) {
-            Timber.e(e, "Failed to show system notification")
+            Timber.e(e, "Failed to show follow operation failed notification")
         }
     }
-    
-    /**
-     * Clear all notifications
-     */
-    fun clearAllNotifications(context: Context) {
-        try {
-            NotificationManagerCompat.from(context).cancelAll()
-            Timber.d("All notifications cleared")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to clear notifications")
-        }
-    }
-    
+
     /**
      * Clear specific notification by ID
      */
@@ -200,46 +202,4 @@ object SystemNotificationManager {
             Timber.e(e, "Failed to clear notification: $notificationId")
         }
     }
-    
-    /**
-     * Check if notifications are enabled for the app
-     */
-    fun areNotificationsEnabled(context: Context): Boolean {
-        return NotificationManagerCompat.from(context).areNotificationsEnabled()
-    }
-    
-    /**
-     * Test notification for debugging purposes
-     */
-    fun testNotification(context: Context) {
-        Timber.d("Testing notification...")
-        showChatMessageNotification(
-            context,
-            "Test User",
-            "This is a test notification message",
-            1
-        )
-    }
-    
-    /**
-     * Get notification debug info
-     */
-    fun getNotificationDebugInfo(context: Context): String {
-        val permissionGranted = NotificationPermissionManager.isNotificationPermissionGranted(context)
-        val notificationsEnabled = areNotificationsEnabled(context)
-        val channelExists = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.getNotificationChannel(DEFAULT_CHANNEL) != null
-        } else {
-            true
-        }
-        
-        return """
-            Notification Debug Info:
-            - Permission Granted: $permissionGranted
-            - Notifications Enabled: $notificationsEnabled
-            - Channel Exists: $channelExists
-            - Android Version: ${android.os.Build.VERSION.SDK_INT}
-        """.trimIndent()
-    }
-} 
+}

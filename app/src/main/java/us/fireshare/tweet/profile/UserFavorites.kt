@@ -21,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -34,6 +37,7 @@ import us.fireshare.tweet.datamodel.Tweet
 
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 
@@ -46,16 +50,31 @@ fun UserFavorites(
 ) {
     val navController = LocalNavController.current
     val favorites by viewModel.favorites.collectAsState()
+    val favoritesInitialLoadComplete by viewModel.favoritesInitialLoadComplete.collectAsState()
     val user = appUser
-    
+
+    // Track scroll-to-top trigger
+    var scrollToTopTrigger by remember { mutableIntStateOf(0) }
+
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
         viewModel.startListeningToNotifications()
     }
 
+    // Only load favorites if the list is empty (initial load)
+    // TweetListView handles pagination, so we don't reload on navigation back
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            viewModel.getFavorites(0) // Load first page
+        if (favorites.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                viewModel.getFavorites(0) // Load first page only if empty
+            }
+        }
+    }
+
+    // Scroll to top when initial server load completes (after cached data)
+    LaunchedEffect(favoritesInitialLoadComplete) {
+        if (favoritesInitialLoadComplete) {
+            scrollToTopTrigger++
         }
     }
 
@@ -70,14 +89,17 @@ fun UserFavorites(
                     Column {
                         UserAvatar(user = user, size = 36)
                         Text(
-                            text = stringResource(R.string.user_favorites),
+                            text = stringResource(R.string.your_favorites),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() })
+                    IconButton(onClick = {
+                        // Simply pop back to the previous screen (user profile)
+                        navController.popBackStack()
+                    })
                     {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -99,10 +121,12 @@ fun UserFavorites(
                 tweets = favorites,
                 fetchTweets = { pageNumber ->
                     viewModel.getFavorites(pageNumber)
-                    emptyList<Tweet?>() // Return empty list since getFavorites updates the state
                 },
-                showPrivateTweets = false,
-                parentEntry = parentEntry
+                showPrivateTweets = true, // Show private tweets in favorites since they are user's own favorites
+                context = "appUserFavorites",
+                parentEntry = parentEntry,
+                restoreScrollPosition = true, // Remember scroll position when navigating back
+                scrollToTopTrigger = scrollToTopTrigger // Scroll to top when server data loads
             )
         }
     }

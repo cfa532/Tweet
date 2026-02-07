@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -98,7 +97,6 @@ fun UserListView(
         Timber.tag("UserListView").d("LaunchedEffect triggered with currentUserId: $currentUserId, lastUserId: $lastUserId")
         if (currentUserId != lastUserId || allUserIds.isEmpty()) {
             Timber.tag("UserListView").d("User changed from $lastUserId to $currentUserId, initializing data")
-            lastUserId = currentUserId
             allUserIds = emptyList()
             displayedUserCount = 0
             serverDepleted = false
@@ -109,11 +107,15 @@ fun UserListView(
                 val initialUserIds = fetchUserIds(0)
                 Timber.tag("UserListView").d("fetchUserIds(0) returned: ${initialUserIds.size} user IDs")
                 if (initialUserIds.isNotEmpty()) {
+                    // Filter out invalid user IDs (null, empty, or guest IDs)
+                    val validUserIds = initialUserIds.filter { userId ->
+                        userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
+                    }
                     // Ensure no duplicates in initial load
-                    val uniqueInitialUserIds = initialUserIds.distinct()
+                    val uniqueInitialUserIds = validUserIds.distinct()
                     allUserIds = uniqueInitialUserIds
                     displayedUserCount = minOf(uniqueInitialUserIds.size, TW_CONST.USER_BATCH_SIZE)
-                    Timber.tag("UserListView").d("Initial load completed: fetched ${uniqueInitialUserIds.size} unique user IDs, displaying $displayedUserCount")
+                    Timber.tag("UserListView").d("Initial load completed: fetched ${initialUserIds.size} user IDs, filtered to ${validUserIds.size} valid IDs, ${uniqueInitialUserIds.size} unique user IDs, displaying $displayedUserCount")
                 } else {
                     serverDepleted = true
                     Timber.tag("UserListView").d("No initial user IDs found, server depleted")
@@ -195,7 +197,6 @@ fun UserListView(
         
         if (isAtBottom && !isRefreshingAtBottom && !isLoadingMore && !serverDepleted) {
             Timber.tag("UserListView").d("Triggering load more...")
-            isLoadingMore = true
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
@@ -209,12 +210,16 @@ fun UserListView(
                             serverDepleted = true
                             Timber.tag("UserListView").d("No more user IDs available, server depleted")
                         } else {
+                            // Filter out invalid user IDs (null, empty, or guest IDs)
+                            val validNewUserIds = newUserIds.filter { userId ->
+                                userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
+                            }
                             // Add new user IDs to the list, ensuring no duplicates
-                            val uniqueNewUserIds = newUserIds.filter { newId -> !allUserIds.contains(newId) }
+                            val uniqueNewUserIds = validNewUserIds.filter { newId -> !allUserIds.contains(newId) }
                             if (uniqueNewUserIds.isNotEmpty()) {
                                 allUserIds = allUserIds + uniqueNewUserIds
                                 displayedUserCount = minOf(displayedUserCount + TW_CONST.USER_BATCH_SIZE, allUserIds.size)
-                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs, total: ${allUserIds.size}, displayed: $displayedUserCount")
+                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs (from ${newUserIds.size} fetched, ${validNewUserIds.size} valid), total: ${allUserIds.size}, displayed: $displayedUserCount")
                             } else {
                                 // All new IDs were duplicates, mark as depleted
                                 serverDepleted = true
@@ -227,7 +232,6 @@ fun UserListView(
                     serverDepleted = true
                 } finally {
                     isRefreshingAtBottom = false
-                    isLoadingMore = false
                     Timber.tag("UserListView").d("Load more completed, isRefreshingAtBottom set to false, isLoadingMore set to false")
                 }
             }
@@ -252,22 +256,27 @@ fun UserListView(
         ) {
             items(
                 items = displayedUserIds,
-                key = { userId -> "${userId}_${displayedUserIds.indexOf(userId)}" }
+                key = { userId -> userId },  // userId is already unique - no need for indexOf
+                contentType = { "user" }  // Help Compose reuse compositions efficiently
             ) { userId ->
                 userItem(userId)
             }
             
             // Show loading indicator if there are more user IDs to load
+            // Use fixed-height container to prevent layout shifts
             if (isRefreshingAtBottom || (!serverDepleted && displayedUserCount < allUserIds.size)) {
                 item {
-                    CircularProgressIndicator(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
-                            .wrapContentWidth(Alignment.CenterHorizontally),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp
-                    )
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
                 }
             }
         }

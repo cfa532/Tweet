@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,11 +56,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
-import us.fireshare.tweet.HproseInstance.appUser
+import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.ui.CameraXPreview
 import us.fireshare.tweet.widget.UploadFilePreview
 
 @Composable
@@ -68,6 +71,8 @@ fun ReplyEditorBox(
     isExpanded: Boolean = false,
     onExpandedChange: (Boolean) -> Unit = {}
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     var textValue by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
@@ -86,35 +91,39 @@ fun ReplyEditorBox(
             }
         }
     }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-            if (success) {
-                imageUri?.let {
-                    selectedAttachments.add(it)
-                }
-            }
-        }
-    val takeAShot = {
-        val photoFile = createImageFile(context)
-        photoFile?.also {
-            val photoURI: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                it
-            )
-            imageUri = photoURI
-            cameraLauncher.launch(photoURI)
-        }
+    // CameraX state
+    var showCamera by remember { mutableStateOf(false) }
+
+    // Handle image capture from CameraX
+    val onImageCaptured = { uri: Uri ->
+        Timber.tag("CameraX").d("Image captured: $uri")
+        selectedAttachments.add(uri)
+        showCamera = false
     }
+
+    // Handle video recording from CameraX
+    val onVideoRecorded = { uri: Uri ->
+        Timber.tag("CameraX").d("Video recorded: $uri")
+        selectedAttachments.add(uri)
+        showCamera = false
+    }
+
+    // Open camera with CameraX
+    val openCamera = {
+        showCamera = true
+    }
+
+    // Capture string resources at composable level
+    val cameraPermissionRequiredText = stringResource(R.string.camera_permission_required)
+    
+    // Request camera permission
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) {
-        if (it) {
-            Toast.makeText(context, "Permission Granted", Toast.LENGTH_SHORT).show()
-            takeAShot()
+    ) { isGranted ->
+        if (isGranted) {
+            openCamera()
         } else {
-            Toast.makeText(context, "Permission Denied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, cameraPermissionRequiredText, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -326,7 +335,7 @@ fun ReplyEditorBox(
                                         Manifest.permission.CAMERA
                                     ) == PackageManager.PERMISSION_GRANTED
                                 ) {
-                                    takeAShot()
+                                    openCamera()
                                 } else {
                                     permissionLauncher.launch(Manifest.permission.CAMERA)
                                 }
@@ -400,7 +409,7 @@ fun ReplyEditorBox(
     // Exit confirmation dialog
     if (showExitConfirmation) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showExitConfirmation = false },
+            onDismissRequest = { },
             title = { Text(stringResource(R.string.discard_reply)) },
             text = { Text(stringResource(R.string.unsaved_content_warning)) },
             confirmButton = {
@@ -412,11 +421,21 @@ fun ReplyEditorBox(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(
-                    onClick = { showExitConfirmation = false }
+                    onClick = { }
                 ) {
                     Text(stringResource(R.string.keep_editing))
                 }
             }
+        )
+    }
+
+    // CameraX Preview
+    if (showCamera) {
+        CameraXPreview(
+            onImageCaptured = onImageCaptured,
+            onVideoRecorded = onVideoRecorded,
+            onDismiss = { },
+            modifier = Modifier.fillMaxSize()
         )
     }
 }

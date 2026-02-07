@@ -35,6 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -62,11 +65,12 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     var dragOffset by remember { mutableFloatStateOf(0f) }
     
     // Add player listener to handle state changes
     DisposableEffect(existingPlayer) {
-        val listener = object : androidx.media3.common.Player.Listener {
+        val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_IDLE -> {
@@ -82,10 +86,9 @@ fun FullScreenVideoPlayer(
                         existingPlayer.playWhenReady = true
                     }
                     Player.STATE_ENDED -> {
-                        // If video ends, restart it
-                        Timber.d("FullScreenVideoPlayer: Video ended, restarting")
-                        existingPlayer.seekTo(0)
-                        existingPlayer.playWhenReady = true
+                        // Rewind is handled by CreateExoPlayer listener
+                        Timber.d("FullScreenVideoPlayer: Video ended")
+                        existingPlayer.playWhenReady = false
                     }
                     Player.STATE_BUFFERING -> {
                         // Video is buffering, this is normal - no action needed
@@ -105,6 +108,25 @@ fun FullScreenVideoPlayer(
         
         onDispose {
             existingPlayer.removeListener(listener)
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer: Exiting fullscreen, stopping playback")
+            existingPlayer.pause()
+            existingPlayer.playWhenReady = false
+        }
+    }
+    
+    // Pause playback when app goes to background
+    DisposableEffect(lifecycleOwner, existingPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                Timber.d("FullScreenVideoPlayer: Lifecycle ${event.name}, pausing existingPlayer")
+                existingPlayer.playWhenReady = false
+                existingPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -139,6 +161,10 @@ fun FullScreenVideoPlayer(
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer: Exiting fullscreen, stopping playback")
+            existingPlayer.pause()
+            existingPlayer.playWhenReady = false
         }
     }
 
@@ -153,6 +179,7 @@ fun FullScreenVideoPlayer(
                 }
             }
             
+            @Deprecated("Deprecated in Java")
             override fun onLowMemory() {
                 // Handle low memory if needed
             }
@@ -184,9 +211,17 @@ fun FullScreenVideoPlayer(
             existingPlayer.prepare()
         }
         
-        // Start playback if ready
+        // Autoplay when entering fullscreen
         if (existingPlayer.playbackState == Player.STATE_READY) {
+            Timber.d("FullScreenVideoPlayer: Player ready, autoplaying")
             existingPlayer.playWhenReady = true
+        } else {
+            // Wait for player to become ready, then autoplay
+            kotlinx.coroutines.delay(100)
+            if (existingPlayer.playbackState == Player.STATE_READY) {
+                Timber.d("FullScreenVideoPlayer: Player ready after delay, autoplaying")
+                existingPlayer.playWhenReady = true
+            }
         }
     }
 
@@ -202,7 +237,7 @@ fun FullScreenVideoPlayer(
                     },
                     onDragEnd = {
                         // Check if it's a downward swipe (positive Y value means downward)
-                        if (dragOffset > 100f) { // Increased threshold - 100dp
+                        if (dragOffset > 220f) { // Allow more dragging distance before exit
                             onClose()
                         }
                         dragOffset = 0f
@@ -224,6 +259,8 @@ fun FullScreenVideoPlayer(
                     useController = true // Use native controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set shutter background to black to prevent white flash on initial load
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
                     // Let ExoPlayer handle its own control visibility
                     controllerShowTimeoutMs = 2000 // Auto-hide after 2 seconds
                     controllerHideOnTouch = true // Hide when tapping outside controls
@@ -235,9 +272,9 @@ fun FullScreenVideoPlayer(
                 .fillMaxSize()
                 .graphicsLayer {
                     translationY = dragOffset
-                    // Add some scaling effect as the video is dragged down
-                    scaleX = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
-                    scaleY = 1f - (dragOffset / 1000f).coerceAtMost(0.1f)
+                    // Unified scaling with IndependentFullScreenPlayer: moderate shrink, min 0.8f
+                    scaleX = (1f - (dragOffset / 800f)).coerceAtLeast(0.8f)
+                    scaleY = (1f - (dragOffset / 800f)).coerceAtLeast(0.8f)
                     // Add alpha effect for fade out
                     alpha = 1f - (dragOffset / 500f).coerceAtMost(0.3f)
                 }
@@ -258,9 +295,11 @@ fun FullScreenVideoPlayer(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showControls by remember { mutableStateOf(false) } // Start with controls hidden
     var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
-    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) } // horizontal offset (for swipe)
+    var verticalDragOffset by remember { mutableFloatStateOf(0f) } // vertical offset (for drag-to-exit)
 
     // Get the dedicated full screen player
     val exoPlayer = remember {
@@ -286,6 +325,21 @@ fun FullScreenVideoPlayer(
 
         // Auto-play the video
         exoPlayer.playWhenReady = true
+    }
+    
+    // Pause playback when app goes to background
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                Timber.d("FullScreenVideoPlayer (API 30+): Lifecycle ${event.name}, pausing fullscreen player")
+                exoPlayer.playWhenReady = false
+                exoPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Immersive full screen and orientation handling
@@ -318,6 +372,10 @@ fun FullScreenVideoPlayer(
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
+            // Stop playback when exiting fullscreen
+            Timber.d("FullScreenVideoPlayer (API 30+): Exiting fullscreen, stopping playback")
+            exoPlayer.pause()
+            exoPlayer.playWhenReady = false
         }
     }
 
@@ -336,6 +394,7 @@ fun FullScreenVideoPlayer(
                 }
             }
 
+            @Deprecated("Deprecated in Java")
             override fun onLowMemory() {
                 // Handle low memory if needed
             }
@@ -352,21 +411,7 @@ fun FullScreenVideoPlayer(
         }
     }
 
-    // Handle auto-replay
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && autoReplay) {
-                    exoPlayer.seekTo(0)
-                    exoPlayer.play()
-                }
-            }
-        }
-        exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-        }
-    }
+    // Note: Rewind is handled by CreateExoPlayer listener, no need to duplicate here
 
     // Full screen video player UI
     Box(
@@ -376,13 +421,24 @@ fun FullScreenVideoPlayer(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragEnd = {
+                        // Horizontal swipe
                         if (abs(dragOffset) > 100f) {
                             onHorizontalSwipe?.invoke(if (dragOffset > 0) 1 else -1)
                         }
+                        // Vertical drag-to-exit
+                        if (verticalDragOffset > 220f) {
+                            onClose()
+                        }
                         dragOffset = 0f
+                        verticalDragOffset = 0f
                     },
-                    onDrag = { _, dragAmount ->
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        // Track both directions
                         dragOffset += dragAmount.x
+                        if (dragAmount.y > 0) {
+                            verticalDragOffset += dragAmount.y
+                        }
                     }
                 )
             }
@@ -395,10 +451,20 @@ fun FullScreenVideoPlayer(
                     useController = false // We'll implement custom controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // Set shutter background to black to prevent white flash on initial load
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    // Apply vertical drag visuals (same feel as other fullscreen variant)
+                    translationY = verticalDragOffset
+                    // Unified scaling with IndependentFullScreenPlayer: moderate shrink, min 0.8f
+                    scaleX = (1f - (verticalDragOffset / 800f)).coerceAtLeast(0.8f)
+                    scaleY = (1f - (verticalDragOffset / 800f)).coerceAtLeast(0.8f)
+                    alpha = 1f - (verticalDragOffset / 500f).coerceAtMost(0.3f)
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {

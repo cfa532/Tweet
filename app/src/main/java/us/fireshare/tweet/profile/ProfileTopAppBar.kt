@@ -43,18 +43,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
-import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.NavTweet
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
@@ -70,9 +68,10 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
 
     // manually prevent fast continuous click of a button
     var lastClickTime by remember { mutableLongStateOf(0L) }
@@ -144,7 +143,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             popUpTo(NavTweet.TweetFeed) { inclusive = true }
                         }
                     }
-                    lastClickTime = currentTime
                 }
             }) {
                 Icon(
@@ -170,7 +168,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = "More"
+                            contentDescription = stringResource(R.string.more)
                         )
                     }
                     DropdownMenu(
@@ -189,9 +187,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 onClick = {
                                     viewModel.viewModelScope.launch(IO) {
                                         viewModel.logout {
-                                            tweetFeedViewModel.viewModelScope.launch(IO) {
-                                                tweetFeedViewModel.reset()
-                                            }
                                             viewModel.viewModelScope.launch(Main) {
                                                 navController.navigate(NavTweet.TweetFeed)
                                             }

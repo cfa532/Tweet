@@ -124,33 +124,6 @@ object BlackList {
     }
     
     /**
-     * Get statistics about the blacklist
-     */
-    suspend fun getStats(): BlackListStats {
-        return mutex.withLock {
-            val dao = blacklistDao ?: run {
-                Timber.tag("BlackList").e("BlackList not initialized")
-                return@withLock BlackListStats(0, 0, emptyList(), emptyList())
-            }
-            
-            val now = System.currentTimeMillis()
-            
-            // Clean up old candidates (older than 2 weeks)
-            dao.deleteOldCandidates(now)
-            
-            val candidates = dao.getAllCandidates()
-            val blacklisted = dao.getAllBlacklisted()
-            
-            BlackListStats(
-                candidateCount = candidates.size,
-                blacklistedCount = blacklisted.size,
-                candidates = candidates,
-                blacklisted = blacklisted
-            )
-        }
-    }
-    
-    /**
      * Clear all data (for testing or reset purposes)
      */
     suspend fun clear() {
@@ -166,27 +139,6 @@ object BlackList {
     }
     
     /**
-     * Remove a specific resource from blacklist (manual override)
-     */
-    suspend fun removeFromBlacklist(resourceId: String): Boolean {
-        return mutex.withLock {
-            val dao = blacklistDao ?: run {
-                Timber.tag("BlackList").e("BlackList not initialized")
-                return@withLock false
-            }
-            
-            val existing = dao.get(resourceId)
-            if (existing != null && existing.isBlacklisted) {
-                dao.delete(resourceId)
-                Timber.tag("BlackList").d("Manually removed $resourceId from blacklist")
-                true
-            } else {
-                false
-            }
-        }
-    }
-    
-    /**
      * Check if a candidate should be moved to blacklist
      */
     private fun shouldMoveToBlacklist(entry: BlacklistEntry): Boolean {
@@ -195,11 +147,4 @@ object BlackList {
         
         return timeSinceFirst > WEEK_IN_MILLIS && entry.failureCount >= MAX_FAILURE_COUNT
     }
-    
-    data class BlackListStats(
-        val candidateCount: Int,
-        val blacklistedCount: Int,
-        val candidates: List<BlacklistEntry>,
-        val blacklisted: List<BlacklistEntry>
-    )
 } 

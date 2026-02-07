@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +46,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,7 +92,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                 contentDescription = stringResource(R.string.cancel))
         }
 
-        Text(text = "Login", fontSize = 32.sp, color = Color.Black)
+        Text(text = stringResource(R.string.login), fontSize = 32.sp, color = Color.Black)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -132,15 +133,33 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         val context = LocalContext.current
+        val hasError = loginError.isNotEmpty()
+        
         Button(
             onClick = {
                 viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    viewModel.login(context) {
-                        popBack()
+                    if (hasError) {
+                        // Retry login with max retries when there's an error
+                        viewModel.login(context, {
+                            popBack()
+                        }, maxRetries = 3)
+                    } else {
+                        // Normal login attempt
+                        viewModel.login(context, {
+                            popBack()
+                        })
                     }
-                } },
+                }
+            },
             modifier = Modifier.width(intrinsicSize = IntrinsicSize.Max),
-            enabled = !isLoading    // disable Login button during loading
+            enabled = !isLoading,    // disable button during loading
+            colors = if (hasError) {
+                ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFF9800) // Orange color for retry
+                )
+            } else {
+                ButtonDefaults.buttonColors() // Default color for login
+            }
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -149,12 +168,16 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                     strokeWidth = 2.dp
                 )
             } else {
-                Text(text = stringResource(R.string.login))     // Login
+                Text(
+                    text = if (hasError) "Retry Login" else stringResource(R.string.login),
+                    color = Color.White
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = loginError, color = Color.Red)
+        
         Spacer(modifier = Modifier.height(32.dp))
 
         val annotatedText = buildAnnotatedString {

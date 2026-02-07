@@ -22,6 +22,7 @@ import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,8 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -56,11 +55,9 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
-import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.ui.theme.ThemeManager
@@ -74,7 +71,6 @@ import us.fireshare.tweet.widget.VideoManager
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
     val appUser by appUserViewModel.user.collectAsState()
-    var showDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Scaffold(
@@ -111,7 +107,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
     ) { innerPadding ->
         // Shared state variables for save functionality
         var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
-        var cloudPort by remember { mutableStateOf(HproseInstance.preferenceHelper.getCloudPort()) }
         var showDialog by remember { mutableStateOf(false) }
 
         Column(
@@ -167,7 +162,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                                 shape = RoundedCornerShape(12.dp)
                             )
 
@@ -198,44 +193,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 )
                             }
                         }
-                    }
-                }
-
-                item {
-                    // Cloud port section
-                    val focusRequester = remember { FocusRequester() }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cloud_port),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = cloudPort ?: "",
-                            onValueChange = { cloudPort = it },
-                            placeholder = { Text("8010") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
                     }
                 }
 
@@ -439,23 +396,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             // Save theme mode
                             HproseInstance.preferenceHelper.setThemeMode(currentThemeMode)
                             ThemeManager.updateThemeMode(currentThemeMode)
-
-                            // Save cloud port
-                            HproseInstance.preferenceHelper.setCloudPort(cloudPort)
-                            if (!appUser.isGuest()) {
-                                try {
-                                    appUser.cloudDrivePort = cloudPort?.toInt() ?: 8010
-                                    applicationScope.launch(Dispatchers.IO) {
-                                        HproseInstance.setUserData(appUser)
-                                    }
-                                } catch (e: NumberFormatException) {
-                                    Timber.tag("SystemSettings")
-                                        .e("Invalid cloudPort value: $cloudPort - ${e.message}")
-                                } catch (e: Exception) {
-                                    Timber.tag("SystemSettings")
-                                        .e("An unexpected error occurred: $e")
-                                }
-                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -487,13 +427,16 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 ) {
                     Text("Privacy Policy")
                 }
-                SelectableText(
-                    text = appUser.mid,
-                    color = MaterialTheme.colorScheme.secondary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                // Show IP address for guest users
+                if (appUser.isGuest()) {
+                    SelectableText(
+                        text = appUser.baseUrl ?: "",
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 Text(
-                    "Version: ${BuildConfig.VERSION_NAME}",
+                    "Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                     color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 4.dp)

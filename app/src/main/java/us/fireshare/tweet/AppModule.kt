@@ -14,7 +14,7 @@ import us.fireshare.tweet.datamodel.ChatMessageDao
 import us.fireshare.tweet.datamodel.ChatSessionDao
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.SearchViewModel
-import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetListViewModel
 import javax.inject.Singleton
 
 @Module
@@ -29,17 +29,20 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTweetFeedViewModel(): TweetFeedViewModel {
-        return TweetFeedViewModel()
-    }
-
-    @Provides
-    @Singleton
     fun provideShareViewModel(): SharedViewModel {
         return SharedViewModel()
     }
 
+    @Provides
+    @Singleton
+    fun provideActivityViewModel(): ActivityViewModel {
+        return ActivityViewModel()
+    }
 
+    @Provides
+    fun provideTweetListViewModel(): TweetListViewModel {
+        return TweetListViewModel()
+    }
 
     @Provides
     @Singleton
@@ -70,9 +73,10 @@ object AppModule {
     @Singleton
     fun provideChatSessionRepository(
         chatSessionDao: ChatSessionDao,
-        chatMessageDao: ChatMessageDao
+        chatMessageDao: ChatMessageDao,
+        @ApplicationContext context: Context
     ): ChatSessionRepository {
-        return ChatSessionRepository(chatSessionDao, chatMessageDao)
+        return ChatSessionRepository(chatSessionDao, chatMessageDao, context)
     }
 }
 

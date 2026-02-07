@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -77,6 +77,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
 import us.fireshare.tweet.tweet.CommentButton
@@ -100,7 +101,7 @@ fun MediaBrowser(
     /**
      *  Create a tweetViewModel with given tweetId to remember the position of this tweet
      *  in the feed list. When user closes the Media browser, goes back to the right position.
-     *  The viewModel is also necessary for favorite and retweeting buttons at the bottom.
+     *  The viewModel is also necessary for favorite and retweeting buttons at the bottom. (not implemented)
      * */
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         parentEntry,
@@ -109,15 +110,71 @@ fun MediaBrowser(
         factory.create(Tweet(mid = tweetId, authorId = authorId))
     }
     val tweet by viewModel.tweetState.collectAsState()
-    val tweetAttachments by viewModel.attachments.collectAsState()
+    
+    // Inject SharedViewModel to get TweetListViewModel
+    val sharedViewModel: SharedViewModel = hiltViewModel()
+    
+    // Observe the video list from TweetListViewModel
+    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
+    val videoList = videoIndexedList.map { it.first } // Extract video mids from video-indexed list
+    
+    // Find the video mid from the current tweet's attachments
+    val currentVideoMid = tweet.attachments?.firstOrNull { attachment ->
+        val mediaType = inferMediaTypeFromAttachment(attachment)
+        mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+    }?.mid
+    
+    val startIndex = if (currentVideoMid != null) {
+        sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(currentVideoMid)
+    } else {
+        0
+    }
+    
+    Timber.d("MediaBrowser - Using video list from TweetListViewModel: ${videoList.size} videos, start index: $startIndex")
+    
+    // Get attachments from the current tweet
+    val tweetAttachments = tweet.attachments
+    Timber.d("MediaBrowser - tweetAttachments: $tweetAttachments")
+    Timber.d("MediaBrowser - tweetAttachments size: ${tweetAttachments?.size}")
+    Timber.d("MediaBrowser - Video list size: ${videoList.size}, start index: $startIndex")
+    Timber.d("MediaBrowser - Tweet list IDs: ${videoList.map { it }}")
+    
     val mediaItems = tweetAttachments?.map {
         val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
         val inferredType = inferMediaTypeFromAttachment(it)
         Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
         MediaItem(mediaUrl, inferredType)
-    } ?: return
+    }
 
-    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
+    // Show loading state if tweetAttachments is null
+    if (tweetAttachments == null) {
+        Timber.d("MediaBrowser - Showing loading state because tweetAttachments is null")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+                androidx.compose.material3.Text(
+                    text = "Loading...",
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+        }
+        return
+    }
+    
+    Timber.d("MediaBrowser - tweetAttachments loaded, size: ${tweetAttachments.size}")
+
+    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems?.size ?: 0 })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
 
@@ -125,7 +182,7 @@ fun MediaBrowser(
     LaunchedEffect(pagerState.currentPage) {
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
         // Pause all videos except the current one
-        mediaItems.forEachIndexed { index, mediaItem ->
+        mediaItems?.forEachIndexed { index, mediaItem ->
             if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
                 val videoMid = mediaItem.url.getMimeiKeyFromUrl()
                 if (index == pagerState.currentPage) {
@@ -263,61 +320,26 @@ fun MediaBrowser(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            val mediaItem = mediaItems[page]
+            val mediaItem = mediaItems?.get(page) ?: return@HorizontalPager
             when (mediaItem.type) {
-                // video preview - use existing player from VideoManager
+                // video preview - use independent fullscreen player
                 MediaType.Video, MediaType.HLS_VIDEO -> {
                     Timber.d("MediaBrowser - Processing video item: ${mediaItem.url}")
-                    // Extract video mid from URL for VideoManager using the same method as VideoPreview
-                    val videoMid = mediaItem.url.getMimeiKeyFromUrl()
-
-                    // Try to get existing player for seamless transition
-                    val existingPlayer = VideoManager.transferToFullScreen(videoMid)
-                    val attachments = tweetAttachments // Store in local variable for smart casting
-
-                    if (existingPlayer != null && attachments != null) {
-                        // Use existing player for seamless transition
-                        val videoItem =
-                            attachments.find { it.mid == videoMid } ?: attachments.first()
-                        FullScreenVideoPlayer(
-                            existingPlayer = existingPlayer,
-                            videoItem = videoItem,
-                            onClose = {
-                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
-                                // Return player back to VideoManager when closed
-                                VideoManager.returnFromFullScreen(videoMid)
-                                navController.popBackStack()
-                            },
-                            enableImmersiveMode = true // Enable immersive mode for orientation control
-                        )
-                    } else {
-                        // Fallback to creating new player
-                        FullScreenVideoPlayer(
-                            videoUrl = mediaItem.url,
-                            onClose = {
-                                Timber.d("MediaBrowser - FullScreenVideoPlayer onClose called")
-                                navController.popBackStack()
-                            },
-                            enableImmersiveMode = true, // Enable immersive mode for orientation control
-                            onHorizontalSwipe = { direction ->
-                                Timber.tag("MediaBrowser")
-                                    .d("Horizontal swipe detected: $direction")
-                                animationScope.launch {
-                                    if (direction > 0) {
-                                        // Swipe right, go to next page
-                                        pagerState.animateScrollToPage(
-                                            pagerState.currentPage + 1
-                                        )
-                                    } else {
-                                        // Swipe left, go to previous page
-                                        pagerState.animateScrollToPage(
-                                            pagerState.currentPage - 1
-                                        )
-                                    }
-                                }
-                            }
-                        )
-                    }
+                    
+                    // Use the new independent fullscreen player with full tweet list
+                    // Always use the full tweet list for navigation, even if current tweet isn't found
+                    Timber.d("MediaBrowser - Using full tweet list for navigation (${videoList.size} tweets)")
+                    
+                    IndependentFullScreenPlayer(
+                        // Always use full tweet list
+                        startIndex = startIndex,
+                        tappedTweet = tweet, // Pass the current tweet for reference
+                        parentEntry = parentEntry,
+                        onClose = {
+                            Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
+                            navController.popBackStack()
+                        }
+                    )
                 }
                 // audio preview - keep existing implementation
                 MediaType.Audio -> {
@@ -378,7 +400,7 @@ fun MediaBrowser(
                                 orientation = Orientation.Vertical,
                                 state = rememberDraggableState { delta ->
                                     offsetY += delta
-                                    if (offsetY > 20f && !isNavigationTriggered.value) {
+                                    if (offsetY > 100f && !isNavigationTriggered.value) {
                                         isNavigationTriggered.value = true
                                         navController.popBackStack()
                                     }
@@ -421,9 +443,8 @@ fun MediaBrowser(
                                 state = rememberDraggableState { delta ->
                                     isDragging = true
                                     offsetY += delta
-                                    if (offsetY > 200f && scaleFactor <= 1 && !isNavigationTriggered.value) {
-                                        isNavigationTriggered.value =
-                                            true    // prevent multiple popBack
+                                    if (offsetY > 300f && scaleFactor <= 1 && !isNavigationTriggered.value) {
+                                        isNavigationTriggered.value = true
                                         navController.popBackStack()
                                     }
                                 }
@@ -519,10 +540,10 @@ fun MediaBrowser(
                             .padding(start = 16.dp, bottom = 32.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        LikeButton(viewModel)
-                        BookmarkButton(viewModel)
                         CommentButton(viewModel)
                         RetweetButton(viewModel)
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)
                     }
@@ -531,3 +552,4 @@ fun MediaBrowser(
         }
     }
 }
+

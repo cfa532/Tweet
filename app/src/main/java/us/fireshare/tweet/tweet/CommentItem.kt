@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.DropdownMenu
@@ -25,6 +25,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +42,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -77,11 +79,26 @@ fun CommentItem(
     ) { factory ->
         factory.create(comment)
     }
-    val author = comment.author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+    
+    // Observe author changes reactively via StateFlow
+    // This ensures all comments from the same author update when user data becomes available
+    val authorStateFlow = remember(comment.authorId) {
+        TweetCacheManager.getUserStateFlow(comment.authorId)
+    }
+    val author by authorStateFlow.collectAsState(initial = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
 
     Column(
         modifier = Modifier
-            .clickable { navController.navigate(NavTweet.TweetDetail(comment.authorId, comment.mid)) }
+            .clickable { 
+                navController.navigate(
+                    NavTweet.TweetDetail(
+                        authorId = comment.authorId,
+                        tweetId = comment.mid,
+                        parentTweetId = parentTweetViewModel?.tweetState?.value?.mid,
+                        parentAuthorId = parentTweetViewModel?.tweetState?.value?.authorId
+                    )
+                )
+            }
             .padding(horizontal = 4.dp)
             .heightIn(max = 80000.dp) // Limit individual comment height
     ) {
@@ -92,7 +109,7 @@ fun CommentItem(
             IconButton(onClick = {
                 navController.navigate(NavTweet.UserProfile(comment.authorId)) }
             ) {
-                UserAvatar(user = author, size = 32)
+                UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 32)
             }
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -108,12 +125,12 @@ fun CommentItem(
                         modifier = Modifier.padding(bottom = 0.dp, top = 2.dp),
                     ) {
                         Text(
-                            text = author.name ?: "No One",
+                            text = author?.name ?: "No One",
                             modifier = Modifier.padding(horizontal = 0.dp),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Text(
-                            text = "@${author.username}",
+                            text = "@${author?.username ?: "unknown"}",
                             modifier = Modifier.padding(horizontal = 2.dp),
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -127,7 +144,11 @@ fun CommentItem(
                 }
 
                 if (!comment.content.isNullOrEmpty()) {
-                    SelectableText(text = comment.content!!, maxLines = 10) { username ->
+                    SelectableText(
+                        text = comment.content!!,
+                        maxLines = 7,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp)
+                    ) { username ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {
                                 withContext(Dispatchers.Main) {
@@ -138,14 +159,20 @@ fun CommentItem(
                     }
                 }
                 // attached media files
-                comment.attachments?.let {
-                    Box(
+                if (!comment.attachments.isNullOrEmpty()) {
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .wrapContentHeight()
-                            .heightIn(max = 600.dp) // Max height for media grid in comments
+                            .padding(top = 4.dp)
+                            .heightIn(min = 20.dp, max = 600.dp), // Max height for media grid in comments
+                        tonalElevation = 4.dp,
+                        shape = RoundedCornerShape(size = 8.dp)
                     ) {
-                        MediaGrid(it, viewModel)
+                        MediaGrid(
+                            comment.attachments!!,
+                            viewModel,
+                            parentTweetId = comment.mid
+                        )
                     }
                 }
             }
@@ -156,12 +183,17 @@ fun CommentItem(
                 .padding(start = 40.dp, end = 4.dp, bottom = 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            LikeButton(viewModel)
-            BookmarkButton(viewModel)
             CommentButton(viewModel)
             RetweetButton(viewModel)
+            LikeButton(viewModel)
+            BookmarkButton(viewModel)
             Spacer(modifier = Modifier.width(40.dp))
-            ShareButton(viewModel)
+            // Pass parent tweet info to ShareButton for comments
+            ShareButton(
+                viewModel = viewModel,
+                parentTweetId = parentTweetViewModel?.tweetState?.collectAsState()?.value?.mid,
+                parentAuthorId = parentTweetViewModel?.tweetState?.collectAsState()?.value?.authorId
+            )
         }
     }
 }
@@ -173,6 +205,9 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState()
         ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
+    
+    // Capture string resource at composable level to avoid context capture warnings
+    val deleteFailedMessage = stringResource(R.string.comment_delete_failed)
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
     LaunchedEffect(comment.mid) {
@@ -191,7 +226,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
             onClick = { expanded = !expanded }) {
             Icon(
                 painter = painterResource(R.drawable.ellipsis),
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
@@ -221,7 +256,7 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(
                                             context,
-                                            context.getString(R.string.comment_delete_failed),
+                                            deleteFailedMessage,
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }

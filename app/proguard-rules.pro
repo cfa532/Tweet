@@ -27,3 +27,17 @@
 -keep class us.fireshare.tweet.viewmodel.** { *; }
 -keep class hprose.client.** { *; }
 -keep class us.fireshare.tweet.** { *; }
+
+# Keep Timber logging for release builds
+-keep class timber.log.** { *; }
+-dontwarn timber.log.**
+
+# Keep android.util.Log calls (don't remove them with ProGuard)
+# DO NOT uncomment the following - it would remove all log calls
+# -assumenosideeffects class android.util.Log {
+#     public static *** v(...);
+#     public static *** d(...);
+#     public static *** i(...);
+#     public static *** w(...);
+#     public static *** e(...);
+# }

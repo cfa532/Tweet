@@ -1,26 +1,25 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,8 +28,6 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -53,17 +51,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -72,6 +71,9 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
+import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
+import kotlin.math.abs
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -79,30 +81,50 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 fun TweetDetailScreen(
     authorId: String,
     tweetId: String,
-    parentEntry: NavBackStackEntry
+    parentEntry: NavBackStackEntry,
+    parentTweetId: String? = null,
+    parentAuthorId: String? = null
 ) {
+    // Use activity scope to ensure same ViewModel instance is shared with TweetItem
+    val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweetId
+        viewModelStoreOwner = activity, key = tweetId
     ) { factory ->
         factory.create(Tweet(mid = tweetId, authorId = authorId))
     }
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()
+    val tweetDeleted by viewModel.tweetDeleted.collectAsState()
     val navController = LocalNavController.current
     val context = LocalContext.current
 
+    // Navigate away if tweet gets deleted
+    LaunchedEffect(tweetDeleted) {
+        if (tweetDeleted) {
+            Timber.tag("TweetDetailScreen").d("Tweet ${tweet.mid} was deleted, navigating back")
+            navController.popBackStack()
+        }
+    }
+
+    // Cancel image loading when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
+        }
+    }
+
     // ReplyEditorBox state management
     var isReplyBoxExpanded by remember { mutableStateOf(false) }
-
-    // Grid columns state for media layout
-    var gridColumns by remember { mutableStateOf(1) }
-    var fabOffset by remember { mutableStateOf(Offset(0f, 0f)) }
 
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
+    var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
+    
+    // Prevent double-exit when back button is tapped multiple times
+    var isNavigatingBack by remember { mutableStateOf(false) }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -112,7 +134,11 @@ fun TweetDetailScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
+    // Track LazyColumn viewport size for VideoPlaybackCoordinator
+    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+
     // Scroll-based top app bar visibility
+    var previousFirstVisibleItemIndex by remember { mutableStateOf(0) }
     var previousScrollOffset by remember { mutableStateOf(0) }
     var showTopAppBar by remember { mutableStateOf(true) }
     
@@ -125,21 +151,35 @@ fun TweetDetailScreen(
 
     // Track scroll direction with improved logic
     LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemScrollOffset }
-            .collect { currentOffset ->
-                val scrollDelta = currentOffset - previousScrollOffset
-                
-                // Only change state if there's significant scroll movement
-                if (scrollDelta > 5) { // Scrolling down - hide top bar
-                    showTopAppBar = false
-                } else if (scrollDelta < -5) { // Scrolling up - show top bar
-                    showTopAppBar = true
-                }
-                // If scrollDelta is small (between -5 and 5), maintain current state
-                // This prevents the top bar from popping back when scrolling stops
-                
-                previousScrollOffset = currentOffset
+        snapshotFlow {
+            Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }.collect { (currentIndex, currentOffset) ->
+            val indexDelta = currentIndex - previousFirstVisibleItemIndex
+            val offsetDelta = currentOffset - previousScrollOffset
+
+            // Update previous values for next comparison
+            previousFirstVisibleItemIndex = currentIndex
+            previousScrollOffset = currentOffset
+
+            // Determine scroll direction based on both index and offset changes
+            // Scrolling down: index increases OR (index same and offset increases significantly)
+            // Scrolling up: index decreases OR (index same and offset decreases significantly)
+            val isScrollingDown = indexDelta > 0 || (indexDelta == 0 && offsetDelta > 10)
+            val isScrollingUp = indexDelta < 0 || (indexDelta == 0 && offsetDelta < -10)
+
+            // Only change state if there's significant scroll movement
+            if (isScrollingDown && abs(offsetDelta) > 5) {
+                showTopAppBar = false
+            } else if (isScrollingUp && abs(offsetDelta) > 5) {
+                showTopAppBar = true
             }
+
+            // Update VideoPlaybackCoordinator scroll direction for video autoplay
+            if (abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
+                val approximateOffset = currentIndex * 1000f + currentOffset
+                VideoPlaybackCoordinator.updateScrollDirection(approximateOffset)
+            }
+        }
     }
 
     // Pull-to-refresh state
@@ -152,6 +192,7 @@ fun TweetDetailScreen(
                     withContext(Dispatchers.IO) {
                         currentPage = 0 // Reset to page 0 for refresh
                         viewModel.loadComments(tweet, 0)
+                        lastLoadedPage = 0
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -169,9 +210,11 @@ fun TweetDetailScreen(
         }
     }
 
-    // Set context for notifications
+    // PERFORMANCE FIX: Consolidated initialization effects
+    // Set context for notifications and start listening - run once when screen opens
     LaunchedEffect(Unit) {
         viewModel.setNotificationContext(context)
+        viewModel.startListeningToNotifications()
     }
 
     // Track scroll position changes and save them
@@ -187,32 +230,65 @@ fun TweetDetailScreen(
             }
     }
 
-    // Track initial loading completion
-    LaunchedEffect(comments) {
-        if (isInitialLoading) {
-            // Set loading to false when we receive any response (empty or not)
+    // Track if we've loaded page 0 to prevent infinite reloads
+    var hasLoadedPage0 by remember { mutableStateOf(false) }
+    // Track if we should stop pagination (when empty page is returned)
+    var shouldStopPagination by remember { mutableStateOf(false) }
+
+    // Initial comment load when tweet is available - only load once per tweet
+    LaunchedEffect(tweet.mid) {
+        if (tweet.mid != null && !hasLoadedPage0) {
+            hasLoadedPage0 = true
+            isInitialLoading = true
+            withContext(Dispatchers.IO) {
+                val newCommentsCount = viewModel.loadComments(tweet, 0)
+                currentPage = 0
+                lastLoadedPage = 0
+                // If page 0 returned no comments, stop pagination immediately
+                if (newCommentsCount == 0) {
+                    shouldStopPagination = true
+                    Timber.tag("TweetDetailScreen").d("Page 0 returned no comments for tweet ${tweet.mid}, stopping pagination")
+                }
+            }
             isInitialLoading = false
         }
     }
 
-    // Initial comment load when tweet is available
-    LaunchedEffect(tweet.mid) {
-        if (tweet.mid != null && isInitialLoading) {
-            withContext(Dispatchers.IO) {
-                viewModel.loadComments(tweet, 0)
-            }
-        }
-    }
+    // Track last pagination attempt to prevent rapid repeated calls
+    var lastPaginationAttempt by remember { mutableStateOf(-1L) }
 
-    // Infinite scroll for comments
-    LaunchedEffect(isAtBottom) {
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading) {
+    // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
+    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
+        // CRITICAL: Don't attempt pagination if we've confirmed there are no comments
+        if (shouldStopPagination || (comments.isEmpty() && hasLoadedPage0)) {
+            return@LaunchedEffect
+        }
+        
+        val now = System.currentTimeMillis()
+        // Add throttling: don't attempt pagination more than once per second
+        // Only load if we're at bottom, have comments, and haven't stopped pagination
+        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && hasLoadedPage0 && 
+            !shouldStopPagination && comments.isNotEmpty() && 
+            (now - lastPaginationAttempt) > 1000L) {
+            
+            lastPaginationAttempt = now
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage += 1 // Increment page for load more
-                        viewModel.loadComments(tweet, currentPage)
+                        val nextPage = lastLoadedPage + 1
+                        val newCommentsCount = viewModel.loadComments(tweet, nextPage)
+                        
+                        if (newCommentsCount == 0) {
+                            // No new comments from this page, stop pagination
+                            shouldStopPagination = true
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
+                        } else {
+                            // Got new comments, continue pagination
+                            currentPage = nextPage
+                            lastLoadedPage = nextPage
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned $newCommentsCount comments, continuing pagination")
+                        }
                     }
                 } finally {
                     isRefreshingAtBottom = false
@@ -221,38 +297,69 @@ fun TweetDetailScreen(
         }
     }
 
-    // Refresh handler: initial refresh after 3 seconds, then every 5 minutes
+    // Refresh handler: refresh immediately when opened, then every 5 minutes
+    // This LaunchedEffect will be automatically cancelled when the screen is disposed
     LaunchedEffect(Unit) {
-        delay(3000L)
-        withContext(Dispatchers.IO) {
-            viewModel.refreshTweetAndOriginal()
-            Timber.tag("TweetDetailScreen").d("Initial refresh completed after 3 seconds")
-        }
-        while (true) {
-            delay(5 * 60 * 1000)
+        try {
+            // Refresh immediately when screen is opened
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweetAndOriginal()
-                Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+                Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
             }
+            // Then refresh periodically every 5 minutes
+            // The delay() function will throw CancellationException when the coroutine is cancelled
+            while (isActive) {
+                delay(5 * 60 * 1000)
+                if (isActive) {
+                    withContext(Dispatchers.IO) {
+                        viewModel.refreshTweetAndOriginal()
+                        Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+                    }
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Expected when the screen is disposed - cleanup is automatic
+            Timber.tag("TweetDetailScreen").d("Periodic refresh cancelled (screen disposed)")
+            throw e // Re-throw to properly complete cancellation
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.startListeningToNotifications()
+    // Build video list from comments for VideoPlaybackCoordinator
+    LaunchedEffect(comments) {
+        if (comments.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                VideoPlaybackCoordinator.buildVideoList(comments)
+            }
+            Timber.tag("TweetDetailScreen").d("Built video list from ${comments.size} comments")
+        }
     }
 
-    fun Offset.toIntOffset(): IntOffset {
-        return IntOffset(x.toInt(), y.toInt())
+    // Clear VideoPlaybackCoordinator state when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            VideoPlaybackCoordinator.clear()
+            Timber.tag("TweetDetailScreen").d("Cleared VideoPlaybackCoordinator on dispose")
+        }
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.offset(y = (-56 * (1 - topAppBarAlpha)).dp),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
-                    titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
-                ),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clipToBounds()
+                    .background(Color.Transparent)
+            ) {
+                TopAppBar(
+                    modifier = Modifier
+                        .offset(y = (-56 * (1 - topAppBarAlpha)).dp)
+                        .graphicsLayer(alpha = if (topAppBarAlpha < 0.01f) 0f else topAppBarAlpha),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = if (topAppBarAlpha < 0.01f) Color.Transparent else MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
+                        titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
+                    ),
                 title = {
                     Text(
                         text = "Tweet",
@@ -262,8 +369,13 @@ fun TweetDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { navController.popBackStack() },
-                        enabled = topAppBarAlpha > 0.5f
+                        onClick = { 
+                            if (!isNavigatingBack) {
+                                isNavigatingBack = true
+                                navController.popBackStack()
+                            }
+                        },
+                        enabled = topAppBarAlpha > 0.5f && !isNavigatingBack
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -273,6 +385,7 @@ fun TweetDetailScreen(
                     }
                 },
             )
+            }
         },
         bottomBar = {
             Column {
@@ -293,41 +406,31 @@ fun TweetDetailScreen(
                 )
             }
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { gridColumns = if (gridColumns == 1) 2 else 1 },
-                modifier = Modifier
-                    .offset { fabOffset.toIntOffset() }
-                    .draggable(
-                        state = rememberDraggableState { delta ->
-                            fabOffset = fabOffset.copy(y = fabOffset.y + delta)
-                        },
-                        orientation = Orientation.Vertical
-                    )
-                    .size(40.dp),
-                shape = CircleShape,
-                containerColor = Color.White.copy(alpha = 0.7f)
-            ) {
-                Icon(
-                    painter = if (gridColumns != 1) painterResource(R.drawable.ic_list_layout) else painterResource(
-                        R.drawable.ic_grid_layout
-                    ),
-                    contentDescription = stringResource(R.string.switch_layout),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        },
-        floatingActionButtonPosition = FabPosition.End
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
+                .padding(
+                    top = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+                    bottom = innerPadding.calculateBottomPadding(),
+                    start = innerPadding.calculateLeftPadding(LocalLayoutDirection.current),
+                    end = innerPadding.calculateRightPadding(LocalLayoutDirection.current)
+                )
                 .pullRefresh(pullRefreshState)
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .onSizeChanged { size ->
+                        viewportSize = size
+                        // Update VideoPlaybackCoordinator with viewport size
+                        VideoPlaybackCoordinator.updateViewportSize(
+                            size.width.toFloat(),
+                            size.height.toFloat()
+                        )
+                    },
                 state = listState,
                 contentPadding = PaddingValues(bottom = 60.dp)
             ) {
@@ -336,7 +439,8 @@ fun TweetDetailScreen(
                     TweetDetailBody(
                         viewModel = viewModel,
                         parentEntry = parentEntry,
-                        gridColumns = gridColumns,
+                        parentTweetId = parentTweetId,
+                        parentAuthorId = parentAuthorId,
                         onExpandReply = { isReplyBoxExpanded = true }
                     )
                     HorizontalDivider(
@@ -347,24 +451,29 @@ fun TweetDetailScreen(
                 }
 
                 // Show initial loading spinner for comments
+                // Use fixed-height container to prevent layout shifts
                 if (isInitialLoading) {
                     item {
-                        CircularProgressIndicator(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp)
-                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                .size(48.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp
-                        )
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                        }
                     }
                 } else {
                     // Show comments when loading is complete
-                    items(
+                    itemsIndexed(
                         items = comments,
-                        key = { it.mid }
-                    ) { comment ->
+                        key = { _, comment -> comment.mid },
+                        contentType = { _, _ -> "comment" }  // Help Compose reuse compositions efficiently
+                    ) { index, comment ->
                         CommentItem(
                             comment = comment,
                             parentTweetViewModel = viewModel,
@@ -372,7 +481,8 @@ fun TweetDetailScreen(
                         )
 
                         // Add divider after each comment (except the last one)
-                        if (comments.indexOf(comment) < comments.size - 1) {
+                        // Use index instead of indexOf for O(1) performance
+                        if (index < comments.size - 1) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 1.dp),
                                 thickness = 1.dp,
@@ -382,31 +492,39 @@ fun TweetDetailScreen(
                     }
 
                     // Show top refresh spinner
+                    // Use fixed-height container to prevent layout shifts
                     if (isRefreshingAtTop) {
                         item {
-                            CircularProgressIndicator(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 60.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally)
-                                    .size(48.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
+                                    .padding(top = 60.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                            }
                         }
                     }
 
                     // Show bottom pagination spinner
+                    // Use fixed-height container to prevent layout shifts
                     if (isRefreshingAtBottom) {
                         item {
-                            CircularProgressIndicator(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp)
-                                    .wrapContentWidth(Alignment.CenterHorizontally),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                            }
                         }
                     }
                 }

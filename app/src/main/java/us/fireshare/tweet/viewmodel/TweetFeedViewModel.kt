@@ -1,16 +1,18 @@
 package us.fireshare.tweet.viewmodel
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -24,8 +26,8 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.HproseInstance.getAlphaIds
-import us.fireshare.tweet.HproseInstance.getUser
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
@@ -47,16 +49,132 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
+    
+    // Retry status message (null when not retrying)
+    private val _retryMessage = MutableStateFlow<String?>(null)
+    val retryMessage: StateFlow<String?> get() = _retryMessage.asStateFlow()
+    
+    // Context reference for accessing string resources
+    private var contextRef = WeakReference<Context>(null)
+    
+    // Track if ViewModel has been initialized to prevent race conditions
+    private var isInitialized = false
 
     init {
-        // Load initial tweets when ViewModel is created
-        viewModelScope.launch(Dispatchers.IO) {
-            refresh(0)
-            initState.value = false
-        }
-
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
+        
+        // Don't load tweets immediately - wait for explicit initialization
+        // This prevents race conditions with HproseInstance initialization
+    }
+    
+    /**
+     * Set context reference for accessing string resources
+     */
+    fun setContext(context: Context) {
+        contextRef = WeakReference(context)
+    }
+    
+    /**
+     * Initialize the ViewModel after HproseInstance is ready.
+     * This should be called from the UI layer after app initialization completes.
+     */
+    fun initialize() {
+        if (isInitialized) {
+            return
+        }
+        isInitialized = true
+        viewModelScope.launch(IO) {
+            try {
+                // Load cached tweets immediately to show something to the user
+                Timber.tag("TweetFeedViewModel").d("Loading cached tweets immediately...")
+                loadCachedTweetsOnly()
+                
+                val hasCachedTweets = _tweets.value.isNotEmpty()
+                
+                if (hasCachedTweets) {
+                    // We have cached tweets - clear loading state early so UI shows them
+                    initState.value = false
+                    Timber.tag("TweetFeedViewModel").d("Found ${_tweets.value.size} cached tweets, clearing spinner")
+                } else {
+                    // No cached tweets (first time user or after login) - keep spinner until network loads
+                    Timber.tag("TweetFeedViewModel").d("No cached tweets found, keeping spinner until network fetch completes")
+                }
+                
+                // Try to fetch from network
+                waitForAppUser()
+                if (appUser.baseUrl != null) {
+                    // BaseUrl available, try to load tweets from server
+                    Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
+                    refresh(0)
+                } else {
+                    // BaseUrl not available, cached tweets already loaded (or none available)
+                    Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
+                }
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization: ${e.message}")
+                // Ensure cached tweets are loaded even on error
+                try {
+                    if (_tweets.value.isEmpty()) {
+                        loadCachedTweetsOnly()
+                    }
+                } catch (cacheError: Exception) {
+                    Timber.tag("TweetFeedViewModel").e(cacheError, "Failed to load cached tweets")
+                    _tweets.value = emptyList()
+                }
+            } finally {
+                // Only clear initState if we have tweets to show
+                // Keep spinner showing if no tweets loaded yet (including during retries)
+                if (_tweets.value.isNotEmpty()) {
+                    initState.value = false
+                    Timber.tag("TweetFeedViewModel").d("Initialization complete with tweets, initState=false")
+                } else {
+                    Timber.tag("TweetFeedViewModel").d("Initialization complete but no tweets, keeping initState=true for retry visibility")
+                }
+            }
+        }
+    }
+
+    /**
+     * Load cached tweets when server is not available
+     */
+    private suspend fun loadCachedTweetsOnly() {
+        try {
+            val cachedTweets = loadCachedTweets(0, TW_CONST.PAGE_SIZE)
+            _tweets.value = cachedTweets
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+            
+            // Log timestamps to verify sort order
+            Timber.tag("TweetFeedViewModel").d("Loaded ${cachedTweets.size} cached tweets, sorted by timestamp DESC:")
+            _tweets.value.take(5).forEachIndexed { index, tweet ->
+                Timber.tag("TweetFeedViewModel").d("  [$index] ${tweet.mid} - timestamp: ${tweet.timestamp} (${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(tweet.timestamp))})")
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").e(e, "Failed to load cached tweets")
+            _tweets.value = emptyList()
+        }
+    }
+    
+    /**
+     * Reset the ViewModel state for logout or user changes.
+     * This clears all data and allows re-initialization.
+     * Don't clear tweet cache on logout - cache persists per user and is cleared periodically or manually (matches iOS behavior)
+     */
+    fun reset() {
+        isInitialized = false
+        
+        // Don't clear cached tweets - cache persists per user and is cleared periodically or manually
+        // This matches iOS behavior where cache is not cleared on logout
+        
+        _tweets.value = emptyList()
+        initState.value = true
+        
+        // Re-initialize after a short delay to ensure appUser state is updated
+        viewModelScope.launch(IO) {
+            kotlinx.coroutines.delay(100) // Small delay to ensure state consistency
+            initialize()
+        }
     }
 
     /**
@@ -64,9 +182,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * When new following is added or removed, _followings will be updated also.
      * */
     suspend fun refresh(pageNumber: Int = 0) {
-        if (!appUser.isGuest())
-            TweetCacheManager.saveUser(appUser)
+        // Don't save appUser here - it gets saved after network initialization with full data
         fetchTweets(pageNumber)
+    }
+
+    private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
+        val startTime = System.currentTimeMillis()
+        Timber.tag("TweetFeedViewModel").d("Waiting for appUser to be fully initialized (timeout: ${timeoutMillis}ms)")
+        while (!HproseInstance.isAppUserInitialized.value && System.currentTimeMillis() - startTime < timeoutMillis) {
+            kotlinx.coroutines.delay(200)
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+        if (!HproseInstance.isAppUserInitialized.value) {
+            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, using entry IP")
+        } else {
+            Timber.tag("TweetFeedViewModel").d("appUser initialized after ${elapsed}ms: ${appUser.baseUrl}")
+        }
     }
 
     private var followingTweetsJob: Job? = null
@@ -80,25 +211,38 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
-        /**
-         * Show cached tweets before loading from net.
-         * */
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
+        
+        if (pageNumber == 0) {
+            Timber.tag("MainFeed").d("📦 Loaded ${cachedTweets.size} cached tweets")
+        }
 
         if (appUser.isGuest()) {
-            // show tweets of administrator only
-            val defaultUserId = getAlphaIds().first()
+            // For guest users: call getTweetsByUser() to fetch tweets
+            Timber.tag("TweetFeedViewModel").d("🔍 Guest user detected, loading tweets from alphaId")
+            val alphaIds = getAlphaIds()
+            Timber.tag("TweetFeedViewModel").d("🔍 AlphaIds: $alphaIds")
+            if (alphaIds.isEmpty()) {
+                Timber.tag("TweetFeedViewModel").w("⚠️ No alpha IDs configured, returning empty list for guest user")
+                return emptyList()
+            }
+            val defaultUserId = alphaIds.first()
+            Timber.tag("TweetFeedViewModel").d("🔍 Using defaultUserId (first alphaId): $defaultUserId")
             _tweets.update { currentTweets ->
                 val allTweets = (cachedTweets + currentTweets)
                     // only show default tweets to guest
                     .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
                     .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                Timber.tag("TweetFeedViewModel").d("🔍 Cached tweets for alphaId: ${allTweets.size}")
                 allTweets
             }
+            Timber.tag("TweetFeedViewModel").d("🔍 Calling getTweets for userId: $defaultUserId, pageNumber: $pageNumber")
             val result = getTweets(defaultUserId, pageNumber)
+            Timber.tag("TweetFeedViewModel").d("🔍 getTweets returned ${result.size} tweets")
             return result
         } else {
+            // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
             _tweets.update { currentTweets ->
                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -115,16 +259,48 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             }
 
             /**
-             * Load tweet feed from network
+             * Load tweet feed from network with error handling
              * */
-            val tweetsWithNulls = HproseInstance.getTweetFeed(
-                appUser,
-                pageNumber,
-                pageSize,
-            )
+            val tweetsWithNulls = try {
+                HproseInstance.getTweetFeed(
+                    pageNumber = pageNumber,
+                    pageSize = pageSize,
+                    onRetry = { attempt, maxRetries ->
+                        // Show retry message when no tweets are loaded yet
+                        if (_tweets.value.isEmpty() && pageNumber == 0) {
+                            viewModelScope.launch(Main) {
+                                val context = contextRef.get()
+                                if (context != null) {
+                                    val message = context.getString(R.string.retrying, attempt, maxRetries)
+                                    _retryMessage.value = message
+                                }
+                            }
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error fetching tweet feed (page $pageNumber): ${e.message}")
+                // Clear retry message and loading state on final failure
+                _retryMessage.value = null
+                if (pageNumber == 0) {
+                    initState.value = false  // Stop showing spinner after all retries exhausted
+                    Timber.tag("MainFeed").w("⚠️ Network fetch failed after retries, showing ${_tweets.value.size} cached tweets")
+                }
+                emptyList()
+            }
+            
+            // Clear retry message and loading state on success
+            _retryMessage.value = null
+            if (pageNumber == 0 && tweetsWithNulls.isNotEmpty()) {
+                initState.value = false  // Stop showing spinner when tweets loaded
+            }
 
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
+            
+            if (pageNumber == 0) {
+                Timber.tag("MainFeed").d("🌐 Network returned ${validTweets.size} tweets")
+            }
 
             // Always merge new tweets with existing ones, never replace
             _tweets.update { currentTweets ->
@@ -162,20 +338,31 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * // Process both results together
              * */
             if (pageNumber == 0 && followingTweetsJob?.isActive != true) {
-                followingTweetsJob = applicationScope.launch(Dispatchers.IO) {
+                followingTweetsJob = applicationScope.launch(IO) {
                     try {
                         val followingTweetsWithNulls = HproseInstance.getTweetFeed(
-                            appUser,
-                            pageNumber,
-                            pageSize,
-                            "update_following_tweets"
+                            pageNumber = pageNumber,
+                            pageSize = pageSize,
+                            entry = "update_following_tweets",
+                            onRetry = { attempt, maxRetries ->
+                                // Show retry message when no tweets are loaded yet
+                                if (_tweets.value.isEmpty() && pageNumber == 0) {
+                                    viewModelScope.launch(Main) {
+                                        val context = contextRef.get()
+                                        if (context != null) {
+                                            val message = context.getString(R.string.retrying, attempt, maxRetries)
+                                            _retryMessage.value = message
+                                        }
+                                    }
+                                }
+                            }
                         )
 
                         // Filter out null elements and get valid tweets
                         val followingTweets = followingTweetsWithNulls.filterNotNull()
 
                         // Always merge following tweets with existing ones
-                        withContext(Dispatchers.Main) {
+                        withContext(Main) {
                             _tweets.update { currentTweets ->
                                 // Use Set for O(1) lookup performance
                                 val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -209,13 +396,38 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * */
     private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
         try {
-            getUser(userId)?.let { user ->
+            Timber.tag("GetTweets").d("🔍 Fetching user data for userId: $userId")
+            
+            // For guest users loading alphaId, resolve provider IP first
+            if (appUser.isGuest()) {
+                Timber.tag("GetTweets").d("🔍 Guest user - resolving provider IP for alphaId: $userId")
+                val providerIp = HproseInstance.getProviderIP(userId)
+                if (providerIp == null) {
+                    Timber.tag("GetTweets").w("⚠️ Could not resolve provider IP for userId: $userId")
+                    return emptyList()
+                }
+                Timber.tag("GetTweets").d("🔍 Resolved provider IP: $providerIp for userId: $userId")
+                
+                // Fetch user with the correct provider IP
+                val user = fetchUser(userId, baseUrl = "http://$providerIp")
+                if (user == null) {
+                    Timber.tag("GetTweets").w("⚠️ fetchUser returned null for userId: $userId even with provider IP")
+                    return emptyList()
+                }
+                
+                Timber.tag("GetTweets").d("🔍 User fetched: ${user.username}, baseUrl: ${user.baseUrl}")
+                Timber.tag("GetTweets").d("🔍 Calling getTweetsByUser for userId: $userId, pageNumber: $pageNumber")
+                
                 val tweetsWithNulls = HproseInstance.getTweetsByUser(
                     user,
                     pageNumber,
                 )
+                
+                Timber.tag("GetTweets").d("🔍 getTweetsByUser returned ${tweetsWithNulls.size} tweets (with nulls)")
+                
                 // Filter out null elements and get valid tweets
                 val validTweets = tweetsWithNulls.filterNotNull()
+                Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
                 _tweets.update { list ->
                     val beforeFilter = validTweets + list
@@ -225,12 +437,47 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         .distinctBy { tweet: Tweet -> tweet.mid }
                         .sortedByDescending { tweet: Tweet -> tweet.timestamp }
 
+                    Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
                     mergedTweets
                 }
                 return tweetsWithNulls
             }
+            
+            // For logged-in users, use normal fetchUser
+            val user = fetchUser(userId)
+            if (user == null) {
+                Timber.tag("GetTweets").w("⚠️ fetchUser returned null for userId: $userId")
+                return emptyList()
+            }
+            
+            Timber.tag("GetTweets").d("🔍 User fetched: ${user.username}, baseUrl: ${user.baseUrl}")
+            Timber.tag("GetTweets").d("🔍 Calling getTweetsByUser for userId: $userId, pageNumber: $pageNumber")
+            
+            val tweetsWithNulls = HproseInstance.getTweetsByUser(
+                user,
+                pageNumber,
+            )
+            
+            Timber.tag("GetTweets").d("🔍 getTweetsByUser returned ${tweetsWithNulls.size} tweets (with nulls)")
+            
+            // Filter out null elements and get valid tweets
+            val validTweets = tweetsWithNulls.filterNotNull()
+            Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
+
+            _tweets.update { list ->
+                val beforeFilter = validTweets + list
+                val afterPrivateFilter =
+                    beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                val mergedTweets = afterPrivateFilter
+                    .distinctBy { tweet: Tweet -> tweet.mid }
+                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+
+                Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
+                mergedTweets
+            }
+            return tweetsWithNulls
         } catch (e: Exception) {
-            Timber.tag("GetTweets").e(e, "Error fetching tweets for user: $userId")
+            Timber.tag("GetTweets").e("❌ Error fetching tweets for user: $userId: ${e.message}")
         }
         return emptyList()
     }
@@ -238,10 +485,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     /**
      * When appUser toggles following status on a User, update tweet feed correspondingly.
      * Remove it if unfollowing, add it if following.
+     * 
+     * When following: Fetch tweets directly from the user's node immediately.
+     * The server will eventually add tweetIds to appuser's tweetlist, but that takes time.
+     * When unfollowing: Remove all tweets of this user from the local feed.
      * */
     suspend fun updateFollowingsTweets(userId: MimeiId, isFollowing: Boolean) {
         if (isFollowing) {
             // add the tweets of a user after following it.
+            // Fetch directly from user's node since server update takes time
             getTweets(userId)
         } else {
             // remove all tweets of this user from list after unfollowing it.
@@ -251,14 +503,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    fun reset() {
-        tweets.value.forEach {
-            if (it.mid != null) {   // deal with corrupted data
-                dao.deleteCachedTweet(it.mid)
+    /**
+     * Rollback tweet feed changes when follow operation fails.
+     * If following failed: Remove tweets that were added.
+     * If unfollowing failed: We can't restore removed tweets, so this is a no-op.
+     * */
+    suspend fun rollbackFollowingsTweets(userId: MimeiId, attemptedIsFollowing: Boolean) {
+        if (attemptedIsFollowing) {
+            // Following failed - remove tweets that were optimistically added
+            _tweets.update { currentTweets ->
+                currentTweets.filterNot { it.authorId == userId }
             }
+            Timber.tag("rollbackFollowingsTweets").d("Rolled back tweets for user: $userId (following failed)")
+        } else {
+            // Unfollowing failed - we can't restore removed tweets without fetching from server
+            // This is a limitation, but the user can refresh their feed manually
+            Timber.tag("rollbackFollowingsTweets").d("Unfollowing failed for user: $userId, but cannot restore removed tweets")
         }
-        _tweets.value = emptyList()
     }
+
 
     /**
      * Remove a tweet from the list when it becomes unavailable (e.g., original tweet deleted)
@@ -280,40 +543,129 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     // Optimistic deletion: Remove from UI immediately, then delete from backend
+    // If deletion fails, restore the tweet and throw exception
     suspend fun delTweet(
-        navController: NavController,
         tweetId: MimeiId,
         userViewModel: UserViewModel? = null,
         callback: () -> Unit,
     ) {
-        // Check if this is a retweet and get original tweet info
+        // Save tweet state BEFORE removal for potential restoration
         val tweetToDelete = _tweets.value.find { it.mid == tweetId }
-
-        // OPTIMISTIC UPDATE: Remove tweet immediately
-        removeTweet(tweetId)
-
-        // Update user's tweet count if it's the current user's tweet
-        if (tweetToDelete?.authorId == appUser.mid) {
-            appUser = appUser.copy(tweetCount = max(0, appUser.tweetCount - 1))
-            TweetCacheManager.saveUser(appUser)
+        val wasInTweetFeed = tweetToDelete != null
+        
+        // Track which UserViewModel lists contain this tweet
+        val wasInUserTweets = userViewModel?.tweets?.value?.any { it.mid == tweetId } == true
+        val wasInPinnedTweets = userViewModel?.pinnedTweets?.value?.any { it.mid == tweetId } == true
+        val wasInFavorites = userViewModel?.favorites?.value?.any { it.mid == tweetId } == true
+        val wasInBookmarks = userViewModel?.bookmarks?.value?.any { it.mid == tweetId } == true
+        
+        // Get tweet from UserViewModel if not in TweetFeedViewModel
+        var finalTweetToDelete = tweetToDelete
+        if (finalTweetToDelete == null && userViewModel != null) {
+            finalTweetToDelete = userViewModel.tweets.value.find { it.mid == tweetId }
+                ?: userViewModel.pinnedTweets.value.find { it.mid == tweetId }
+                ?: userViewModel.favorites.value.find { it.mid == tweetId }
+                ?: userViewModel.bookmarks.value.find { it.mid == tweetId }
         }
 
-        // Also remove from UserViewModel lists if provided (for profile screen)
-        userViewModel?.removeTweetFromAllLists(tweetId)
+        Timber.tag("TweetFeedViewModel").d("Starting optimistic deletion of tweet $tweetId")
 
-        // Navigate back immediately for better UX
-        applicationScope.launch(Main) {
-            if (navController.currentDestination?.route?.contains("TweetDetail") == true) {
-                navController.popBackStack()
+        // STEP 1: OPTIMISTIC UPDATE - Remove tweet from UI immediately
+        withContext(Main) {
+            removeTweet(tweetId)
+            userViewModel?.removeTweetFromAllLists(tweetId)
+            Timber.tag("TweetFeedViewModel").d("Tweet $tweetId removed from UI (optimistic)")
+        }
+
+        // STEP 2: POST DELETION NOTIFICATION IMMEDIATELY (Optimistic)
+        // This ensures ALL ViewModels listening will remove the tweet instantly
+        // TweetViewModel will set tweetDeleted=true, causing TweetDetailScreen to navigate away
+        val authorId = finalTweetToDelete?.authorId ?: appUser.mid
+        Timber.tag("TweetFeedViewModel").d("Posting optimistic TweetDeleted notification for $tweetId")
+        TweetNotificationCenter.post(
+            TweetEvent.TweetDeleted(
+                tweetId,
+                authorId
+            )
+        )
+
+        // NOTE: No need to navigate here - TweetDetailScreen observes tweetDeleted state
+        // and will navigate away automatically when TweetViewModel receives the notification
+
+        // STEP 3: Delete from local cache
+        try {
+            dao.deleteCachedTweet(tweetId)
+            Timber.tag("TweetFeedViewModel").d("Tweet $tweetId deleted from local cache")
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").w(e, "Failed to delete tweet from cache")
+        }
+
+        // STEP 4: Delete from backend
+        var deletionFailed = false
+        var errorMessage: String? = null
+        try {
+            Timber.tag("TweetFeedViewModel").d("Attempting backend deletion of tweet $tweetId")
+            val deletedTweetId = HproseInstance.deleteTweet(tweetId)
+            if (deletedTweetId != null) {
+                // Success - backend confirmed deletion
+                Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
+            } else {
+                deletionFailed = true
+                errorMessage = "Backend returned null"
+                Timber.tag("TweetFeedViewModel").w("Backend deleteTweet returned null for tweetId $tweetId")
             }
+        } catch (e: Exception) {
+            deletionFailed = true
+            errorMessage = e.message ?: "Unknown error"
+            Timber.tag("TweetFeedViewModel").e(e, "Backend deletion failed: ${e.message}")
         }
-
-        // Perform actual deletion in background
-        // Delete from local cache first
-        dao.deleteCachedTweet(tweetId)
-
-        // Delete from backend
-        HproseInstance.deleteTweet(tweetId)
+        
+        // STEP 5: If deletion failed, restore the tweet
+        if (deletionFailed && finalTweetToDelete != null) {
+            Timber.tag("TweetFeedViewModel").w("Deletion failed, restoring tweet $tweetId")
+            
+            // Try to fetch fresh version from server
+            var restoredTweet: Tweet? = null
+            try {
+                restoredTweet = HproseInstance.fetchTweet(finalTweetToDelete.mid, finalTweetToDelete.authorId)
+                Timber.tag("TweetFeedViewModel").d("Fetched fresh tweet from server for restoration")
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").w(e, "Failed to fetch tweet from server, using cached version")
+            }
+            
+            val tweetToRestore = restoredTweet ?: finalTweetToDelete
+            
+            // Restore on Main thread to ensure immediate UI update
+            withContext(Main) {
+                // Restore in TweetFeedViewModel if it was there
+                if (wasInTweetFeed) {
+                    _tweets.update { current ->
+                        if (current.any { it.mid == tweetToRestore.mid }) {
+                            Timber.tag("TweetFeedViewModel").d("Tweet already in list, skipping restoration")
+                            current
+                        } else {
+                            val restored = (current + tweetToRestore).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                            Timber.tag("TweetFeedViewModel").d("Restored tweet to TweetFeedViewModel, now ${restored.size} tweets")
+                            restored
+                        }
+                    }
+                }
+                
+                // Restore in UserViewModel if it was in any lists
+                if (userViewModel != null && (wasInUserTweets || wasInPinnedTweets || wasInFavorites || wasInBookmarks)) {
+                    userViewModel.restoreTweetToLists(tweetToRestore, wasInUserTweets, wasInPinnedTweets, wasInFavorites, wasInBookmarks)
+                    Timber.tag("TweetFeedViewModel").d("Restored tweet to UserViewModel lists")
+                }
+            }
+            
+            // POST RESTORATION NOTIFICATION so all listeners can restore the tweet
+            Timber.tag("TweetFeedViewModel").d("Posting TweetRestored notification for $tweetId")
+            TweetNotificationCenter.post(TweetEvent.TweetRestored(tweetToRestore))
+            
+            throw Exception("Failed to delete tweet: $errorMessage")
+        }
+        
+        Timber.tag("TweetFeedViewModel").d("Tweet deletion completed successfully")
         callback()
     }
 
@@ -332,14 +684,58 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
             "isPrivate" to isPrivate
         )
+        val constraints = Constraints.Builder()
+            .setRequiresCharging(false) // Allow running on battery
+            .setRequiredNetworkType(NetworkType.CONNECTED) // Require network
+            .setRequiresDeviceIdle(false) // Don't require device idle
+            .setRequiresStorageNotLow(false) // Allow when storage is low
+            .build()
+
         val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
             .setInputData(data)
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                2_000L, // 2 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
             .build()
 
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
         val workId = uploadRequest.id.toString()
-        
+
+        // Take persistent URI permissions to survive app restarts and process changes
+        attachments?.forEach { uri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                Timber.tag("TweetFeedViewModel").w("Failed to take persistable permission for URI: $uri")
+            }
+        }
+
+        // Check if there are video attachments and show background upload message
+        val hasVideoAttachments = attachments?.any { uri ->
+            try {
+                val mimeType = context.contentResolver.getType(uri)
+                mimeType?.startsWith("video/") == true
+            } catch (_: Exception) {
+                false
+            }
+        } ?: false
+
+        if (hasVideoAttachments) {
+            // Show toast immediately informing user about background upload
+            Toast.makeText(
+                context,
+                context.getString(R.string.tweet_uploading_background),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         // Save incomplete upload for potential resume
         val incompleteUpload = HproseInstance.IncompleteUpload(
             workId = workId,
@@ -378,29 +774,20 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         isListeningToNotifications = true
-        Timber.tag("TweetFeedViewModel")
-            .d("TweetFeedViewModel instance starting to listen to notifications")
         applicationScope.launch {
             try {
-                Timber.tag("TweetFeedViewModel").d("Notification listener coroutine started")
-                Timber.tag("TweetFeedViewModel")
-                    .d("About to start collecting events from TweetNotificationCenter")
                 TweetNotificationCenter.events.collect { event ->
-                    Timber.tag("TweetFeedViewModel").d("Received notification event: $event")
                     when (event) {
                         is TweetEvent.TweetUploaded -> {
+                            Timber.tag("TweetFeedViewModel").d("Received TweetUploaded notification for tweet: ${event.tweet.mid}, author: ${event.tweet.authorId}, current user: ${appUser.mid}")
+
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
-                            Timber.tag("TweetFeedViewModel")
-                                .d("TweetFeedViewModel received TweetUploaded notification for tweet: ${event.tweet.mid}")
-                            Timber.tag("TweetFeedViewModel")
-                                .d("Current tweets count: ${_tweets.value.size}")
 
                             // Show success toast if it's the current user's tweet
                             val context = notificationContextRef?.get()
                             if (tweetWithAuthor.authorId == appUser.mid && context != null) {
-                                Timber.tag("TweetFeedViewModel")
-                                    .d("Showing tweet upload success toast for tweet: ${event.tweet.mid}")
+                                Timber.tag("TweetFeedViewModel").d("Showing success toast for tweet: ${tweetWithAuthor.mid}")
                                 withContext(Main) {
                                     Toast.makeText(
                                         context,
@@ -408,6 +795,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
+                                
+                                // Cache the new tweet for mainfeed under appUser.mid
+                                TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid)
                             }
 
                             // Update on main thread to ensure UI updates
@@ -417,22 +807,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 if (tweetWithAuthor.mid !in existingTweetIds) {
                                     _tweets.value = listOf(tweetWithAuthor) + _tweets.value
                                     Timber.tag("TweetFeedViewModel")
-                                        .d("Updated tweets count: ${_tweets.value.size}")
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Tweet added to feed: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
-
-                                    // Update user's tweet count if it's the current user's tweet
-                                    if (tweetWithAuthor.authorId == appUser.mid) {
-                                        appUser = appUser.copy(tweetCount = appUser.tweetCount + 1)
-                                        withContext(IO) {
-                                            TweetCacheManager.saveUser(appUser)
-                                        }
-                                        Timber.tag("TweetFeedViewModel")
-                                            .d("Updated user tweet count to: ${appUser.tweetCount}")
-                                    }
-                                } else {
-                                    Timber.tag("TweetFeedViewModel")
-                                        .d("Tweet already exists in feed: ${tweetWithAuthor.mid}")
+                                        .d("Tweet added: ${tweetWithAuthor.mid} by ${tweetWithAuthor.author?.username}")
                                 }
                             }
                         }
@@ -454,9 +829,41 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         }
 
                         is TweetEvent.TweetDeleted -> {
-                            // Tweet is already removed optimistically, just log
-                            Timber.tag("TweetFeedViewModel")
-                                .d("Received TweetDeleted notification for tweet: ${event.tweetId} (already removed optimistically)")
+                            // Remove tweet from feed if it still exists (in case optimistic removal failed)
+                            withContext(Main) {
+                                _tweets.update { currentTweets ->
+                                    val beforeCount = currentTweets.size
+                                    val filteredTweets = currentTweets.filterNot { it.mid == event.tweetId }
+                                    val afterCount = filteredTweets.size
+                                    
+                                    if (beforeCount > afterCount) {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Removed tweet ${event.tweetId} from feed via notification (${beforeCount} -> ${afterCount})")
+                                    } else {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Tweet ${event.tweetId} not found in feed (already removed optimistically)")
+                                    }
+                                    filteredTweets
+                                }
+                            }
+                        }
+
+                        is TweetEvent.TweetRestored -> {
+                            // Restore tweet to feed after failed deletion
+                            withContext(Main) {
+                                _tweets.update { currentTweets ->
+                                    if (!currentTweets.any { it.mid == event.tweet.mid }) {
+                                        val restored = (listOf(event.tweet) + currentTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Restored tweet ${event.tweet.mid} to feed after failed deletion")
+                                        restored
+                                    } else {
+                                        Timber.tag("TweetFeedViewModel")
+                                            .d("Tweet ${event.tweet.mid} already in feed, skipping restoration")
+                                        currentTweets
+                                    }
+                                }
+                            }
                         }
 
                         is TweetEvent.CommentUploaded -> {
@@ -545,7 +952,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             val retweetWithAuthor = if (event.retweet.author != null) {
                                 event.retweet
                             } else {
-                                event.retweet.copy(author = appUser)
+                                // Check cache first before using appUser as fallback
+                                val cachedAuthor = TweetCacheManager.getCachedUser(event.retweet.authorId)
+                                event.retweet.copy(author = cachedAuthor ?: appUser)
                             }
                             withContext(Main) {
                                 // Check if retweet already exists to avoid duplicates
@@ -594,6 +1003,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         is TweetEvent.ChatSessionUpdated -> {
                             // Chat events are handled in ChatViewModel
                             Timber.tag("TweetFeedViewModel").d("Ignoring ChatSessionUpdated event")
+                        }
+
+                        is TweetEvent.UserDataUpdated -> {
+                            // User data updates are handled in UserViewModel
+                            Timber.tag("TweetFeedViewModel").d("Ignoring UserDataUpdated event")
+                        }
+
+                        is TweetEvent.FeedResetRequested -> {
+                            Timber.tag("TweetFeedViewModel")
+                                .d("Feed reset requested due to ${event.reason}, resetting feed")
+                            reset()
                         }
                     }
                 }

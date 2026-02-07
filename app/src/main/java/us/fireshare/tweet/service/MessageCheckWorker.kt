@@ -92,20 +92,54 @@ class MessageCheckWorker @AssistedInject constructor(
     /**
      * Show system bar notifications for new messages
      */
-    private fun showNewMessageNotifications(messages: List<ChatMessage>) {
+    private suspend fun showNewMessageNotifications(messages: List<ChatMessage>) {
         try {
             if (messages.isEmpty()) return
             
             // Get the first message for notification
             val firstMessage = messages.first()
             val authorId = firstMessage.authorId
-            val messagePreview = firstMessage.content ?: "New message"
+            
+            // Create message preview text
+            val messagePreview = when {
+                !firstMessage.content.isNullOrBlank() -> firstMessage.content
+                !firstMessage.attachments.isNullOrEmpty() -> {
+                    // Show attachment type in preview
+                    val attachmentType = firstMessage.attachments.first().type.name.lowercase()
+                    "Sent $attachmentType"
+                }
+                else -> "New message"
+            }
             
             // Count messages from the same sender
             val messagesFromSameSender = messages.count { it.authorId == authorId }
             
-            // Use authorId as sender name for simplicity
-            val senderName = authorId
+            // Try to get sender name from cache, fetch if not available
+            val senderName = try {
+                var cachedUser = us.fireshare.tweet.datamodel.TweetCacheManager.getCachedUser(authorId)
+                
+                // If user not in cache or doesn't have name/username, try to fetch with short timeout
+                if (cachedUser == null || (cachedUser.name.isNullOrBlank() && cachedUser.username.isNullOrBlank())) {
+                    Timber.tag("MessageCheckWorker").d("User $authorId not in cache or missing name, fetching...")
+                    
+                    // Fetch user with 5 second timeout to avoid blocking notification
+                    cachedUser = kotlinx.coroutines.withTimeoutOrNull(5000) {
+                        us.fireshare.tweet.HproseInstance.fetchUser(authorId, skipRetryAndBlacklist = true)
+                    }
+                    
+                    if (cachedUser != null) {
+                        Timber.tag("MessageCheckWorker").d("Fetched user: ${cachedUser.name ?: cachedUser.username}")
+                    }
+                }
+                
+                // Use name (alias) first, fallback to username, then authorId
+                cachedUser?.name?.takeIf { it.isNotBlank() } 
+                    ?: cachedUser?.username?.takeIf { it.isNotBlank() }
+                    ?: authorId
+            } catch (e: Exception) {
+                Timber.tag("MessageCheckWorker").e(e, "Error getting sender name for $authorId")
+                authorId
+            }
             
             SystemNotificationManager.showChatMessageNotification(
                 applicationContext,
@@ -114,7 +148,7 @@ class MessageCheckWorker @AssistedInject constructor(
                 messagesFromSameSender
             )
             
-            Timber.tag("MessageCheckWorker").d("System notifications shown for ${messages.size} new messages")
+            Timber.tag("MessageCheckWorker").d("System notifications shown for ${messages.size} new messages from $senderName")
         } catch (e: Exception) {
             Timber.tag("MessageCheckWorker").e(e, "Error showing system notifications")
         }

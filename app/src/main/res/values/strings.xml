@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">M2O</string>
+    <string name="app_name">ZZ</string>
     <string name="forward_by">Forwarded by you</string>
     <string name="delete">Delete</string>
     <string name="login">Login</string>
@@ -13,6 +13,7 @@
     <string name="save">Save</string>
     <string name="saving">Saving...</string>
     <string name="registering">Registering...</string>
+    <string name="retrying">Retrying %1$d/%2$d...</string>
     <string name="updating_avatar">Updating avatar...</string>
     <string name="avatar_update_success">Avatar updated successfully</string>
     <string name="avatar_update_failed">Failed to update avatar</string>
@@ -21,6 +22,7 @@
     <string name="comment">Comment</string>
     <string name="reply_to">Reply to</string>
     <string name="comment_as_tweet">Post as Tweet</string>
+    <string name="quote_original">Quote Original</string>
     <string name="guest_reminder">Please login or register</string>
     <string name="update_available">Update Available</string>
     <string name="update_message">A new version of the app is available. Would you like to update?</string>
@@ -46,12 +48,14 @@
     <string name="login_failed">Login failed. Please retry later.</string>
     <string name="profile_update_ok">User profile updated successfully</string>
     <string name="profile_update_failed">Update user data failed</string>
+    <string name="no_more_tweets">No more tweets</string>
     <string name="registration_ok">Registration is successful. Please wait a few minutes before login.</string>
     <string name="username_required">Username is required</string>
     <string name="password_required">Password is required</string>
     <string name="keyphrase_required">Key phrase is required</string>
     <string name="tweet_uploaded">Tweet uploaded successfully</string>
     <string name="tweet_failed">Tweet upload failed.</string>
+    <string name="tweet_uploading_background">Tweet will be uploaded in background</string>
     <string name="clipboard_copy">Content copied to clipboard</string>
     <string name="share_link">Share link</string>
     <string name="screenshot">Screenshot</string>
@@ -78,12 +82,19 @@
     <string name="user_favorites">Favorites</string>
     <string name="upload_comment">Uploading comment</string>
     <string name="your_followings">Your followings</string>
+    <string name="your_fans">Your Fans</string>
+    <string name="your_followings_title">Your Followings</string>
+    <string name="your_bookmarks">Your Bookmarks</string>
+    <string name="your_favorites">Your Favorites</string>
+    <string name="fans_at_username">Fans@%s</string>
+    <string name="followings_at_username">Followings@%s</string>
     <string name="recommendation">Recommendation</string>
     <string name="update_following">Update following status</string>
     <string name="follow_operation_failed">Follow operation failed. Please try again.</string>
+    <string name="follow_operation_failed_refresh_message">Please refresh your following list to update it.</string>
     <string name="post_your_reply">Post your reply</string>
     <string name="reply">Reply</string>
-    <string name="delete_tweet">Deleting tweet</string>
+    <string name="delete_tweet">Tweet deleted</string>
     <string name="login_getuserid_fail">Cannot get user Id</string>
     <string name="login_getuser_fail">Cannot get User</string>
     <string name="login_success">Login success. Navigating ...</string>
@@ -103,8 +114,9 @@
     <string name="clear_again">Clear Again</string>
     <string name="cache_cleared_success">All cache cleared successfully!</string>
     <string name="cloud_port">Cloud Port</string>
+    <string name="domain_to_share">Domain to Share</string>
     <string name="failed_to_load_image">Failed to load image</string>
-    <string name="loading">Loading...</string>
+    <string name="loading">Loading</string>
     <string name="save_image">Save Image</string>
     <string name="share_image">Share Image</string>
     
@@ -178,6 +190,9 @@
     <string name="cleared">Cleared!</string>
     <string name="clear">Clear</string>
     <string name="search_placeholder">Search @username or #hashtag</string>
+    <string name="search_generic_error">Something went wrong while searching. Please try again.</string>
+    <string name="search_section_users">Accounts</string>
+    <string name="search_section_tweets">Tweets</string>
     <string name="content_to_share">Content to Share</string>
     <string name="yesterday">Yesterday</string>
     
@@ -185,6 +200,16 @@
     <string name="uploading_attachment">You can continue chatting while it uploads</string>
     <string name="attachment_sent">Attachment sent</string>
     <string name="attachment_received">Attachment received</string>
+    <string name="image_sent">Image sent</string>
+    <string name="image_received">Image received</string>
+    <string name="video_sent">Video sent</string>
+    <string name="video_received">Video received</string>
+    <string name="audio_sent">Audio sent</string>
+    <string name="audio_received">Audio received</string>
+    <string name="document_sent">Document sent</string>
+    <string name="document_received">Document received</string>
+    <string name="archive_sent">Archive sent</string>
+    <string name="archive_received">Archive received</string>
     <string name="unknown_file">Unknown file</string>
     <string name="new_chat_started">New chat started</string>
     <string name="no_one">No One</string>
@@ -196,6 +221,7 @@
     <!-- Toast messages -->
     <string name="failed_to_send_message">Failed to send message: %s</string>
     <string name="uploading_attachment_background">Uploading attachment in background...</string>
+    <string name="attachment_upload_failed">Failed to upload attachment. Please check your network connection and try again.</string>
     <string name="image_saved_to_gallery">Image saved to gallery</string>
     <string name="failed_to_save_image">Failed to save image</string>
     <string name="permission_granted">Permission Granted</string>
@@ -238,4 +264,120 @@
     <string name="theme_system">System Default</string>
     <string name="theme_light">Light Mode</string>
     <string name="theme_dark">Dark Mode</string>
+    
+    <!-- HproseInstance Error Messages -->
+    <string name="error_unknown">Unknown error</string>
+    <string name="error_network">Network error</string>
+    <string name="error_send_outgoing_message">Failed to send outgoing message</string>
+    <string name="error_unknown_occurred">Unknown error occurred</string>
+    <string name="error_upload_unknown">Unknown upload error</string>
+    <string name="error_tweet_deletion_unknown">Unknown tweet deletion error</string>
+    <string name="error_video_processing_timeout">Video processing timeout after %d minutes</string>
+    <string name="error_job_id_not_found">Job ID not found: %s</string>
+    <string name="error_status_check_failed">Status check failed with status: %s</string>
+    <string name="error_no_cid_in_response">No CID in completion response</string>
+    <string name="error_video_conversion_failed">Video conversion failed</string>
+    <string name="error_poll_status_failures" formatted="false">Failed to poll status after %d consecutive failures: %s</string>
+    
+    <!-- Upgrade messages -->
+    <string name="no_upgrade_available">No upgrade available (version already up to date)</string>
+    <string name="upgrade_required_title">Upgrade Required</string>
+    <string name="upgrade_required_message">You have more than 5 tweets and need to upgrade to the full version to continue posting. The latest version will be downloaded from the server.</string>
+    <string name="upgrade_now">Upgrade Now</string>
+    <string name="upgrade_failed_no_server">Upgrade failed: Unable to download from any server</string>
+    <string name="upgrade_failed_server_error">Download failed: Server returned %1$s</string>
+    <string name="upgrade_failed_read_apk">Failed to read APK file</string>
+    <string name="upgrade_failed_download">Download failed: %1$s</string>
+    <string name="upgrade_failed_unknown">Upgrade failed: Unknown error</string>
+    <string name="download_in_progress">Download is already in progress. Please wait for it to complete.</string>
+    <string name="crop_avatar">Crop Avatar</string>
+    <string name="choose">Choose</string>
+    <string name="choose_photo">Choose Photo</string>
+    <string name="select_photo_to_crop">Select a photo to crop</string>
+    <string name="crop_instructions">Drag to reposition and pinch to zoom. The circular area will be your avatar.</string>
+    <string name="cropping_avatar">Cropping avatar...</string>
+    <string name="uploading_avatar">Uploading avatar...</string>
+    
+    <!-- Additional missing strings -->
+    <string name="downloading_file">Downloading file...</string>
+    <string name="error_unknown_error">Unknown error</string>
+    <string name="error_message_failed">Error: %s</string>
+    <string name="video_file_too_large">Video files must be smaller than 512MB</string>
+    <string name="files_too_large">Files must be smaller than 512MB</string>
+    <string name="camera_permission_required">Camera permission required</string>
+    <string name="sending_attachment_background">Sending attachment in background...</string>
+    <string name="message_failed_send_tap_error">Message failed to send - tap to see error details</string>
+    <string name="video_error">Video Error</string>
+    <string name="previous_video">Previous Video</string>
+    <string name="next_video">Next Video</string>
+    <string name="more_options">More options</string>
+    <string name="play_video">Play video</string>
+    <string name="photo_mode">Photo Mode</string>
+    <string name="video_mode">Video Mode</string>
+    <string name="copy_tweet_id">Copy tweet ID</string>
+    
+    <!-- File size warnings -->
+    <string name="file_size_warning">File size: %s (Max: 512MB)</string>
+    <string name="file_size_ok">File size: %s ✓</string>
+    <string name="file_size_large_warning">Large file selected (%s) - upload may take longer</string>
+    <string name="file_size_very_large_warning">Very large file (%s) - consider compressing before upload</string>
+    <string name="file_size_limit">512MB</string>
+    <string name="file_size_large_threshold">50MB</string>
+    <string name="file_size_very_large_threshold">100MB</string>
+    
+    <!-- Empty states -->
+    <string name="no_tweets_found">No tweets found</string>
+    <string name="no_more_chat_messages">No more chat messages</string>
+    <string name="no_search_results">No results found for "%s"</string>
+    <string name="no_bookmarks">No bookmarks yet</string>
+    <string name="no_favorites">No favorites yet</string>
+    <string name="no_followers">No followers yet</string>
+    <string name="no_following">Not following anyone yet</string>
+    <string name="start_following">Start following people to see their tweets</string>
+    <string name="try_different_search">Try a different search term</string>
+    
+    <!-- Network error messages -->
+    <string name="network_error_connection_lost">Connection lost. Please check your internet connection.</string>
+    <string name="network_error_timeout">Request timed out. Please try again.</string>
+    <string name="network_error_unreachable">Unable to reach server. Please check your connection.</string>
+    <string name="network_error_generic">Network error occurred. Please try again.</string>
+    <string name="retry_connection">Retry Connection</string>
+    
+    <!-- Video error messages -->
+    <string name="video_error_playback_failed">Video playback failed. This may be due to network issues or unsupported format.</string>
+    <string name="video_error_format_not_supported">Video format not supported. Please try a different video.</string>
+    <string name="video_error_network_issue">Video failed to load. Check your internet connection and try again.</string>
+    <string name="video_retry_playback">Retry Playback</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">Need to set up your own node</string>
+    <string name="node_required_message">You have more than 10 tweets and need to set up your own node to continue posting. Please set up your own node for better performance and storage.</string>
+    <string name="node_required_ok">OK</string>
+
+    <!-- Error message helper strings -->
+    <string name="unknown_error">Unknown error occurred</string>
+    <string name="wrong_password">Wrong password</string>
+    <string name="invalid_username_format">Invalid username format</string>
+    <string name="user_not_found_or_missing_host">User not found or missing host</string>
+    <string name="user_host_not_found">User host not found</string>
+    <string name="author_host_not_found">Author host not found</string>
+    <string name="user_not_found_in_database">User not found in database</string>
+    <string name="user_missing_host">User missing host</string>
+    <string name="cannot_follow_yourself">Cannot follow yourself</string>
+    <string name="cannot_get_followed_user">Cannot get followed user</string>
+    <string name="missing_host_for_followed_user">Missing host for followed user</string>
+    <string name="tweet_not_found">Tweet not found</string>
+    <string name="only_author_can_update_privacy">Only the tweet author can update privacy settings</string>
+    <string name="not_a_friend_of_the_host">Not a friend of the host</string>
+    <string name="no_provider_ip_found">No provider IP found</string>
+    <string name="failed_to_extract_zip_file">Failed to extract zip file</string>
+    <string name="invalid_hls_structure">Invalid HLS structure</string>
+    <string name="app_id_mismatch">App ID mismatch</string>
+    <string name="chunk_size_exceeds_limit">Chunk size exceeds 1MB limit</string>
+    <string name="invalid_host_id_format">Invalid host ID format. Please check your host ID and try again.</string>
+    <string name="invalid_host_id_length">Host ID must be at least 27 characters long.</string>
+    <string name="network_connection_lost">Network connection lost. Please check your internet connection.</string>
+    <string name="request_timeout">The request took too long. Please try again.</string>
+    <string name="server_unreachable">Cannot reach the server. Please try again later.</string>
+    <string name="connection_error">Connection error. Please try again.</string>
 </resources>

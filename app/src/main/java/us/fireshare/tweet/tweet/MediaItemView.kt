@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -45,9 +46,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -67,12 +70,21 @@ fun MediaItemView(
     numOfHiddenItems: Int = 0,      // add a PLUS sign to indicate more items not shown
     autoPlay: Boolean = false,      // autoplay first video item, index 0
     inPreviewGrid: Boolean = true,  // use real aspectRatio when not displaying in preview grid.
+    loadOriginalImage: Boolean = false, // load original high-res image instead of compressed preview
     viewModel: TweetViewModel,
-    onVideoCompleted: (() -> Unit)? = null
+    onVideoCompleted: (() -> Unit)? = null,
+    useIndependentVideoMute: Boolean = false, // For TweetDetailView - videos independent of global mute
+    enableTapToShowControls: Boolean = false, // For TweetDetailView - enable tap-to-show controls
+    allMediaItems: List<MimeiFileType>? = null, // All media items for full screen navigation (if different from mediaItems)
+    parentTweetId: MimeiId? = null,
+    enableCoordinator: Boolean = true,
+    containerTopY: Float? = null
 ) {
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
+    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -82,6 +94,18 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
+    // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
+    // If parentTweetId is provided, it represents the retweet/quote container tweet
+    // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
+    val playbackTweetId = if (enableCoordinator) {
+        if (parentTweetId != null && parentTweetId.isNotEmpty()) {
+            // Always use parentTweetId (retweet/quote ID) when available
+            parentTweetId
+        } else {
+            // Only use tweet.mid if parentTweetId is not provided (direct tweet, not retweet/quote)
+            tweet.mid
+        }
+    } else null
     /**
      * Action to take when any media item is clicked.
      * Images and videos open in full-screen mode, audio files navigate to tweet detail page, 
@@ -95,6 +119,7 @@ fun MediaItemView(
             MediaType.Image -> {
                 // Show full-screen image directly
                 fullScreenImageMid = mediaItems[idx].mid
+                fullScreenBitmap = currentBitmap // Pass the current bitmap to fullscreen
                 showFullScreenImage = true
             }
             MediaType.Audio -> {
@@ -154,18 +179,34 @@ fun MediaItemView(
     }
         when (attachment.type) {
             MediaType.Image -> {
+                // Track visibility for priority-based loading
+                var isVisible by remember { mutableStateOf(true) } // Default to true since images in feed are likely visible
+                
                 // Use a Box with clickable modifier to handle image clicks
+                // Ensure the inner Box fills the parent to properly display the image
                 Box(
                     modifier = modifier
+                        .fillMaxSize()
                         .clipToBounds()
+                        .onGloballyPositioned { layoutCoordinates ->
+                            // Update visibility based on actual layout - if item has size, it's visible
+                            val hasSize = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                            isVisible = hasSize
+                        }
                         .clickable {
                             goto(index)
                         }
                 ) {
                     ImageViewer(
                         attachment.url,
-                        modifier = Modifier.fillMaxSize(),
-                        enableLongPress = false // Disable long press to allow clickable to work
+                        modifier = Modifier.fillMaxSize(), // Always fill parent in preview grid
+                        enableLongPress = false, // Disable long press to allow clickable to work
+                        inPreviewGrid = inPreviewGrid,
+                        isVisible = isVisible,
+                        loadOriginalImage = loadOriginalImage,
+                        onBitmapLoaded = { bitmap ->
+                            currentBitmap = bitmap
+                        }
                     )
                 }
             }
@@ -184,7 +225,12 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         callback = { goto(index) },
                         videoMid = videoMid,
-                        onVideoCompleted = onVideoCompleted
+                        videoType = attachment.type,
+                        onVideoCompleted = onVideoCompleted,
+                        useIndependentMuteState = useIndependentVideoMute,
+                        enableTapToShowControls = enableTapToShowControls,
+                        playbackTweetId = playbackTweetId,
+                        containerTopY = containerTopY
                     )
                 }
             }
@@ -247,10 +293,37 @@ fun MediaItemView(
     // Full-screen image overlay
     if (showFullScreenImage && fullScreenImageMid != null) {
         val imageMid = fullScreenImageMid!!
-        val mediaUrl = getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+        
+        // Use allMediaItems if provided (for full navigation), otherwise use mediaItems
+        val itemsForNavigation = allMediaItems ?: mediaItems
+        
+        // Filter to only image attachments and get their URLs
+        val imageAttachments = itemsForNavigation.mapIndexedNotNull { idx, item ->
+            val inferredType = inferMediaTypeFromAttachment(item)
+            if (inferredType == MediaType.Image) {
+                idx to getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+            } else {
+                null
+            }
+        }
+        
+        // Find current image index in the filtered list
+        val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+            itemsForNavigation[idx].mid == imageMid
+        }
+        
+        // Get current media URL based on current imageMid
+        val mediaUrl = if (currentImageIndexInList >= 0) {
+            imageAttachments[currentImageIndexInList].second
+        } else {
+            getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+        }
+        
+        // Get list of image URLs
+        val imageUrls = imageAttachments.map { (_, url) -> url }
         
         Dialog(
-            onDismissRequest = { showFullScreenImage = false },
+            onDismissRequest = { },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,
@@ -262,12 +335,43 @@ fun MediaItemView(
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                AdvancedImageViewer(
-                    imageUrl = mediaUrl,
-                    enableLongPress = true,
-                    onClose = { showFullScreenImage = false },
-                    modifier = Modifier.fillMaxSize()
-                )
+                // Use key to force recomposition when image changes - this ensures smooth animation
+                key(imageMid) {
+                    AdvancedImageViewer(
+                        imageUrl = mediaUrl,
+                        enableLongPress = true,
+                        initialBitmap = null, // Always start fresh for smooth animation
+                        onClose = { showFullScreenImage = false },
+                        modifier = Modifier.fillMaxSize(),
+                        imageUrls = if (imageUrls.size > 1) imageUrls else null,
+                        onNextImage = {
+                            if (imageAttachments.isNotEmpty()) {
+                                // Wrap around: if at last image, go to first
+                                val nextIndex = if (currentImageIndexInList >= imageAttachments.size - 1) {
+                                    0 // Wrap to first image
+                                } else {
+                                    currentImageIndexInList + 1
+                                }
+                                val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
+                                fullScreenBitmap = null // Reset bitmap to load new image
+                            }
+                        },
+                        onPreviousImage = {
+                            if (imageAttachments.isNotEmpty()) {
+                                // Wrap around: if at first image, go to last
+                                val prevIndex = if (currentImageIndexInList <= 0) {
+                                    imageAttachments.size - 1 // Wrap to last image
+                                } else {
+                                    currentImageIndexInList - 1
+                                }
+                                val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
+                                fullScreenBitmap = null // Reset bitmap to load new image
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -319,6 +423,7 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     downloadManager.enqueue(request)
 
-    Toast.makeText(context, "Downloading file...", Toast.LENGTH_SHORT).show()
+    val downloadingMessage = context.getString(R.string.downloading_file)
+    Toast.makeText(context, downloadingMessage, Toast.LENGTH_SHORT).show()
 }
 

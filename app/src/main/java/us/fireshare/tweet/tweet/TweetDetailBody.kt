@@ -1,26 +1,29 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -38,15 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -55,30 +58,39 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AudioPlayer
+import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetDetailBody(
     viewModel: TweetViewModel,
     parentEntry: NavBackStackEntry,
-    gridColumns: Int = 1,
+    parentTweetId: String? = null,
+    parentAuthorId: String? = null,
     onExpandReply: (() -> Unit)? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
+    
+    // Observe author changes reactively via StateFlow
+    // This ensures the tweet detail updates when user data becomes available
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
+    }
+    val author by authorStateFlow.collectAsState()
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -99,7 +111,6 @@ fun TweetDetailBody(
                     horizontalArrangement = Arrangement.Start,
                     modifier = Modifier.padding(bottom = 4.dp)
                 ) {
-                    val author = tweet.author
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
@@ -111,7 +122,7 @@ fun TweetDetailBody(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
-                        text = "@${author?.username}",
+                        text = "@${author?.username ?: "unknown"}",
                         modifier = Modifier.padding(horizontal = 0.dp),
                         style = MaterialTheme.typography.labelMedium
                     )
@@ -122,13 +133,13 @@ fun TweetDetailBody(
                     )
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, parentEntry, context = "default")
+                TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail")
             }
             // Tweet detail's content
             Surface(
                 shape = MaterialTheme.shapes.small, // Inner border
                 modifier = Modifier
-                    .padding(start = 0.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
+                    .padding(start = 4.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
                      tweet.content?.let {
@@ -149,14 +160,44 @@ fun TweetDetailBody(
 
                     if (! tweet.attachments.isNullOrEmpty()) {
                         val attachments = tweet.attachments!!
-                        val isAllAudio = attachments.all { it.type == MediaType.Audio }
-                        if (isAllAudio) {
-                            attachments.forEach {
-                                it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
+                        
+                        // Separate media (visual) from documents (like iOS)
+                        val mediaAttachments = attachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isMediaType(type)
+                        }
+                        val documentAttachments = attachments.filter { attachment ->
+                            val type = inferMediaTypeFromAttachment(attachment)
+                            isDocumentType(type)
+                        }
+                        
+                        // Handle media attachments
+                        if (mediaAttachments.isNotEmpty()) {
+                            val isAllAudio = mediaAttachments.all { 
+                                val type = inferMediaTypeFromAttachment(it)
+                                type == MediaType.Audio 
                             }
-                            AudioPlayer(attachments)
-                        } else
-                            MediaGrid(attachments, viewModel, navController, gridColumns)
+                            if (isAllAudio) {
+                                mediaAttachments.forEach {
+                                    it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
+                                }
+                                AudioPlayer(mediaAttachments)
+                            } else {
+                                AttachmentBrowser(
+                                    mediaItems = mediaAttachments,
+                                    viewModel = viewModel
+                                )
+                            }
+                        }
+                        
+                        // Handle document attachments (below media)
+                        if (documentAttachments.isNotEmpty()) {
+                            DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = tweet.author?.baseUrl,
+                                maxDocuments = null // Show all documents in detail view
+                            )
+                        }
                     }
 
                     // This is a retweet. Display the original tweet in quote box.
@@ -208,9 +249,11 @@ fun TweetDetailBody(
                                 tonalElevation = 2.dp,
                                 modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
                             ) {
+                                // Use activity scope to ensure same ViewModel instance is shared
+                                val activity = LocalActivity.current as ComponentActivity
                                 TweetItemBody(
                                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                                        parentEntry, key = tweet.originalTweetId
+                                        viewModelStoreOwner = activity, key = tweet.originalTweetId
                                     ) { factory -> factory.create(originalTweet!!) },
                                     parentEntry = parentEntry,
                                     isQuoted = true
@@ -229,12 +272,17 @@ fun TweetDetailBody(
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         // State hoist
-                        LikeButton(viewModel)
-                        BookmarkButton(viewModel)
                         CommentButton(viewModel, onExpandReply = onExpandReply)
                         RetweetButton(viewModel)
+                        LikeButton(viewModel)
+                        BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
-                        ShareButton(viewModel)
+                        ShareButton(
+                            viewModel = viewModel,
+                            parentTweetId = parentTweetId,
+                            parentAuthorId = parentAuthorId,
+                            isInDetailView = true
+                        )
                     }
                 }
             }
@@ -243,59 +291,143 @@ fun TweetDetailBody(
 }
 
 @RequiresApi(Build.VERSION_CODES.R)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MediaGrid(
+fun AttachmentBrowser(
     mediaItems: List<MimeiFileType>,
-    viewModel: TweetViewModel,
-    navController: NavController,
-    gridColumns: Int, containerWidth: Dp = 400.dp
+    viewModel: TweetViewModel
 ) {
-    val tweet by viewModel.tweetState.collectAsState()
-    Box(
+    // Stabilize attachments to prevent recomposition issues (like iOS implementation)
+    val stableAttachments = remember(mediaItems.map { it.mid }) {
+        mediaItems
+    }
+    
+    // Calculate fixed aspect ratio to prevent height jumping (like iOS calculateFixedAspectRatio)
+    val fixedAspectRatio = remember(stableAttachments.map { it.mid }) {
+        calculateFixedAspectRatio(stableAttachments)
+    }
+    
+    val pagerState = rememberPagerState(pageCount = { stableAttachments.size })
+
+    Column(
         modifier = Modifier
-            .padding(top = 0.dp)
             .fillMaxWidth()
+            .background(Color.Transparent)
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(gridColumns),
-            modifier = Modifier
-                .padding(top = 0.dp)
-                .fillMaxWidth()
-                .background(Color.Transparent)
-                .border(1.dp, Color.Transparent)
-                .heightIn(max = 20000.dp),
-            horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            val modifier =
-                if (gridColumns == 1)
-                    Modifier.fillMaxWidth()
-                else Modifier.size(containerWidth / gridColumns)
-            itemsIndexed(mediaItems) { index, _ ->
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth(),
+            userScrollEnabled = stableAttachments.size > 1
+        ) { page ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(fixedAspectRatio)
+            ) {
                 MediaItemView(
-                    mediaItems,
-                    modifier.clickable {
-                        val params = MediaViewerParams(
-                            mediaItems.map {
-                                MediaItem(
-                                    getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                    it.type
-                                )
-                            }, index, tweet.mid, tweet.authorId
-                        )
-                        navController.navigate(
-                            NavTweet.MediaViewer(params)
-                        )
-                    },
-                    index,
-                    0,
-                    autoPlay = true,
+                    mediaItems = stableAttachments,
+                    modifier = Modifier.fillMaxSize(),
+                    index = page,
+                    autoPlay = pagerState.currentPage == page,
                     inPreviewGrid = false,
-                    viewModel
+                    loadOriginalImage = false,
+                    viewModel = viewModel,
+                    onVideoCompleted = null,
+                    useIndependentVideoMute = true,
+                    enableTapToShowControls = true,
+                    enableCoordinator = false
                 )
             }
         }
+
+        if (stableAttachments.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(stableAttachments.size) { index ->
+                    val isSelected = pagerState.currentPage == index
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (isSelected) 10.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                    )
+                }
+            }
+        }
     }
+}
+
+/**
+ * Determines if a media type is visual content (should be in MediaGrid)
+ */
+private fun isMediaType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO, MediaType.Audio -> true
+        else -> false
+    }
+}
+
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
+    }
+}
+
+/**
+ * Calculate a fixed aspect ratio for all attachments to prevent height jumping.
+ * Similar to iOS calculateFixedAspectRatio implementation:
+ * - If all same orientation, use average
+ * - If mixed orientations, use minimum aspect ratio (ensures container is tall enough)
+ * - Clamp to reasonable bounds (0.5 to 2.0)
+ */
+private fun calculateFixedAspectRatio(attachments: List<MimeiFileType>): Float {
+    if (attachments.isEmpty()) return 1.0f
+    
+    // Collect all aspect ratios
+    val aspectRatios = attachments.map { attachment ->
+        when {
+            attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO -> {
+                attachment.aspectRatio?.takeIf { it > 0f } ?: (4f / 3f)
+            }
+            attachment.type == MediaType.Image -> {
+                attachment.aspectRatio?.takeIf { it > 0f } ?: 1.0f
+            }
+            else -> 1.0f
+        }
+    }
+    
+    // Separate portrait and landscape
+    val portraits = aspectRatios.filter { it < 1.0f }
+    val landscapes = aspectRatios.filter { it >= 1.0f }
+    
+    // If all are same orientation, use average
+    if (portraits.isEmpty() || landscapes.isEmpty()) {
+        val average = aspectRatios.average().toFloat()
+        // Clamp to reasonable bounds (0.5 to 2.0)
+        return maxOf(0.5f, minOf(2.0f, average))
+    }
+    
+    // Mixed orientations: use the minimum aspect ratio
+    // This ensures the container is tall enough for all content
+    // (minimum aspect ratio = tallest content = maximum height needed)
+    val minAspectRatio = aspectRatios.minOrNull() ?: 1.0f
+    
+    // Clamp to reasonable bounds
+    return maxOf(0.5f, minOf(2.0f, minAspectRatio))
 }
 
 @Composable
@@ -324,7 +456,7 @@ fun TweetDropdownMenu(
             onClick = { expanded = !expanded }) {
             Icon(
                 painter = painterResource(R.drawable.ellipsis),
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.primary
             )
         }

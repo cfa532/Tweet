@@ -1,7 +1,10 @@
 
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
+
     id("com.google.dagger.hilt.android")
     alias(libs.plugins.compose.compiler)
     kotlin("plugin.serialization")
@@ -9,6 +12,13 @@ plugins {
     id("com.google.gms.google-services")
     alias(libs.plugins.firebase.crashlytics)
     id("kotlin-parcelize")
+}
+
+// Load keystore properties
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -20,8 +30,10 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 49    // Google Play store version code
-        versionName = "37"   // compared with App Mimei version to check for upgrade.
+        versionCode = 106    // Full release version code. Must be increased each time,
+                            // and higher than mini version code.
+                            // So full version can override mini version. 
+        versionName = "46"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -32,7 +44,34 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
+        
+        // Default APP_ID (will be overridden by buildTypes)
+        // This ensures APP_ID is always defined and prevents any inheritance issues
+        buildConfigField("String", "APP_ID", "\"\"")
+        buildConfigField("String", "BASE_URL", "\"\"")
     }
+    
+    signingConfigs {
+        // Debug signing config (automatically available)
+        
+        create("release") {
+            // Load from keystore.properties file or fall back to debug signing
+            if (keystorePropertiesFile.exists()) {
+                // Use rootProject.file() since keystore is in project root, not app/ directory
+                storeFile = rootProject.file(keystoreProperties["KEYSTORE_FILE"].toString())
+                storePassword = keystoreProperties["KEYSTORE_PASSWORD"].toString()
+                keyAlias = keystoreProperties["KEY_ALIAS"].toString()
+                keyPassword = keystoreProperties["KEY_PASSWORD"].toString()
+            } else {
+                // Fallback to debug signing if keystore.properties doesn't exist
+                storeFile = signingConfigs.getByName("debug").storeFile
+                storePassword = signingConfigs.getByName("debug").storePassword
+                keyAlias = signingConfigs.getByName("debug").keyAlias
+                keyPassword = signingConfigs.getByName("debug").keyPassword
+            }
+        }
+    }
+    
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -46,13 +85,16 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.uk\"")
-            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")
-            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
+            // DEBUG BUILD CONFIG - Different from release
+            buildConfigField("String", "BASE_URL", "\"twbe.fireshare.us\"")
+            buildConfigField("String", "APP_ID", "\"d4lRyhABgqOnqY4bURSm_T-4FZ4\"")  // DEBUG APP_ID
+            buildConfigField("String", "APP_ID_HASH", "\"5yOO4xP1QjAXhHpJtKMyIETVMxU\"")  // DEBUG APP_ID
+            buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
-            buildConfigField("String", "ENTRY_URLS", "\"1x7Dh9mJfN5zSyPM5TRX3Sro_wQna\"")
+            buildConfigField("String", "ENTRY_URLS", "\"VQ3xCeguhlAF1jY7zfn-HM_Vrad\"")
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
 //            isDebuggable = true
@@ -63,29 +105,69 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
-            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.uk\"")
-            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")
-            // Sync APP_ID_HASH to the same nodes of APP_ID manually for it to work.
-            buildConfigField("String", "APP_ID_HASH", "\"FGPaNfKA-RwvJ-_hGN0JDWMbm9R\"")
+            // RELEASE BUILD CONFIG - Different from debug
+            buildConfigField("String", "BASE_URL", "\"tweet.fireshare.us\"")
+            buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")  // RELEASE APP_ID
+            buildConfigField("String", "APP_ID_HASH", "\"h5U5jxPr2p2tg2kMr8UeyRMNIJ_\"")  // DEBUG APP_ID
+            buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
         }
     }
+    
     flavorDimensions += "version"
+    
+    productFlavors {
+        create("full") {
+            dimension = "version"
+            versionNameSuffix = ""
+            // Full version uses default versionCode from defaultConfig (currently 70)
+            // No override - will use defaultConfig versionCode
+            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
+        }
+        
+        create("mini") {
+            dimension = "version"
+            versionNameSuffix = "-mini"
+            versionCode = 87  // Mini version code. Must be smaller than full version's code
+            buildConfigField("Boolean", "IS_MINI_VERSION", "true")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
+        }
+        
+        create("play") {
+            dimension = "version"
+            versionNameSuffix = "-play"
+            versionCode = 106  // Play version code increased for release
+            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
+            buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
+            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
+            // Play version is based on full version but with different settings
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    @Suppress("DEPRECATION")
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    @Suppress("UnstableApiUsage")
+    
+    // Create shared source set for full and play variants (both use FFmpeg)
+    // Both variants share the same FFmpeg-based video processing code
+    sourceSets {
+        getByName("full") {
+            kotlin.directories.add("src/fullPlay/java")
+        }
+        getByName("play") {
+            kotlin.directories.add("src/fullPlay/java")
+        }
+    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
     }
@@ -99,9 +181,7 @@ android {
             excludes += "**/mac/dump_syms.bin"
             excludes += "**/win32/dump_syms.exe"
             excludes += "**/win64/dump_syms.exe"
-            // Exclude other potential problematic binaries
-            excludes += "**/*.so"
-            excludes += "**/lib/**"
+            // Note: .so files in lib/ are needed for FFmpeg, only exclude dump_syms
             pickFirsts += "**/lib/**"
         }
         // Enable 16 KB page size compatibility
@@ -111,9 +191,25 @@ android {
     }
 }
 
+// Configure Kotlin compiler options at project level (not inside android block)
+kotlin {
+    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
+    // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
+    // Included in full and play versions, excluded in mini version
+    "fullImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
+    "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
+    "playImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
+    "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
+
     implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.okhttp)
+    // OkHttp removed - using Ktor for all HTTP operations (consolidated)
     implementation(libs.accompanist.systemuicontroller)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
@@ -169,10 +265,17 @@ dependencies {
     implementation(libs.subsampling.scale.image.view)
 
     // Support library for ExifInterface
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation(libs.androidx.exifinterface)
+
+    // CameraX dependencies
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

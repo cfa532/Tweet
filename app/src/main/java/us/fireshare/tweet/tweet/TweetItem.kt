@@ -1,6 +1,8 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,12 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -64,8 +67,18 @@ fun TweetItem(
     tweet: Tweet,
     parentEntry: NavBackStackEntry, // navGraph scoped
     onTweetUnavailable: ((MimeiId) -> Unit)? = null, // callback when tweet becomes unavailable
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null, // Current profile userId to prevent duplicate navigation
+    onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
 ) {
+    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
+    val activity = LocalActivity.current as ComponentActivity
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        viewModelStoreOwner = activity, key = tweet.mid
+    ) { factory ->
+        factory.create(tweet)
+    }
+
     // Optimize: Use derivedStateOf to avoid unnecessary recomposition
     val isTweetValid by remember(tweet, tweet.author) {
         derivedStateOf { tweet.author != null }
@@ -85,14 +98,9 @@ fun TweetItem(
         return
     }
 
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweet.mid
-    ) { factory ->
-        factory.create(tweet)
-    }
-    
     // Optimize: Use remember for visibility state to reduce recomposition
     var isVisible by remember { mutableStateOf(false) }
+    var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
     val debounceMs = 100L // 100ms debounce for visibility detection
     
@@ -112,16 +120,36 @@ fun TweetItem(
         }
     }
 
+    val navController = LocalNavController.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 8000.dp)
+            .clickable(onClick = {
+                // Navigate to detail view when tapping on non-tappable areas
+                navController.navigate(
+                    NavTweet.TweetDetail(
+                        tweet.authorId,
+                        tweet.mid
+                    )
+                )
+            })
             .onGloballyPositioned { layoutCoordinates ->
                 val now = System.currentTimeMillis()
                 if (now - lastVisibilityUpdate > debounceMs) {
                     isVisible = isElementVisible(layoutCoordinates, 50)
                     lastVisibilityUpdate = now
+
+                    // Update VideoPlaybackCoordinator with cell position and visibility
+                    // This replaces the old video-based tracking with cell-based tracking like iOS
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateTweetCellPosition(
+                        tweetId = tweet.mid,
+                        cellTopY = layoutCoordinates.boundsInRoot().top,
+                        cellHeight = layoutCoordinates.size.height.toFloat(),
+                        isVisible = isVisible
+                    )
                 }
+                tweetTopY = layoutCoordinates.boundsInRoot().top
             }
     ) {
         when {
@@ -132,7 +160,10 @@ fun TweetItem(
                     isVisible = isVisible,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
                 )
             }
             isRetweetWithContent -> {
@@ -141,12 +172,22 @@ fun TweetItem(
                     tweet = tweet,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
                 )
             }
             else -> {
                 // Original tweet
-                TweetItemBody(viewModel, parentEntry = parentEntry, context = context)
+                TweetItemBody(
+                    viewModel,
+                    parentEntry = parentEntry,
+                    context = context,
+                    currentUserId = currentUserId,
+                    onScrollToTop = onScrollToTop,
+                    containerTopY = tweetTopY
+                )
             }
         }
     }
@@ -159,30 +200,45 @@ private fun RetweetContent(
     isVisible: Boolean,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null,
+    onScrollToTop: (suspend () -> Unit)? = null,
+    containerTopY: Float? = null
 ) {
-    Surface {
-        // Load original tweet dynamically
-        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-        var isLoadingOriginal by remember { mutableStateOf(true) }
+    val navController = LocalNavController.current
+    Surface(
+        modifier = Modifier.clickable(onClick = {
+            // Navigate to detail view when tapping on non-tappable areas
+            navController.navigate(
+                NavTweet.TweetDetail(
+                    tweet.authorId,
+                    tweet.mid
+                )
+            )
+        })
+    ) {
+        // Use remember with a stable key based on originalTweetId to maintain state across recompositions
+        val originalTweetId = tweet.originalTweetId
+        var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
+        var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
 
-        LaunchedEffect(tweet.originalTweetId, isVisible) {
-            if (tweet.originalTweetId != null && tweet.originalAuthorId != null && isVisible) {
+        LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+            if (originalTweetId != null && tweet.originalAuthorId != null) {
                 withContext(IO) {
                     try {
-                        val originalTweetId = tweet.originalTweetId ?: ""
                         val originalAuthorId = tweet.originalAuthorId ?: ""
 
                         Timber.tag("TweetItem")
                             .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
                         originalTweet = HproseInstance.fetchTweet(
                             originalTweetId,
-                            originalAuthorId,
-                            shouldCache = true
+                            originalAuthorId
                         )
                         if (originalTweet != null) {
                             Timber.tag("TweetItem")
                                 .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
+                            // Notify VideoPlaybackCoordinator about the loaded original tweet for retweet
+                            us.fireshare.tweet.widget.VideoPlaybackCoordinator.addRetweetVideos(tweet.mid, originalTweet!!)
                         } else {
                             Timber.tag("TweetItem")
                                 .w("Original tweet not found: $originalTweetId")
@@ -194,6 +250,8 @@ private fun RetweetContent(
                         isLoadingOriginal = false
                     }
                 }
+            } else {
+                isLoadingOriginal = false
             }
         }
 
@@ -223,9 +281,11 @@ private fun RetweetContent(
                     Box(modifier = Modifier.size(0.dp))
                 } else {
                     // The tweet area with 'Forwarded by' label above
+                    // Use activity scope to ensure same ViewModel instance is shared
+                    val activity = LocalActivity.current as ComponentActivity
                     val originalTweetViewModel =
                         hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            parentEntry, key = tweet.originalTweetId
+                            viewModelStoreOwner = activity, key = tweet.originalTweetId
                         ) { factory -> factory.create(originalTweetNonNull) }
 
                     Column(modifier = Modifier.padding(top = 0.dp)) {
@@ -260,7 +320,10 @@ private fun RetweetContent(
                             parentEntry = parentEntry,
                             parentTweet = tweet,
                             modifier = Modifier.offset(y = (-8).dp),
-                            context = context
+                            context = context,
+                            currentUserId = currentUserId,
+                            onScrollToTop = onScrollToTop,
+                            containerTopY = containerTopY
                         )
                     }
                 }
@@ -282,11 +345,17 @@ private fun RetweetWithContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    currentUserId: MimeiId? = null,
+    onScrollToTop: (suspend () -> Unit)? = null,
+    containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
+    val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        parentEntry, key = tweet.mid
+        viewModelStoreOwner = activity, key = tweet.mid
     ) { factory ->
         factory.create(tweet)
     }
@@ -321,11 +390,27 @@ private fun RetweetWithContent(
             Column {
                 IconButton(
                     onClick = {
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        // Only navigate if we're not already on this user's profile
+                        timber.log.Timber.tag("TweetItem").d("Avatar clicked in RetweetWithContent: authorId=${tweet.authorId}, currentUserId=$currentUserId")
+                        if (tweet.authorId != currentUserId) {
+                            timber.log.Timber.tag("TweetItem").d("Navigating to profile: ${tweet.authorId}")
+                            navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                        } else {
+                            timber.log.Timber.tag("TweetItem").d("Already on this user's profile, scrolling to top")
+                            coroutineScope.launch {
+                                onScrollToTop?.invoke()
+                            }
+                        }
                     },
-                    modifier = Modifier.width(44.dp)
+                    modifier = Modifier.width(48.dp)
                 ) {
-                    author?.let { UserAvatar(user = it, size = 32) }
+                    UserAvatar(
+                        user = author ?: us.fireshare.tweet.datamodel.User(
+                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                            baseUrl = appUser.baseUrl
+                        ),
+                        size = 38
+                    )
                 }
             }
 
@@ -382,18 +467,29 @@ private fun RetweetWithContent(
                         if (hasContent) {
                             SelectableText(
                                 text = tweet.content!!,
-                                maxLines = 10,
-                            ) { username ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    withContext(Dispatchers.Main) {
-                                        navController.navigate(
-                                            NavTweet.UserProfile(
-                                                tweet.authorId
-                                            )
+                                maxLines = 7,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                                onTextClick = {
+                                    // Navigate to detail view when text (not username) is clicked
+                                    navController.navigate(
+                                        NavTweet.TweetDetail(
+                                            tweet.authorId,
+                                            tweet.mid
                                         )
+                                    )
+                                },
+                                callback = { _ ->
+                                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        withContext(Dispatchers.Main) {
+                                            navController.navigate(
+                                                NavTweet.UserProfile(
+                                                    tweet.authorId
+                                                )
+                                            )
+                                        }
                                     }
                                 }
-                            }
+                            )
                         }
 
                         // Media files
@@ -406,10 +502,12 @@ private fun RetweetWithContent(
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {
-                                MediaGrid(
-                                    tweet.attachments!!,
-                                    viewModel
-                                )
+                MediaGrid(
+                    tweet.attachments!!,
+                    viewModel,
+                    parentTweetId = tweet.mid,
+                    containerTopY = containerTopY
+                )
                             }
                         }
                     }
@@ -420,7 +518,8 @@ private fun RetweetWithContent(
                     tweet = tweet,
                     parentEntry = parentEntry,
                     onTweetUnavailable = onTweetUnavailable,
-                    context = context
+                    context = context,
+                    containerTopY = containerTopY
                 )
 
                 Row(
@@ -429,10 +528,10 @@ private fun RetweetWithContent(
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
                     // State hoist
-                    LikeButton(viewModel)
-                    BookmarkButton(viewModel)
                     CommentButton(viewModel)
                     RetweetButton(viewModel)
+                    LikeButton(viewModel)
+                    BookmarkButton(viewModel)
                     Spacer(modifier = Modifier.width(40.dp))
                     ShareButton(viewModel)
                 }
@@ -447,34 +546,31 @@ private fun QuotedTweetContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onTweetUnavailable: ((MimeiId) -> Unit)?,
-    context: String = "default"
+    context: String = "default",
+    containerTopY: Float? = null
 ) {
-    var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-    var isLoadingOriginal by remember { mutableStateOf(true) }
+    // Use remember with a stable key based on originalTweetId to maintain state across recompositions
+    val originalTweetId = tweet.originalTweetId
+    var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
+    var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
 
-    LaunchedEffect(tweet.originalTweetId) {
-        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+    LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+        if (originalTweetId != null && tweet.originalAuthorId != null) {
             try {
                 withContext(IO) {
-                    Timber.tag("TweetItem")
-                        .d("Fetching quoted original tweet: ${tweet.originalTweetId} from author: ${tweet.originalAuthorId}")
                     originalTweet = HproseInstance.fetchTweet(
-                        tweet.originalTweetId!!,
-                        tweet.originalAuthorId!!,
-                        shouldCache = true
+                        originalTweetId,
+                        tweet.originalAuthorId!!
                     )
-                    if (originalTweet != null) {
-                        Timber.tag("TweetItem")
-                            .d("Quoted original tweet loaded successfully: ${originalTweet!!.mid}")
-                    } else {
-                        Timber.tag("TweetItem")
-                            .w("Quoted original tweet not found: ${tweet.originalTweetId}")
-                    }
+                }
+                // Notify VideoPlaybackCoordinator about the loaded embedded tweet
+                originalTweet?.let { loadedTweet ->
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.addEmbeddedTweetVideos(tweet.mid, loadedTweet)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetItem").e(
                     e,
-                    "Error loading original tweet: ${tweet.originalTweetId}"
+                    "Error loading original tweet: $originalTweetId"
                 )
             } finally {
                 isLoadingOriginal = false
@@ -515,16 +611,20 @@ private fun QuotedTweetContent(
                 tonalElevation = 8.dp,
             ) {
                 // quoted tweet
+                // Use activity scope to ensure same ViewModel instance is shared
+                val activity = LocalActivity.current as ComponentActivity
                 TweetItemBody(
                     hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweet.originalTweetId
+                        viewModelStoreOwner = activity, key = tweet.originalTweetId
                     ) { factory ->
                         factory.create(originalTweet!!)
                     },
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     isQuoted = true,
                     parentEntry = parentEntry,
-                    context = context
+                    parentTweet = tweet,
+                    context = context,
+                    containerTopY = containerTopY
                 )
             }
         }

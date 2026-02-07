@@ -13,9 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -26,9 +23,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,17 +38,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
@@ -57,6 +58,7 @@ import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.ImageCacheManager
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -68,6 +70,13 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
+
+    // Cancel image loading when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            ImageCacheManager.cancelImageLoadingForContext(context)
+        }
+    }
 
     // Create ViewModel - move hiltViewModel outside of remember
     val viewModel = if (userId == appUser.mid) appUserViewModel
@@ -86,40 +95,53 @@ fun ProfileScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // Calculate the transparency based on scrolling state
-    var bottomBarTransparency by remember { mutableStateOf(0.98f) }
+    var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
 
     val activity = context as? Activity
     activity?.let { OrientationManager.lockToPortrait(it) }
 
-    LaunchedEffect(Unit) {
-        // load tweets only when user profile screen is opened.
-        withContext(Dispatchers.IO) {
-            viewModel.initLoad()
+    // Load tweets when screen opens
+    LaunchedEffect(userId) {
+        viewModel.initLoad()
+    }
+
+    // Refresh user data when screen opens (in background, non-blocking)
+    LaunchedEffect(userId) {
+        Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
+        viewModel.refreshUserData()
+    }
+
+    // Resync user data on server in background (long-running operation)
+    // Only run once per app session per user to avoid redundant expensive operations
+    // Matches iOS ProfileView behavior
+    LaunchedEffect(userId) {
+        val shouldResync = HproseInstance.shouldResyncUser(userId)
+        
+        if (shouldResync) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val resyncedUser = HproseInstance.resyncUser(userId)
+                    if (resyncedUser != null) {
+                        Timber.tag("ProfileScreen").d("✅ Successfully resynced user $userId on server")
+                        TweetCacheManager.saveUser(resyncedUser)
+                        Timber.tag("ProfileScreen").d("Saved resynced user to cache")
+                    } else {
+                        Timber.tag("ProfileScreen").w("Failed to resync user $userId")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ProfileScreen").e(e, "Failed to resync user $userId")
+                }
+            }
+        } else {
+            Timber.tag("ProfileScreen").d("Skipping resync for user $userId - already resynced this session")
         }
     }
 
-    // Refresh user data when returning to ProfileScreen (e.g., after editing profile)
-    LaunchedEffect(Unit) {
-        // Refresh user data to ensure it's up to date
-        withContext(Dispatchers.IO) {
-            viewModel.refreshUserData()
-        }
-    }
-
-    // Additional refresh when the screen becomes active again
-    LaunchedEffect(navController.currentBackStackEntryAsState().value?.destination?.route) {
-        // Refresh user data when navigation changes (e.g., returning from EditProfileScreen)
-        withContext(Dispatchers.IO) {
-            viewModel.refreshUserData()
-        }
-    }
+    // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens
+    // and when exiting profile editor, appUserState is already updated by the save operation.
 
 
 
-    // Start listening to tweet and comment notifications
-    LaunchedEffect(Unit) {
-        viewModel.startListeningToNotifications()
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -131,42 +153,55 @@ fun ProfileScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
             ) {
-                ProfileContentWithTweetListView(
-                    viewModel = viewModel,
-                    navController = navController,
-                    parentEntry = parentEntry,
-                    scrollBehavior = scrollBehavior,
-                    initState = initState,
-                    userId = userId,
-                    onScrollStateChange = { newScrollState ->
-                            scrollState = newScrollState
+                if (initState) {
+                    // Show loading spinner while initial data is being loaded
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 4.dp
+                        )
+                    }
+                } else {
+                    ProfileContentWithTweetListView(
+                        viewModel = viewModel,
+                        navController = navController,
+                        parentEntry = parentEntry,
+                        scrollBehavior = scrollBehavior,
+                        initState = initState,
+                        userId = userId,
+                        onScrollStateChange = { newScrollState ->
+                                scrollState = newScrollState
 
-                            // Update bottom bar transparency based on scroll direction
-                            when (newScrollState.direction) {
-                                ScrollDirection.UP -> {
-                                    // Scroll UP (content moves down): restore header and bottom bar
-                                    bottomBarTransparency = 0.98f
-                                }
+                                // Update bottom bar transparency based on scroll direction
+                                when (newScrollState.direction) {
+                                    ScrollDirection.UP -> {
+                                        // Scroll UP (content moves down): restore header and bottom bar
+                                        bottomBarTransparency = 0.98f
+                                    }
 
-                                ScrollDirection.DOWN -> {
-                                    // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
-                                    coroutineScope.launch {
-                                        withContext(Dispatchers.Main) {
-                                            delay(100) // Small delay for smooth transition
-                                            if (scrollState.direction == ScrollDirection.DOWN) {
-                                                bottomBarTransparency = 0.2f
+                                    ScrollDirection.DOWN -> {
+                                        // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
+                                        coroutineScope.launch {
+                                            withContext(Dispatchers.Main) {
+                                                delay(100) // Small delay for smooth transition
+                                                if (scrollState.direction == ScrollDirection.DOWN) {
+                                                    bottomBarTransparency = 0.2f
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                ScrollDirection.NONE -> {
-                                    // Idle state: keep current opacity, don't restore automatically
-                                    // Only restore when user starts scrolling up
+                                    ScrollDirection.NONE -> {
+                                        // Idle state: keep current opacity, don't restore automatically
+                                        // Only restore when user starts scrolling up
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                }
             }
         }
 
@@ -228,7 +263,8 @@ private fun ProfileContentWithTweetListView(
                         TweetItem(
                             tweet,
                             parentEntry,
-                            context = if (userId == appUser.mid) "appUserProfile" else "default"
+                            context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId",
+                            currentUserId = userId
                         )
                     }
 
@@ -244,49 +280,27 @@ private fun ProfileContentWithTweetListView(
         }
     }
 
-    // Create pull refresh state for initial loading
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = initState,
-        onRefresh = { /* No-op for initial load */ }
+    // Use TweetListView with header content for unified scrolling
+    // TweetListView handles its own pull-to-refresh functionality
+    TweetListView(
+        tweets = tweets,
+        fetchTweets = { pageNumber ->
+            viewModel.fetchTweets(pageNumber)
+        },
+        modifier = Modifier.fillMaxSize(),
+        scrollBehavior = scrollBehavior,
+        contentPadding = PaddingValues(bottom = 96.dp), // FIX: Increased from 60dp to 96dp to prevent action buttons being covered by bottom nav bar (72dp height + 24dp padding)
+        showPrivateTweets = true, // Show private tweets in profile
+        parentEntry = parentEntry,
+        onScrollStateChange = onScrollStateChange,
+        currentUserId = userId, // Use userId directly
+        onTweetUnavailable = { tweetId ->
+            viewModel.removeTweetFromAllLists(tweetId)
+        },
+        headerContent = headerContent,
+        restoreScrollPosition = true, // Remember scroll position when navigating back from tweet details
+        context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId", // Each user profile maintains its own scroll position
+        isInitialLoading = initState, // Pass the initialization state to delay videolist creation
+        pinnedTweets = pinnedTweets // Include pinned tweets in video navigation
     )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
-    ) {
-        // Use TweetListView with header content for unified scrolling
-        TweetListView(
-            tweets = tweets,
-            fetchTweets = { pageNumber ->
-                viewModel.fetchTweets(pageNumber)
-            },
-            modifier = Modifier.fillMaxSize(),
-            scrollBehavior = scrollBehavior,
-            contentPadding = PaddingValues(bottom = 60.dp),
-            showPrivateTweets = true, // Show private tweets in profile
-            parentEntry = parentEntry,
-            onScrollStateChange = onScrollStateChange,
-            currentUserId = userId, // Use userId directly
-            onTweetUnavailable = { tweetId ->
-                viewModel.removeTweetFromAllLists(tweetId)
-            },
-            headerContent = headerContent,
-            restoreScrollPosition = false, // Disable scroll position restoration to prevent jumping back
-            context = if (userId == appUser.mid) "appUserProfile" else "default"
-        )
-
-        // Show pull-to-refresh style indicator during initial load
-        if (initState) {
-            PullRefreshIndicator(
-                refreshing = true,
-                state = pullRefreshState,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 40.dp),
-                backgroundColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
 }

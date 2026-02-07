@@ -9,10 +9,17 @@ import timber.log.Timber
 /**
  * Events for tweet, comment, and chat operations
  */
+enum class FeedResetReason {
+    LOGIN,
+    LOGOUT,
+    BASEURL_AVAILABLE
+}
+
 sealed class TweetEvent {
     data class TweetUploaded(val tweet: Tweet) : TweetEvent()
     data class TweetUploadFailed(val error: String) : TweetEvent()
     data class TweetDeleted(val tweetId: String, val authorId: String) : TweetEvent()
+    data class TweetRestored(val tweet: Tweet) : TweetEvent()
     data class CommentUploaded(val comment: Tweet, val parentTweet: Tweet) : TweetEvent()
     data class CommentUploadFailed(val error: String) : TweetEvent()
     data class CommentDeleted(val commentId: String, val parentTweetId: String) : TweetEvent()
@@ -20,6 +27,8 @@ sealed class TweetEvent {
     data class TweetLiked(val tweet: Tweet, val isLiked: Boolean) : TweetEvent()
     data class TweetBookmarked(val tweet: Tweet, val isBookmarked: Boolean) : TweetEvent()
     data class TweetRetweeted(val originalTweet: Tweet, val retweet: Tweet) : TweetEvent()
+    data class UserDataUpdated(val user: User) : TweetEvent()
+    data class FeedResetRequested(val reason: FeedResetReason) : TweetEvent()
     
     // Chat events
     data class ChatMessageSent(val message: ChatMessage) : TweetEvent()

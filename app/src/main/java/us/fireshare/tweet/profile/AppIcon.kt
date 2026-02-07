@@ -1,30 +1,26 @@
 package us.fireshare.tweet.profile
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
@@ -47,7 +43,7 @@ data class AvatarLoadState(
 @Composable
 fun AppIcon() {
     Image(
-        painter = painterResource(R.drawable.ic_app_logo),
+        painter = painterResource(R.drawable.ic_splash),
                         contentDescription = stringResource(R.string.app_icon),
         modifier = Modifier
             .size(36.dp)
@@ -60,50 +56,81 @@ fun AppIcon() {
  * UserAvatar displays user avatar with fallback to initials
  * @param user User object containing avatar information
  * @param size Size of the avatar in dp
- * @param enableLongPress Whether to enable long press functionality
  * @param onClick Optional click handler
  */
 @Composable
 fun UserAvatar(
     user: User,
     size: Int = 40,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
-    val mid = user.avatar ?: ""
-    // Use a more specific key that includes both user ID and avatar ID to ensure proper recomposition
-    var loadState by remember("${user.mid}_${mid}") { mutableStateOf(AvatarLoadState()) }
+    val avatarMid = user.avatar
 
-    LaunchedEffect(key1 = user.avatar, key2 = user.mid) {
-        val newAvatarUrl = getMediaUrl(user.avatar, user.baseUrl)
-        loadState = loadState.copy(avatarUrl = newAvatarUrl)
+    // Watch both avatar and user object - state resets only when avatar ID changes,
+    // but we recompose when user object changes to ensure toolbar updates
+    var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-        if (mid.isNotEmpty()) {
-            try {
-                loadState = loadState.copy(isLoading = true, hasError = false)
+    // React to avatar changes AND user object changes
+    // State reset only happens when avatarMid changes, but effect reruns to update URLs
+    LaunchedEffect(avatarMid, user) {
+        // Capture baseUrl inside LaunchedEffect to always use current value
+        val currentBaseUrl = user.baseUrl
+        
+        // Only reset state if avatarMid changed from the current loaded state
+        if (loadState.bitmap != null && !avatarMid.isNullOrEmpty()) {
+            // We have a cached bitmap, check if it matches the current avatar ID
+            val originalMid = "${avatarMid}_original"
+            val cachedBitmap = withContext(Dispatchers.IO) {
+                ImageCacheManager.getCachedImage(context, originalMid) 
+                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
+            }
+            if (cachedBitmap != null && cachedBitmap == loadState.bitmap) {
+                // Same avatar, keep using cached bitmap - don't reload
+                return@LaunchedEffect
+            }
+        }
+        
+        // Reset state when avatar changes or first load
+        loadState = AvatarLoadState()
+        
+        if (!avatarMid.isNullOrEmpty()) {
+            // Check cache for original image (loadOriginalImageWithScope uses "${mid}_original" key)
+            val originalMid = "${avatarMid}_original"
+            val cachedBitmap = withContext(Dispatchers.IO) {
+                // Try original cache key first, then fallback to regular key
+                ImageCacheManager.getCachedImage(context, originalMid) 
+                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
+            }
+            if (cachedBitmap != null) {
+                // Use cached avatar immediately
+                loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
+            } else {
+                // Not cached, need to load it
+                val avatarUrl = getMediaUrl(avatarMid, currentBaseUrl)
+                loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
-                // Try to load from cache first
-                val cachedBitmap = ImageCacheManager.getCachedImage(context, mid)
-
-                // If not cached, download and cache
-                if (cachedBitmap == null && !newAvatarUrl.isNullOrEmpty()) {
-                    val downloadedBitmap = ImageCacheManager.loadImage(context, newAvatarUrl, mid)
-
-                    if (downloadedBitmap == null) {
-                        loadState = loadState.copy(isLoading = false, hasError = true)
-                        Timber.tag("UserAvatar").e("Failed to load avatar: $newAvatarUrl")
-                    } else {
-                        loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false)
+                try {
+                    ImageCacheManager.loadOriginalImageWithScope(
+                        context = context,
+                        imageUrl = avatarUrl ?: "",
+                        mid = avatarMid
+                    ) { bitmap ->
+                        loadState = if (bitmap != null && !bitmap.isRecycled) {
+                            AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
+                        } else {
+                            AvatarLoadState(isLoading = false, hasError = true)
+                        }
                     }
-                } else {
-                    loadState = loadState.copy(bitmap = cachedBitmap, isLoading = false)
+                } catch (e: Exception) {
+                    loadState = AvatarLoadState(isLoading = false, hasError = true)
+                    Timber.e("UserAvatar - Error loading avatar: $e")
                 }
-            } catch (e: Exception) {
-                loadState = loadState.copy(isLoading = false, hasError = true)
-                Timber.e("UserAvatar - Error loading avatar: $e")
             }
         } else {
-            // Reset state when no avatar
+            // No avatar
+            Timber.tag("UserAvatar").d("❌ No avatarMid, showing default icon")
             loadState = AvatarLoadState()
         }
     }
@@ -130,57 +157,44 @@ fun UserAvatar(
     } else if (!loadState.avatarUrl.isNullOrEmpty() && !loadState.hasError) {
         // Show loading state or try to load from URL
         if (loadState.isLoading) {
-            Box(
-                modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Loading...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            // Fallback to initials
-            Box(
+            // Show manyone.png icon while loading
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name?.firstOrNull()?.uppercase() ?: "U",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            )
+        } else {
+            // Fallback to manyone.png icon
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
+                modifier = modifier
+            )
         }
     } else {
-        // Show default system icon when avatar is null or empty
-        if (user.avatar.isNullOrEmpty() || mid.isEmpty()) {
+        // Show default system icon with 50% gray color when avatar is null or empty
+        if (user.avatar.isNullOrEmpty() || avatarMid.isNullOrEmpty()) {
             // Use manyone.png as default system icon
             Image(
                 painter = painterResource(id = R.drawable.manyone),
                 contentDescription = stringResource(R.string.user_avatar),
                 contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
             )
         } else {
-            // Show fallback with user initials for other cases (like loading errors)
-            Box(
+            // Show fallback manyone.png icon for other cases (like loading errors)
+            Image(
+                painter = painterResource(id = R.drawable.manyone),
+                contentDescription = stringResource(R.string.user_avatar),
+                contentScale = ContentScale.Crop,
+                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
                 modifier = modifier
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name?.firstOrNull()?.uppercase() ?: "U",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            )
         }
     }
 }

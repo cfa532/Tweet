@@ -6,21 +6,31 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.util.LruCache
+import android.net.Uri
 import androidx.core.graphics.createBitmap
 import androidx.exifinterface.media.ExifInterface
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpHeaders
+import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import okhttp3.Protocol
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -35,43 +45,145 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    private const val MAX_MEMORY_CACHE_SIZE =
-        150 * 1024 * 1024 // Reduced to 150MB for better memory management
+    // Match iOS configuration: 35MB total cost limit, 100 image count limit
+    private const val MAX_MEMORY_CACHE_SIZE = 35 * 1024 * 1024 // 35MB (matches iOS totalCostLimit)
+    private const val MAX_MEMORY_CACHE_COUNT = 100 // Maximum number of images in memory (matches iOS countLimit)
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
-    private const val CONNECTION_TIMEOUT = 8000 // 8 seconds
-    private const val READ_TIMEOUT = 12000 // 12 seconds
-    private const val MAX_CONCURRENT_DOWNLOADS = 3 // Limit concurrent downloads
-    private const val MAX_RETRY_ATTEMPTS = 2
+    private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
+    private const val READ_TIMEOUT = 20000 // 20 seconds - IPFS can be slow, give it more time
+    // Reduced from 24 to 8 for better memory management (iOS uses 4 for avatars, no explicit limit for regular images)
+    private const val MAX_CONCURRENT_DOWNLOADS = 8 // Reduced for better memory management
+    private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
+    private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
+    private const val MAX_DOWNLOAD_RESULTS = 20 // FIX P1-4: Limit size of downloadResults map
+    
+    // Memory checking thresholds (similar to iOS MemoryCapManager)
+    // iOS blocks duplicate requests at 60% of 2GB limit (1.2GB)
+    // Android heap is typically smaller, so we use 60% of max heap as threshold
+    private const val MEMORY_BLOCK_THRESHOLD_PERCENT = 60 // Block new downloads when memory usage > 60%
+    
+    // Separate timeout for avatar images (smaller, should be faster)
+    private const val AVATAR_READ_TIMEOUT = 15000 // 15 seconds for avatars
 
-    // Connection pool for better performance
-    private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
-    private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
-    private val activeDownloads = AtomicInteger(0)
-    private val downloadQueue = ConcurrentHashMap<String, Boolean>()
+    // Coroutine scope for image loading that can be cancelled when screen is disposed
+    private val imageLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // Track active downloads by screen/context to allow selective cancellation
+    private val activeDownloadsByContext = ConcurrentHashMap<String, MutableSet<String>>()
+    
+    // Priority queue for downloads (visible images get higher priority)
+    private val downloadPriorityQueue = ConcurrentHashMap<String, Boolean>() // mid -> isVisible
+    
+    // Simple priority tracking for monitoring
+    private var activeVisibleDownloads = 0
+    private var activeInvisibleDownloads = 0
 
-    // LRU memory cache (mid -> Bitmap)
-    private val memoryCache = object : LruCache<String, Bitmap>(MAX_MEMORY_CACHE_SIZE) {
-        override fun sizeOf(key: String, value: Bitmap): Int {
-            return value.byteCount
-        }
-
-        override fun entryRemoved(
-            evicted: Boolean,
-            key: String,
-            oldValue: Bitmap,
-            newValue: Bitmap?
-        ) {
-            super.entryRemoved(evicted, key, oldValue, newValue)
-            // Recycle bitmap when removed from cache
-            if (evicted && !oldValue.isRecycled) {
-                try {
-                    oldValue.recycle()
-                } catch (e: Exception) {
-                    Timber.tag("ImageCacheManager").d("Error recycling bitmap: $e")
-                }
+    // Ktor HTTP client for image downloads with OkHttp engine
+    private val imageHttpClient = HttpClient(OkHttp) {
+        engine {
+            config {
+                connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 20s for IPFS
+                writeTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                followRedirects(true)
             }
         }
+    }
+    
+    // Separate client for avatars with shorter timeout
+    private val avatarHttpClient = HttpClient(OkHttp) {
+        engine {
+            config {
+                connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 15s for avatars
+                writeTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
+                protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+                followRedirects(true)
+            }
+        }
+    }
+    
+    private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    private val downloadQueue = ConcurrentHashMap<String, Boolean>()
+    private val downloadResults = ConcurrentHashMap<String, Bitmap>()
+    private val resultTimestamps = ConcurrentHashMap<String, Long>()
+    
+    // Mutex to prevent race conditions in download queue
+    private val downloadQueueMutex = Any()
+    
+    // Deduplication: Track ongoing downloads to prevent duplicate requests
+    // Maps image mid to the timestamp when download started
+    private val ongoingDownloads = ConcurrentHashMap<String, Long>()
+    
+    // Pause/resume mechanism
+    private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
+    private val pausedDownloadMutex = Any()
+
+    // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
+    private val memoryCache = ConcurrentHashMap<String, Bitmap>()
+    private var currentMemoryUsage = AtomicInteger(0)
+    
+    /**
+     * Add bitmap to memory cache with size and count management (matches iOS NSCache limits)
+     */
+    private fun addToMemoryCache(mid: String, bitmap: Bitmap) {
+        if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+            val bitmapSize = bitmap.byteCount
+            
+            // Enforce count limit first (iOS uses countLimit = 100)
+            if (memoryCache.size >= MAX_MEMORY_CACHE_COUNT && !memoryCache.containsKey(mid)) {
+                // Remove oldest entries to make room (simple FIFO approach)
+                val iterator = memoryCache.entries.iterator()
+                while (iterator.hasNext() && memoryCache.size >= MAX_MEMORY_CACHE_COUNT) {
+                    val entry = iterator.next()
+                    val oldBitmap = entry.value
+                    iterator.remove()
+                    currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
+                }
+            }
+            
+            // Enforce size limit (iOS uses totalCostLimit = 35MB)
+            if (currentMemoryUsage.get() + bitmapSize > MAX_MEMORY_CACHE_SIZE) {
+                // Remove some entries to free memory (simple FIFO approach)
+                // Don't recycle bitmaps here to avoid crashes - let Android handle memory management
+                val iterator = memoryCache.entries.iterator()
+                while (iterator.hasNext() && currentMemoryUsage.get() + bitmapSize > MAX_MEMORY_CACHE_SIZE) {
+                    val entry = iterator.next()
+                    val oldBitmap = entry.value
+                    // Just remove from cache, don't recycle to avoid crashes
+                    iterator.remove()
+                    currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
+                }
+            }
+            
+            // Remove existing entry if present (to update)
+            val existingBitmap = memoryCache.remove(mid)
+            if (existingBitmap != null) {
+                currentMemoryUsage.addAndGet(-existingBitmap.byteCount)
+            }
+            
+            memoryCache[mid] = bitmap
+            currentMemoryUsage.addAndGet(bitmapSize)
+        }
+    }
+
+    /**
+     * Remove bitmap from memory cache with proper memory tracking
+     */
+    private fun removeFromMemoryCache(mid: String): Bitmap? {
+        val bitmap = memoryCache.remove(mid)
+        if (bitmap != null) {
+            // Update memory usage counter
+            val bitmapSize = try {
+                bitmap.byteCount
+            } catch (_: Exception) {
+                0 // Bitmap already recycled
+            }
+            currentMemoryUsage.addAndGet(-bitmapSize)
+        }
+        return bitmap
     }
 
     /**
@@ -83,7 +195,6 @@ object ImageCacheManager {
                 val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
                 return@withContext if (file.exists()) file else null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in getCachedImageFile: $e")
                 null
             }
         }
@@ -95,12 +206,12 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             try {
                 // Check memory cache first
-                memoryCache.get(mid)?.let {
-                    if (!it.isRecycled) {
-                        return@withContext it
+                memoryCache.get(mid)?.let { bitmap ->
+                    if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                        return@withContext bitmap
                     } else {
-                        // Remove recycled bitmap from cache
-                        memoryCache.remove(mid)
+                        // Remove invalid bitmap from cache
+                        removeFromMemoryCache(mid)
                     }
                 }
 
@@ -109,44 +220,132 @@ object ImageCacheManager {
                 if (file.exists()) {
                     try {
                         val bitmap = decodeBitmapFromFileWithCorrectOrientation(file.absolutePath)
-                        if (bitmap != null && !bitmap.isRecycled) {
-                            memoryCache.put(mid, bitmap)
+                        if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                            addToMemoryCache(mid, bitmap)
                             return@withContext bitmap
                         }
                     } catch (e: OutOfMemoryError) {
-                        Timber.tag("ImageCacheManager")
-                            .d("OutOfMemoryError loading cached image: $e")
+                        Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError loading cached image")
                         clearMemoryCache()
                         return@withContext null
                     } catch (e: Exception) {
-                        Timber.tag("ImageCacheManager").d("Error loading cached image: $e")
+                        // Ignore decode errors
                     }
                 }
                 null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in getCachedImage: $e")
                 null
             }
         }
 
     /**
+     * Wait for concurrent download to complete with timeout
+     * @return Cached image if download completed, null otherwise
+     */
+    private suspend fun waitForConcurrentDownload(context: Context, mid: String): Bitmap? {
+        val maxWaitTime = 15000L // 15 seconds
+        val startTime = System.currentTimeMillis()
+        
+        while (true) {
+            delay(100) // Check every 100ms
+            
+            if (System.currentTimeMillis() - startTime > maxWaitTime) {
+                return null
+            }
+            
+            val isStillDownloading = synchronized(downloadQueueMutex) {
+                ongoingDownloads.contains(mid)
+            }
+            
+            if (!isStillDownloading) {
+                // Download completed, try to get from cache
+                return getCachedImage(context, mid)
+            }
+        }
+    }
+
+    /**
+     * Check memory usage and wait if necessary (similar to iOS waitForMemoryWindow)
+     * Returns true if memory is available, false if we should skip the download
+     */
+    private suspend fun waitForMemoryWindow(cacheKey: String, retryLabel: String): Boolean {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val usedMemory = runtime.totalMemory() - runtime.freeMemory()
+        val memoryUsagePercent = (usedMemory * 100.0 / maxMemory).toInt()
+        
+        // Fast-path if we're comfortably below the threshold (iOS uses 60%)
+        if (memoryUsagePercent < MEMORY_BLOCK_THRESHOLD_PERCENT) {
+            return true
+        }
+        
+        // Memory is high, wait and retry (similar to iOS exponential backoff)
+        val maxAttempts = 3
+        for (attempt in 0 until maxAttempts) {
+            val currentUsed = runtime.totalMemory() - runtime.freeMemory()
+            val currentPercent = (currentUsed * 100.0 / maxMemory).toInt()
+            
+            if (currentPercent < MEMORY_BLOCK_THRESHOLD_PERCENT) {
+                if (attempt > 0) {
+                    Timber.tag("ImageCacheManager").d("✅ Memory cooled down after $attempt backoff attempts for $retryLabel $cacheKey")
+                }
+                return true
+            }
+            
+            val delaySeconds = Math.pow(2.0, attempt.toDouble()) * 0.4
+            Timber.tag("ImageCacheManager").w("⏳ Memory at $currentPercent% (threshold $MEMORY_BLOCK_THRESHOLD_PERCENT%) - delaying new image download $retryLabel $cacheKey by ${String.format("%.1f", delaySeconds)}s")
+            delay((delaySeconds * 1000).toLong())
+        }
+        
+        val finalUsed = runtime.totalMemory() - runtime.freeMemory()
+        val finalPercent = (finalUsed * 100.0 / maxMemory).toInt()
+        if (finalPercent >= MEMORY_BLOCK_THRESHOLD_PERCENT) {
+            Timber.tag("ImageCacheManager").w("🚫 Aborting new image download $retryLabel $cacheKey - memory still high at $finalPercent%")
+            return false
+        }
+        
+        return true
+    }
+
+    /**
      * Download and cache image from URL with improved error handling and retry logic
+     * Includes deduplication to prevent multiple concurrent downloads of the same image
      */
     suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
         withContext(Dispatchers.IO) {
+            var semaphoreAcquired = false
             try {
                 // Check if already cached first
                 getCachedImage(context, mid)?.let { return@withContext it }
 
-                // Check if already downloading this image
-                if (downloadQueue.containsKey(mid)) {
+                // Deduplication: Check if already downloading this image
+                val shouldProceed = synchronized(downloadQueueMutex) {
+                    if (ongoingDownloads.contains(mid)) {
+                        false // Another thread is downloading
+                    } else {
+                        ongoingDownloads[mid] = System.currentTimeMillis()
+                        true // This thread will download
+                    }
+                }
+
+            if (!shouldProceed) {
+                // Wait for the concurrent download to complete
+                return@withContext waitForConcurrentDownload(context, mid)
+            }
+
+                // Check memory availability before starting download (similar to iOS)
+                if (!waitForMemoryWindow(mid, "[thumbnail]")) {
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
                     return@withContext null
                 }
 
                 // Acquire semaphore to limit concurrent downloads
                 downloadSemaphore.acquire()
+                semaphoreAcquired = true
                 downloadQueue[mid] = true
-                activeDownloads.incrementAndGet()
+                activeInvisibleDownloads++ // Assume invisible for compressed images
 
                 try {
                     var bitmap: Bitmap? = null
@@ -155,15 +354,13 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            bitmap = performDownload(imageUrl, mid)
+                            bitmap = performDownload(imageUrl, context)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
-                            Timber.tag("ImageCacheManager")
-                                .d("Download attempt $attempt failed for $mid: $e")
                             if (attempt < MAX_RETRY_ATTEMPTS) {
                                 delay(1000L * attempt) // Exponential backoff
                             }
@@ -174,89 +371,651 @@ object ImageCacheManager {
 
                 } finally {
                     downloadQueue.remove(mid)
-                    activeDownloads.decrementAndGet()
+                    // Remove from ongoing downloads to signal completion
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
+                    activeInvisibleDownloads--
                     downloadSemaphore.release()
+                    semaphoreAcquired = false
                 }
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in downloadAndCacheImage: $e")
+                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
+                if (e is kotlinx.coroutines.CancellationException) {
+                    // Clean up download queue and release resources atomically
+                    synchronized(downloadQueueMutex) {
+                        val wasInQueue = downloadQueue.containsKey(mid)
+                        
+                        // Recycle any cached result for this download
+                        downloadResults[mid]?.let { bitmap ->
+                            if (!bitmap.isRecycled) {
+                                try {
+                                    bitmap.recycle()
+                                } catch (ex: Exception) {
+                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
+                                }
+                            }
+                        }
+                        
+                        downloadQueue.remove(mid)
+                        downloadResults.remove(mid)
+                        downloadPriorityQueue.remove(mid)
+                        resultTimestamps.remove(mid)
+                        ongoingDownloads.remove(mid)
+                        
+                        // Update counter ONLY if we were in the queue
+                        if (wasInQueue) {
+                            activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
+                        }
+                    }
+                    
+                    if (semaphoreAcquired) {
+                        downloadSemaphore.release()
+                    }
+                } else {
+                    synchronized(downloadQueueMutex) {
+                        ongoingDownloads.remove(mid)
+                    }
+                }
                 null
             }
         }
 
     /**
-     * Perform the actual download with connection pooling
+     * Perform the actual download with OkHttp connection pooling
+     * FIX: Now streams to disk to avoid OOM for large compressed images
      */
-    private suspend fun performDownload(imageUrl: String, mid: String): Bitmap? =
+    private suspend fun performDownload(imageUrl: String, context: Context): Bitmap? =
         withContext(Dispatchers.IO) {
-            var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
 
             try {
-                val url = URL(imageUrl)
-                connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = CONNECTION_TIMEOUT
-                connection.readTimeout = READ_TIMEOUT
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("User-Agent", "TweetApp/1.0")
+                val response = imageHttpClient.get(imageUrl) {
+                    headers {
+                        append(HttpHeaders.UserAgent, "TweetApp/1.0")
+                        append(HttpHeaders.Accept, "image/*,*/*;q=0.8")
+                        append(HttpHeaders.CacheControl, "no-cache")
+                    }
+                }
 
-                // Add connection to pool
-                connectionPool[mid] = connection
-
-                inputStream = connection.inputStream
-                val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream)
-
-                if (bitmap != null && !bitmap.isRecycled) {
-                    return@withContext bitmap
-                } else {
-                    Timber.tag("ImageCacheManager")
-                        .d("Failed to decode image from URL: $imageUrl")
+                if (response.status.value !in 200..299) {
                     return@withContext null
                 }
+
+                inputStream = response.bodyAsChannel().toInputStream()
+
+                val bitmap = decodeBitmapFromStreamWithCorrectOrientation(inputStream, context)
+
+                // FIX P1-5: Validate bitmap before returning
+                if (bitmap != null) {
+                    if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                        return@withContext bitmap
+                    } else {
+                        // Invalid or corrupt bitmap - recycle it
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (e: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                }
+                return@withContext null
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError downloading image: $e")
+                // FIX P2-6: Aggressive cleanup on OOM to prevent cascading failures
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading image")
+                
+                // Clear all caches and intermediate results
                 clearMemoryCache()
+                synchronized(downloadQueueMutex) {
+                    // Recycle all cached download results
+                    downloadResults.values.forEach { bitmap ->
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (ex: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                    downloadResults.clear()
+                    resultTimestamps.clear()
+                }
+                System.gc()  // Suggest immediate garbage collection
+                
                 return@withContext null
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error downloading image: $e")
                 return@withContext null
             } finally {
                 inputStream?.close()
-                connection?.disconnect()
-                connectionPool.remove(mid)
             }
         }
 
     /**
-     * Load image from URL or cache with prioritization
+     * Perform download for original quality images with progressive loading
+     * Shows low-quality preview first, then full quality
+     * FIX: Streams directly to disk to avoid OOM (matches iOS URLSession.shared.download behavior)
      */
-    suspend fun loadImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+    private suspend fun performDownloadOriginalProgressive(
+        imageUrl: String,
+        mid: String,
+        context: Context,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null
+    ): Bitmap? =
         withContext(Dispatchers.IO) {
-            try {
-                // First try to get from cache
-                getCachedImage(context, mid)?.let { return@withContext it }
+            var inputStream: InputStream? = null
+            var tempFile: File? = null
 
-                // If not in cache, download and cache
-                downloadAndCacheImage(context, imageUrl, mid)
+            try {
+                // Check if download is paused before starting
+                if (isDownloadPaused(mid)) {
+                    return@withContext null
+                }
+                
+                // Use appropriate client based on URL (avatar vs regular image)
+                val isAvatar = imageUrl.contains("/avatar/") || mid.contains("avatar")
+                val client = if (isAvatar) avatarHttpClient else imageHttpClient
+                
+                val response = client.get(imageUrl) {
+                    headers {
+                        append(HttpHeaders.UserAgent, "TweetApp/1.0")
+                        append(HttpHeaders.Accept, "image/*,*/*;q=0.8")
+                        append(HttpHeaders.CacheControl, "no-cache")
+                    }
+                }
+
+                if (response.status.value !in 200..299) {
+                    return@withContext null
+                }
+
+                inputStream = response.bodyAsChannel().toInputStream()
+
+                // FIX OOM: Stream directly to temporary file instead of loading into memory
+                // This matches iOS URLSession.shared.download behavior
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                tempFile = File.createTempFile("img_${mid}_", ".tmp", dir)
+                
+                // Stream download directly to file (avoids loading entire image into memory)
+                FileOutputStream(tempFile).use { out ->
+                    inputStream.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
+                }
+                
+                // Check if download was paused during streaming
+                if (isDownloadPaused(mid)) {
+                    tempFile?.delete()
+                    return@withContext null
+                }
+                
+                // Progressive loading: First decode low-quality preview (1/4 resolution) from file
+                if (onProgressiveLoad != null && tempFile != null && tempFile.length() > 50 * 1024) { // Only for images > 50KB
+                    var preview: Bitmap? = null
+                    try {
+                        val previewOptions = BitmapFactory.Options().apply {
+                            inSampleSize = PROGRESSIVE_SAMPLE_SIZE // 1/4 resolution
+                            inPreferredConfig = Bitmap.Config.RGB_565
+                        }
+                        // Decode preview directly from file (no memory load)
+                        preview = BitmapFactory.decodeFile(tempFile.absolutePath, previewOptions)
+                        if (preview != null && !preview.isRecycled) {
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    onProgressiveLoad(preview)
+                                    preview = null  // Callback owns the bitmap now, don't recycle
+                                } catch (e: Exception) {
+                                    // Callback failed, bitmap will be recycled in finally block
+                                    Timber.tag("ImageCacheManager").w(e, "Preview callback failed")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Ignore preview decode errors
+                        Timber.tag("ImageCacheManager").w(e, "Preview decode failed")
+                    } finally {
+                        // FIX P0-1: Always recycle preview bitmap if we still own it
+                        preview?.let {
+                            if (!it.isRecycled) {
+                                try {
+                                    it.recycle()
+                                } catch (e: Exception) {
+                                    // Ignore recycle errors
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Move temp file to final location
+                val finalFile = File(dir, "$mid.jpg")
+                if (tempFile != null && tempFile.exists()) {
+                    tempFile.renameTo(finalFile)
+                }
+
+                // Decode full quality bitmap from file (no memory load of raw bytes)
+                val bitmap = decodeBitmapFromFileWithCorrectOrientation(finalFile.absolutePath)
+
+                // FIX P1-5: Validate bitmap before returning
+                if (bitmap != null) {
+                    if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                        return@withContext bitmap
+                    } else {
+                        // Invalid or corrupt bitmap - recycle it
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (e: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                }
+                return@withContext null
+            } catch (e: OutOfMemoryError) {
+                // FIX P0-2 & P2-6: Aggressive cleanup on OOM to prevent cascading failures
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
+                
+                // Clear all caches and intermediate results
+                clearMemoryCache()
+                synchronized(downloadQueueMutex) {
+                    // Recycle all cached download results
+                    downloadResults.values.forEach { bitmap ->
+                        if (!bitmap.isRecycled) {
+                            try {
+                                bitmap.recycle()
+                            } catch (ex: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                    downloadResults.clear()
+                    resultTimestamps.clear()
+                }
+                System.gc()  // Suggest immediate garbage collection
+                
+                return@withContext null
+            } catch (e: java.net.SocketTimeoutException) {
+                // Timeout - let caller handle retry logic
+                val timeoutType = if (e.message?.contains("connect") == true) "connection" else "read"
+                Timber.tag("ImageCacheManager").w("⏱️ Image download $timeoutType timeout for $imageUrl")
+                throw e // Re-throw to allow retry logic to handle it
+            } catch (e: java.io.IOException) {
+                // Network errors - let caller retry
+                Timber.tag("ImageCacheManager").w("🌐 Network error downloading image from $imageUrl: ${e.message}")
+                throw e // Re-throw to allow retry logic to handle it
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error in loadImage: $e")
+                // Log other exceptions with stack trace for debugging
+                Timber.tag("ImageCacheManager").w(e, "Error downloading original image from $imageUrl")
+                return@withContext null
+            } finally {
+                // Clean up resources: close stream and delete temp file if it exists
+                try {
+                    inputStream?.close()
+                } catch (e: Exception) {
+                    // Ignore close errors
+                }
+                // Clean up temp file if download failed or was cancelled
+                tempFile?.let { file ->
+                    if (file.exists()) {
+                        try {
+                            file.delete()
+                        } catch (e: Exception) {
+                            // Ignore delete errors
+                        }
+                    }
+                }
+            }
+        }
+    
+    /**
+     * Legacy method for backward compatibility - calls progressive version without callback
+     */
+    private suspend fun performDownloadOriginal(
+        imageUrl: String,
+        mid: String,
+        context: Context
+    ): Bitmap? = performDownloadOriginalProgressive(imageUrl, mid, context, null)
+
+    /**
+     * Load original image with progressive loading support
+     * First returns low-quality preview, then full quality
+     * Handles cancellation properly by cleaning up download queue
+     */
+    suspend fun loadOriginalImage(
+        context: Context, 
+        imageUrl: String, 
+        mid: String, 
+        isVisible: Boolean = true,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null
+    ): Bitmap? =
+        withContext(Dispatchers.IO) {
+            var semaphoreAcquired = false
+            try {
+                // Use separate cache key for original images
+                val originalMid = "${mid}_original"
+
+                // Check if original image is already cached first
+                getCachedImage(context, originalMid)?.let { return@withContext it }
+
+                // Atomically check if downloading and mark as downloading to prevent race conditions
+                val shouldDownload = synchronized(downloadQueueMutex) {
+                    if (downloadQueue.containsKey(originalMid)) {
+                        false // Already downloading, wait for result
+                    } else {
+                        // Mark as downloading immediately to prevent other threads from starting
+                        downloadQueue[originalMid] = true
+                        downloadPriorityQueue[originalMid] = isVisible
+                        ongoingDownloads[originalMid] = System.currentTimeMillis()
+                        true // This thread will download
+                    }
+                }
+                
+                if (!shouldDownload) {
+                    // Another thread is downloading, wait for the result
+                    var attempts = 0
+                    var shouldContinue = true
+                    while (attempts < 100 && shouldContinue) { // Wait up to 10 seconds (100 * 100ms) - reduced timeout
+                        delay(100L)
+                        attempts++
+                        
+                        synchronized(downloadQueueMutex) {
+                            shouldContinue = downloadQueue.containsKey(originalMid)
+                        }
+                    }
+                    
+                    // Clean up old results before checking
+                    cleanupOldResults()
+                    
+                    // Return the result if available
+                    return@withContext downloadResults[originalMid]
+                }
+                
+                // This thread won - it will perform the download
+                // Check memory availability before starting download (similar to iOS)
+                if (!waitForMemoryWindow(originalMid, "[original]")) {
+                    synchronized(downloadQueueMutex) {
+                        downloadQueue.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
+                    }
+                    return@withContext null
+                }
+                
+                downloadSemaphore.acquire()
+                semaphoreAcquired = true
+                
+                // Track priority for monitoring
+                if (isVisible) {
+                    activeVisibleDownloads++
+                } else {
+                    activeInvisibleDownloads++
+                }
+                
+                // No artificial delays - let semaphore handle concurrency control
+
+                try {
+                    var bitmap: Bitmap? = null
+                    var attempt = 0
+
+                    while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
+                        attempt++
+                        try {
+                            bitmap = performDownloadOriginalProgressive(imageUrl, originalMid, context, onProgressiveLoad)
+                            if (bitmap != null && !bitmap.isRecycled) {
+                                // Store original bitmap in memory cache with original key
+                                addToMemoryCache(originalMid, bitmap)
+                                // FIX P1-4: Store result with size limit enforcement
+                                storeDownloadResult(originalMid, bitmap)
+                                
+                                return@withContext bitmap
+                            }
+                        } catch (e: Exception) {
+                            val isTimeout = e is java.net.SocketTimeoutException
+                            if (attempt < MAX_RETRY_ATTEMPTS) {
+                                // For timeouts, retry immediately; for other errors, use backoff
+                                val delayMs = if (isTimeout) 100L else (1000L * attempt)
+                                delay(delayMs)
+                            } else {
+                                Timber.tag("ImageCacheManager").w("Download failed for $mid: ${e.message}")
+                            }
+                        }
+                    }
+
+                    // All attempts failed
+                    Timber.tag("ImageCacheManager").w("All download attempts failed for $mid")
+                    return@withContext null
+
+                } finally {
+                    // Always release the download slot and clean up
+                    val wasVisible = downloadPriorityQueue[originalMid] ?: false
+                    
+                    // Update priority counters
+                    if (wasVisible) {
+                        activeVisibleDownloads--
+                    } else {
+                        activeInvisibleDownloads--
+                    }
+                    
+                    synchronized(downloadQueueMutex) {
+                        downloadQueue.remove(originalMid)
+                        downloadPriorityQueue.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
+                    }
+                    
+                    // Release semaphore (we always acquire it in the normal path)
+                    downloadSemaphore.release()
+                    semaphoreAcquired = false
+                    
+                    // FIX P1-4: Use scheduled cleanup instead of GlobalScope
+                    // Clean up download results after a delay to allow other requests to get the result
+                    imageLoadingScope.launch {
+                        delay(5000L) // Reduced to 5 seconds
+                        synchronized(downloadQueueMutex) {
+                            downloadResults.remove(originalMid)
+                            resultTimestamps.remove(originalMid)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
+                if (e is kotlinx.coroutines.CancellationException) {
+                    val originalMid = "${mid}_original"
+                    
+                    // Clean up download queue and release resources atomically
+                    synchronized(downloadQueueMutex) {
+                        // Check if we're actually in the download queue
+                        val wasInQueue = downloadQueue.containsKey(originalMid)
+                        val wasVisible = downloadPriorityQueue[originalMid] ?: false
+                        
+                        // Recycle bitmap before removing from results
+                        downloadResults[originalMid]?.let { bitmap ->
+                            if (!bitmap.isRecycled) {
+                                try {
+                                    bitmap.recycle()
+                                } catch (ex: Exception) {
+                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
+                                }
+                            }
+                        }
+                        
+                        // Remove all references atomically
+                        downloadQueue.remove(originalMid)
+                        downloadResults.remove(originalMid)
+                        downloadPriorityQueue.remove(originalMid)
+                        resultTimestamps.remove(originalMid)
+                        ongoingDownloads.remove(originalMid)
+                        
+                        // Update priority counters ONLY if we were in the queue
+                        if (wasInQueue) {
+                            if (wasVisible) {
+                                activeVisibleDownloads = maxOf(0, activeVisibleDownloads - 1)
+                            } else {
+                                activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
+                            }
+                        }
+                    }
+                    
+                    // Release the download slot only if we acquired it and haven't released it yet
+                    if (semaphoreAcquired) {
+                        downloadSemaphore.release()
+                    }
+                } else {
+                    Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
+                }
                 null
             }
         }
 
     /**
-     * Preload image in background (lower priority)
+     * Check if there are available download slots
      */
-    suspend fun preloadImage(context: Context, imageUrl: String, mid: String) =
-        withContext(Dispatchers.IO) {
-            try {
-                // Only preload if not already cached
-                if (getCachedImage(context, mid) == null) {
-                    downloadAndCacheImage(context, imageUrl, mid)
+    fun hasAvailableDownloadSlots(): Boolean {
+        return downloadSemaphore.availablePermits > 0
+    }
+
+    /**
+     * Get current download status for debugging
+     */
+    fun getDownloadStatus(): String {
+        return "Available: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}, Queued: ${downloadQueue.size}, Paused: ${pausedDownloads.size}"
+    }
+    
+    /**
+     * Pause a download by marking it as paused
+     */
+    fun pauseDownload(mid: String) {
+        synchronized(pausedDownloadMutex) {
+            pausedDownloads[mid] = true
+        }
+    }
+    
+    /**
+     * Resume a download by removing it from paused state
+     */
+    fun resumeDownload(mid: String) {
+        synchronized(pausedDownloadMutex) {
+            pausedDownloads.remove(mid)
+        }
+    }
+    
+    /**
+     * Check if a download is paused
+     */
+    fun isDownloadPaused(mid: String): Boolean {
+        synchronized(pausedDownloadMutex) {
+            return pausedDownloads.containsKey(mid)
+        }
+    }
+    
+    /**
+     * Start background task to periodically resume paused downloads and clean up stuck downloads
+     */
+    private fun startPausedDownloadResumer() {
+        imageLoadingScope.launch {
+            while (true) {
+                delay(5000L) // Check every 5 seconds
+
+                synchronized(pausedDownloadMutex) {
+                    if (pausedDownloads.isNotEmpty()) {
+                        // Resume paused downloads if we have available slots
+                        if (downloadSemaphore.availablePermits > 0) {
+                            val pausedMids = pausedDownloads.keys.toList()
+                            for (mid in pausedMids) {
+                                if (downloadSemaphore.availablePermits > 0) {
+                                    pausedDownloads.remove(mid)
+                                } else {
+                                    break // No more slots available
+                                }
+                            }
+                        }
+                    }
                 }
-            } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error preloading image: $e")
+
+                // Clean up stuck downloads
+                cleanupStuckDownloads()
             }
         }
+    }
+    
+    // Initialize the paused download resumer
+    init {
+        startPausedDownloadResumer()
+    }
+
+    /**
+     * Cache a local image file from Uri directly by mid
+     * This is used when sending an image - cache it immediately without downloading
+     * 
+     * @param context Android context
+     * @param mid The media ID to cache under
+     * @param uri The local file Uri
+     * @return Cached bitmap if successful, null otherwise
+     */
+    suspend fun cacheLocalImageFile(context: Context, mid: String, uri: Uri): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                // Load bitmap from local Uri with orientation correction
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    decodeBitmapFromStreamWithOrientation(inputStream, uri, context)
+                }
+                
+                if (bitmap != null && !bitmap.isRecycled) {
+                    // Cache the bitmap
+                    cacheImage(context, mid, bitmap)
+                    Timber.tag("ImageCacheManager").d("Cached local image file for mid: $mid")
+                    return@withContext bitmap
+                } else {
+                    Timber.tag("ImageCacheManager").w("Failed to load bitmap from local Uri: $uri")
+                    return@withContext null
+                }
+            } catch (e: Exception) {
+                Timber.tag("ImageCacheManager").e(e, "Error caching local image file")
+                return@withContext null
+            }
+        }
+
+    /**
+     * Decode bitmap from stream with EXIF orientation correction
+     */
+    private fun decodeBitmapFromStreamWithOrientation(
+        inputStream: InputStream,
+        uri: Uri,
+        context: Context
+    ): Bitmap? {
+        try {
+            // First, decode without orientation to get bitmap
+            val bitmap = BitmapFactory.decodeStream(inputStream) ?: return null
+            
+            // Try to read EXIF data for orientation
+            val orientation = try {
+                context.contentResolver.openInputStream(uri)?.use { exifStream ->
+                    val exif = ExifInterface(exifStream)
+                    exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                }
+            } catch (e: Exception) {
+                ExifInterface.ORIENTATION_NORMAL
+            }
+            
+            // Apply orientation correction if needed
+            return when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(bitmap, 90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(bitmap, 180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(bitmap, 270f)
+                else -> bitmap
+            }
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").e(e, "Error decoding bitmap with orientation")
+            return null
+        }
+    }
+
+    /**
+     * Rotate bitmap by degrees
+     */
+    private fun rotateBitmap(source: Bitmap, degrees: Float): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(degrees)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+    }
 
     /**
      * Cache and compress a bitmap by mid
@@ -265,15 +1024,13 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             try {
                 if (bitmap.isRecycled) {
-                    Timber.tag("ImageCacheManager")
-                        .w("Attempting to cache recycled bitmap for: $mid")
                     return@withContext
                 }
 
                 // Compress bitmap
                 val compressed = compressBitmap(bitmap)
                 if (compressed != null && !compressed.isRecycled) {
-                    memoryCache.put(mid, compressed)
+                    addToMemoryCache(mid, compressed)
 
                     // Save to disk
                     val dir = File(context.cacheDir, CACHE_DIR)
@@ -295,14 +1052,14 @@ object ImageCacheManager {
                             out.write(byteArray)
                         }
                     } catch (e: IOException) {
-                        Timber.tag("ImageCacheManager").d("Error saving image to disk: $e")
+                        // Ignore disk write errors
                     }
                 }
             } catch (e: OutOfMemoryError) {
-                Timber.tag("ImageCacheManager").d("OutOfMemoryError caching image: $e")
+                Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError caching image")
                 clearMemoryCache()
             } catch (e: Exception) {
-                Timber.tag("ImageCacheManager").d("Error caching image: $e")
+                // Ignore other caching errors
             }
         }
 
@@ -336,11 +1093,10 @@ object ImageCacheManager {
 
             return resized
         } catch (e: OutOfMemoryError) {
-            Timber.tag("ImageCacheManager").d("OutOfMemoryError compressing bitmap: $e")
+            Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError compressing bitmap")
             clearMemoryCache()
             return null
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error compressing bitmap: $e")
             return null
         }
     }
@@ -350,9 +1106,178 @@ object ImageCacheManager {
      */
     fun clearMemoryCache() {
         try {
-            memoryCache.evictAll()
+            // Just clear the cache, don't recycle bitmaps to avoid crashes
+            // Android will handle bitmap cleanup when they're no longer referenced
+            memoryCache.clear()
+            currentMemoryUsage.set(0)
         } catch (e: Exception) {
             Timber.d("ImageCacheManager - Error clearing memory cache: $e")
+        }
+    }
+
+    /**
+     * Load original image using a dedicated scope with progressive loading support
+     * This avoids cancellation during UI recomposition but allows cancellation when leaving screen
+     * @param onProgressiveLoad Called with low-quality preview first (optional)
+     * @param onComplete Called with final full-quality image
+     */
+    fun loadOriginalImageWithScope(
+        context: Context, 
+        imageUrl: String, 
+        mid: String,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null,
+        onComplete: (Bitmap?) -> Unit
+    ) {
+        val contextKey = context.toString()
+        
+        // Track this download for the context
+        activeDownloadsByContext.computeIfAbsent(contextKey) { ConcurrentHashMap.newKeySet() }.add(mid)
+        
+        imageLoadingScope.launch {
+            try {
+                val result = loadOriginalImage(context, imageUrl, mid, true, onProgressiveLoad)
+                // Use withContext to ensure callback runs on main thread safely
+                withContext(Dispatchers.Main) {
+                    try {
+                        onComplete(result)
+                    } catch (e: Exception) {
+                        // Ignore callback errors
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    try {
+                        onComplete(null)
+                    } catch (e: Exception) {
+                        // Ignore callback errors
+                    }
+                }
+            } finally {
+                // Remove from tracking when done
+                activeDownloadsByContext[contextKey]?.remove(mid)
+                if (activeDownloadsByContext[contextKey]?.isEmpty() == true) {
+                    activeDownloadsByContext.remove(contextKey)
+                }
+            }
+        }
+    }
+
+    /**
+     * Cancel image loading operations for a specific context (screen)
+     * Call this when leaving a screen to avoid wasting resources
+     */
+    fun cancelImageLoadingForContext(context: Context) {
+        val contextKey = context.toString()
+        val downloadsToCancel = activeDownloadsByContext[contextKey]
+        
+        if (downloadsToCancel != null) {
+            // Remove from download queue to prevent new downloads
+            downloadsToCancel.forEach { mid ->
+                downloadQueue.remove(mid)
+                downloadResults.remove(mid)
+            }
+            // Clear the tracking for this context
+            activeDownloadsByContext.remove(contextKey)
+        }
+    }
+
+    /**
+     * Clean up old results from the download results cache
+     */
+    /**
+     * FIX P1-4: Store download result with size limit enforcement
+     * Prevents unbounded growth of downloadResults map
+     */
+    private fun storeDownloadResult(mid: String, bitmap: Bitmap?) {
+        synchronized(downloadQueueMutex) {
+            // Enforce size limit
+            if (downloadResults.size >= MAX_DOWNLOAD_RESULTS) {
+                // Remove oldest entries (by timestamp)
+                val oldestEntries = resultTimestamps.entries
+                    .sortedBy { it.value }
+                    .take(5)  // Remove 5 oldest at a time
+                
+                oldestEntries.forEach { entry ->
+                    // Recycle bitmap before removing
+                    downloadResults[entry.key]?.let { oldBitmap ->
+                        if (!oldBitmap.isRecycled) {
+                            try {
+                                oldBitmap.recycle()
+                            } catch (e: Exception) {
+                                // Ignore recycle errors
+                            }
+                        }
+                    }
+                    downloadResults.remove(entry.key)
+                    resultTimestamps.remove(entry.key)
+                }
+                
+                Timber.tag("ImageCacheManager").d(
+                    "Cleaned up ${oldestEntries.size} old download results, size now: ${downloadResults.size}"
+                )
+            }
+            
+            // Store new result (only if non-null)
+            if (bitmap != null) {
+                downloadResults[mid] = bitmap
+                resultTimestamps[mid] = System.currentTimeMillis()
+            }
+        }
+    }
+
+    private fun cleanupOldResults() {
+        val currentTime = System.currentTimeMillis()
+        val fiveSecondsAgo = currentTime - 5000L
+
+        val iterator = resultTimestamps.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.value < fiveSecondsAgo) {
+                // Recycle bitmap before removing
+                downloadResults[entry.key]?.let { bitmap ->
+                    if (!bitmap.isRecycled) {
+                        try {
+                            bitmap.recycle()
+                        } catch (e: Exception) {
+                            // Ignore recycle errors
+                        }
+                    }
+                }
+                downloadResults.remove(entry.key)
+                iterator.remove()
+            }
+        }
+    }
+
+    /**
+     * Clean up stuck downloads that have been in the queue too long
+     */
+    private fun cleanupStuckDownloads() {
+        val currentTime = System.currentTimeMillis()
+        val thirtySecondsAgo = currentTime - 30000L // 30 seconds timeout
+        
+        synchronized(downloadQueueMutex) {
+            val stuckDownloads = downloadQueue.keys.filter { mid ->
+                // Check when download started (ongoingDownloads) not when it completed (resultTimestamps)
+                val startTimestamp = ongoingDownloads[mid]
+                if (startTimestamp != null) {
+                    // Download is actively running - check if it's been too long
+                    startTimestamp < thirtySecondsAgo
+                } else {
+                    // No start timestamp - something is wrong, consider it stuck
+                    true
+                }
+            }
+            
+            if (stuckDownloads.isNotEmpty()) {
+                stuckDownloads.forEach { mid ->
+                    downloadQueue.remove(mid)
+                    downloadResults.remove(mid)
+                    downloadPriorityQueue.remove(mid)
+                    resultTimestamps.remove(mid)
+                    ongoingDownloads.remove(mid)
+                }
+            }
         }
     }
 
@@ -361,8 +1286,8 @@ object ImageCacheManager {
      */
     suspend fun clearCachedImage(context: Context, mid: String) = withContext(Dispatchers.IO) {
         try {
-            // Remove from memory cache
-            memoryCache.remove(mid)
+            // Remove from memory cache with proper memory tracking
+            removeFromMemoryCache(mid)
 
             // Remove from disk cache
             val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
@@ -390,59 +1315,141 @@ object ImageCacheManager {
     }
 
     /**
+     * Preload images for faster loading (similar to video preloading)
+     */
+    suspend fun preloadImages(context: Context, mid: String, imageUrl: String) = withContext(Dispatchers.IO) {
+        try {
+            // Check if already cached
+            if (getCachedImage(context, mid) != null) {
+                return@withContext
+            }
+            
+            // Start downloading in background
+            downloadAndCacheImage(context, imageUrl, mid)
+        } catch (e: Exception) {
+            Timber.tag("ImageCacheManager").d("Error preloading image: $e")
+        }
+    }
+
+    // Note: clearMinimalCachedImages() removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels
+
+    // Note: clearPartialCachedImages() removed as it's no longer used
+    // Modern Android (API 34+) only sends UI_HIDDEN and BACKGROUND memory levels
+
+    // Note: clearSignificantCachedImages() removed as modern Android (API 34+) 
+    // only sends UI_HIDDEN and BACKGROUND memory levels
+
+    /**
      * Get memory cache statistics
      */
     fun getMemoryCacheStats(): String {
-        val maxSize = memoryCache.maxSize()
-        val currentSize = memoryCache.size()
-        val hitCount = memoryCache.hitCount()
-        val missCount = memoryCache.missCount()
-        val hitRate = if (hitCount + missCount > 0) {
-            (hitCount * 100.0 / (hitCount + missCount)).toInt()
-        } else 0
+        val maxSize = MAX_MEMORY_CACHE_SIZE
+        val currentSize = memoryCache.size
+        val currentMemory = currentMemoryUsage.get()
 
-        return "Memory: ${currentSize}/${maxSize}, Hit Rate: ${hitRate}%, Active Downloads: ${activeDownloads.get()}"
+        return "Memory: $currentSize items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}"
     }
 
     /**
      * Decode bitmap from stream with correct EXIF orientation handling
+     * FIX: Streams to temp file to avoid OOM for large compressed images
      */
-    private fun decodeBitmapFromStreamWithCorrectOrientation(inputStream: InputStream): Bitmap? {
-        return try {
-            // Read the entire stream into a byte array to handle mark/reset issues
-            val byteArray = inputStream.readBytes()
-            val byteArrayInputStream = java.io.ByteArrayInputStream(byteArray)
+    private suspend fun decodeBitmapFromStreamWithCorrectOrientation(inputStream: InputStream, context: Context): Bitmap? {
+        return withContext(Dispatchers.IO) {
+            var tempFile: File? = null
+            try {
+                // FIX OOM: Stream to temp file instead of loading into memory
+                // This prevents OOM for unexpectedly large compressed images
+                val dir = File(context.cacheDir, CACHE_DIR)
+                if (!dir.exists()) dir.mkdirs()
+                tempFile = File.createTempFile("img_compressed_", ".tmp", dir)
+                
+                // Stream download directly to file (avoids loading entire image into memory)
+                FileOutputStream(tempFile).use { out ->
+                    inputStream.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
+                }
+                
+                // Decode from file (supports multiple reads for bounds checking)
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                
+                // Check bounds first
+                BitmapFactory.decodeFile(tempFile.absolutePath, options)
+                if (options.outWidth <= 0 || options.outHeight <= 0) {
+                    return@withContext null
+                }
+                
+                // Decode the actual bitmap
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
+                }
+                
+                val bitmap = BitmapFactory.decodeFile(tempFile.absolutePath, decodeOptions)
+                if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                    // Apply EXIF orientation correction from file
+                    val correctedBitmap = applyExifOrientation(tempFile.absolutePath, bitmap)
+                    if (correctedBitmap != bitmap) {
+                        // If we created a new bitmap, recycle the original
+                        bitmap.recycle()
+                    }
+                    return@withContext correctedBitmap
+                }
+                null
+            } catch (e: Exception) {
+                null
+            } finally {
+                // Clean up temp file
+                tempFile?.let { file ->
+                    if (file.exists()) {
+                        try {
+                            file.delete()
+                        } catch (e: Exception) {
+                            // Ignore delete errors
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-            // Create options to decode bounds first
+    /**
+     * Decode bitmap from byte array with correct EXIF orientation handling
+     */
+    private fun decodeBitmapFromByteArrayWithCorrectOrientation(byteArray: ByteArray): Bitmap? {
+        return try {
+            // Try decodeByteArray first (more reliable than decodeStream)
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
 
-            // Mark the stream so we can reset it
-            byteArrayInputStream.mark(byteArray.size)
-            BitmapFactory.decodeStream(byteArrayInputStream, null, options)
-            byteArrayInputStream.reset()
-
-            // Decode the actual bitmap
-            val decodeOptions = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.RGB_565 // Use less memory
+            // Check bounds first
+            BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, options)
+            
+            if (options.outWidth <= 0 || options.outHeight <= 0) {
+                return null
             }
 
-            val bitmap = BitmapFactory.decodeStream(byteArrayInputStream, null, decodeOptions)
-            if (bitmap != null) {
+            // Decode the actual bitmap - use RGB_565 for better memory efficiency (2x less memory)
+            val decodeOptions = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565 // 2 bytes per pixel instead of 4 - much faster!
+                inJustDecodeBounds = false
+            }
+
+            val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, decodeOptions)
+            if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                 // Apply EXIF orientation correction
                 val correctedBitmap = applyExifOrientation(byteArray, bitmap)
                 if (correctedBitmap != bitmap) {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded bitmap with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
-                return correctedBitmap
+                correctedBitmap
+            } else {
+                null
             }
-            bitmap
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error decoding bitmap with orientation: $e")
             null
         }
     }
@@ -464,39 +1471,29 @@ object ImageCacheManager {
                     // If we created a new bitmap, recycle the original
                     bitmap.recycle()
                 }
-                Timber.tag("ImageCacheManager")
-                    .d("Successfully decoded bitmap from file with orientation correction: ${correctedBitmap.width}x${correctedBitmap.height}")
                 return correctedBitmap
             }
             bitmap
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager")
-                .d("Error decoding bitmap from file with orientation: $e")
             null
         }
     }
 
     /**
      * Apply EXIF orientation to bitmap from byte array
+     * Optimized to read directly from stream instead of creating temp file
      */
     private fun applyExifOrientation(byteArray: ByteArray, bitmap: Bitmap): Bitmap {
         return try {
-            // Create a temporary file to use with ExifInterface
-            val tempFile = File.createTempFile("exif_temp", ".jpg")
-            tempFile.writeBytes(byteArray)
-
-            val exif = ExifInterface(tempFile.absolutePath)
+            // Use ByteArrayInputStream directly - no temp file needed (faster!)
+            val exif = ExifInterface(java.io.ByteArrayInputStream(byteArray))
             val orientation = exif.getAttributeInt(
                 ExifInterface.TAG_ORIENTATION,
                 ExifInterface.ORIENTATION_NORMAL
             )
 
-            // Clean up temp file
-            tempFile.delete()
-
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from byte array: $e")
             bitmap
         }
     }
@@ -514,7 +1511,6 @@ object ImageCacheManager {
 
             return applyOrientationMatrix(bitmap, orientation)
         } catch (e: Exception) {
-            Timber.tag("ImageCacheManager").d("Error applying EXIF orientation from file: $e")
             bitmap
         }
     }
@@ -525,59 +1521,23 @@ object ImageCacheManager {
     private fun applyOrientationMatrix(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()
         when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> {
-                matrix.postRotate(90f)
-                Timber.tag("ImageCacheManager").d("Applying 90 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_ROTATE_180 -> {
-                matrix.postRotate(180f)
-                Timber.tag("ImageCacheManager").d("Applying 180 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_ROTATE_270 -> {
-                matrix.postRotate(270f)
-                Timber.tag("ImageCacheManager").d("Applying 270 degree rotation")
-            }
-
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
-                matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying horizontal flip")
-            }
-
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
-                matrix.postScale(1f, -1f)
-                Timber.tag("ImageCacheManager").d("Applying vertical flip")
-            }
-
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.postRotate(90f)
                 matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying transpose")
             }
-
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.postRotate(270f)
                 matrix.postScale(-1f, 1f)
-                Timber.tag("ImageCacheManager").d("Applying transverse")
             }
-
-            else -> {
-                // No rotation needed
-                return bitmap
-            }
+            else -> return bitmap // No rotation needed
         }
 
         // Create new bitmap with applied transformation
-        val rotatedBitmap = Bitmap.createBitmap(
-            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-        )
-
-        if (rotatedBitmap != bitmap) {
-            Timber.tag("ImageCacheManager")
-                .d("Created rotated bitmap: ${rotatedBitmap.width}x${rotatedBitmap.height}")
-        }
-
-        return rotatedBitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 }

@@ -2,13 +2,17 @@ package us.fireshare.tweet.viewmodel
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.graphics.scale
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -16,6 +20,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,18 +30,27 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.UploadCommentWorker
+import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.createExoPlayer
+import java.io.File
+import java.io.FileOutputStream
 import java.lang.Integer.max
 import java.lang.ref.WeakReference
+import java.util.concurrent.TimeUnit
 
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
@@ -57,24 +71,52 @@ class TweetViewModel @AssistedInject constructor(
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
 
+    private val _mediaGridVideoIndex = MutableStateFlow(-1)
+    val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
+
+    private val _isSharing = MutableStateFlow(false)
+    val isSharing: StateFlow<Boolean> get() = _isSharing.asStateFlow()
+
+    private val _tweetDeleted = MutableStateFlow(false)
+    val tweetDeleted: StateFlow<Boolean> get() = _tweetDeleted.asStateFlow()
+
     private val exoPlayers = mutableMapOf<String, ExoPlayer>()
 
     // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
 
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {
-        return exoPlayers.getOrPut(url) {
+        // Extract media ID (CID) from URL to use as key
+        val mediaId = extractMediaIdFromUrl(url)
+        return exoPlayers.getOrPut(mediaId) {
             createExoPlayer(context, url).also { player ->
-                val position = savedStateHandle.get<Long>("playbackPosition_$url") ?: 0L
+                val position = savedStateHandle.get<Long>("playbackPosition_$mediaId") ?: 0L
                 player.seekTo(position)
-                playbackPositions[url] = position
+                playbackPositions[mediaId] = position
             }
         }
     }
+    
+    /**
+     * Extract media ID (IPFS CID) from URL
+     * Returns the CID (e.g., "QmZeP6Cc1r8yG4u1iEksvEBM3ohajhobUfHdGyoBVAs6Qg")
+     */
+    private fun extractMediaIdFromUrl(url: String): String {
+        // Look for IPFS CID pattern (Qm followed by 44 characters)
+        val cidPattern = Regex("(Qm[A-Za-z0-9]{44})")
+        val match = cidPattern.find(url)
+        return match?.value ?: url // Fallback to full URL if no CID found
+    }
+
+    fun updateRetweetCount(tweet: Tweet) {
+        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount + 1)
+        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount - 1)
+    }
 
     fun savePlaybackPosition(url: String, position: Long) {
-        playbackPositions[url] = position
-        savedStateHandle["playbackPosition_$url"] = position
+        val mediaId = extractMediaIdFromUrl(url)
+        playbackPositions[mediaId] = position
+        savedStateHandle["playbackPosition_$mediaId"] = position
     }
 
     fun releaseAllPlayers() {
@@ -83,7 +125,8 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     fun stopPlayer(url: String) {
-        exoPlayers[url]?.playWhenReady = false  // have to set it here, otherwise won't work.
+        val mediaId = extractMediaIdFromUrl(url)
+        exoPlayers[mediaId]?.playWhenReady = false  // have to set it here, otherwise won't work.
     }
 
     init {
@@ -93,8 +136,65 @@ class TweetViewModel @AssistedInject constructor(
          * */
         if (tweetState.value.author == null) {
             viewModelScope.launch(Dispatchers.IO) {
-                HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { tweet ->
-                    _tweetState.value = tweet
+                // Step 1: Check if there's a cached tweet with author already populated
+                @Suppress("SENSELESS_COMPARISON")
+                if (tweet.mid != null) {
+                    val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
+                    if (cachedTweet != null && cachedTweet.author != null) {
+                        _tweetState.value = cachedTweet
+                        _attachments.value = cachedTweet.attachments
+                        return@launch
+                    }
+                }
+                
+                // Step 2: Try to get user from cache and populate author
+                var cachedUser: User? = null
+                @Suppress("SENSELESS_COMPARISON")
+                if (tweet.authorId != null) {
+                    cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
+                    if (cachedUser != null) {
+                        val tweetWithAuthor = tweet.copy(author = cachedUser)
+                        _tweetState.value = tweetWithAuthor
+                    }
+                }
+                
+                // Step 3: Fetch author if not cached (for deep links)
+                // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery
+                var author: User? = cachedUser
+                @Suppress("SENSELESS_COMPARISON")
+                if (tweet.authorId != null && author == null) {
+                    try {
+                        author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
+                        if (author != null) {
+                            val tweetWithAuthor = tweet.copy(author = author)
+                            _tweetState.value = tweetWithAuthor
+                        } else {
+                            Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId}")
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "TweetViewModel - Exception fetching author: ${tweet.authorId}")
+                    }
+                }
+                
+                // Step 4: Refresh tweet from server (now that we have author with baseUrl)
+                @Suppress("SENSELESS_COMPARISON")
+                if (tweet.mid != null && tweet.authorId != null) {
+                    HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
+                        _tweetState.value = refreshedTweet
+                        _attachments.value = refreshedTweet.attachments
+                    } ?: run {
+                        // If refresh failed but we have author, at least show tweet with author
+                        val currentAuthor = author ?: cachedUser
+                        if (currentAuthor != null && tweetState.value.author == null) {
+                            _tweetState.value = tweet.copy(author = currentAuthor)
+                        }
+                    }
+                } else {
+                    // Optionally populate with author if available
+                    val currentAuthor = author ?: cachedUser
+                    if (currentAuthor != null && tweetState.value.author == null) {
+                        _tweetState.value = tweet.copy(author = currentAuthor)
+                    }
                 }
             }
         }
@@ -157,14 +257,35 @@ class TweetViewModel @AssistedInject constructor(
         isCheckedToTweet.value = value
     }
 
-    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0) {
-        _comments.value = HproseInstance.getComments(tweet)?.map {
-            it.author = HproseInstance.getUser(it.authorId)
+    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0): Int {
+        val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
+            // Check for cached author first (expired or not) and use it if available
+            // This prevents unnecessary server updates when TweetDetailScreen opens
+            val cachedAuthor = TweetCacheManager.getCachedUser(it.authorId)
+            if (cachedAuthor != null) {
+                it.author = cachedAuthor
+            } else {
+                // Only fetch from server if no cached author exists
+                it.author = HproseInstance.fetchUser(it.authorId)
+            }
             it
         } ?: emptyList()
-        _comments.update { list ->
-            list.sortedByDescending { it.timestamp }
+
+        // Always merge new comments with existing ones, keeping newly fetched ones over existing duplicates
+        _comments.update { currentComments ->
+            // PERFORMANCE FIX: Use Set for O(n) lookup instead of O(n²)
+            val newCommentIds = newComments.map { it.mid }.toSet()
+            val mergedComments = newComments + currentComments.filterNot { it.mid in newCommentIds }
+            val finalComments = mergedComments.sortedByDescending { it.timestamp }
+            // Only log when there are actually new comments or when comments count changes significantly
+            if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
+                Timber.tag("TweetViewModel").d("Merged to ${finalComments.size} total comments (${newComments.size} new)")
+            }
+            finalComments
         }
+        
+        // Return the number of new comments fetched from this page
+        return newComments.size
     }
 
     suspend fun delComment(commentId: MimeiId) {
@@ -222,6 +343,10 @@ class TweetViewModel @AssistedInject constructor(
         )
     }
 
+    fun updateMediaGridVideoIndex(index: Int) {
+        _mediaGridVideoIndex.value = index
+    }
+
     // add new Comment object to its parent Tweet. The code runs on Main thread.
     fun uploadComment(
         context: Context,
@@ -235,8 +360,25 @@ class TweetViewModel @AssistedInject constructor(
             "content" to content,   // content for new comment
             "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray()
         )
+        // Take persistent URI permissions to survive app restarts and process changes
+        attachments?.forEach { uri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                Timber.tag("TweetViewModel").w("Failed to take persistable permission for comment URI: $uri")
+            }
+        }
+
         val uploadRequest = OneTimeWorkRequest.Builder(UploadCommentWorker::class.java)
             .setInputData(data)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                2_000L, // 2 seconds
+                TimeUnit.MILLISECONDS
+            )
             .build()
         val workManager = WorkManager.getInstance(context)
         workManager.enqueue(uploadRequest)
@@ -244,22 +386,437 @@ class TweetViewModel @AssistedInject constructor(
         // No need to observe work status - UI will update via notification system
     }
 
-    suspend fun shareTweet(context: Context) {
-        /**
-         * Call to checkUpgrade() also returns a map of environmental variables,
-         * which includes environment variables of the App.
-         * */
-        val map = HproseInstance.checkUpgrade() ?: return
-        val deepLink = "http://${map["domain"]}/tweet/${tweet.mid}/${tweet.authorId}"
-//            val deepLink = "${tweet.author?.baseUrl}/entry?mid=$appId&ver=last#/tweet/" +
-//                    "${tweet.mid}/${tweet.authorId}"
+    suspend fun shareTweet(
+        context: Context,
+        parentTweetId: String? = null,
+        parentAuthorId: String? = null,
+        isInDetailView: Boolean = false
+    ) {
+        _isSharing.value = true
+        try {
+            // Use current tweet state (which has loaded content) instead of constructor parameter
+            val currentTweet = tweetState.value
+            
+            /**
+             * Call to checkUpgrade() also returns a map of environmental variables,
+             * which includes environment variables of the App.
+             * */
+            val map = HproseInstance.checkUpgrade()
+            if (map == null) {
+                return
+            }
+            
+            // Build the share link based on context (similar to iOS implementation)
+            val deepLink = if (isInDetailView) {
+                // In detail view: use author's baseUrl with entry format
+                val baseUrlString = currentTweet.author?.baseUrl ?: appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+                if (parentTweetId != null && parentAuthorId != null) {
+                    // Comment in detail view: entry format with query parameters in hash
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
+                } else {
+                    // Regular tweet in detail view: entry format
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                }
+            } else if (parentTweetId != null && parentAuthorId != null) {
+                // Comment in feed/list: traditional format with query parameters
+                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                    appUser.domainToShare!!
+                } else {
+                    map["domain"] ?: return
+                }
+                // Ensure domain has http:// protocol prefix
+                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                    domain = "http://$domain"
+                }
+                "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
+            } else {
+                // In feed/grid: use traditional format
+                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                    appUser.domainToShare!!
+                } else {
+                    map["domain"] ?: return
+                }
+                // Ensure domain has http:// protocol prefix
+                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                    domain = "http://$domain"
+                }
+                if (BuildConfig.IS_PLAY_VERSION) {
+                    "http://${BuildConfig.PLAY_SHARE_DOMAIN}/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                } else {
+                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                }
+            }
+
+        // Generate share content based on tweet title, content, or attachment types
+        val shareContent = when {
+            !currentTweet.title.isNullOrBlank() -> {
+                val title = currentTweet.title!!.trim()
+                if (title.length <= 40) title else "${title.take(40)}..."
+            }
+            !currentTweet.content.isNullOrBlank() -> {
+                val content = currentTweet.content!!.replace("\n", " ").trim()
+                if (content.length <= 40) content else "${content.take(40)}..."
+            }
+            else -> {
+                // No title or content, compose from first 3 attachment types
+                composeAttachmentTypeText(currentTweet)
+            }
+        }
+        
+        Timber.tag("SHARE").d("Share content for tweet ${currentTweet.mid}: title='${currentTweet.title}', content='${currentTweet.content?.take(50)}', shareContent='$shareContent'")
+
+        val textToShare = if (shareContent.isNotEmpty()) {
+            "$shareContent\n\n$deepLink"
+        } else {
+            deepLink
+        }
+
+        // Skip preview image generation - Android doesn't support sharing text and image together
+        // This makes sharing instant instead of waiting for image processing
+        Timber.tag("SHARE").d("Sharing text only (preview images not supported with text)")
+        
+        // Create share intent - share text only
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, deepLink)
+            putExtra(Intent.EXTRA_TEXT, textToShare)
             type = "text/plain"
         }
-        val shareIntent = Intent.createChooser(sendIntent, null)
-        context.startActivity(shareIntent, null)
+        
+        // Create chooser
+        val chooserIntent = Intent.createChooser(sendIntent, "Share Tweet")
+        context.startActivity(chooserIntent, null)
+        } finally {
+            // Clear loading state after share sheet is shown
+            _isSharing.value = false
+        }
+    }
+    
+    
+    /**
+     * Load attachment preview image for sharing
+     * Returns a 270x270 center-cropped preview of the first image or video attachment
+     */
+    private suspend fun loadAttachmentPreviewImage(context: Context): Bitmap? = withContext(Dispatchers.IO) {
+        try {
+            Timber.tag("SHARE").d("Loading attachment preview for tweet: ${tweet.mid}")
+            
+            // Find the source tweet with attachments (could be original for retweets/quotes)
+            val sourceTweet = resolveSourceTweetWithAttachments() ?: run {
+                Timber.tag("SHARE").d("No source tweet with attachments found")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("Source tweet found: ${sourceTweet.mid}, attachments: ${sourceTweet.attachments?.size ?: 0}")
+            
+            val attachment = sourceTweet.attachments?.firstOrNull() ?: run {
+                Timber.tag("SHARE").d("No first attachment found")
+                return@withContext null
+            }
+            
+            Timber.tag("SHARE").d("First attachment type: ${attachment.type}, mid: ${attachment.mid}")
+            
+            // Get base URL for attachments
+            val baseURL = resolveAttachmentBaseURL(sourceTweet)
+            Timber.tag("SHARE").d("Resolved baseURL: $baseURL")
+            
+            when (attachment.type) {
+                MediaType.Image -> {
+                    Timber.tag("SHARE").d("Processing image attachment")
+                    var fullImage: Bitmap?
+
+                    // Try to get cached image first
+                    fullImage = ImageCacheManager.getCachedImage(context, attachment.mid)
+                    
+                    if (fullImage == null) {
+                        // Download image if not cached
+                        val imageUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
+                        Timber.tag("SHARE").d("Loading image from URL: $imageUrl")
+                        fullImage = ImageCacheManager.downloadAndCacheImage(context, imageUrl, attachment.mid)
+                        Timber.tag("SHARE").d("Image loaded: ${fullImage != null}")
+                    } else {
+                        Timber.tag("SHARE").d("Found cached image")
+                    }
+                    
+                    // Crop to center square and resize to 270x270
+                    if (fullImage != null) {
+                        val croppedImage = cropToCenter(fullImage, 270)
+                        Timber.tag("SHARE").d("Image cropped to center 270x270")
+                        return@withContext croppedImage
+                    }
+                    return@withContext null
+                }
+                MediaType.Video, MediaType.HLS_VIDEO -> {
+                    Timber.tag("SHARE").d("Processing video attachment, type: ${attachment.type}")
+                    val videoUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
+                    Timber.tag("SHARE").d("Generating video preview from URL: $videoUrl")
+                    val preview = generateVideoPreviewImage(videoUrl, attachment.mid, attachment.type)
+                    Timber.tag("SHARE").d("Video preview generated: ${preview != null}")
+                    return@withContext preview
+                }
+                else -> {
+                    Timber.tag("SHARE").d("Attachment type not supported: ${attachment.type}")
+                    return@withContext null
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error loading attachment preview")
+            return@withContext null
+        }
+    }
+    
+    /**
+     * Resolve the source tweet that contains attachments
+     * For retweets/quotes, returns the original tweet if it has attachments
+     */
+    private suspend fun resolveSourceTweetWithAttachments(): Tweet? {
+        // Check if current tweet has attachments
+        if (!tweet.attachments.isNullOrEmpty()) {
+            return tweet
+        }
+        
+        // Check if it's a retweet/quote and get original tweet
+        if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
+            try {
+                val originalTweet = HproseInstance.fetchTweet(
+                    tweet.originalTweetId!!,
+                    tweet.originalAuthorId!!
+                )
+                if (originalTweet != null && !originalTweet.attachments.isNullOrEmpty()) {
+                    return originalTweet
+                }
+            } catch (e: Exception) {
+                Timber.tag("SHARE").e(e, "Error fetching original tweet")
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * Resolve the base URL for attachments
+     * Tries author's base URL first, then falls back to app user's base URL
+     */
+    private suspend fun resolveAttachmentBaseURL(sourceTweet: Tweet): String {
+        // Try to get author's base URL
+        try {
+            val author = HproseInstance.fetchUser(sourceTweet.authorId)
+            if (author?.baseUrl != null) {
+                return author.baseUrl.toString()
+            }
+        } catch (e: Exception) {
+            Timber.tag("SHARE").w("Error fetching author base URL: ${e.message}")
+        }
+        
+        // Fall back to app user's base URL
+        return appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+    }
+    
+    /**
+     * Generate a video preview image from the existing player or video URL
+     * For HLS: Uses a direct segment URL from the cached video
+     * For Progressive: Uses MediaMetadataRetriever with the video URL
+     * Returns a 270x270 center-cropped preview
+     */
+    private suspend fun generateVideoPreviewImage(videoUrl: String, mediaId: String, mediaType: MediaType): Bitmap? = withContext(Dispatchers.IO) {
+        if (mediaType == MediaType.HLS_VIDEO) {
+            // For HLS, get current playback position from player
+            val playerInfo = withContext(Main) {
+                val player = VideoManager.getCachedVideoPlayer(mediaId)
+                player?.currentPosition
+            }
+            
+            if (playerInfo == null) {
+                Timber.tag("SHARE").d("No cached player for HLS, skipping preview generation")
+                return@withContext null
+            }
+
+            // MediaMetadataRetriever needs a direct .ts segment file, not a .m3u8 playlist
+            // Calculate which segment to use based on current position
+            // Assuming standard HLS segment duration of 5 seconds
+            val segmentDurationMs = 5000L
+            val segmentNumber = (playerInfo / segmentDurationMs).toInt()
+            val offsetWithinSegmentMs = playerInfo % segmentDurationMs
+            val segmentName = "segment%03d.ts".format(segmentNumber)
+            
+            Timber.tag("SHARE").d("Current position: ${playerInfo}ms, using segment: $segmentName, offset: ${offsetWithinSegmentMs}ms")
+            
+            // Try different quality levels in order (smallest first for speed)
+            val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+            val qualityLevels = listOf("480p", "720p")
+            
+            for (quality in qualityLevels) {
+                val segmentUrl = "${baseUrl}${quality}/$segmentName"
+                
+                Timber.tag("SHARE").d("Trying HLS segment: $segmentUrl")
+                
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(segmentUrl, mapOf("timeout" to "3000"))
+                    
+                    // Get frame at the offset within the segment
+                    val captureTimeUs = offsetWithinSegmentMs * 1000
+                    val frame = retriever.getFrameAtTime(captureTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                    
+                    if (frame != null) {
+                        Timber.tag("SHARE").d("Successfully captured frame from $quality segment at offset ${offsetWithinSegmentMs}ms")
+                        return@withContext cropToCenter(frame, 270)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("SHARE").d("Failed with $quality: ${e.message}")
+                } finally {
+                    try {
+                        retriever.release()
+                    } catch (_: Exception) {
+                        // Ignore
+                    }
+                }
+            }
+            
+            Timber.tag("SHARE").w("Failed to capture frame from any quality level")
+            return@withContext null
+        } else {
+            // For progressive videos, use the direct URL
+            // Get current playback position if player exists
+            val currentPositionMs = withContext(Main) {
+                val player = VideoManager.getCachedVideoPlayer(mediaId)
+                player?.currentPosition ?: 1000L // Default to 1 second if no player
+            }
+            
+            val retriever = MediaMetadataRetriever()
+            try {
+                Timber.tag("SHARE").d("Using progressive video URL: $videoUrl at position ${currentPositionMs}ms")
+                retriever.setDataSource(videoUrl, mapOf("timeout" to "3000"))
+                
+                val captureTimeUs = currentPositionMs * 1000 // Convert ms to microseconds
+                val frame = retriever.getFrameAtTime(captureTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                
+                if (frame != null) {
+                    Timber.tag("SHARE").d("Successfully captured frame")
+                    return@withContext cropToCenter(frame, 270)
+                } else {
+                    Timber.tag("SHARE").w("Failed to capture frame from retriever")
+                    return@withContext null
+                }
+            } catch (e: Exception) {
+                Timber.tag("SHARE").e(e, "Failed to generate preview with MediaMetadataRetriever")
+                return@withContext null
+            } finally {
+                try {
+                    retriever.release()
+                } catch (e: Exception) {
+                    Timber.tag("SHARE").w("Error releasing MediaMetadataRetriever: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Crop image to center square and resize to target size
+     */
+    private fun cropToCenter(image: Bitmap, targetSize: Int = 360): Bitmap {
+        val width = image.width
+        val height = image.height
+        
+        // Determine the crop size (square based on the shorter dimension)
+        val cropSize = minOf(width, height)
+        
+        // Calculate the crop rect (centered)
+        val left = (width - cropSize) / 2
+        val top = (height - cropSize) / 2
+        
+        // Create cropped bitmap
+        val croppedBitmap = Bitmap.createBitmap(image, left, top, cropSize, cropSize)
+        
+        // Resize to target size
+        val resizedBitmap = croppedBitmap.scale(targetSize, targetSize)
+        
+        // Clean up intermediate bitmap if different from input
+        if (croppedBitmap != image && croppedBitmap != resizedBitmap) {
+            croppedBitmap.recycle()
+        }
+        
+        return resizedBitmap
+    }
+    
+    /**
+     * Save bitmap to cache directory and return the file
+     * Also cleans up old preview files to avoid cache bloat
+     */
+    private fun saveBitmapToCache(context: Context, bitmap: Bitmap, filename: String): File? {
+        return try {
+            val cacheDir = File(context.cacheDir, "share_previews")
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+            
+            // Clean up old preview files (keep only last 5)
+            cacheDir.listFiles()?.let { files ->
+                if (files.size > 5) {
+                    files.sortedBy { it.lastModified() }
+                        .dropLast(5)
+                        .forEach { it.delete() }
+                }
+            }
+            
+            val file = File(cacheDir, filename)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            
+            Timber.tag("SHARE").d("Saved preview image to: ${file.absolutePath}")
+            file
+        } catch (e: Exception) {
+            Timber.tag("SHARE").e(e, "Error saving bitmap to cache")
+            null
+        }
+    }
+    
+    /**
+     * Compose a descriptive string from the first three attachment types
+     */
+    private fun composeAttachmentTypeText(tweet: Tweet): String {
+        // Get attachments from the tweet or its original tweet
+        var attachments: List<MimeiFileType>? = null
+        
+        if (!tweet.attachments.isNullOrEmpty()) {
+            attachments = tweet.attachments
+        } else if (tweet.originalTweetId != null) {
+            // Try to get original tweet from cache
+            val originalTweet = Tweet.getInstance(tweet.originalTweetId!!, tweet.originalAuthorId ?: "")
+            if (!originalTweet.attachments.isNullOrEmpty()) {
+                attachments = originalTweet.attachments
+            }
+        }
+        
+        if (attachments.isNullOrEmpty()) {
+            return ""
+        }
+        
+        // Get first 3 attachment types
+        val firstThree = attachments.take(3)
+        val typeTexts = firstThree.map { attachment ->
+            when (attachment.type) {
+                MediaType.Image -> "📷 Image"
+                MediaType.Video, MediaType.HLS_VIDEO -> "🎬 Video"
+                MediaType.Audio -> "🎵 Audio"
+                MediaType.PDF -> "📄 PDF"
+                MediaType.Word -> "📝 Word"
+                MediaType.Excel -> "📊 Excel"
+                MediaType.PPT -> "📊 PPT"
+                MediaType.Zip -> "🗜️ Zip"
+                MediaType.Txt -> "📄 Text"
+                MediaType.Html -> "🌐 HTML"
+                else -> "📎 File"
+            }
+        }
+        
+        // Add count if there are more attachments
+        return if (attachments.size > 3) {
+            val remaining = attachments.size - 3
+            typeTexts.joinToString(", ") + " +$remaining more"
+        } else {
+            typeTexts.joinToString(", ")
+        }
     }
 
     /**
@@ -288,12 +845,13 @@ class TweetViewModel @AssistedInject constructor(
                 favoriteCount = if (isFavorite) tweetState.value.favoriteCount + 1
                 else max(0, tweetState.value.favoriteCount - 1),
             )
-            // Show error toast
-            notificationContextRef?.get()?.let { context ->
-                android.widget.Toast.makeText(
+            // Show error toast - check both WeakReference and Context are available
+            val context = notificationContextRef?.get()
+            if (context != null) {
+                Toast.makeText(
                     context,
                     "Failed to update favorite",
-                    android.widget.Toast.LENGTH_SHORT
+                    Toast.LENGTH_SHORT
                 ).show()
             }
         } else {
@@ -328,12 +886,13 @@ class TweetViewModel @AssistedInject constructor(
                 bookmarkCount = if (hasBookmarked) tweetState.value.bookmarkCount + 1
                 else max(0, tweetState.value.bookmarkCount - 1),
             )
-            // Show error toast
-            notificationContextRef?.get()?.let { context ->
-                android.widget.Toast.makeText(
+            // Show error toast - check both WeakReference and Context are available
+            val context = notificationContextRef?.get()
+            if (context != null) {
+                Toast.makeText(
                     context,
                     "Failed to update bookmark",
-                    android.widget.Toast.LENGTH_SHORT
+                    Toast.LENGTH_SHORT
                 ).show()
             }
         } else {
@@ -347,12 +906,10 @@ class TweetViewModel @AssistedInject constructor(
      * Perform a retweet action and update the UI immediately for better user experience.
      * */
     suspend fun retweetTweet() {
-        // Update retweet count and status immediately for better UX
-        val hasRetweeted = tweetState.value.isRetweeted
-        _tweetState.value.isRetweeted = !hasRetweeted
+        // Optimistic update of retweet count and status immediately for better UX
+        val currentCount = tweetState.value.retweetCount
         _tweetState.value = tweetState.value.copy(
-            retweetCount = if (hasRetweeted) max(0, tweetState.value.retweetCount - 1)
-            else tweetState.value.retweetCount + 1,
+            retweetCount = currentCount + 1,
         )
 
         // Perform the actual retweet operation
@@ -360,21 +917,10 @@ class TweetViewModel @AssistedInject constructor(
             HproseInstance.retweet(tweetState.value)
         } catch (e: Exception) {
             // Revert the UI changes if the retweet failed
-            _tweetState.value.isRetweeted = hasRetweeted
             _tweetState.value = tweetState.value.copy(
-                retweetCount = if (hasRetweeted) tweetState.value.retweetCount + 1
-                else max(0, tweetState.value.retweetCount - 1),
+                retweetCount = currentCount,
             )
             throw e
-        }
-    }
-
-    /**
-     * Update retweet account on the original tweet after retweet is deleted.
-     * */
-    suspend fun updateRetweetCount(tweet: Tweet, retweetId: MimeiId, flag: Int) {
-        HproseInstance.updateRetweetCount(tweet, retweetId, flag)?.let {
-            _tweetState.value = it
         }
     }
 
@@ -455,12 +1001,34 @@ class TweetViewModel @AssistedInject constructor(
                             }
                         }
 
+                        is TweetEvent.TweetDeleted -> {
+                            // Check if this ViewModel's tweet was deleted
+                            if (event.tweetId == tweetState.value.mid) {
+                                Timber.tag("TweetViewModel")
+                                    .d("This tweet (${tweetState.value.mid}) was deleted, marking as unavailable")
+                                // Mark tweet as deleted/unavailable by setting a flag
+                                // TweetDetailScreen should observe this and navigate away
+                                _tweetDeleted.value = true
+                            }
+                        }
+
+                        is TweetEvent.TweetRestored -> {
+                            // Check if this ViewModel's tweet was restored after failed deletion
+                            if (event.tweet.mid == tweetState.value.mid) {
+                                Timber.tag("TweetViewModel")
+                                    .d("This tweet (${tweetState.value.mid}) was restored, clearing deleted flag")
+                                // Clear deleted flag and update tweet state
+                                _tweetDeleted.value = false
+                                _tweetState.value = event.tweet
+                            }
+                        }
+
                         else -> {
                             // Handle other events if needed
                         }
                     }
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 // This is expected when the ViewModel is destroyed
                 Timber.tag("TweetViewModel").d("Notification listener cancelled: ${e.message}")
             } catch (e: Exception) {

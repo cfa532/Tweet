@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,8 +52,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.preferenceHelper
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 
 /**
@@ -63,29 +67,78 @@ import us.fireshare.tweet.widget.Gadget.isElementVisible
 @OptIn(UnstableApi::class)
 @Composable
 fun VideoPreview(
-    url: String,
+    url: String?,
     modifier: Modifier,
     index: Int,
     autoPlay: Boolean = false,
     inPreviewGrid: Boolean = true,
     callback: (Int) -> Unit,
     videoMid: MimeiId? = null,
+    videoType: MediaType? = null,
     onLoadComplete: (() -> Unit)? = null,
-    onVideoCompleted: (() -> Unit)? = null
+    onVideoCompleted: (() -> Unit)? = null,
+    useIndependentMuteState: Boolean = false, // For TweetDetailView - independent of global mute state
+    enableTapToShowControls: Boolean = false, // New parameter for tap-to-show controls
+    playbackTweetId: MimeiId? = null, // Container tweet id for coordinator tracking
+    containerTopY: Float? = null
 ) {
     val context = LocalContext.current
 
     // Use completely stable state that doesn't change during recompositions
     var isVideoVisible by remember(videoMid) { mutableStateOf(false) }
-    var isMuted by remember(videoMid) { mutableStateOf(preferenceHelper.getSpeakerMute()) }
+    
+    // PERF FIX: Throttle visibility updates to reduce expensive calculations during scrolling
+    var lastVisibilityUpdate by remember(videoMid) { mutableLongStateOf(0L) }
+    var lastVisibilityRatio by remember(videoMid) { mutableStateOf(0f) }
+    val visibilityUpdateThrottleMs = 100L // Only update every 100ms during scrolling
+    val visibilityRatioThreshold = 0.15f // Only trigger coordinator update if ratio changes by 15%
+    
+    // If using independent mute state (TweetDetailView/FullScreen), start unmuted and don't sync with global state
+    // Otherwise (MediaItem in feeds), use global mute state
+    var isMuted by remember(videoMid) { 
+        mutableStateOf(if (useIndependentMuteState) false else preferenceHelper.getSpeakerMute()) 
+    }
     var isLoading by remember(videoMid) {
         mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
     }
     var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
-    var recoveryAttempts by remember(videoMid) { mutableIntStateOf(0) }
-    val MAX_RECOVERY_ATTEMPTS = 5 // Increased from 3 to 5 for more lenient retry
+    var retryCount by remember(videoMid) { mutableIntStateOf(0) }
+    var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
+    val maxRetries = 3
+    val shouldUseCoordinator = playbackTweetId != null && videoMid != null
+    var coordinatorWantsToPlay by remember(videoMid, playbackTweetId) { mutableStateOf(false) }
+    val shouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
+    LaunchedEffect(videoMid, playbackTweetId) {
+        if (!shouldUseCoordinator) {
+            coordinatorWantsToPlay = false
+            return@LaunchedEffect
+        }
+        VideoPlaybackCoordinator.playbackCommands.collect { command ->
+            when (command) {
+                is VideoPlaybackCommand.ShouldPlayVideo -> {
+                    coordinatorWantsToPlay = command.videoMid == videoMid && command.tweetId == playbackTweetId
+                }
+                is VideoPlaybackCommand.ShouldPauseVideo -> {
+                    if (command.videoMid == videoMid) {
+                        coordinatorWantsToPlay = false
+                    }
+                }
+                is VideoPlaybackCommand.ShouldStopVideo -> {
+                    if (command.videoMid == videoMid) {
+                        coordinatorWantsToPlay = false
+                    }
+                }
+                VideoPlaybackCommand.ShouldStopAllVideos -> {
+                    coordinatorWantsToPlay = false
+                }
+            }
+        }
+    }
+    
+    // Use lifecycle-aware coroutine scope for retry operations to prevent memory leaks
+    val retryScope = rememberCoroutineScope()
 
     // Use VideoLoadingManager to track visibility and manage loading
     videoMid?.let { mid ->
@@ -97,10 +150,13 @@ fun VideoPreview(
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
-        val player = if (videoMid != null) {
-            VideoManager.getVideoPlayer(context, videoMid, url)
+        val player = if (videoMid != null && url != null) {
+            VideoManager.getVideoPlayer(context, videoMid, url, videoType)
+        } else if (url != null) {
+            createExoPlayer(context, url, videoType ?: MediaType.Video)
         } else {
-            createExoPlayer(context, url, MediaType.Video)
+            // Fallback to an empty player if url is null
+            createExoPlayer(context, "", videoType ?: MediaType.Video)
         }
 
         // Explicitly disable repeat mode to prevent auto-replay
@@ -127,8 +183,9 @@ fun VideoPreview(
                 }
 
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                    // Resume video playback if it was playing before
-                    if (isVideoVisible && autoPlay) {
+                    // Resume video playback if coordinator/autoPlay wants it
+                    val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+                    if (effectivelyVisible && shouldPlay) {
                         exoPlayer.playWhenReady = true
                     }
                 }
@@ -147,8 +204,9 @@ fun VideoPreview(
         }
     }
 
-    LaunchedEffect(isVideoVisible) {
-        if (isVideoVisible) {
+    LaunchedEffect(isVideoVisible, shouldPlay) {
+        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+        if (effectivelyVisible) {
             // Mark video as active in VideoManager
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
@@ -157,26 +215,50 @@ fun VideoPreview(
             // Ensure repeat mode is disabled
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
 
-            // If player is already ready, start immediately
-            if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
-                exoPlayer.playWhenReady = autoPlay
-                isLoading = false // Ensure loading state is updated
-                return@LaunchedEffect
-            }
+            // Handle different player states properly to avoid stuck states
+            when (exoPlayer.playbackState) {
+                androidx.media3.common.Player.STATE_READY -> {
+                    // Player is ready, just start playing if needed
+                    exoPlayer.playWhenReady = shouldPlay
+                    isLoading = false
+                    hasError = false // Clear any previous errors when becoming visible
+                }
+                androidx.media3.common.Player.STATE_IDLE -> {
+                    // Player is idle (e.g., stopped when scrolled off-screen).
+                    // Re-prepare to resume buffering from disk cache.
+                    isLoading = true
+                    hasError = false
+                    if (exoPlayer.mediaItemCount == 0) {
+                        // Player was released completely, need to recreate media source
+                        if (videoMid != null && url != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+                        }
+                    } else {
+                        // Player has media items (retained after stop()), just re-prepare
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = shouldPlay
+                    }
+                }
+                androidx.media3.common.Player.STATE_BUFFERING -> {
+                    // Player is buffering, just set play state
+                    exoPlayer.playWhenReady = shouldPlay
+                    isLoading = true
+                    hasError = false
+                }
+                androidx.media3.common.Player.STATE_ENDED -> {
+                    // Video ended - rewind is handled by CreateExoPlayer listener
+                    hasError = false
+                }
+                else -> {
+                    // For other states, try to recover
+                    isLoading = true
+                    hasError = false
 
-            // If video is preloaded but player is idle, prepare it
-            if (videoMid != null && VideoManager.isVideoPreloaded(videoMid) && 
-                exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
-                exoPlayer.prepare()
+                    if (videoMid != null && url != null) {
+                        VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+                    }
+                }
             }
-
-            // Ensure player is in a good state before playing
-            if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
-                exoPlayer.prepare()
-            }
-
-            // Set playWhenReady after ensuring player is ready
-            exoPlayer.playWhenReady = autoPlay
         } else {
             // Only pause if this is the only active instance of this video
             // Don't pause if the video is being used in full screen
@@ -189,53 +271,74 @@ fun VideoPreview(
             } ?: run {
                 // If no videoMid, this is a standalone player, so pause it
                 exoPlayer.playWhenReady = false
+                Timber.tag("VideoPreview").d("⏸️ STANDALONE PLAYER PAUSED: no videoMid")
             }
         }
     }
 
     // React to changes in autoPlay while visible (for sequential playback)
-    LaunchedEffect(autoPlay, isVideoVisible) {
-        if (!isVideoVisible) return@LaunchedEffect
+    LaunchedEffect(shouldPlay, isVideoVisible) {
+        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
+        if (!effectivelyVisible) return@LaunchedEffect
         try {
             // Always keep repeat mode off for previews
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
-            if (autoPlay) {
-                if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
-                    exoPlayer.prepare()
+            
+            // Check if player is in a valid state before attempting to play
+            when (exoPlayer.playbackState) {
+                androidx.media3.common.Player.STATE_READY -> {
+                    // Player is ready, safe to play/pause
+                    exoPlayer.playWhenReady = shouldPlay
                 }
-                exoPlayer.playWhenReady = true
-            } else {
-                exoPlayer.playWhenReady = false
+                androidx.media3.common.Player.STATE_IDLE -> {
+                    // Player is idle, check if we have media items
+                    if (exoPlayer.mediaItemCount > 0) {
+                        exoPlayer.prepare()
+                        // Don't set playWhenReady yet, wait for STATE_READY
+                    } else {
+                        // No media items, need to recover
+                        if (videoMid != null && url != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+                        }
+                    }
+                }
+                androidx.media3.common.Player.STATE_BUFFERING -> {
+                    // Player is buffering, safe to set play state
+                    exoPlayer.playWhenReady = shouldPlay
+                }
+                androidx.media3.common.Player.STATE_ENDED -> {
+                    // Video ended - rewind is handled by CreateExoPlayer listener
+                    exoPlayer.playWhenReady = false
+                }
+                else -> {
+                    // For other states, just set play state
+                    exoPlayer.playWhenReady = shouldPlay
+                }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Timber.tag("VideoPreview").d("Error handling autoPlay change: ${e.message}")
         }
     }
 
-    // Monitor for video loading issues and trigger cleanup if needed
-    LaunchedEffect(hasError, isLoading) {
-        if (hasError && videoMid != null) {
-            // Check if we have too many video players and force cleanup
-            val cachedCount = VideoManager.getCachedVideoCount()
-            if (cachedCount > 8) { // If we have more than 8 cached videos, force cleanup
-                Timber.w("VideoPreview - Too many cached videos ($cachedCount), forcing cleanup")
-                VideoManager.forceCleanupInactiveVideos()
-            }
-        }
-    }
+    // Note: Stream parsing error monitoring removed - errors are now ignored to keep playback continuous
 
     LaunchedEffect(isMuted) {
         try {
             exoPlayer.volume = if (isMuted) 0f else 1f
-            // Persist mute state to preferences
-            preferenceHelper.setSpeakerMute(isMuted)
+            // Only persist mute state to global preferences if NOT using independent mute state
+            // TweetDetailView and FullScreen videos should not affect global mute state
+            if (!useIndependentMuteState) {
+                preferenceHelper.setSpeakerMute(isMuted)
+            }
         } catch (e: Exception) {
             Timber.e("VideoPreview - Error setting volume: ${e.message}")
         }
     }
 
     // Watch for global mute state changes only when visible, at a relaxed cadence
-    LaunchedEffect(isVideoVisible) {
-        if (!isVideoVisible) return@LaunchedEffect
+    // Skip this synchronization if using independent mute state (TweetDetailView/FullScreen)
+    LaunchedEffect(isVideoVisible, useIndependentMuteState) {
+        if (!isVideoVisible || useIndependentMuteState) return@LaunchedEffect
         while (isVideoVisible) {
             val globalMuteState = preferenceHelper.getSpeakerMute()
             if (isMuted != globalMuteState) {
@@ -249,8 +352,16 @@ fun VideoPreview(
     LaunchedEffect(exoPlayer.isPlaying) {
         if (exoPlayer.isPlaying) {
             showTimeLabel = true
-            delay(3000)
+            delay(5000)
             showTimeLabel = false
+        }
+    }
+    
+    // Auto-hide controls after 3 seconds when enabled
+    LaunchedEffect(showControls) {
+        if (showControls && enableTapToShowControls) {
+            delay(2000)
+            showControls = false
         }
     }
 
@@ -273,62 +384,143 @@ fun VideoPreview(
                     }
 
                     androidx.media3.common.Player.STATE_BUFFERING -> {
-                        // Only show loading if not already cached/preloaded
-                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-                            isLoading = true
-                        }
+                        // Show loading spinner when video is buffering data
+                        isLoading = true
                     }
 
                     androidx.media3.common.Player.STATE_ENDED -> {
                         isLoading = false
-                        // Ensure video doesn't restart by setting playWhenReady to false
+                        // Rewind is handled by CreateExoPlayer listener, but we still need to handle callbacks
                         exoPlayer.playWhenReady = false
                         videoMid?.let { mid ->
                             VideoManager.onVideoCompleted(mid)
                         }
+                    if (videoMid != null && playbackTweetId != null) {
+                        VideoPlaybackCoordinator.handleVideoFinished(videoMid, playbackTweetId)
+                    }
                         // Call the completion callback for sequential playback
                         onVideoCompleted?.invoke()
                     }
 
                     androidx.media3.common.Player.STATE_IDLE -> {
-                        // Only show loading if not already cached/preloaded
-                        if (videoMid != null && !VideoManager.isVideoPreloaded(videoMid)) {
-                            isLoading = true
-                        }
+                        // Show loading spinner when video is idle and preparing
+                        isLoading = true
                     }
                 }
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // Check if it's a network-related error that might be temporary
-                val isNetworkError = error.cause?.message?.contains("network", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("timeout", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("connection", ignoreCase = true) == true ||
-                        error.cause?.message?.contains("unable to resolve", ignoreCase = true) == true
+                Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
                 
-                // For network errors, be more lenient and don't immediately show error state
-                if (isNetworkError && recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
-                    recoveryAttempts++
-                    Timber.tag("VideoPreview").d("Network error detected, will retry automatically (attempt $recoveryAttempts)")
-                    
-                    // Keep loading state for network errors to allow automatic retry
+                // Check if this is a MediaCodec decoder failure
+                val errorMessage = error.cause?.message ?: ""
+                val isMediaCodecError = errorMessage.contains("MediaCodec", ignoreCase = true) ||
+                        errorMessage.contains("Decoder init failed", ignoreCase = true) ||
+                        errorMessage.contains("OMX.hisi.video.decoder", ignoreCase = true) ||
+                        errorMessage.contains("OMX.", ignoreCase = true) ||
+                        errorMessage.contains("Failed to initialize", ignoreCase = true) ||
+                        errorMessage.contains("CodecException", ignoreCase = true) ||
+                        errorMessage.contains("DecoderInitializationException", ignoreCase = true) ||
+                        errorMessage.contains("MediaCodecRenderer", ignoreCase = true) ||
+                        errorMessage.contains("error 0xfffffff4", ignoreCase = true) ||
+                        errorMessage.contains("native_setup", ignoreCase = true)
+                
+                // Check if this is a stream parsing error that we should ignore
+                val isStreamParsingError = errorMessage.contains("Unexpected start code", ignoreCase = true) ||
+                        errorMessage.contains("PesReader", ignoreCase = true) ||
+                        errorMessage.contains("start code prefix", ignoreCase = true)
+                
+                // Check if this is a recoverable error
+                val isRecoverableError = errorMessage.contains("network", ignoreCase = true) ||
+                        errorMessage.contains("timeout", ignoreCase = true) ||
+                        errorMessage.contains("connection", ignoreCase = true) ||
+                        errorMessage.contains("server", ignoreCase = true) ||
+                        errorMessage.contains("400", ignoreCase = true) ||  // Bad Request
+                        errorMessage.contains("401", ignoreCase = true) ||  // Unauthorized
+                        errorMessage.contains("403", ignoreCase = true) ||  // Forbidden
+                        errorMessage.contains("404", ignoreCase = true) ||  // Not Found
+                        errorMessage.contains("408", ignoreCase = true) ||  // Request Timeout
+                        errorMessage.contains("429", ignoreCase = true) ||  // Too Many Requests
+                        errorMessage.contains("500", ignoreCase = true) ||
+                        errorMessage.contains("502", ignoreCase = true) ||
+                        errorMessage.contains("503", ignoreCase = true) ||
+                        errorMessage.contains("504", ignoreCase = true) ||
+                        errorMessage.contains("InvalidResponseCodeException", ignoreCase = true) ||
+                        errorMessage.contains("HttpDataSource", ignoreCase = true)
+                
+                if (isStreamParsingError) {
+                    // For stream parsing errors, just ignore and keep playing
+                    // These are typically non-fatal warnings from PesReader about malformed start codes
+                    Timber.tag("VideoPreview").d("Ignoring stream parsing error and continuing playback for video: $videoMid - ${error.message}")
+                    Timber.tag("VideoPreview").d("Stream parsing errors are common with HLS and usually don't affect playback quality")
+                    isLoading = false
+                    hasError = false
+                    // Don't increment retry count for parsing errors
+                } else if (isMediaCodecError && videoMid != null && retryCount < maxRetries) {
+                    // For MediaCodec failures, force recreate with software decoder
+                    retryCount++
+                    Timber.tag("VideoPreview").w("MediaCodec decoder failure detected (attempt $retryCount/$maxRetries), force recreating with software decoder for video: $videoMid")
                     isLoading = true
                     hasError = false
                     
-                    // Auto-retry after a delay for network errors
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        delay(3000) // Wait 3 seconds before auto-retry
-                        if (isLoading && !hasError && videoMid != null) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url)
+                    // Force recreate with software decoder with delay to prevent rapid retries
+                    // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                    retryScope.launch {
+                        try {
+                            // Add delay before retry to prevent rapid retry loops
+                            delay(1000) // Wait 1 second before MediaCodec recovery attempt
+                            
+                            // Force recreate the entire player with software decoder
+                            val recreateSuccess = if (videoMid != null && url != null) {
+                                VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                            } else {
+                                false
+                            }
+                            
+                            if (recreateSuccess) {
+                                Timber.tag("VideoPreview").d("Player force recreated with software decoder for video: $videoMid")
+                                isLoading = false
+                                hasError = false
+                            } else {
+                                Timber.tag("VideoPreview").e("Failed to force recreate player for video: $videoMid")
+                                isLoading = false
+                                hasError = true
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("VideoPreview").e("Exception during MediaCodec recovery for video: $videoMid - ${e.message}")
+                            isLoading = false
+                            hasError = true
+                        }
+                    }
+                } else if (isMediaCodecError && videoMid != null) {
+                    // MediaCodec error but exceeded retry limit
+                    Timber.tag("VideoPreview").e("MediaCodec decoder failure exceeded retry limit ($maxRetries) for video: $videoMid")
+                    Timber.tag("VideoPreview").e("This device may not support software decoders for this video format")
+                    isLoading = false
+                    hasError = true
+                } else if (isRecoverableError && retryCount < maxRetries && videoMid != null) {
+                    // Only retry for non-parsing, non-MediaCodec recoverable errors
+                    retryCount++
+                    Timber.tag("VideoPreview").d("Attempting automatic retry $retryCount/$maxRetries for video: $videoMid")
+                    
+                    // Keep loading state during retry
+                    isLoading = true
+                    hasError = false
+                    
+                    // Retry after a delay
+                    // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                    retryScope.launch {
+                        delay(1000) // Wait 1 second before retry
+                        if (isLoading && !hasError && videoMid != null && url != null) {
+                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     }
                 } else {
-                    // For non-network errors or after max attempts, show error state
+                    // For non-recoverable errors or after max retries, show error state
                     isLoading = false
                     hasError = true
-                    // Only log the final error, not intermediate trial errors
-                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - ${error.message}")
-                    Timber.tag("VideoPreview").d("Showing error state for video: $videoMid")
+                    val userFriendlyError = ErrorMessageUtils.getVideoErrorMessage(context, error)
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid - $userFriendlyError (retries: $retryCount, recoverable: $isRecoverableError, mediaCodec: $isMediaCodecError)")
                 }
             }
         }
@@ -337,6 +529,13 @@ fun VideoPreview(
     // Add and remove listener properly
     DisposableEffect(exoPlayer) {
         exoPlayer.addListener(playerListener)
+        
+        // Check current state immediately in case we missed the state change
+        // This handles race conditions where the player becomes READY before listener attachment
+        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
+            isLoading = false
+        }
+        
         onDispose {
             exoPlayer.removeListener(playerListener)
         }
@@ -348,10 +547,19 @@ fun VideoPreview(
             .clipToBounds()
             .background(MaterialTheme.colorScheme.surfaceVariant) // Material3 surface variant for loading background
             .onGloballyPositioned { layoutCoordinates ->
+                // PERF FIX: Throttle visibility calculations during scrolling
+                val now = System.currentTimeMillis()
+                val timeSinceLastUpdate = now - lastVisibilityUpdate
+                
+                // Always update local visibility state for UI (lightweight check)
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
                     isVideoVisible = newVisibility
                 }
+                
+                    // Video visibility is now tracked at the TweetItem level
+                    // No need to call VideoPlaybackCoordinator.updateVideoVisibility anymore
+                    lastVisibilityUpdate = now
             }
             .clickable {
                 // Auto-start video in full screen
@@ -362,29 +570,52 @@ fun VideoPreview(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = false // No controls in preview mode
+                    useController = if (enableTapToShowControls) showControls else false // Use state for tap-to-show controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
                     // Keep last frame to avoid black flashes when resetting/pausing
                     setKeepContentOnPlayerReset(true)
-                    // Only show buffering indicator when playing and buffering
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    // Disable built-in buffering indicator - we show our own CircularProgressIndicator
+                    // This prevents duplicate loading spinners
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     // Force hardware acceleration and proper clipping for Media3 1.7.1
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                }
+            },
+            update = { playerView ->
+                // Update player reference in case it changes (e.g., after recovery)
+                // This fixes black screen issue when player is recreated
+                if (playerView.player != exoPlayer) {
+                    playerView.player = exoPlayer
+                }
+                // Update controller visibility when state changes
+                if (enableTapToShowControls) {
+                    playerView.useController = showControls // Use state for tap-to-show controls
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .clipToBounds() // Ensure content is clipped to bounds
+                .then(
+                    if (enableTapToShowControls) {
+                        Modifier.clickable { 
+                            showControls = !showControls
+                        }
+                    } else {
+                        Modifier.clickable {
+                            callback(index)
+                        }
+                    }
+                )
         )
 
         // Show loading indicator when video is loading
+        // Don't cover the entire video - allow frames to be visible while loading
         if (isLoading) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
@@ -408,7 +639,7 @@ fun VideoPreview(
                 ) {
                     Icon(
                         imageVector = Icons.Default.BrokenImage,
-                        contentDescription = "Video Error",
+                        contentDescription = stringResource(R.string.video_error),
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -419,32 +650,42 @@ fun VideoPreview(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    // Show retry button
+                    // Show retry button for manual retry attempts
                     if (videoMid != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                recoveryAttempts++
+                                retryCount++
                                 hasError = false
                                 isLoading = true
                                 
+                                Timber.tag("VideoPreview").d("Manual retry attempt $retryCount for video: $videoMid")
+                                
                                 // Attempt recovery on the main thread (required for ExoPlayer)
-                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
+                                retryScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                     try {
-                                        val success = VideoManager.attemptVideoRecovery(context, videoMid, url)
-                                        if (!success) {
-                                            // If recovery failed, show error again
-                                            hasError = true
-                                            isLoading = false
+                                        // Force recreate with software decoder for manual retry
+                                        val success = if (videoMid != null && url != null) {
+                                            VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
                                         } else {
+                                            false
+                                        }
+                                        if (success) {
                                             // Ensure playback resumes if visible and allowed
                                             if (isVideoVisible && autoPlay) {
                                                 exoPlayer.playWhenReady = true
                                             }
+                                            Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
+                                        } else {
+                                            // If recovery failed, show error again
+                                            hasError = true
+                                            isLoading = false
+                                            Timber.tag("VideoPreview").w("Manual retry failed for video: $videoMid")
                                         }
                                     } catch (e: Exception) {
                                         // Only log retry failures at debug level to avoid noise
-                                        Timber.d("VideoPreview - Retry failed: ${e.message}")
+                                        Timber.d("VideoPreview - Manual retry failed: ${e.message}")
                                         hasError = true
                                         isLoading = false
                                     }
@@ -453,8 +694,18 @@ fun VideoPreview(
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "Retry",
+                                text = if (retryCount > 0) "Retry Again" else "Retry",
                                 style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        
+                        // Show retry count information
+                        if (retryCount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Attempts: $retryCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -504,7 +755,7 @@ fun VideoPreview(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = Color.Black.copy(alpha = 0.1f),
+                            color = Color.Black.copy(alpha = 0.2f),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp)

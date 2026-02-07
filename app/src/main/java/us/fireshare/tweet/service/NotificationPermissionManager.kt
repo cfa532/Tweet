@@ -117,7 +117,7 @@ object NotificationPermissionManager {
     private fun getAppVersion(context: Context): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "${packageInfo.versionName}-${packageInfo.versionCode}"
+            "${packageInfo.versionName}-${packageInfo.longVersionCode}"
         } catch (e: Exception) {
             Timber.e(e, "Failed to get app version")
             "unknown"

@@ -1,21 +1,159 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Edit Profile Dialog -->
-    <string name="save_changes_title">変更を保存しますか？</string>
-    <string name="unsaved_changes_message">未保存の変更があります。終了前に保存しますか？</string>
-    <string name="dont_save">保存しない</string>
-    <string name="save_and_continue">保存して続行</string>
-    <string name="avatar_upload_failed">アバターのアップロードに失敗しました：%s</string>
-    <string name="joined">参加日</string>
-    <string name="cache_cleared_success">キャッシュをすべて削除しました！</string>
+    <!-- App name - same as Chinese -->
+    <string name="app_name">众众</string>
     
-    <!-- Theme Settings -->
-    <string name="theme_settings">テーマ設定</string>
-    <string name="theme_mode">テーマモード</string>
-    <string name="theme_system">システム設定に従う</string>
-    <string name="theme_light">ライトモード</string>
-    <string name="theme_dark">ダークモード</string>
+    <!-- Japanese translations -->
+    <string name="no_upgrade_available">利用可能なアップグレードはありません（バージョンは最新です）</string>
+    <string name="upgrade_required_title">アップグレードが必要です</string>
+    <string name="upgrade_required_message">新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。</string>
+    <string name="upgrade_now">今すぐアップグレード</string>
+    <string name="no_more_tweets">これ以上のツイートはありません</string>
+    <string name="upgrade_failed_no_server">アップグレードに失敗しました：どのサーバーからもダウンロードできません</string>
+    <string name="upgrade_failed_server_error">ダウンロードに失敗しました：サーバーが %1$s を返しました</string>
+    <string name="upgrade_failed_read_apk">APKファイルを読み取れませんでした</string>
+    <string name="upgrade_failed_download">ダウンロードに失敗しました：%1$s</string>
+    <string name="upgrade_failed_unknown">アップグレードに失敗しました：不明なエラー</string>
+    <string name="download_in_progress">ダウンロードが進行中です。完了までお待ちください。</string>
+    <string name="retrying">再試行中 %1$d/%2$d...</string>
     
-    <!-- Error Messages -->
-    <string name="delete_failed">ツイートの削除に失敗しました。もう一度お試しください。</string>
+    <!-- Additional missing strings -->
+    <string name="downloading_file">ファイルをダウンロード中...</string>
+    <string name="error_unknown_error">不明なエラー</string>
+    <string name="error_message_failed">エラー：%s</string>
+    <string name="video_file_too_large">動画ファイルは120MB未満である必要があります</string>
+    <string name="files_too_large">ファイルは120MB未満である必要があります</string>
+    <string name="image_saved_to_gallery">画像がギャラリーに保存されました</string>
+    <string name="failed_to_save_image">画像の保存に失敗しました</string>
+    <string name="camera_permission_required">カメラの権限が必要です</string>
+    <string name="uploading_attachment_background">添付ファイルをバックグラウンドでアップロード中...</string>
+    <string name="attachment_upload_failed">添付ファイルのアップロードに失敗しました。ネットワーク接続を確認して、もう一度お試しください。</string>
+    <string name="sending_attachment_background">添付ファイルをバックグラウンドで送信中...</string>
+    <string name="message_failed_send_tap_error">メッセージの送信に失敗しました - タップしてエラー詳細を確認</string>
+    <string name="more">その他</string>
+    <string name="video_error">動画エラー</string>
+    <string name="close">閉じる</string>
+    <string name="previous_video">前の動画</string>
+    <string name="next_video">次の動画</string>
+    <string name="more_options">その他のオプション</string>
+    <string name="open_camera">カメラを開く</string>
+    <string name="upload_file">ファイルをアップロード</string>
+    <string name="play_video">動画を再生</string>
+    <string name="cancel">キャンセル</string>
+    <string name="photo_mode">写真モード</string>
+    <string name="video_mode">動画モード</string>
+    <string name="copy_tweet_id">ツイートIDをコピー</string>
+    
+    <!-- File size warnings -->
+    <string name="file_size_warning">ファイルサイズ：%s（最大：120MB）</string>
+    <string name="file_size_ok">ファイルサイズ：%s ✓</string>
+    <string name="file_size_large_warning">大きなファイルを選択しました（%s）- アップロードに時間がかかる場合があります</string>
+    <string name="file_size_very_large_warning">非常に大きなファイル（%s）- アップロード前に圧縮することをお勧めします</string>
+    <string name="file_size_limit">120MB</string>
+    <string name="file_size_large_threshold">50MB</string>
+    <string name="file_size_very_large_threshold">100MB</string>
+    
+    <!-- Empty states -->
+    <string name="no_tweets_found">ツイートが見つかりません</string>
+    <string name="no_more_chat_messages">これ以上のチャットメッセージはありません</string>
+    <string name="no_search_results">「%s」の結果が見つかりません</string>
+    <string name="search_generic_error">検索中に問題が発生しました。もう一度お試しください。</string>
+    <string name="search_section_users">アカウント</string>
+    <string name="search_section_tweets">ツイート</string>
+    <string name="no_bookmarks">ブックマークがありません</string>
+    <string name="no_favorites">お気に入りがありません</string>
+    <string name="no_followers">フォロワーがいません</string>
+    <string name="no_following">まだ誰もフォローしていません</string>
+    <string name="start_following">人をフォローしてツイートを見る</string>
+    <string name="try_different_search">別の検索語を試してください</string>
+    
+    <!-- Network error messages -->
+    <string name="network_error_connection_lost">接続が失われました。インターネット接続を確認してください。</string>
+    <string name="network_error_timeout">リクエストがタイムアウトしました。再試行してください。</string>
+    <string name="network_error_unreachable">サーバーに接続できません。接続を確認してください。</string>
+    <string name="network_error_generic">ネットワークエラーが発生しました。再試行してください。</string>
+    <string name="retry_connection">接続を再試行</string>
+    
+    <!-- Video error messages -->
+    <string name="video_error_playback_failed">動画の再生に失敗しました。ネットワークの問題またはサポートされていない形式が原因の可能性があります。</string>
+    <string name="video_error_format_not_supported">動画形式がサポートされていません。別の動画をお試しください。</string>
+    <string name="video_error_network_issue">動画の読み込みに失敗しました。インターネット接続を確認して再試行してください。</string>
+    <string name="video_retry_playback">再生を再試行</string>
+    <string name="domain_to_share">共有ドメイン</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">独自ノードの設定が必要です</string>
+    <string name="node_required_message">新しいツイートを投稿するには、独自のノードを設定する必要があります（10を超えるツイートがあります）。より良いパフォーマンスとストレージのために、独自のノードを確立してください。</string>
+    <string name="node_required_ok">わかりました</string>
+    
+    <!-- Profile screen strings -->
+    <string name="fans">フォロワー</string>
+    <string name="followings">フォロー中</string>
+    <string name="user_bookmarks">ブックマーク</string>
+    <string name="user_favorites">お気に入り</string>
+    <string name="your_followings">あなたのフォロー中</string>
+    <string name="your_fans">あなたのフォロワー</string>
+    <string name="your_followings_title">あなたのフォロー中</string>
+    <string name="your_bookmarks">あなたのブックマーク</string>
+    <string name="follow_operation_failed">フォロー操作に失敗しました。もう一度お試しください。</string>
+    <string name="follow_operation_failed_refresh_message">フォローリストを更新するには、フォローリストを更新してください。</string>
+    <string name="your_favorites">あなたのお気に入り</string>
+    <string name="fans_at_username">%sのフォロワー</string>
+    <string name="followings_at_username">%sのフォロー中</string>
+    <string name="choose">選択</string>
+    <string name="choose_photo">写真を選択</string>
+    <string name="select_photo_to_crop">クロップする写真を選択</string>
+    <string name="crop_instructions">ドラッグして位置を調整し、ピンチしてズームします。円形の領域がアバターになります。</string>
+    <string name="cropping_avatar">アバターをクロップ中...</string>
+    <string name="uploading_avatar">アバターをアップロード中...</string>
+    
+    <!-- Chat-related strings -->
+    <string name="uploading_attachment">アップロード中でもチャットを続けることができます</string>
+    <string name="attachment_sent">添付ファイルを送信しました</string>
+    <string name="attachment_received">添付ファイルを受信しました</string>
+    <string name="image_sent">画像を送信しました</string>
+    <string name="image_received">画像を受信しました</string>
+    <string name="video_sent">動画を送信しました</string>
+    <string name="video_received">動画を受信しました</string>
+    <string name="audio_sent">音声を送信しました</string>
+    <string name="audio_received">音声を受信しました</string>
+    <string name="document_sent">ドキュメントを送信しました</string>
+    <string name="document_received">ドキュメントを受信しました</string>
+    <string name="archive_sent">アーカイブを送信しました</string>
+    <string name="archive_received">アーカイブを受信しました</string>
+    <string name="unknown_file">不明なファイル</string>
+    <string name="new_chat_started">新しいチャットを開始しました</string>
+    <string name="no_one">誰もいません</string>
+    <string name="remove_attachment">添付ファイルを削除</string>
+    <string name="file_attachment">ファイル添付</string>
+    <string name="no_more_messages">これ以上のメッセージはありません</string>
+    <string name="loading_older_messages">古いメッセージを読み込み中...</string>
+    <string name="failed_to_send_message">メッセージの送信に失敗しました：%s</string>
+
+    <!-- Error message helper strings (Japanese) -->
+    <string name="username_taken">ユーザー名が既に使用されています</string>
+    <string name="wrong_password">パスワードが間違っています</string>
+    <string name="invalid_username_format">無効なユーザー名形式</string>
+    <string name="user_not_found_or_missing_host">ユーザーが見つからないかホストがありません</string>
+    <string name="user_host_not_found">ユーザーホストが見つかりません</string>
+    <string name="author_host_not_found">投稿者ホストが見つかりません</string>
+    <string name="user_not_found_in_database">データベースにユーザーが見つかりません</string>
+    <string name="user_missing_host">ユーザーにホストがありません</string>
+    <string name="cannot_follow_yourself">自分自身をフォローできません</string>
+    <string name="cannot_get_followed_user">フォローされたユーザーを取得できません</string>
+    <string name="missing_host_for_followed_user">フォローされたユーザーのホストがありません</string>
+    <string name="tweet_not_found">ツイートが見つかりません</string>
+    <string name="only_author_can_update_privacy">ツイートの投稿者のみがプライバシー設定を更新できます</string>
+    <string name="not_a_friend_of_the_host">ホストの友人ではありません</string>
+    <string name="no_provider_ip_found">プロバイダーIPが見つかりません</string>
+    <string name="failed_to_extract_zip_file">ZIPファイルの展開に失敗しました</string>
+    <string name="invalid_hls_structure">無効なHLS構造</string>
+    <string name="app_id_mismatch">アプリIDが一致しません</string>
+    <string name="chunk_size_exceeds_limit">チャンクサイズが1MB制限を超えています</string>
+    <string name="invalid_host_id_format">ホストIDの形式が無効です。ホストIDを確認して、もう一度お試しください。</string>
+    <string name="invalid_host_id_length">ホストIDは27文字以上でなければなりません。</string>
+    <string name="network_connection_lost">ネットワーク接続が失われました。インターネット接続を確認してください。</string>
+    <string name="request_timeout">リクエストがタイムアウトしました。もう一度お試しください。</string>
+    <string name="server_unreachable">サーバーに接続できません。後でもう一度お試しください。</string>
+    <string name="connection_error">接続エラー。もう一度お試しください。</string>
 </resources>

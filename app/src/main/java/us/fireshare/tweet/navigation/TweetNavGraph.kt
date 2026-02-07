@@ -8,14 +8,16 @@ import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
@@ -26,10 +28,11 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.getAlphaIds
 import us.fireshare.tweet.chat.ChatListScreen
 import us.fireshare.tweet.chat.ChatScreen
-import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.profile.EditProfileScreen
 import us.fireshare.tweet.profile.FollowerScreen
 import us.fireshare.tweet.profile.FollowingScreen
@@ -47,9 +50,9 @@ import us.fireshare.tweet.tweet.TweetFeedScreen
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
-
 import us.fireshare.tweet.widget.MediaBrowser
 import javax.inject.Inject
 import kotlin.reflect.typeOf
@@ -61,64 +64,96 @@ val LocalNavController = compositionLocalOf<NavController> {
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetNavGraph(
-    appLinkIntent: Intent,
+    appLinkIntent: Intent?,
     modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
+    navController: NavHostController = rememberNavController()
 ) {
     var startDestination: NavTweet = NavTweet.TweetFeed
+    val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
         hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory>(
-            LocalActivity.current as ComponentActivity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
+            activity, key = "${appUser.mid}_${appUser.avatar}_${appUser.name}_${appUser.profile}"
         ) { factory ->
             factory.create(appUser.mid)
         }
-    // Use the singleton TweetFeedViewModel from AppModule
-    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    // Use activity-scoped TweetFeedViewModel to ensure single instance across the app
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
+    
+    // Initialize TweetListViewModel
+    sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
-    // Handle deeplink
-    if (appLinkIntent.action == Intent.ACTION_VIEW) {
-        val appLinkData = appLinkIntent.data
-        if (appLinkData != null) {
-            val pathSegments = appLinkData.pathSegments
-            if (pathSegments.size >= 3) { // Check if enough segments are present
-                val tweetId = pathSegments[1] // Get the 2nd segment (tweetId)
-                val authorId = pathSegments[2] // Get the 3rd segment (authorId)
-                tweetId?.let { startDestination = NavTweet.DeepLink(tweetId, authorId) }
+    // Parse deep link from intent
+    val deepLinkDestination = remember(appLinkIntent) {
+        parseDeepLink(appLinkIntent)
+    }
+    
+    // Track the last processed intent URI to avoid duplicate navigation
+    var lastProcessedUri by remember { mutableStateOf<String?>(null) }
+    
+    // Set initial destination if deep link is present
+    if (deepLinkDestination != null) {
+        val currentUri = appLinkIntent?.data?.toString()
+        if (currentUri != lastProcessedUri) {
+            // This is either initial load or a new deep link
+            if (lastProcessedUri == null) {
+                // Initial load - set start destination
+                startDestination = deepLinkDestination
+                lastProcessedUri = currentUri
+            } else {
+                // New deep link while app is running - will be handled by LaunchedEffect
             }
         }
     }
+    
+    // Handle deep link navigation when app is already running (onNewIntent)
+    LaunchedEffect(appLinkIntent?.data?.toString()) {
+        val currentUri = appLinkIntent?.data?.toString()
+        if (currentUri != null && currentUri != lastProcessedUri) {
+            val destination = parseDeepLink(appLinkIntent)
+            if (destination != null) {
+                // Navigate to deep link, clearing back stack to root
+                navController.navigate(destination) {
+                    popUpTo(navController.graph.startDestinationId) {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                }
+                lastProcessedUri = currentUri
+            }
+        } else if (currentUri == null && lastProcessedUri == null) {
+            // Initial load without deep link - mark as processed
+            lastProcessedUri = ""
+        }
+    }
+    // Navigate guest user to alphaId profile on app start
+    LaunchedEffect(Unit) {
+        if (deepLinkDestination == null && appUser.isGuest()) {
+            val alphaIds = getAlphaIds()
+            if (alphaIds.isNotEmpty()) {
+                navController.navigate(NavTweet.UserProfile(alphaIds.first()))
+            }
+        }
+    }
+
     CompositionLocalProvider(LocalNavController provides navController) {
         NavHost(
-            modifier = Modifier,
+            modifier = modifier,
             navController = navController,
-            startDestination = startDestination,
-            route = NavTwee::class
+            startDestination = startDestination
         ) {
             composable<NavTweet.TweetFeed> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
-                // Save the current route in the savedStateHandle
-                parentEntry.savedStateHandle["previousRoute"] = "TweetFeed"
-                TweetFeedScreen(navController, parentEntry, 0, tweetFeedViewModel)
+                TweetFeedScreen(navController, it, 0, tweetFeedViewModel)
             }
             composable<NavTweet.TweetDetail> { navBackStackEntry ->
                 val args = navBackStackEntry.toRoute<NavTweet.TweetDetail>()
-                val parentEntry = remember(navBackStackEntry) {
-                    navController.getBackStackEntry(NavTwee)
-                }
-                val viewModel =
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry,            // The scope and key will identify
-                        key = args.tweetId      // the viewModel to be injected.
-                    )
-                    { factory ->
-                        factory.create(
-                            Tweet(mid = args.tweetId, authorId = args.authorId)
-                        )
-                    }
-                TweetDetailScreen(args.authorId, args.tweetId, parentEntry)
+                TweetDetailScreen(
+                    authorId = args.authorId,
+                    tweetId = args.tweetId,
+                    parentEntry = navBackStackEntry,
+                    parentTweetId = args.parentTweetId,
+                    parentAuthorId = args.parentAuthorId
+                )
             }
             composable<NavTweet.ComposeTweet> {
                 ComposeTweetScreen(navController)
@@ -132,13 +167,12 @@ fun TweetNavGraph(
                     val currentTime = SystemClock.elapsedRealtime()
                     if (currentTime - lastClickTime > debounceTime) {
                         navController.popBackStack()
-                        lastClickTime = currentTime
                     }
                 }
             }
             composable<NavTweet.UserProfile> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
                 // reassign the appUserViewModel here, in case the user login with
@@ -156,47 +190,44 @@ fun TweetNavGraph(
             }
             composable<NavTweet.Favorites> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 UserFavorites(sharedViewModel.appUserViewModel, parentEntry)
             }
             composable<NavTweet.Bookmarks> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 UserBookmarks(sharedViewModel.appUserViewModel, parentEntry)
             }
-            composable<NavTweet.Comments> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
-            }
             composable<NavTweet.ChatBox> {
                 // go to individual chatbox
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
                 val args = it.toRoute<NavTweet.ChatBox>()
+                // Use NavBackStackEntry as viewModelStoreOwner for proper lifecycle management
                 val viewModel = hiltViewModel<ChatViewModel, ChatViewModel.ChatViewModelFactory>(
+                    viewModelStoreOwner = it,
                     key = args.receiptId
                 ) { factory ->
                     factory.create(receiptId = args.receiptId)
                 }
-                viewModel.chatListViewModel = hiltViewModel<ChatListViewModel>(parentEntry)
+                // Use activity as ViewModelStoreOwner so ChatListViewModel is shared with ChatList screen
+                viewModel.chatListViewModel = hiltViewModel<ChatListViewModel>(
+                    LocalActivity.current as ComponentActivity
+                )
                 ChatScreen(viewModel)
             }
             composable<NavTweet.ChatList> {
-                val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
-                }
-                val viewModel = hiltViewModel<ChatListViewModel>(parentEntry)
+                // Use activity as ViewModelStoreOwner so ChatListViewModel is shared with ChatBox screen
+                val viewModel = hiltViewModel<ChatListViewModel>(
+                    LocalActivity.current as ComponentActivity
+                )
                 ChatListScreen(viewModel)
             }
             composable<NavTweet.MediaViewer>(
                 typeMap = mapOf(typeOf<MediaViewerParams>() to TweetNavType.MediaViewerType)
             ) { navBackStackEntry ->
                 val parentEntry = remember(navBackStackEntry) {
-                    navController.getBackStackEntry(NavTwee)
+                    navBackStackEntry
                 }
                 val md = navBackStackEntry.toRoute<NavTweet.MediaViewer>()
                 MediaBrowser(
@@ -227,21 +258,21 @@ fun TweetNavGraph(
             }
             composable<NavTweet.Following> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 val user = it.toRoute<NavTweet.Following>()
                 FollowingScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Follower> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 val user = it.toRoute<NavTweet.Follower>()
                 FollowerScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Search> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 val viewModel: SearchViewModel = hiltViewModel(parentEntry)
                 SearchScreen(viewModel)
@@ -252,20 +283,53 @@ fun TweetNavGraph(
              * */
             composable<NavTweet.DeepLink> {
                 val parentEntry = remember(it) {
-                    navController.getBackStackEntry(NavTwee)
+                    it
                 }
                 val tweetId = it.toRoute<NavTweet.DeepLink>().tweetId
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
-                val viewModel =
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        parentEntry, key = tweetId
-                    ) { factory ->
-                        factory.create(Tweet(authorId = authorId, mid = tweetId))
-                    }
                 TweetDetailScreen(authorId, tweetId, parentEntry)
             }
         }
     }
+}
+
+/**
+ * Parse deep link from intent
+ * Expected URL format: http://fireshare.uk/tweet/{tweetId}/{authorId}
+ */
+private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
+    if (intent?.action != Intent.ACTION_VIEW) {
+        return null
+    }
+    
+    val appLinkData = intent.data
+    if (appLinkData == null) {
+        return null
+    }
+    
+    val pathSegments = appLinkData.pathSegments
+    
+    // Expected format: /tweet/{tweetId}/{authorId}
+    // pathSegments will be: ["tweet", "tweetId", "authorId"]
+    if (pathSegments.size < 3) {
+        Timber.tag("DeepLink").w("Invalid deep link format: expected at least 3 path segments, got ${pathSegments.size}")
+        return null
+    }
+    
+    if (pathSegments[0] != "tweet") {
+        Timber.tag("DeepLink").w("Invalid deep link format: first segment should be 'tweet', got '${pathSegments[0]}'")
+        return null
+    }
+    
+    val tweetId = pathSegments[1]
+    val authorId = pathSegments[2]
+    
+    if (tweetId.isBlank() || authorId.isBlank()) {
+        Timber.tag("DeepLink").w("Invalid deep link: tweetId or authorId is blank")
+        return null
+    }
+    
+    return NavTweet.DeepLink(tweetId, authorId)
 }
 
 @HiltViewModel
@@ -273,4 +337,5 @@ class SharedViewModel @Inject constructor(
 ) : ViewModel() {
     lateinit var appUserViewModel: UserViewModel
     lateinit var tweetViewModel: TweetViewModel
+    lateinit var tweetListViewModel: TweetListViewModel
 }

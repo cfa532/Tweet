@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chinese (Traditional) translations -->
+    <string name="no_upgrade_available">沒有可用的升級（版本已是最新）</string>
+    <string name="upgrade_required_title">需要升級</string>
+    <string name="upgrade_required_message">您已發布超過5條推文，需要升級到完整版才能繼續發布。將從服務器下載最新版本。</string>
+    <string name="upgrade_now">立即升級</string>
+    <string name="upgrade_failed_no_server">升級失敗：無法從任何服務器下載</string>
+    <string name="upgrade_failed_server_error">下載失敗：服務器返回 %1$s</string>
+    <string name="upgrade_failed_read_apk">無法讀取APK文件</string>
+    <string name="upgrade_failed_download">下載失敗：%1$s</string>
+    <string name="upgrade_failed_unknown">升級失敗：未知錯誤</string>
+    <string name="download_in_progress">下載正在進行中，請等待完成。</string>
+    <string name="retrying">正在重試 %1$d/%2$d...</string>
+    
+    <!-- Additional missing strings -->
+    <string name="downloading_file">正在下載文件...</string>
+    <string name="error_unknown_error">未知錯誤</string>
+    <string name="error_message_failed">錯誤：%s</string>
+    <string name="video_file_too_large">視頻文件必須小於120MB</string>
+    <string name="files_too_large">文件必須小於120MB</string>
+    <string name="image_saved_to_gallery">圖片已保存到相冊</string>
+    <string name="failed_to_save_image">保存圖片失敗</string>
+    <string name="camera_permission_required">需要相機權限</string>
+    <string name="uploading_attachment_background">正在後台上傳附件...</string>
+    <string name="sending_attachment_background">正在後台上傳附件...</string>
+    <string name="message_failed_send_tap_error">消息發送失敗 - 點擊查看錯誤詳情</string>
+    <string name="more">更多</string>
+    <string name="video_error">視頻錯誤</string>
+    <string name="close">關閉</string>
+    <string name="previous_video">上一個視頻</string>
+    <string name="next_video">下一個視頻</string>
+    <string name="more_options">更多選項</string>
+    <string name="open_camera">打開相機</string>
+    <string name="upload_file">上傳文件</string>
+    <string name="play_video">播放視頻</string>
+    <string name="cancel">取消</string>
+    <string name="photo_mode">拍照模式</string>
+    <string name="video_mode">錄像模式</string>
+    <string name="copy_tweet_id">複製推文ID</string>
+    
+    <!-- File size warnings -->
+    <string name="file_size_warning">文件大小：%s（最大：120MB）</string>
+    <string name="file_size_ok">文件大小：%s ✓</string>
+    <string name="file_size_large_warning">已選擇大文件（%s）- 上傳可能需要更長時間</string>
+    <string name="file_size_very_large_warning">文件很大（%s）- 建議上傳前先壓縮</string>
+    <string name="file_size_limit">120MB</string>
+    <string name="file_size_large_threshold">50MB</string>
+    <string name="file_size_very_large_threshold">100MB</string>
+    
+    <!-- Empty states -->
+    <string name="no_tweets_found">沒有找到推文</string>
+    <string name="no_more_chat_messages">沒有更多聊天訊息</string>
+    <string name="no_search_results">沒有找到「%s」的結果</string>
+    <string name="search_generic_error">搜尋時發生問題，請再試一次。</string>
+    <string name="search_section_users">帳號</string>
+    <string name="search_section_tweets">推文</string>
+    <string name="no_bookmarks">還沒有書簽</string>
+    <string name="no_favorites">還沒有喜歡的內容</string>
+    <string name="no_followers">還沒有粉絲</string>
+    <string name="no_following">還沒有關注任何人</string>
+    <string name="start_following">開始關注他人以查看他們的推文</string>
+    <string name="try_different_search">嘗試不同的搜索詞</string>
+    
+    <!-- Network error messages -->
+    <string name="network_error_connection_lost">連接已斷開。請檢查您的網絡連接。</string>
+    <string name="network_error_timeout">請求超時。請重試。</string>
+    <string name="network_error_unreachable">無法連接到服務器。請檢查您的連接。</string>
+    <string name="network_error_generic">發生網絡錯誤。請重試。</string>
+    <string name="retry_connection">重試連接</string>
+    
+    <!-- Video error messages -->
+    <string name="video_error_playback_failed">視頻播放失敗。這可能是由於網絡問題或格式不支持。</string>
+    <string name="video_error_format_not_supported">視頻格式不支持。請嘗試其他視頻。</string>
+    <string name="video_error_network_issue">視頻加載失敗。檢查您的網絡連接並重試。</string>
+    <string name="video_retry_playback">重試播放</string>
+    <string name="domain_to_share">分享域名</string>
+    
+    <!-- Node required dialog -->
+    <string name="node_required_title">需要建立自己的節點</string>
+    <string name="node_required_message">您已發布超過10條推文，需要建立自己的節點才能繼續發布。請建立您自己的節點以獲得更好的性能和存儲。</string>
+    <string name="node_required_ok">我知道了</string>
+
+    <!-- Error message helper strings (Chinese Traditional) -->
+    <string name="username_taken">用戶名已被使用</string>
+    <string name="wrong_password">密碼錯誤</string>
+    <string name="invalid_username_format">無效的用戶名格式</string>
+    <string name="user_not_found_or_missing_host">找不到用戶或缺少主機</string>
+    <string name="user_host_not_found">找不到用戶主機</string>
+    <string name="author_host_not_found">找不到作者主機</string>
+    <string name="user_not_found_in_database">在數據庫中找不到用戶</string>
+    <string name="user_missing_host">用戶缺少主機</string>
+    <string name="cannot_follow_yourself">不能關注自己</string>
+    <string name="cannot_get_followed_user">無法獲取被關注的用戶</string>
+    <string name="missing_host_for_followed_user">被關注用戶缺少主機</string>
+    <string name="tweet_not_found">找不到推文</string>
+    <string name="only_author_can_update_privacy">只有推文作者可以更新隱私設置</string>
+    <string name="not_a_friend_of_the_host">不是主機的朋友</string>
+    <string name="no_provider_ip_found">找不到提供者IP</string>
+    <string name="failed_to_extract_zip_file">解壓縮ZIP文件失敗</string>
+    <string name="invalid_hls_structure">無效的HLS結構</string>
+    <string name="app_id_mismatch">應用程式ID不匹配</string>
+    <string name="chunk_size_exceeds_limit">區塊大小超過1MB限制</string>
+    <string name="invalid_host_id_format">無效的主機ID格式。請檢查您的主機ID後重試。</string>
+    <string name="invalid_host_id_length">主機ID必須至少27個字符長。</string>
+    <string name="network_connection_lost">網路連接已中斷。請檢查您的網路連接。</string>
+    <string name="request_timeout">請求超時。請重試。</string>
+    <string name="server_unreachable">無法連接到伺服器。請稍後重試。</string>
+    <string name="connection_error">連接錯誤。請重試。</string>
+    <string name="no_more_tweets">沒有更多推文了</string>
+</resources>
+

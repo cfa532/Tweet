@@ -1,6 +1,8 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,14 +18,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.tweet.guestWarning
 import us.fireshare.tweet.ui.theme.DebouncedButton
@@ -41,12 +45,30 @@ fun ToggleFollowingButton(
     val followings by appUserViewModel.followings.collectAsState()
     val isFollowing = followings.contains(userId)
     var localFollowState by remember { mutableStateOf(isFollowing) }
-    var isOperationInProgress by remember { mutableStateOf(false) }
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
+    val followOperationFailed by appUserViewModel.followOperationFailed.collectAsState()
+    
+    // Capture string resources at composable level
+    val followOperationFailedText = stringResource(R.string.follow_operation_failed)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Update local state when followings change
     LaunchedEffect(followings) {
         localFollowState = isFollowing
+    }
+    
+    // Show toast when follow operation fails
+    LaunchedEffect(followOperationFailed) {
+        if (followOperationFailed == userId) {
+            Toast.makeText(
+                context,
+                followOperationFailedText,
+                Toast.LENGTH_LONG
+            ).show()
+            // Reset the failure signal
+            appUserViewModel.clearFollowOperationFailed()
+        }
     }
 
     DebouncedButton(
@@ -54,72 +76,53 @@ fun ToggleFollowingButton(
         onClick = {
             if (appUser.isGuest()) {
                 appUserViewModel.viewModelScope.launch {
-                    guestWarning(context, navController)
+                    guestWarning(context, navController, guestReminderText)
                 }
                 return@DebouncedButton
             }
 
-            // Prevent multiple simultaneous operations
-            if (isOperationInProgress) {
-                return@DebouncedButton
-            }
-
-            // Store the previous state for potential rollback
-            val previousState = localFollowState
-            
-            // Toggle local state immediately for instant UI feedback
-            localFollowState = !localFollowState
-            isOperationInProgress = true
-
-            appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    // Attempt the actual toggle operation
-                    val result = appUserViewModel.toggleFollowingWithResult(
-                        userId,
-                        appUser.mid
-                    ) { isFollowingResult ->
-                        viewModel.viewModelScope.launch(Dispatchers.IO) {
-                            tweetFeedViewModel.updateFollowingsTweets(
-                                userId,
-                                isFollowingResult
-                            )
-                        }
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        isOperationInProgress = false
+            // Optimistically update followingList and enqueue worker
+            appUserViewModel.toggleFollowingOptimistic(
+                userId,
+                appUser.mid,
+                context,
+                updateTweetFeed = { isFollowingResult ->
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        tweetFeedViewModel.updateFollowingsTweets(
+                            userId,
+                            isFollowingResult
+                        )
                         
-                        if (result == null) {
-                            // Operation failed, revert the local state
-                            localFollowState = previousState
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.follow_operation_failed),
-                                Toast.LENGTH_SHORT
-                            ).show()
+                        // Remove cache of the followed/unfollowed user to force refresh from server
+                        TweetCacheManager.removeCachedUser(userId)
+                        
+                        // Refresh user data for the followed/unfollowed user
+                        try {
+                            // Get fresh user data from server and cache it
+                            fetchUser(userId)?.let { refreshedUser ->
+                                TweetCacheManager.saveUser(refreshedUser)
+                                // Refresh the current viewmodel's user data
+                                viewModel.refreshUserData()
+                                Timber.tag("ToggleFollowingButton").d("Refreshed user data for: $userId")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ToggleFollowingButton").e("Failed to refresh user data for $userId: $e")
                         }
-                        // If result is not null, the operation succeeded and local state is correct
                     }
-                } catch (e: Exception) {
-                    // Exception occurred, revert the local state
-                    withContext(Dispatchers.Main) {
-                        localFollowState = previousState
-                        isOperationInProgress = false
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.follow_operation_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                },
+                rollbackTweetFeed = { attemptedIsFollowing ->
+                    viewModel.viewModelScope.launch(Dispatchers.IO) {
+                        tweetFeedViewModel.rollbackFollowingsTweets(userId, attemptedIsFollowing)
                     }
                 }
-            }
+            )
         },
-        textColor = MaterialTheme.colorScheme.primary,
+        textColor = if (localFollowState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         textStyle = MaterialTheme.typography.bodyMedium,
         modifier = Modifier
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                color = MaterialTheme.colorScheme.outline,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 20.dp, vertical = 6.dp)

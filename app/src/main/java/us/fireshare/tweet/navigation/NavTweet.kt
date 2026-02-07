@@ -8,8 +8,6 @@ import kotlinx.serialization.json.Json
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MimeiId
 
-@Serializable
-object NavTwee
 
 @Serializable
 data class ComposeComment(val tweetId: MimeiId)
@@ -26,7 +24,9 @@ sealed interface NavTweet {
     @Serializable
     data class TweetDetail(
         val authorId: MimeiId,
-        val tweetId: MimeiId
+        val tweetId: MimeiId,
+        val parentTweetId: MimeiId? = null,
+        val parentAuthorId: MimeiId? = null
     ) : NavTweet
 
     @Serializable
@@ -70,9 +70,6 @@ sealed interface NavTweet {
 
     @Serializable
     data class Favorites(val userId: MimeiId) : NavTweet
-
-    @Serializable
-    data class Comments(val userId: MimeiId) : NavTweet
 }
 
 @Serializable

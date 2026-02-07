@@ -16,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,10 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.withContext
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -41,7 +38,6 @@ fun ProfileDetail(
 ) {
     val sharedViewModel = hiltViewModel<SharedViewModel>()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val appUserFollowings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
     val appUser by appUserViewModel.user.collectAsState()
 
@@ -56,13 +52,18 @@ fun ProfileDetail(
     val followingsCount by viewModel.followingsCount.collectAsState()
     val followersCount by viewModel.followersCount.collectAsState()
     val tweetCount by viewModel.tweetCount.collectAsState()
+    
 
-    // Stabilize the LaunchedEffect to prevent unnecessary calls
-    LaunchedEffect(appUserFollowings.size) {
-        withContext(IO) {
-            viewModel.refreshFollowingsAndFans()
-        }
-    }
+    // Only refresh followings and fans when the user changes, not on every size change
+    // Removed automatic refresh to prevent count flicking during navigation
+    // LaunchedEffect(displayUser.mid) {
+    //     withContext(IO) {
+    //         viewModel.refreshFollowingsAndFans()
+    //     }
+    // }
+    
+    // No need to sync counts since viewModel == appUserViewModel for current user
+    // Count updates are handled directly in toggleFollowingWithResult
 
     // go to list of followings of the user
     Surface(

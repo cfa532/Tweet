@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -64,11 +66,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -77,8 +82,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,8 +95,11 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.service.BadgeStateManager
+import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenVideoPlayer
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
@@ -96,6 +107,7 @@ import us.fireshare.tweet.widget.VideoManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.net.toUri
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,6 +133,15 @@ fun ChatScreen(
             }
         }
     }
+
+    // Reload messages from database when screen appears (in case ViewModel was recreated)
+    LaunchedEffect(key1 = Unit) {
+        // Always reload messages from database when screen appears to ensure they're displayed
+        // This handles the case where ViewModel was recreated or messages were cleared
+        viewModel.reloadMessagesFromDatabase()
+        // Then get unread messages from network
+        viewModel.fetchNewMessage()
+    }
     
     // Preload videos for visible messages with shorter debouncing for LAN
     LaunchedEffect(visibleMessages, chatMessages.size) {
@@ -129,7 +150,7 @@ fun ChatScreen(
             message.attachments?.forEach { attachment ->
                 if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
                     val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl)
+                    VideoManager.preloadVideo(context, attachment.mid, mediaUrl, attachment.type)
                 }
             }
         }
@@ -162,21 +183,40 @@ fun ChatScreen(
     // Global state to control full screen display
     var showFullScreen by remember { mutableStateOf(false) }
     var fullScreenAttachment by remember { mutableStateOf<us.fireshare.tweet.datamodel.MimeiFileType?>(null) }
+    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var fullScreenMessage by remember { mutableStateOf<ChatMessage?>(null) } // Store message to access all attachments
+
+    var pendingScrollJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingScrollJob?.cancel()
+            pendingScrollJob = null
+        }
+    }
 
     fun scrollToBottom() {
         if (chatMessages.isNotEmpty()) {
-            coroutineScope.launch {
+            pendingScrollJob?.cancel()
+            val job = coroutineScope.launch {
                 try {
-                    listState.animateScrollToItem(chatMessages.size - 1)
-                } catch (e: Exception) {
-                    // Fallback to scroll to end if animateScrollToItem fails
-                    listState.scrollToItem(chatMessages.size - 1)
+                    // With reverseLayout = true, index 0 is the newest message (at bottom)
+                    listState.scrollToItem(0)
+                } finally {
+                    pendingScrollJob = null
                 }
             }
+            pendingScrollJob = job
         }
     }
 
     LaunchedEffect(Unit) {
+        // Clear badge when entering chat screen
+        BadgeStateManager.clearBadge()
+        
+        // Clear system notifications when entering chat screen
+        SystemNotificationManager.clearNotification(context, 1001)
+        
         // Assume user read new message when opening this chat screen.
         // Upon opening ChatBox, set new message flag to false in chatSession list.
         viewModel.chatListViewModel?.updateSession(null,
@@ -201,20 +241,20 @@ fun ChatScreen(
     }
 
     // Scroll to bottom when messages are first loaded
-    LaunchedEffect(chatMessages.isNotEmpty()) {
+    LaunchedEffect(Unit) {
+        // With reverseLayout, newest messages automatically appear at bottom
+        // Short delay to ensure LazyColumn is laid out
+        delay(200)
         if (chatMessages.isNotEmpty()) {
-            // Add a small delay to ensure the LazyColumn is properly laid out
-            delay(100)
-            scrollToBottom()
+            listState.scrollToItem(0)
         }
     }
     
     // Scroll to bottom when current user sends a message
     LaunchedEffect(shouldScrollToBottom) {
         if (shouldScrollToBottom && chatMessages.isNotEmpty()) {
-            // Add a small delay to ensure the new message is rendered
-            delay(50)
-            scrollToBottom()
+            // Instant scroll to newest message (index 0 with reverseLayout)
+            listState.animateScrollToItem(0)
             // Reset the flag
             viewModel.resetScrollToBottomFlag()
         }
@@ -278,7 +318,8 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(bottom = 80.dp), // Increased padding for new input design
-                        state = listState
+                        state = listState,
+                        reverseLayout = true  // Reverse scroll: newest messages at bottom
                     ) {
                         // Show loading indicator at the top when loading older messages
                         if (isLoadingOlderMessages) {
@@ -327,11 +368,12 @@ fun ChatScreen(
                             }
                         }
 
-                        itemsIndexed(chatMessages) { index, msg ->
+                        itemsIndexed(chatMessages.reversed()) { index, msg ->
                             // Add time divider if more than 1 hour difference from previous message
+                            // Note: With reverseLayout, we're iterating from newest to oldest
                             if (index > 0) {
-                                val previousMessage = chatMessages[index - 1]
-                                val timeDifference = msg.timestamp - previousMessage.timestamp
+                                val previousMessage = chatMessages.reversed()[index - 1]
+                                val timeDifference = previousMessage.timestamp - msg.timestamp  // Reversed comparison
                                 val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
 
                                 if (timeDifference > oneHourInMillis) {
@@ -377,12 +419,15 @@ fun ChatScreen(
                                 viewModel = viewModel,
                                 message = msg,
                                 messages = chatMessages,
-                                onImageClick = { attachment ->
+                                onImageClick = { attachment, bitmap ->
                                     fullScreenAttachment = attachment
+                                    fullScreenBitmap = bitmap
+                                    fullScreenMessage = msg // Store message for navigation
                                     showFullScreen = true
                                 },
                                 onVideoClick = { attachment ->
                                     fullScreenAttachment = attachment
+                                    fullScreenMessage = msg // Store message for navigation
                                     showFullScreen = true
                                 }
                             )
@@ -402,19 +447,92 @@ fun ChatScreen(
         }
     }
     
-    // Full screen overlays - rendered at the top level
+    // Full screen overlays - rendered at the top level (same as MediaItemView)
     if (showFullScreen && fullScreenAttachment != null) {
         val attachment = fullScreenAttachment!!
         val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
         
         when (attachment.type) {
             MediaType.Image -> {
-                us.fireshare.tweet.widget.AdvancedImageViewer(
-                    imageUrl = mediaUrl,
-                    enableLongPress = true,
-                    onClose = { showFullScreen = false },
-                    modifier = Modifier.fillMaxSize()
-                )
+                // Get all image attachments from the message for navigation
+                val message = fullScreenMessage
+                val allAttachments = message?.attachments ?: emptyList()
+                val imageAttachments = allAttachments.mapIndexedNotNull { idx, item ->
+                    val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(item)
+                    if (inferredType == MediaType.Image) {
+                        idx to us.fireshare.tweet.HproseInstance.getMediaUrl(item.mid, appUser.baseUrl).toString()
+                    } else {
+                        null
+                    }
+                }
+                
+                // Find current image index
+                val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+                    allAttachments[idx].mid == attachment.mid
+                }
+                
+                // Get list of image URLs
+                val imageUrls = imageAttachments.map { (_, url) -> url }
+                
+                Dialog(
+                    onDismissRequest = { 
+                        showFullScreen = false
+                        fullScreenAttachment = null
+                        fullScreenBitmap = null
+                        fullScreenMessage = null
+                    },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = true,
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    ) {
+                        us.fireshare.tweet.widget.AdvancedImageViewer(
+                            imageUrl = mediaUrl,
+                            enableLongPress = true,
+                            initialBitmap = fullScreenBitmap,
+                            onClose = { 
+                                showFullScreen = false
+                                fullScreenAttachment = null
+                                fullScreenBitmap = null
+                                fullScreenMessage = null
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                            imageUrls = if (imageUrls.size > 1) imageUrls else null,
+                            onNextImage = {
+                                if (imageAttachments.isNotEmpty() && message != null) {
+                                    // Wrap around: if at last image, go to first
+                                    val nextIndex = if (currentImageIndexInList >= imageAttachments.size - 1) {
+                                        0 // Wrap to first image
+                                    } else {
+                                        currentImageIndexInList + 1
+                                    }
+                                    val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                    fullScreenAttachment = message.attachments!![nextMediaIndex]
+                                    fullScreenBitmap = null // Reset bitmap to load new image
+                                }
+                            },
+                            onPreviousImage = {
+                                if (imageAttachments.isNotEmpty() && message != null) {
+                                    // Wrap around: if at first image, go to last
+                                    val prevIndex = if (currentImageIndexInList <= 0) {
+                                        imageAttachments.size - 1 // Wrap to last image
+                                    } else {
+                                        currentImageIndexInList - 1
+                                    }
+                                    val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                    fullScreenAttachment = message.attachments!![prevMediaIndex]
+                                    fullScreenBitmap = null // Reset bitmap to load new image
+                                }
+                            }
+                        )
+                    }
+                }
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Try to get existing player for seamless transition
@@ -426,9 +544,12 @@ fun ChatScreen(
                         existingPlayer = existingPlayer,
                         videoItem = attachment,
                         onClose = {
-                            showFullScreen = false
                             // Return player back to VideoManager when closed
                             VideoManager.returnFromFullScreen(attachment.mid)
+                            showFullScreen = false
+                            fullScreenAttachment = null
+                            fullScreenBitmap = null
+                            fullScreenMessage = null
                         },
                         enableImmersiveMode = true
                     )
@@ -436,7 +557,12 @@ fun ChatScreen(
                     // Fallback to regular full-screen player
                     FullScreenVideoPlayer(
                         videoUrl = mediaUrl,
-                        onClose = { showFullScreen = false },
+                        onClose = { 
+                            showFullScreen = false
+                            fullScreenAttachment = null
+                            fullScreenBitmap = null
+                            fullScreenMessage = null
+                        },
                         enableImmersiveMode = true,
                         autoReplay = true
                     )
@@ -449,12 +575,13 @@ fun ChatScreen(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun ChatItem(
-    viewModel: ChatViewModel, 
-    message: ChatMessage, 
+    viewModel: ChatViewModel,
+    message: ChatMessage,
     messages: List<ChatMessage>,
-    onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit,
+    onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
     val isSentByCurrentUser = message.authorId == appUser.mid
@@ -494,25 +621,10 @@ fun ChatItem(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             
-            // Show failure icon for failed messages sent by current user
-            if (isSentByCurrentUser && !message.success) {
-                val context = LocalContext.current
-                Icon(
-                    imageVector = Icons.Default.Error,
-                    contentDescription = "Message failed to send - tap to see error details",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.CenterVertically)
-                        .clickable {
-                            val errorMessage = message.errorMsg ?: "Unknown error"
-                            Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
-                        }
-                )
-            }
-            
             // Message content in a column with two rows
+            // Limit width to leave space for avatar when sent by current user
             Column(
+                modifier = if (isSentByCurrentUser) Modifier.fillMaxWidth(0.85f) else Modifier.fillMaxWidth(),
                 horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
             ) {
                 // First row: Text content (if any) - hide placeholder text for attachments
@@ -543,25 +655,42 @@ fun ChatItem(
                 // Second row: Media preview grid (if attachments exist)
                 message.attachments?.let { attachments ->
                     if (attachments.isNotEmpty()) {
-                        Surface(
-                            color = if (isSending) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            shape = if (isLastMessageFromParty) {
-                                ChatBubbleShape(isSentByCurrentUser)
-                            } else {
-                                regularChatBubbleShape()
-                            },
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            // Simple media preview for chat messages
-                            ChatMediaPreview(
-                                attachments = attachments,
-                                onImageClick = { onImageClick(attachments.first()) },
-                                onVideoClick = { onVideoClick(attachments.first()) }
+                        // Check if all attachments are documents
+                        val allDocuments = attachments.all { 
+                            val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                            isDocumentType(type)
+                        }
+                        
+                        if (allDocuments) {
+                            // Document messages: no background container
+                            us.fireshare.tweet.widget.DocumentAttachmentsView(
+                                documents = attachments,
+                                baseUrl = appUser.baseUrl,
+                                maxDocuments = null,
+                                modifier = Modifier.padding(4.dp)
                             )
+                        } else {
+                            // Media messages: keep background container
+                            Surface(
+                                color = if (isSending) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                                shape = if (isLastMessageFromParty) {
+                                    ChatBubbleShape(isSentByCurrentUser)
+                                } else {
+                                    regularChatBubbleShape()
+                                },
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                ChatMediaPreview(
+                                    attachments = attachments,
+                                    localAttachmentUri = message.localAttachmentUri,
+                                    onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
+                                    onVideoClick = { onVideoClick(attachments.first()) }
+                                )
+                            }
                         }
                     }
                 }
@@ -590,7 +719,7 @@ fun ChatItem(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Sending attachment in background...",
+                                text = stringResource(R.string.sending_attachment_background),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center
@@ -607,26 +736,27 @@ fun ChatItem(
                 }
             }
             
+            // Show failure icon for failed messages sent by current user (behind message)
+            if (isSentByCurrentUser && !message.success) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = stringResource(R.string.message_failed_send_tap_error),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.CenterVertically)
+                        .clickable {
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                viewModel.resendMessage(message)
+                            }
+                        }
+                )
+            }
+            
             if (isSentByCurrentUser) {
                 Spacer(modifier = Modifier.width(8.dp))
                 UserAvatar(user = appUser, size = 32)
-                
-                // Show failure icon for failed messages sent by current user
-                if (!message.success) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    val context = LocalContext.current
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = "Message failed to send - tap to see error details",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable {
-                                val errorMessage = message.errorMsg ?: "Unknown error"
-                                Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_LONG).show()
-                            }
-                    )
-                }
             }
         }
         
@@ -697,25 +827,44 @@ fun ChatInput(
         }
     }
     
+    // Function to check if file is within size limits
+    fun isFileSizeValid(uri: Uri): Boolean {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val fileSize = inputStream?.available() ?: 0
+            inputStream?.close()
+            fileSize <= TW_CONST.MAX_FILE_SIZE
+        } catch (_: Exception) {
+            false
+        }
+    }
+    
     // File picker launcher for single file selection
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.selectedAttachment.value = it
+            if (isFileSizeValid(it)) {
+                viewModel.selectedAttachment.value = it
+            } else {
+                val videoTooLargeMessage = context.getString(R.string.video_file_too_large)
+                Toast.makeText(context, videoTooLargeMessage, Toast.LENGTH_LONG).show()
+            }
         }
     }
     
     // Function to get filename from URI
+    @Composable
     fun getFileName(uri: Uri): String {
+        val unknownFile = stringResource(R.string.unknown_file)
         return try {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 cursor.moveToFirst()
-                cursor.getString(nameIndex) ?: context.getString(R.string.unknown_file)
-            } ?: context.getString(R.string.unknown_file)
-        } catch (e: Exception) {
-            context.getString(R.string.unknown_file)
+                cursor.getString(nameIndex) ?: unknownFile
+            } ?: unknownFile
+        } catch (_: Exception) {
+            unknownFile
         }
     }
 
@@ -884,20 +1033,37 @@ private fun formatTimestamp(timestamp: Long): String {
     }
 }
 
+/**
+ * Determines if a media type is a document (should be in DocumentAttachmentsView)
+ */
+private fun isDocumentType(type: MediaType): Boolean {
+    return when (type) {
+        MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+        MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+        else -> false
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
-    onImageClick: (() -> Unit)? = null,
+    localAttachmentUri: String? = null,  // Add parameter for local Uri
+    onImageClick: ((android.graphics.Bitmap?) -> Unit)? = null,
     onVideoClick: (() -> Unit)? = null
 ) {
-    if (attachments.isEmpty()) return
+    if (attachments.isEmpty() && localAttachmentUri == null) return
 
+    // Determine if we're displaying from local Uri or from network
+    val isLocalDisplay = localAttachmentUri != null && attachments.isEmpty()
+    
     // For chat messages, we'll show a simple preview of the first attachment
-    val attachment = attachments.first()
-    val mediaUrl =
+    val attachment = if (attachments.isNotEmpty()) attachments.first() else null
+    val mediaUrl = if (attachment != null) {
         us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
-
-    val context = LocalContext.current
+    } else {
+        null
+    }
 
     // Video preloading is handled by the main ChatScreen component with debouncing
 
@@ -910,7 +1076,7 @@ fun ChatMediaPreview(
         }
     }
 
-    val adjustedAspectRatio = applyAspectRatioRule(attachment.aspectRatio)
+    val adjustedAspectRatio = applyAspectRatioRule(attachment?.aspectRatio)
 
     Box(
         modifier = Modifier
@@ -919,35 +1085,196 @@ fun ChatMediaPreview(
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
     ) {
-        when (attachment.type) {
-            MediaType.Image -> {
-                us.fireshare.tweet.widget.ImageViewer(
-                    imageUrl = mediaUrl,
+        // Handle local display (optimistic UI)
+        when {
+            isLocalDisplay -> {
+                // Display from local Uri
+                val context = LocalContext.current
+                val localUri = remember(localAttachmentUri) { localAttachmentUri.toUri() }
+                
+                // Detect media type from local file
+                val mediaType = remember(localUri) {
+                    try {
+                        us.fireshare.tweet.service.FileTypeDetector.detectFileType(context, localUri)
+                    } catch (e: Exception) {
+                        Timber.tag("ChatMediaPreview").e(e, "Error detecting file type")
+                        MediaType.Unknown
+                    }
+                }
+                
+                when (mediaType) {
+                    MediaType.Image -> {
+                        // Display local image
+                        var localBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                        
+                        LaunchedEffect(localUri) {
+                            withContext(Dispatchers.IO) {
+                                try {
+                                    context.contentResolver.openInputStream(localUri)?.use { stream ->
+                                        localBitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.tag("ChatMediaPreview").e(e, "Error loading local image")
+                                }
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onImageClick?.invoke(localBitmap) }
+                        ) {
+                            localBitmap?.let { bitmap ->
+                                androidx.compose.foundation.Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Local image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } ?: run {
+                                // Show loading placeholder
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    MediaType.Video, MediaType.HLS_VIDEO -> {
+                        // Display local video preview (thumbnail)
+                        var videoThumbnail by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                        
+                        LaunchedEffect(localUri) {
+                            withContext(Dispatchers.IO) {
+                                // FIX P0-3: Ensure MediaMetadataRetriever is always released
+                                val retriever = android.media.MediaMetadataRetriever()
+                                try {
+                                    retriever.setDataSource(context, localUri)
+                                    videoThumbnail = retriever.getFrameAtTime(0)
+                                } catch (e: Exception) {
+                                    Timber.tag("ChatMediaPreview").e(e, "Error loading video thumbnail")
+                                } finally {
+                                    try {
+                                        retriever.release()
+                                    } catch (e: Exception) {
+                                        // Ignore release errors
+                                        Timber.tag("ChatMediaPreview").w(e, "Error releasing MediaMetadataRetriever")
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onVideoClick?.invoke() }
+                        ) {
+                            videoThumbnail?.let { bitmap ->
+                                androidx.compose.foundation.Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Video thumbnail",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                                // Play icon overlay
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play",
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(48.dp)
+                                        .background(Color.Black.copy(alpha = 0.5f), androidx.compose.foundation.shape.CircleShape),
+                                    tint = Color.White
+                                )
+                            } ?: run {
+                                // Show loading placeholder
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        // Unknown file type, show placeholder
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Uploading...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            attachment != null -> {
+                // Display from network (normal flow)
+                when (attachment.type) {
+                    MediaType.Image -> {
+                // Track visibility for priority-based loading (same as MediaItemView)
+                var isVisible by remember { mutableStateOf(true) }
+                var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+                
+                // Use a Box with clickable modifier to handle image clicks (same as MediaItemView)
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clickable { onImageClick?.invoke() },
-                    enableLongPress = false
-                )
+                        .clipToBounds()
+                        .onGloballyPositioned { layoutCoordinates ->
+                            // Update visibility based on actual layout - if item has size, it's visible
+                            val hasSize = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
+                            isVisible = hasSize
+                        }
+                        .clickable { onImageClick?.invoke(currentBitmap) }
+                ) {
+                    us.fireshare.tweet.widget.ImageViewer(
+                        imageUrl = mediaUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        enableLongPress = false, // Disable long press to allow clickable to work
+                        inPreviewGrid = true, // Use preview grid mode like MediaCell
+                        isVisible = isVisible, // Track visibility for priority loading
+                        loadOriginalImage = false, // Load compressed images first for preview (same as MediaCell)
+                        onBitmapLoaded = { bitmap -> currentBitmap = bitmap }
+                    )
+                }
             }
 
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Use a completely stable approach with key (same as MediaCell)
                 val videoMid = attachment.mid
-                val videoUrl = mediaUrl
 
                 // Use key with stable identifier to prevent recreation (same as MediaItemView)
                 key("chat_video_${videoMid}_0") {
                     us.fireshare.tweet.widget.VideoPreview(
-                        url = videoUrl,
+                        url = mediaUrl,
                         modifier = Modifier.fillMaxSize(),
                         index = 0,
                         autoPlay = true,
                         inPreviewGrid = true,
-                        callback = { index ->
+                        callback = { _ ->
                             // Open full-screen with the same video player
                             onVideoClick?.invoke()
                         },
-                        videoMid = videoMid
+                        videoMid = videoMid,
+                        videoType = attachment.type
                     )
                 }
             }
@@ -960,26 +1287,69 @@ fun ChatMediaPreview(
             }
 
             else -> {
-                // For other file types, show a file icon with filename
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = stringResource(R.string.file_attachment),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = attachment.fileName ?: stringResource(R.string.unknown_file),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                // Check if this is a document type
+                val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(attachment)
+                if (isDocumentType(inferredType)) {
+                    // Show documents using DocumentAttachmentsView
+                    // Separate documents from media if there are multiple attachments
+                    val documentAttachments = attachments.filter { 
+                        val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                        isDocumentType(type)
+                    }
+                    val mediaAttachments = attachments.filter { 
+                        val type = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(it)
+                        !isDocumentType(type)
+                    }
+                    
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        // Show media attachments first if any
+                        if (mediaAttachments.isNotEmpty()) {
+                            ChatMediaPreview(
+                                attachments = mediaAttachments,
+                                localAttachmentUri = null, // This is for existing messages, no local Uri
+                                onImageClick = onImageClick,
+                                onVideoClick = onVideoClick
+                            )
+                        }
+                        
+                        // Show document attachments
+                        if (documentAttachments.isNotEmpty()) {
+                            us.fireshare.tweet.widget.DocumentAttachmentsView(
+                                documents = documentAttachments,
+                                baseUrl = appUser.baseUrl,
+                                maxDocuments = null // Show all documents in chat
+                            )
+                        }
+                    }
+                } else {
+                    // For unknown file types, show a file icon with filename
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = stringResource(R.string.file_attachment),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = attachment.fileName ?: stringResource(R.string.unknown_file),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
+            }
+                }
+            }
+            else -> {
+                // No valid display source
             }
         }
     }

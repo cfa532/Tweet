@@ -6,15 +6,17 @@ import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import androidx.work.BackoffPolicy
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,11 +26,12 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.dao
-import us.fireshare.tweet.HproseInstance.getUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.HproseInstance.getUserTweetsByType
+import us.fireshare.tweet.HproseInstance.loadCachedTweetsByAuthor
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.FeedResetReason
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -37,11 +40,17 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
+import us.fireshare.tweet.service.FollowUserWorker
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
-    @Assisted val userId: MimeiId,
+    @Assisted val userId: MimeiId
 ): ViewModel() {
+    // Track active work observers to clean up on ViewModel destruction
+    private val activeWorkObservers = mutableMapOf<java.util.UUID, androidx.lifecycle.Observer<WorkInfo?>>()
+    
+    // Track users with pending operations to prevent race conditions
+    private val pendingOperations = mutableSetOf<MimeiId>()
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -57,6 +66,10 @@ class UserViewModel @AssistedInject constructor(
     val followers: StateFlow<List<MimeiId>> get() = _followers.asStateFlow()
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
+    
+    // Signal for follow operation failures - emits userId when operation fails
+    private val _followOperationFailed = MutableStateFlow<MimeiId?>(null)
+    val followOperationFailed: StateFlow<MimeiId?> get() = _followOperationFailed.asStateFlow()
 
     var isLoading = MutableStateFlow(false)
 
@@ -64,6 +77,12 @@ class UserViewModel @AssistedInject constructor(
     val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
     private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
+
+    // Track if initial server load completed (to trigger scroll to top after cached data)
+    private val _bookmarksInitialLoadComplete = MutableStateFlow(false)
+    val bookmarksInitialLoadComplete: StateFlow<Boolean> get() = _bookmarksInitialLoadComplete.asStateFlow()
+    private val _favoritesInitialLoadComplete = MutableStateFlow(false)
+    val favoritesInitialLoadComplete: StateFlow<Boolean> get() = _favoritesInitialLoadComplete.asStateFlow()
 
     // Public count variables for UI display
     private val _bookmarksCount = MutableStateFlow(0)
@@ -84,29 +103,70 @@ class UserViewModel @AssistedInject constructor(
     // variable for login management
     var username = mutableStateOf(appUser.username)
     var password = mutableStateOf("")
-    var name = mutableStateOf(appUser.name)
-    var profile = mutableStateOf(appUser.profile)
+    var name = mutableStateOf(appUser.name ?: "")
+    var profile = mutableStateOf(appUser.profile ?: "")
     var hostId = mutableStateOf("")
+    var cloudDrivePort = mutableStateOf(if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString())
+    var domainToShare = mutableStateOf(appUser.domainToShare ?: "")
     var isPasswordVisible = mutableStateOf(false)
     var loginError = mutableStateOf("")
+
+    // Validation error states for showing red text warnings
+    var usernameError = mutableStateOf("")
+    var passwordError = mutableStateOf("")
+    var confirmPasswordError = mutableStateOf("")
+    var hostIdError = mutableStateOf("")
+    var cloudDrivePortError = mutableStateOf("")
 
     var initState = MutableStateFlow(true)      // initial load state
 
     /**
      * Initial load of tweets of an user. Execute only once.
+     * OPTIMIZED: Clears loading state immediately after cached tweets are loaded,
+     * then continues fetching from network in the background.
      * */
     suspend fun initLoad() {
         try {
             Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
 
             // Load first page (page 0) which includes pinned tweets
-            getTweets(0)
+            // getTweets loads cached tweets FIRST, then network
+            val page0Tweets = getTweets(0)
 
-            // Load additional pages if needed to get at least 5 viewable tweets
-            var pageNumber = 1
-            while (tweets.value.size < 5 && pageNumber < 10) {
-                getTweets(pageNumber)
-                pageNumber++
+            // Clear loading state after first page loads (whether from cache or network)
+            // This ensures UI shows content as soon as any tweets are available
+            initState.value = false
+            Timber.tag("initLoad").d("Cleared loading state after page 0 loaded - found ${tweets.value.size} tweets and ${pinnedTweets.value.size} pinned tweets")
+            
+            // Check if page 0 indicates server depletion
+            // If server returns fewer than PAGE_SIZE tweets, it's depleted (regardless of null/valid)
+            val page0ValidTweets = page0Tweets.filterNotNull()
+            if (page0Tweets.size < TW_CONST.PAGE_SIZE) {
+                // Server is depleted - returned fewer than a full page
+                Timber.tag("initLoad").d("Page 0 returned ${page0Tweets.size} tweets (${page0ValidTweets.size} valid), server depleted - stopping initial load")
+            } else {
+                // Load additional pages if needed to get at least 5 viewable tweets
+                var pageNumber = 1
+                var serverDepleted = false
+                
+                while (tweets.value.size < 5 && pageNumber < 10 && !serverDepleted) {
+                    val pageTweets = getTweets(pageNumber)
+                    val validTweets = pageTweets.filterNotNull()
+                    
+                    // Check if server is depleted (returned fewer tweets than PAGE_SIZE)
+                    if (pageTweets.size < TW_CONST.PAGE_SIZE) {
+                        serverDepleted = true
+                        Timber.tag("initLoad").d("Server depleted at page $pageNumber, returned ${pageTweets.size} tweets (${validTweets.size} valid)")
+                    }
+                    
+                    // Also stop if we got no valid tweets from server
+                    if (validTweets.isEmpty() && serverDepleted) {
+                        Timber.tag("initLoad").d("Page $pageNumber returned no valid tweets, stopping initial load")
+                        break
+                    }
+                    
+                    pageNumber++
+                }
             }
 
             Timber.tag("initLoad")
@@ -114,45 +174,49 @@ class UserViewModel @AssistedInject constructor(
         } catch (e: Exception) {
             Timber.tag("initLoad").e(e, "Error during initial load for user: ${user.value.mid}")
         } finally {
+            // Always clear loading state on completion or error
             initState.value = false
         }
     }
 
     /**
-     * Refresh user data to ensure it's up to date (e.g., after profile editing)
+     * Refresh user data from server when profile is opened or needs updating.
+     * This function launches a coroutine and returns immediately (non-blocking).
      */
-    suspend fun refreshUserData() {
-        try {
-            // If this is the current user's profile, update from appUser
-            if (userId == appUser.mid) {
-                _user.value = appUser
+    fun refreshUserData() {
+        viewModelScope.launch(IO) {
+            try {
+                Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
                 
-                // Also update the count variables to match the updated appUser
-                _bookmarksCount.value = appUser.bookmarksCount
-                _favoritesCount.value = appUser.favoritesCount
-                _followersCount.value = appUser.followersCount
-                _followingsCount.value = appUser.followingCount
-                _tweetCount.value = appUser.tweetCount
+                // Fetch fresh data from server (fetchUser handles retries internally)
+                // Pass empty baseUrl to force fresh IP resolution and skip cache (matches iOS)
+                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 2, forceRefresh = true)
                 
-                Timber.tag("refreshUserData").d("Refreshed user data for current user: ${appUser.name}")
-            } else {
-                // For other users, fetch fresh data from the server using existing pattern
-                refreshUser()
-                
-                // Update count variables from the refreshed user data
-                _bookmarksCount.value = user.value.bookmarksCount
-                _favoritesCount.value = user.value.favoritesCount
-                _followersCount.value = user.value.followersCount
-                _followingsCount.value = user.value.followingCount
-                _tweetCount.value = user.value.tweetCount
-                
-                Timber.tag("refreshUserData").d("Refreshed user data for user: ${user.value.name}")
+                if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    // Update user state
+                    _user.value = refreshedUser
+                    
+                    // If this is the app user, sync with appUser singleton
+                    if (userId == appUser.mid) {
+                        User.updateUserInstance(refreshedUser)
+                        // Set appUser to the updated singleton instance
+                        appUser = User.getInstance(refreshedUser.mid)
+                    }
+                    
+                    // Update count variables
+                    _bookmarksCount.value = refreshedUser.bookmarksCount
+                    _favoritesCount.value = refreshedUser.favoritesCount
+                    _followersCount.value = refreshedUser.followersCount
+                    _followingsCount.value = refreshedUser.followingCount
+                    _tweetCount.value = refreshedUser.tweetCount
+                    
+                    Timber.tag("refreshUserData").d("✅ Refreshed user data for: ${refreshedUser.name}")
+                } else {
+                    Timber.tag("refreshUserData").w("Failed to fetch valid user data for userId: $userId")
+                }
+            } catch (e: Exception) {
+                Timber.tag("refreshUserData").e(e, "Error refreshing user data for userId: $userId")
             }
-            
-            // Reset the profile updated flag after refreshing
-    
-        } catch (e: Exception) {
-            Timber.tag("refreshUserData").e(e, "Error refreshing user data for user: $userId")
         }
     }
 
@@ -172,39 +236,115 @@ class UserViewModel @AssistedInject constructor(
         return pinnedTweets.value.any { it.mid == tweet.mid }
     }
 
-    suspend fun getHostId() {
-        hostId.value = if (user.value.hostIds.isNullOrEmpty()) {
-            HproseInstance.getHostId() ?: ""
-        } else user.value.hostIds!!.first()
-    }
-
     suspend fun updateAvatar(context: Context, uri: Uri) {
+        Timber.tag("updateAvatar").d("updateAvatar called with URI: $uri")
         isLoading.value = true
         try {
             // Store the old avatar ID to clear cache later
             val oldAvatarId = appUser.avatar
+            Timber.tag("updateAvatar").d("Current avatar ID: $oldAvatarId, starting upload...")
             
             // For now, user avatar can only be image.
-            HproseInstance.uploadToIPFS(
-                context,
-                uri,
-                referenceId = appUser.mid
-            )?.let {
-                HproseInstance.setUserAvatar(appUser, it.mid)?.let { avatar ->  // Update appUser's avatar
-                    // Clear the old avatar from cache if it exists
-                    oldAvatarId?.let { oldId ->
-                        us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, oldId)
-                    }
-                    
-                    // Update the user objects with new avatar
-                    appUser = appUser.copy(avatar = avatar)
-                    _user.value = user.value.copy(avatar = avatar)
-                    
-
-                    
-                    // Save the updated user to cache
-                    TweetCacheManager.saveUser(appUser)
+            // Run upload on IO dispatcher to avoid blocking UI
+            Timber.tag("updateAvatar").d("Calling uploadToIPFS...")
+            val uploadResult = withContext(IO) {
+                try {
+                    HproseInstance.uploadToIPFS(
+                        uri,
+                        referenceId = appUser.mid
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("updateAvatar").e(e, "Exception during uploadToIPFS: ${e.message}")
+                    null
                 }
+            }
+            
+            Timber.tag("updateAvatar").d("uploadToIPFS returned: ${uploadResult?.mid ?: "null"}")
+            
+            if (uploadResult == null) {
+                Timber.tag("updateAvatar").e("Failed to upload avatar to IPFS")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.avatar_update_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            
+            Timber.tag("updateAvatar").d("Upload successful, CID: ${uploadResult.mid}, calling setUserAvatar...")
+            val avatarId = withContext(IO) {
+                try {
+                    HproseInstance.setUserAvatar(appUser, uploadResult.mid)
+                } catch (e: Exception) {
+                    Timber.tag("updateAvatar").e(e, "Exception during setUserAvatar: ${e.message}")
+                    null
+                }
+            }
+            Timber.tag("updateAvatar").d("setUserAvatar returned: ${avatarId ?: "null"}")
+            if (avatarId == null) {
+                Timber.tag("updateAvatar").e("Failed to set user avatar on server")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.avatar_update_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            
+            // Update the user objects with new avatar (on Main thread for immediate UI update)
+            withContext(Dispatchers.Main) {
+                val updatedAppUser = appUser.copy(avatar = avatarId)
+                User.updateUserInstance(updatedAppUser)
+                appUser = User.getInstance(updatedAppUser.mid)
+                _user.value = user.value.copy(avatar = avatarId)
+                Timber.tag("updateAvatar").d("State updated on Main thread, new avatar ID: $avatarId")
+            }
+            
+            // Cache the new avatar locally immediately so it shows up without a download
+            // This prevents the old avatar from "reappearing" while waiting for server sync
+            try {
+                withContext(IO) {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                        if (bitmap != null) {
+                            Timber.tag("updateAvatar").d("Caching new avatar locally for CID: $avatarId")
+                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, avatarId, bitmap)
+                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, "${avatarId}_original", bitmap)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("updateAvatar").e(e, "Failed to cache new avatar locally")
+            }
+            
+            // Clear old avatar cache (both regular and "_original" keys used by UserAvatar)
+            oldAvatarId?.let { oldId ->
+                if (oldId != avatarId) {  // Only clear if it's different
+                    withContext(IO) {
+                        Timber.tag("updateAvatar").d("Clearing old avatar cache: $oldId")
+                        us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, oldId)
+                        us.fireshare.tweet.widget.ImageCacheManager.clearCachedImage(context, "${oldId}_original")
+                    }
+                }
+            }
+            
+            Timber.tag("updateAvatar").d("Avatar updated successfully: $avatarId, old: $oldAvatarId")
+            
+            // Preload the new avatar so it's ready for display
+            // Note: Preloading happens in background, UI will load it when needed
+            // The key is that appUserState has already been updated, so UserAvatar will see the new avatarMid
+        } catch (e: Exception) {
+            Timber.tag("updateAvatar").e(e, "Error updating avatar")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.avatar_update_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         } finally {
             isLoading.value = false
@@ -214,30 +354,169 @@ class UserViewModel @AssistedInject constructor(
 
 
     /**
+     * Optimistically update followingList and enqueue background worker.
+     * Immediately updates the followingList, then handles the actual operation in background.
+     * If the operation fails, the worker will send a notification.
+     * 
      * @param subjectUserId to add/remove it to/from the following list
-     * @return Boolean? - true if now following, false if now unfollowing, null if operation failed
-     * */
-    suspend fun toggleFollowingWithResult(
+     * @param userId the user performing the follow action (defaults to appUser.mid)
+     * @param context context for WorkManager
+     * @param updateTweetFeed callback to update tweet feed
+     */
+    fun toggleFollowingOptimistic(
         subjectUserId: MimeiId,
         userId: MimeiId = appUser.mid,
-        updateTweetFeed: (Boolean) -> Unit
-    ): Boolean? {
-        // toggle the Following status on the given UserId
-        return HproseInstance.toggleFollowing(subjectUserId, userId)?.let { isFollowing ->
-            _followings.update { list ->
-                if (isFollowing)
-                    (listOf(subjectUserId) + list).toSet().toList()
-                else
-                    list.filterNot { it == subjectUserId }
-            }
-            _user.value = user.value.copy(followingCount = followings.value.size)
-            withContext(IO) {
-                TweetCacheManager.saveUser(appUser)
-            }
-            // callback to update tweet feed. Load or remove tweets of the others.
-            updateTweetFeed(isFollowing)
-            isFollowing
+        context: Context,
+        updateTweetFeed: (Boolean) -> Unit,
+        rollbackTweetFeed: (Boolean) -> Unit
+    ) {
+        // Prevent concurrent operations on the same user
+        if (pendingOperations.contains(subjectUserId)) {
+            Timber.tag("UserViewModel").w("Follow operation already in progress for user: $subjectUserId, ignoring duplicate request")
+            return
         }
+        
+        val currentlyFollowing = _followings.value.contains(subjectUserId)
+        val newFollowingState = !currentlyFollowing
+        
+        // Store previous state for rollback
+        val previousCount = _followingsCount.value
+        
+        // Mark operation as pending
+        pendingOperations.add(subjectUserId)
+        
+        // Optimistically update the following list immediately
+        _followings.update { list ->
+            if (newFollowingState)
+                (listOf(subjectUserId) + list).toSet().toList()
+            else
+                list.filterNot { it == subjectUserId }
+        }
+        
+        // Update the count manually - increment/decrement based on the action
+        val newCount = if (newFollowingState) {
+            _followingsCount.value + 1
+        } else {
+            _followingsCount.value - 1
+        }
+        _followingsCount.value = newCount
+        
+        // Update the user object with the correct count
+        _user.value = user.value.copy(followingCount = newCount)
+        
+        // Also update appUser.followingCount so refreshUserData uses the correct value
+        if (userId == appUser.mid) {
+            appUser.followingCount = newCount
+        }
+        
+        // Update tweet feed optimistically
+        viewModelScope.launch(IO) {
+            updateTweetFeed(newFollowingState)
+        }
+        
+        // Enqueue background worker to handle the actual operation
+        val data = workDataOf(
+            "followedId" to subjectUserId,
+            "followingId" to userId,
+            "isFollowing" to newFollowingState
+        )
+        val followRequest = OneTimeWorkRequest.Builder(FollowUserWorker::class.java)
+            .setInputData(data)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
+            .build()
+        
+        WorkManager.getInstance(context).enqueue(followRequest)
+        
+        // Observe work status to rollback on failure
+        viewModelScope.launch {
+            val observer = androidx.lifecycle.Observer<WorkInfo?> { workInfo ->
+                when (workInfo?.state) {
+                    WorkInfo.State.FAILED -> {
+                        // Rollback the optimistic update
+                        Timber.tag("UserViewModel").d("Follow operation failed, rolling back for: $subjectUserId")
+                        
+                        // Rollback following list
+                        _followings.update { list ->
+                            if (newFollowingState)
+                                list.filterNot { it == subjectUserId }
+                            else
+                                (listOf(subjectUserId) + list).toSet().toList()
+                        }
+                        
+                        // Rollback count
+                        _followingsCount.value = previousCount
+                        
+                        // Rollback user object count
+                        _user.value = user.value.copy(followingCount = previousCount)
+                        
+                        // Rollback appUser.followingCount
+                        if (userId == appUser.mid) {
+                            appUser.followingCount = previousCount
+                        }
+                        
+                        // Rollback tweet feed
+                        viewModelScope.launch(IO) {
+                            rollbackTweetFeed(newFollowingState)
+                        }
+                        
+                        // Signal failure to UI for toast notification
+                        _followOperationFailed.value = subjectUserId
+                        
+                        // Clean up
+                        cleanupObserver(context, followRequest.id, subjectUserId)
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
+                        // Clean up
+                        cleanupObserver(context, followRequest.id, subjectUserId)
+                    }
+                    else -> {
+                        // Still in progress or other state
+                    }
+                }
+            }
+            
+            // Store observer for cleanup
+            activeWorkObservers[followRequest.id] = observer
+            
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdLiveData(followRequest.id)
+                .observeForever(observer)
+        }
+    }
+    
+    /**
+     * Clean up observer and remove from pending operations
+     */
+    private fun cleanupObserver(context: Context, workId: java.util.UUID, userId: MimeiId) {
+        activeWorkObservers[workId]?.let { observer ->
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdLiveData(workId)
+                .removeObserver(observer)
+            activeWorkObservers.remove(workId)
+        }
+        pendingOperations.remove(userId)
+    }
+    
+    /**
+     * Clear the follow operation failed signal (called by UI after showing toast)
+     */
+    fun clearFollowOperationFailed() {
+        _followOperationFailed.value = null
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Clean up all active observers when ViewModel is destroyed
+        // Note: We can't access context here, so we'll rely on WorkManager's lifecycle
+        // The observers will be automatically cleaned up when the app context is destroyed
+        activeWorkObservers.clear()
+        pendingOperations.clear()
+        Timber.tag("UserViewModel").d("ViewModel cleared, cleaned up ${activeWorkObservers.size} observers and ${pendingOperations.size} pending operations")
     }
 
     suspend fun refreshFollowingsAndFans() {
@@ -250,6 +529,18 @@ class UserViewModel @AssistedInject constructor(
         // Update the public count variables for UI
         _followersCount.value = fans.size
         _followingsCount.value = followings.size
+        
+        // Update the user object with the correct counts
+        _user.value = user.value.copy(
+            followersCount = fans.size,
+            followingCount = followings.size
+        )
+        
+        // Update the User singleton for this user (any user, not just appUser)
+        User.updateUserInstance(_user.value)
+        TweetCacheManager.saveUser(_user.value)
+        Timber.tag("refreshFollowingsAndFans")
+            .d("Updated user $userId counts: followers=${fans.size}, followings=${followings.size}")
     }
 
     companion object {
@@ -261,6 +552,8 @@ class UserViewModel @AssistedInject constructor(
      * Returns List<MimeiId> (null values are filtered out)
      */
     suspend fun fetchFollowers(pageNumber: Int): List<MimeiId> {
+        @Suppress("SENSELESS_COMPARISON")
+        if (userId == null) return emptyList()
         Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {
@@ -277,6 +570,14 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 _followers.value = allFollowers
+                
+                // Update the count
+                _followersCount.value = allFollowers.size
+                _user.value = user.value.copy(followersCount = allFollowers.size)
+                
+                // Update the User singleton for this user
+                User.updateUserInstance(_user.value)
+                TweetCacheManager.saveUser(_user.value)
 
                 // Return the first batch of users, filtering out nulls
                 val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE)
@@ -295,10 +596,9 @@ class UserViewModel @AssistedInject constructor(
                         .d("No more followers to return for page: $pageNumber")
                     emptyList()
                 } else {
-                    val filteredSlice = slice
                     Timber.tag("fetchFollowers")
-                        .d("Returning slice for page $pageNumber: ${filteredSlice.size} user IDs")
-                    filteredSlice
+                        .d("Returning slice for page $pageNumber: ${slice.size} user IDs")
+                    slice
                 }
             }
         } catch (e: Exception) {
@@ -318,6 +618,14 @@ class UserViewModel @AssistedInject constructor(
                 // For page 0, refresh the entire list
                 val allFollowings = HproseInstance.getFollowings(user.value)
                 _followings.value = allFollowings
+                
+                // Update the count
+                _followingsCount.value = allFollowings.size
+                _user.value = user.value.copy(followingCount = allFollowings.size)
+                
+                // Update the User singleton for this user
+                User.updateUserInstance(_user.value)
+                TweetCacheManager.saveUser(_user.value)
 
                 // Return the first batch of users, filtering out nulls
                 allFollowings.take(TW_CONST.USER_BATCH_SIZE)
@@ -346,10 +654,29 @@ class UserViewModel @AssistedInject constructor(
 
     /**
      * Get bookmarks of the user
+     * Returns List<Tweet?> for pagination logic
      * */
-    suspend fun getBookmarks(pageNumber: Int) {
+    suspend fun getBookmarks(pageNumber: Int): List<Tweet?> {
+        // Load cached bookmarks first for instant display (only on initial load, not refresh)
+        // Skip cache if bookmarks list already has items to avoid reordering during refresh
+        if (pageNumber == 0 && userId == appUser.mid && _bookmarks.value.isEmpty()) {
+            val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
+            if (cachedBookmarks.isNotEmpty()) {
+                _bookmarks.value = cachedBookmarks
+                Timber.tag("getBookmarks").d("📦 Loaded ${cachedBookmarks.size} cached bookmarks")
+            }
+        }
+        
+        // Ensure we have the latest user data before loading bookmarks
+        if (userId == appUser.mid) {
+            refreshFromAppUser()
+        }
+
+        // Use the most up-to-date user data (appUser) instead of potentially stale user.value
+        val currentUser = if (userId == appUser.mid) appUser else user.value
+
         val tweetsWithNulls = getUserTweetsByType(
-            user.value,
+            currentUser,
             UserContentType.BOOKMARKS,
             pageNumber,
             TW_CONST.PAGE_SIZE
@@ -362,11 +689,13 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list
+            // For refresh (page 0), replace the list and preserve server order
             _bookmarks.value = validTweets
-            _bookmarksCount.value = validTweets.size
+            // Signal that initial server load is complete (for scroll-to-top)
+            _bookmarksInitialLoadComplete.value = true
+            // Don't override the count - it should come from server data, not local list size
         } else {
-            // For load more (page > 0), append to the list
+            // For load more (page > 0), append to the list while preserving order
             _bookmarks.update { currentBookmarks ->
                 val newTweetsMap = validTweets.associateBy { it.mid }
                 val updatedBookmarks = currentBookmarks.map { bookmark ->
@@ -374,12 +703,14 @@ class UserViewModel @AssistedInject constructor(
                 }
                 val finalBookmarks = (updatedBookmarks + validTweets)
                     .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
 
-                _bookmarksCount.value = finalBookmarks.size
+                // Don't override the count - it should come from server data, not local list size
                 finalBookmarks
             }
         }
+
+        // Return the raw list from server for pagination logic
+        return tweetsWithNulls
     }
 
     /**
@@ -409,6 +740,12 @@ class UserViewModel @AssistedInject constructor(
         // Update the public bookmarks count for UI with server count
         _bookmarksCount.value = serverBookmarksCount
 
+        // Update other count variables to match appUser (but don't override bookmarks count)
+        _favoritesCount.value = appUser.favoritesCount
+        _followersCount.value = appUser.followersCount
+        _followingsCount.value = appUser.followingCount
+        _tweetCount.value = appUser.tweetCount
+
         // Update the bookmarks list based on server response
         if (isBookmarked) {
             // Add tweet to the beginning of bookmarks list if not already present
@@ -434,15 +771,37 @@ class UserViewModel @AssistedInject constructor(
                 .d("updateBookmark: Saving user to cache with bookmarksCount: ${appUser.bookmarksCount}")
             TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
+            
+            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }
 
     /**
      * Get favorite Tweets of the user.
+     * Returns List<Tweet?> for pagination logic
      * */
-    suspend fun getFavorites(pageNumber: Int) {
+    suspend fun getFavorites(pageNumber: Int): List<Tweet?> {
+        // Load cached favorites first for instant display (only on initial load, not refresh)
+        // Skip cache if favorites list already has items to avoid reordering during refresh
+        if (pageNumber == 0 && userId == appUser.mid && _favorites.value.isEmpty()) {
+            val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
+            if (cachedFavorites.isNotEmpty()) {
+                _favorites.value = cachedFavorites
+                Timber.tag("getFavorites").d("📦 Loaded ${cachedFavorites.size} cached favorites")
+            }
+        }
+        
+        // Ensure we have the latest user data before loading favorites
+        if (userId == appUser.mid) {
+            refreshFromAppUser()
+        }
+
+        // Use the most up-to-date user data (appUser) instead of potentially stale user.value
+        val currentUser = if (userId == appUser.mid) appUser else user.value
+
         val tweetsWithNulls = getUserTweetsByType(
-            user.value,
+            currentUser,
             UserContentType.FAVORITES,
             pageNumber,
             TW_CONST.PAGE_SIZE
@@ -455,11 +814,13 @@ class UserViewModel @AssistedInject constructor(
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
-            // For refresh (page 0), replace the list
+            // For refresh (page 0), replace the list and preserve server order
             _favorites.value = validTweets
-            _favoritesCount.value = validTweets.size
+            // Signal that initial server load is complete (for scroll-to-top)
+            _favoritesInitialLoadComplete.value = true
+            // Don't override the count - it should come from server data, not local list size
         } else {
-            // For load more (page > 0), append to the list
+            // For load more (page > 0), append to the list while preserving order
             _favorites.update { currentFavorites ->
                 val newTweetsMap = validTweets.associateBy { it.mid }
                 val updatedFavorites = currentFavorites.map { favorite ->
@@ -467,12 +828,14 @@ class UserViewModel @AssistedInject constructor(
                 }
                 val finalFavorites = (updatedFavorites + validTweets)
                     .distinctBy { it.mid }
-                    .sortedByDescending { it.timestamp }
 
-                _favoritesCount.value = finalFavorites.size
+                // Don't override the count - it should come from server data, not local list size
                 finalFavorites
             }
         }
+
+        // Return the raw list from server for pagination logic
+        return tweetsWithNulls
     }
 
     /**
@@ -502,6 +865,12 @@ class UserViewModel @AssistedInject constructor(
         // Update the public favorites count for UI with server count
         _favoritesCount.value = serverFavoritesCount
 
+        // Update other count variables to match appUser (but don't override favorites count)
+        _bookmarksCount.value = appUser.bookmarksCount
+        _followersCount.value = appUser.followersCount
+        _followingsCount.value = appUser.followingCount
+        _tweetCount.value = appUser.tweetCount
+
         // Update the favorites list based on server response
         if (isFavorite) {
             // Add tweet to the beginning of favorites list if not already present
@@ -527,6 +896,9 @@ class UserViewModel @AssistedInject constructor(
                 .d("updateFavorite: Saving user to cache with favoritesCount: ${appUser.favoritesCount}")
             TweetCacheManager.saveUser(appUser)
             Timber.tag("UserViewModel").d("updateFavorite: User saved to cache successfully")
+            
+            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }
 
@@ -536,18 +908,65 @@ class UserViewModel @AssistedInject constructor(
     }
 
     init {
+        // Start listening to notifications immediately when ViewModel is created
+        startListeningToNotifications()
+        
         if (userId != TW_CONST.GUEST_ID) {
-            viewModelScope.launch(Dispatchers.IO) {
-                val loadedUser =
-                    getUser(userId) ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-                _user.value = loadedUser
+            // Use applicationScope to prevent cancellation during app initialization
+            // This ensures user data loading completes even if composition is cancelled
+            us.fireshare.tweet.TweetApplication.applicationScope.launch(IO) {
+                // Get cached user data immediately for instant UI display
+                val cachedUser = TweetCacheManager.getCachedUser(userId)
+                val initialUser = if (userId == appUser.mid) {
+                    appUser
+                } else {
+                    // Use cached user data if available, otherwise create skeleton
+                    cachedUser ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                }
+
+                // Set cached/initial user data immediately for instant UI display
+                _user.value = initialUser
 
                 // Initialize count variables from user data
-                _bookmarksCount.value = loadedUser.bookmarksCount
-                _favoritesCount.value = loadedUser.favoritesCount
-                _followersCount.value = loadedUser.followersCount
-                _followingsCount.value = loadedUser.followingCount
-                _tweetCount.value = loadedUser.tweetCount
+                _bookmarksCount.value = initialUser.bookmarksCount
+                _favoritesCount.value = initialUser.favoritesCount
+                _followersCount.value = initialUser.followersCount
+                _followingsCount.value = initialUser.followingCount
+                _tweetCount.value = initialUser.tweetCount
+
+                // Load cached tweets immediately for instant UI display
+                if (userId != TW_CONST.GUEST_ID) {
+                    val cachedTweets = loadCachedTweetsByAuthor(userId, 0, TW_CONST.PAGE_SIZE)
+                    if (cachedTweets.isNotEmpty()) {
+                        _tweets.value = cachedTweets
+                        Timber.tag("UserViewModel").d("Loaded ${cachedTweets.size} cached tweets immediately for user $userId")
+                    }
+                }
+
+                // Fetch fresh user data in background and update
+                if (userId != appUser.mid) {
+                    launch(IO) {
+                        try {
+                            val freshUser = fetchUser(userId, maxRetries = 2)
+                            if (freshUser != null) {
+                                _user.value = freshUser
+
+                                // Update count variables with fresh data
+                                _bookmarksCount.value = freshUser.bookmarksCount
+                                _favoritesCount.value = freshUser.favoritesCount
+                                _followersCount.value = freshUser.followersCount
+                                _followingsCount.value = freshUser.followingCount
+                                _tweetCount.value = freshUser.tweetCount
+
+                                Timber.tag("UserViewModel").d("✅ Updated user $userId with fresh data")
+                            } else {
+                                Timber.tag("UserViewModel").w("⚠️ Failed to fetch fresh user data for $userId")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("UserViewModel").e("Error updating user data for $userId: $e")
+                        }
+                    }
+                }
 
                 if (userId == appUser.mid) {
                     // By default NOT to load fans and followings list of an user object.
@@ -568,34 +987,95 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun refreshUser() {
-        getUser(userId)?.let {
+    suspend fun getUser() {
+        fetchUser(userId, maxRetries = 2)?.let {
             _user.value = it
+        }
+    }
+
+    /**
+     * Refresh user data from appUser if this is the current user.
+     * This ensures that when appUser is updated (e.g., after favorite toggle),
+     * this ViewModel gets the updated data.
+     */
+    fun refreshFromAppUser() {
+        if (userId == appUser.mid) {
+            Timber.tag("UserViewModel").d("Refreshing user data from appUser for current user: ${appUser.mid}")
+            _user.value = appUser
+            
+            // Update all count variables to match appUser
+            _bookmarksCount.value = appUser.bookmarksCount
+            _favoritesCount.value = appUser.favoritesCount
+            _followersCount.value = appUser.followersCount
+            _followingsCount.value = appUser.followingCount
+            _tweetCount.value = appUser.tweetCount
+        }
+    }
+    
+    /**
+     * Update ViewModel state from cached user data without fetching from server.
+     * Use this when you've already fetched fresh user data and just need to update the ViewModel.
+     */
+    fun updateFromCache() {
+        viewModelScope.launch(IO) {
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            if (cachedUser != null) {
+                _user.value = cachedUser
+                _bookmarksCount.value = cachedUser.bookmarksCount
+                _favoritesCount.value = cachedUser.favoritesCount
+                _followersCount.value = cachedUser.followersCount
+                _followingsCount.value = cachedUser.followingCount
+                _tweetCount.value = cachedUser.tweetCount
+                
+                Timber.tag("UserViewModel").d("Updated ViewModel state from cache for user: ${cachedUser.mid}")
+            }
         }
     }
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            // When pageNumber is 0, load pinned tweets first and wait for completion
+            // Always load cached tweets FIRST (immediately, before any network calls)
+            Timber.tag("getTweets").d("Loading cached tweets for user: ${user.value.mid}")
+            val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
+            val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
+            
+            // Update _tweets with cached tweets IMMEDIATELY (shows tweets to user right away)
+            _tweets.update { currentTweets ->
+                val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+                
+                if (newCachedTweets.isNotEmpty()) {
+                    val mergedTweets = (currentTweets + newCachedTweets)
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    mergedTweets
+                } else {
+                    currentTweets
+                }
+            }
+            
+            Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
+            
+            // Load pinned tweets AFTER cached tweets are shown (only for page 0)
             if (pageNumber == 0) {
                 loadPinnedTweets()
-                // Ensure pinned tweets are loaded before proceeding
                 Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
             }
+            
+            // If network is available, fetch more tweets from server
+            if (user.value.baseUrl != null && appUser.baseUrl != null) {
+                Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
+                // Fetch tweets of the author and update _tweets
+                val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
 
-            // Fetch tweets of the author and update _tweets
-            val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
+                // Filter out null elements and get valid tweets
+                val newTweets = newTweetsWithNulls.filterNotNull()
 
-            // Filter out null elements and get valid tweets
-            val newTweets = newTweetsWithNulls.filterNotNull()
+                Timber.tag("getTweets")
+                    .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
-            Timber.tag("getTweets")
-                .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
-
-            if (pageNumber == 0) {
-                // For refresh (page 0), replace the list only if we have no existing tweets
-                // This prevents replacing tweets during TweetListView recreation
-                if (_tweets.value.isEmpty()) {
+                // Always merge new tweets with existing ones, never replace (like TweetFeedViewModel)
+                _tweets.update { currentTweets ->
                     val filteredTweets = newTweets.filterNot { tweet: Tweet ->
                         tweet.isPrivate && tweet.authorId != appUser.mid
                     }
@@ -606,39 +1086,26 @@ class UserViewModel @AssistedInject constructor(
                         pinnedTweetIds.contains(tweet.mid)
                     }
 
-                    _tweets.value = tweetsWithoutPinned
-                    _tweetCount.value = tweetsWithoutPinned.size
+                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                    val trulyNewTweets = tweetsWithoutPinned.filter { it.mid !in currentTweetIds }
 
-                    Timber.tag("getTweets")
-                        .d("Initial load: Filtered out ${filteredTweets.size - tweetsWithoutPinned.size} pinned tweets from regular tweets list. Pinned IDs: $pinnedTweetIds")
-                } else {
-                    // We already have tweets, just ensure page 0 tweets are included
-                    Timber.tag("getTweets")
-                        .d("Page 0 called but tweets already exist (${_tweets.value.size} tweets), preserving existing list")
-                }
-            } else {
-                // For load more (page > 0), append to the list
-                _tweets.update { currentTweets ->
-                    val newTweetsMap = newTweets.associateBy { tweet: Tweet -> tweet.mid }
-                    val updatedTweets = currentTweets.map { tweet ->
-                        newTweetsMap[tweet.mid] ?: tweet
+                    if (trulyNewTweets.isNotEmpty()) {
+                        val mergedTweets = (currentTweets + trulyNewTweets)
+                            .distinctBy { tweet: Tweet -> tweet.mid }
+                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        // Don't override tweet count - it should come from server data, not local list size
+                        mergedTweets
+                    } else {
+                        currentTweets
                     }
-                    val combinedTweets = (updatedTweets + newTweets)
-                        .filterNot { tweet: Tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-
-                    // Filter out pinned tweets from the combined list
-                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                    val finalTweets = combinedTweets.filterNot { tweet: Tweet ->
-                        pinnedTweetIds.contains(tweet.mid)
-                    }.sortedByDescending { tweet: Tweet -> tweet.timestamp }
-
-                    _tweetCount.value = finalTweets.size
-                    finalTweets
                 }
-            }
 
-            newTweetsWithNulls
+                return newTweetsWithNulls
+            } else {
+                // Network unavailable, return cached tweets only
+                Timber.tag("getTweets").w("Network unavailable, returning cached tweets only")
+                return cachedTweetsWithNulls
+            }
         } catch (e: Exception) {
             Timber.tag("getTweets")
                 .e(e, "Error fetching tweets for user: ${user.value.mid}, page: $pageNumber")
@@ -648,13 +1115,15 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun loadPinnedTweets() {
         try {
-            Timber.tag("loadPinnedTweets").d("Loading pinned tweets for user: ${user.value.mid}")
 
             // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
             val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(user.value)
 
             Timber.tag("loadPinnedTweets")
                 .d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
+            
+            Timber.tag("loadPinnedTweets")
+                .d("Pinned tweets response: $pinnedTweetsResponse")
 
             if (!pinnedTweetsResponse.isNullOrEmpty()) {
                 // Parse the response: List<{tweet: Tweet, timestamp: Long}>
@@ -697,8 +1166,16 @@ class UserViewModel @AssistedInject constructor(
                         }
 
                         if (tweet != null && pinnedTimestamp != null) {
+                            // Ensure the author field is set correctly for pinned tweets
+                            val tweetWithAuthor = if (tweet.author == null) {
+                                // Check cache first before fetching from server
+                                val cachedAuthor = TweetCacheManager.getCachedUser(tweet.authorId)
+                                tweet.copy(author = cachedAuthor ?: fetchUser(tweet.authorId))
+                            } else {
+                                tweet
+                            }
                             // Keep the original tweet, but associate it with its pinned timestamp for sorting
-                            Pair(tweet, pinnedTimestamp)
+                            Pair(tweetWithAuthor, pinnedTimestamp)
                         } else {
                             Timber.tag("loadPinnedTweets")
                                 .w("Invalid pinned tweet data: tweet=$tweet, timestamp=$pinnedTimestamp")
@@ -727,8 +1204,7 @@ class UserViewModel @AssistedInject constructor(
                                 .d("Loading original tweet for pinned quoted tweet: ${tweet.originalTweetId}")
                             val originalTweet = HproseInstance.fetchTweet(
                                 tweet.originalTweetId!!,
-                                tweet.originalAuthorId!!,
-                                shouldCache = false  // Memory cache only for profile screens
+                                tweet.originalAuthorId!!
                             )
 
                             if (originalTweet != null) {
@@ -754,9 +1230,6 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 _pinnedTweets.value = validPinnedTweets
-
-                Timber.tag("loadPinnedTweets")
-                    .d("Updated pinned tweets list with ${_pinnedTweets.value.size} valid tweets: ${validPinnedTweets.map { it.mid }}")
             } else {
                 // Clear pinned tweets if none found
                 _pinnedTweets.value = emptyList()
@@ -767,6 +1240,8 @@ class UserViewModel @AssistedInject constructor(
             Timber.tag("loadPinnedTweets")
                 .e(e, "Error loading pinned tweets for user: ${user.value.mid}")
             // Don't clear pinned tweets on error, keep existing state
+            Timber.tag("loadPinnedTweets")
+                .d("Exception occurred, keeping existing pinned tweets: ${_pinnedTweets.value.size}")
         }
     }
 
@@ -806,32 +1281,41 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
             }
 
-            // Update tweet count
-            _tweetCount.value = tweets.value.size
+            // Don't override tweet count - it should come from server data, not local list size
         }
     }
 
 
-    suspend fun login(context: Context, callback: () -> Unit) {
+    suspend fun login(context: Context, callback: () -> Unit, maxRetries: Int = 3) {
         isLoading.value = true
+        loginError.value = "" // Clear previous errors
+        
         if (username.value?.isNotEmpty() == true
             && password.value.isNotEmpty()
         ) {
-            val ret = HproseInstance.login(username.value!!, password.value, context)
+            val ret = HproseInstance.login(username.value!!, password.value, context, maxRetries)
 
             if (ret.second != null) {
                 // something wrong
                 loginError.value = ret.second.toString()
                 isLoading.value = false
             } else {
-                appUser = ret.first as User
+                val loggedInUser = ret.first as User
+                User.updateUserInstance(loggedInUser, true)
+                appUser = User.getInstance(loggedInUser.mid)
                 preferenceHelper.setUserId(appUser.mid)
                 _user.value = appUser
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
                 hostId.value = appUser.hostIds?.firstOrNull() ?: ""
+                cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
+                
+                // Notify TweetFeedViewModel to refresh feed after successful login
+                TweetNotificationCenter.postAsync(
+                    TweetEvent.FeedResetRequested(FeedResetReason.LOGIN)
+                )
 
                 // Show success Toast message on main thread
                 withContext(Dispatchers.Main) {
@@ -852,18 +1336,27 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun logout(popBack: () -> Unit) {
+    suspend fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
-        appUser = User(
-            mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl,
-            followingList = HproseInstance.getAlphaIds()
-        )
+        val ip = HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
+        appUser = User.getInstance(TW_CONST.GUEST_ID)
+        appUser.baseUrl = "http://$ip"
+        appUser.followingList = HproseInstance.getAlphaIds()
+
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
+         * Don't clear tweet cache on logout - cache persists per user and is cleared periodically or manually
          * */
         _tweets.value = emptyList()
         _pinnedTweets.value = emptyList()
-        dao.clearAllCachedTweets()
+        // Note: Tweet cache is NOT cleared on logout to match iOS behavior
+        // Cache persists per user and is cleared periodically or manually by user
+        
+        // Notify TweetFeedViewModel to reset for guest timeline
+        TweetNotificationCenter.postAsync(
+            TweetEvent.FeedResetRequested(FeedResetReason.LOGOUT)
+        )
+        
         popBack()
     }
 
@@ -872,233 +1365,99 @@ class UserViewModel @AssistedInject constructor(
      * Do NOT update appUser, wait for the new user to login.
      * */
     suspend fun register(context: Context, popBack: () -> Unit) {
+        // Prevent repeated submission
+        if (isLoading.value) return
+
         isLoading.value = true
+
+        // Clear previous validation errors
+        usernameError.value = ""
+        passwordError.value = ""
+        confirmPasswordError.value = ""
+        hostIdError.value = ""
+        cloudDrivePortError.value = ""
+
+        // Validate cloud drive port if provided
+        if (cloudDrivePort.value.isNotEmpty()) {
+            val port = cloudDrivePort.value.toIntOrNull()
+            if (port == null || port < 8000 || port > 65535) {
+                cloudDrivePortError.value = "Port must be between 8000 and 65535"
+                isLoading.value = false
+                return
+            }
+        }
+
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             /**
              * Register a new user. Check username and password first.
              * */
             if (username.value.isNullOrEmpty()) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.username_required),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                usernameError.value = context.getString(R.string.username_required)
                 isLoading.value = false
                 return
             }
             if (password.value.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.password_required),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                passwordError.value = context.getString(R.string.password_required)
                 isLoading.value = false
                 return
             }
             // Find IP of the desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
-                appUser = appUser.copy(baseUrl = "http://$ip")
+                val updatedUser = appUser.copy(baseUrl = "http://$ip")
+                User.updateUserInstance(updatedUser, true)
+                appUser = User.getInstance(updatedUser.mid)
+                _user.value = user.value.copy(baseUrl = "http://$ip")
             } ?: run {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.node_not_found),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                hostIdError.value = context.getString(R.string.node_not_found)
                 isLoading.value = false
                 return
             }
         }
-        var updatedUser = User(
-            baseUrl = appUser.baseUrl, avatar = appUser.avatar, mid = appUser.mid,
-            name = name.value?.trim(), hostIds = listOf(hostId.value.trim()),
-            username = username.value!!.lowercase().trim(), password = password.value,
-            profile = profile.value?.trim()
-        )
-        HproseInstance.setUserData(updatedUser)?.let { ret ->
-            if (ret["status"] == "success") {
-                try {
-                    // Pre-process the user data to handle timestamp conversion
-                    val userData = ret["user"] as? Map<String, Any>
-                    if (userData != null) {
-                        val processedUserData = userData.toMutableMap()
-                        
-                        // Handle timestamp conversion from decimal to long
-                        processedUserData["timestamp"]?.let { value ->
-                            when (value) {
-                                is Number -> processedUserData["timestamp"] = value.toLong()
-                                is String -> {
-                                    try {
-                                        processedUserData["timestamp"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
-                                        Timber.w("Failed to parse timestamp: $value")
-                                        processedUserData["timestamp"] = System.currentTimeMillis()
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Handle lastLogin conversion from decimal to long
-                        processedUserData["lastLogin"]?.let { value ->
-                            when (value) {
-                                is Number -> processedUserData["lastLogin"] = value.toLong()
-                                is String -> {
-                                    try {
-                                        processedUserData["lastLogin"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
-                                        Timber.w("Failed to parse lastLogin: $value")
-                                        processedUserData["lastLogin"] = System.currentTimeMillis()
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if (appUser.isGuest()) {
-                            // Create new user from processed data
-                            val newUser = User.from(processedUserData)
 
-                            password.value = ""     // clear the password
-                            popBack()
-                        } else {
-                            // Update existing user profile
-                            appUser.from(processedUserData)
-                            _user.value = appUser
-                            
-                            // Update the shared appUserViewModel if this is the current user's profile
-                            if (userId == appUser.mid) {
-                                // Update all the count variables in this ViewModel to match the updated appUser
-                                _bookmarksCount.value = appUser.bookmarksCount
-                                _favoritesCount.value = appUser.favoritesCount
-                                _followersCount.value = appUser.followersCount
-                                _followingsCount.value = appUser.followingCount
-                                _tweetCount.value = appUser.tweetCount
-                                
-                                // Also update the user state to reflect the new profile data
-                                _user.value = appUser
-                                
-                                // Save the updated user to cache
-                                TweetCacheManager.saveUser(appUser)
-                                
+        // Call the new separate functions based on user type
+        val (success, errorMessage) = if (appUser.isGuest()) {
+            HproseInstance.registerUser(
+                username = username.value!!.lowercase().trim(),
+                password = password.value,
+                alias = name.value.trim(),
+                profile = profile.value.trim(),
+                hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0),
+                domainToShare = domainToShare.value.trim().takeIf { it.isNotEmpty() }
+            )
+        } else {
+            HproseInstance.updateUserCore(
+                password = password.value,
+                alias = name.value.trim(),
+                profile = profile.value.trim(),
+                hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
+                cloudDrivePort = if (cloudDrivePort.value.isBlank()) 0 else (cloudDrivePort.value.toIntOrNull() ?: 0),
+                domainToShare = domainToShare.value.trim().takeIf { it.isNotEmpty() }
+            )
+        }
 
-                                
-                                // Force refresh of the shared appUserViewModel by updating its user state
-                                // This ensures that all components using the shared ViewModel get updated
-                                viewModelScope.launch {
-                                    // Small delay to ensure the update is processed
-                                    delay(100)
-                                    _user.value = appUser
-                                }
-                            }
-                            
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.profile_update_ok),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    } else {
-                        // Fallback to custom Gson parsing with timestamp handling
-                        try {
-                            val jsonString = ret["user"].toString()
-                            
-                            // Pre-process JSON string to fix timestamp issues
-                            val processedJson = jsonString.replace(
-                            Regex("\"timestamp\":\\s*([0-9]+\\.[0-9]+)"),
-                            "\"timestamp\": $1"
-                        ).replace(
-                            Regex("\"lastLogin\":\\s*([0-9]+\\.[0-9]+)"),
-                            "\"lastLogin\": $1"
-                        ).replace(
-                                Regex("\"timestamp\":\\s*([0-9]+)\\.([0-9]+)"),
-                                "\"timestamp\": $1"
-                            ).replace(
-                                Regex("\"lastLogin\":\\s*([0-9]+)\\.([0-9]+)"),
-                                "\"lastLogin\": $1"
-                            )
-                            
-                            val gson = Gson()
-                            val userType = object : TypeToken<User>() {}.type
-                            
-                            if (appUser.isGuest()) {
-                                val newUser: User = gson.fromJson(processedJson, userType)
-                                password.value = ""
-                                popBack()
-                            } else {
-                                updatedUser = gson.fromJson(processedJson, userType)
-                                appUser = appUser.copy(
-                                    name = updatedUser.name, profile = updatedUser.profile,
-                                    username = updatedUser.username, hostIds = updatedUser.hostIds,
-                                )
-                                _user.value = appUser
-                                
-                                // Update the shared appUserViewModel if this is the current user's profile
-                                if (userId == appUser.mid) {
-                                    // Update all the count variables in this ViewModel to match the updated appUser
-                                    _bookmarksCount.value = appUser.bookmarksCount
-                                    _favoritesCount.value = appUser.favoritesCount
-                                    _followersCount.value = appUser.followersCount
-                                    _followingsCount.value = appUser.followingCount
-                                    _tweetCount.value = appUser.tweetCount
-                                    
-                                    // Also update the user state to reflect the new profile data
-                                    _user.value = appUser
-                                    
-                                    // Save the updated user to cache
-                                    TweetCacheManager.saveUser(appUser)
-                                    
-
-                                    
-                                    // Force refresh of the shared appUserViewModel by updating its user state
-                                    // This ensures that all components using the shared ViewModel get updated
-                                    viewModelScope.launch {
-                                        // Small delay to ensure the update is processed
-                                        delay(100)
-                                        _user.value = appUser
-                                    }
-                                }
-                                
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.profile_update_ok),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "Error in fallback Gson parsing")
-                            throw e // Re-throw to be caught by outer catch block
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "Error processing user data during ${if (appUser.isGuest()) "registration" else "profile update"}")
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            if (appUser.isGuest()) context.getString(R.string.registration_failed)
-                            else context.getString(R.string.profile_update_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+        if (success) {
+            if (appUser.isGuest()) {
+                // new user registered, wait for its login
+                popBack()
             } else {
+                // Update existing user profile - the updateUserCore function handles all UI updates internally
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, ret["reason"].toString(), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.profile_update_ok),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    popBack()
                 }
             }
-        } ?: run {
+        } else {
             withContext(Dispatchers.Main) {
+                val userFriendlyMessage = us.fireshare.tweet.utils.ErrorMessageHelper.getUserFriendlyMessage(errorMessage, context)
                 Toast.makeText(
                     context,
-                    context.getString(R.string.registration_failed),
+                    userFriendlyMessage,
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -1114,7 +1473,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check fans
         followers.value.forEach { fanId ->
-            getUser(fanId)?.let { fan ->
+            fetchUser(fanId)?.let { fan ->
                 if (fan.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(fan.username!!)
                 }
@@ -1123,7 +1482,7 @@ class UserViewModel @AssistedInject constructor(
 
         // Check followings
         followings.value.forEach { followingId ->
-            getUser(followingId)?.let { following ->
+            fetchUser(followingId)?.let { following ->
                 if (following.username?.startsWith(query, ignoreCase = true) == true) {
                     suggestions.add(following.username!!)
                 }
@@ -1152,6 +1511,33 @@ class UserViewModel @AssistedInject constructor(
 
     fun onNodeIdChange(value: String) {
         hostId.value = value
+        isLoading.value = false
+        loginError.value = ""
+    }
+    
+    fun onCloudDrivePortChange(value: String) {
+        // Only allow digits and limit to 5 digits
+        if (value.isEmpty() || (value.all { it.isDigit() } && value.length <= 5)) {
+            cloudDrivePort.value = value
+            isLoading.value = false
+            loginError.value = ""
+
+            // Validate port range if not empty
+            if (value.isNotEmpty()) {
+                val port = value.toIntOrNull()
+                if (port != null && (port !in 8000..65535)) {
+                    cloudDrivePortError.value = "Port must be between 8000 and 65535"
+                } else {
+                    cloudDrivePortError.value = ""
+                }
+            } else {
+                cloudDrivePortError.value = ""
+            }
+        }
+    }
+
+    fun onDomainToShareChange(value: String) {
+        domainToShare.value = value.trim()
         isLoading.value = false
         loginError.value = ""
     }
@@ -1185,27 +1571,76 @@ class UserViewModel @AssistedInject constructor(
                                 .sortedByDescending { it.timestamp }
 
                             _tweets.value = updatedTweets
-                            _user.value = user.value.copy(tweetCount = updatedTweets.size)
-                            _tweetCount.value = updatedTweets.size
+                            
+                            // Cache the new tweet by authorId
+                            TweetCacheManager.saveTweet(tweetWithAuthor, tweetWithAuthor.authorId)
+                            
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
                         }
                     }
 
                     is TweetEvent.TweetDeleted -> {
-                        // Batch update all related state to reduce recompositions
-                        val updatedTweets = tweets.value.filterNot { it.mid == event.tweetId }
-                        val updatedPinnedTweets =
-                            pinnedTweets.value.filterNot { it.mid == event.tweetId }
-                        val updatedFavorites = favorites.value.filterNot { it.mid == event.tweetId }
-                        val updatedBookmarks = bookmarks.value.filterNot { it.mid == event.tweetId }
+                        // Only process if it's the current user's tweet
+                        if (event.authorId == user.value.mid) {
+                            // Batch update all related state to reduce recompositions
+                            val updatedTweets = tweets.value.filterNot { it.mid == event.tweetId }
+                            val updatedPinnedTweets =
+                                pinnedTweets.value.filterNot { it.mid == event.tweetId }
+                            val updatedFavorites = favorites.value.filterNot { it.mid == event.tweetId }
+                            val updatedBookmarks = bookmarks.value.filterNot { it.mid == event.tweetId }
 
-                        _tweets.value = updatedTweets
-                        _pinnedTweets.value = updatedPinnedTweets
-                        _favorites.value = updatedFavorites
-                        _bookmarks.value = updatedBookmarks
+                            _tweets.value = updatedTweets
+                            _pinnedTweets.value = updatedPinnedTweets
+                            _favorites.value = updatedFavorites
+                            _bookmarks.value = updatedBookmarks
 
-                        // Update user's tweet count while preserving other fields
-                        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
-                        _tweetCount.value = updatedTweets.size
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
+                        }
+                    }
+                    
+                    is TweetEvent.TweetRestored -> {
+                        // Restore tweet if it belongs to current user
+                        if (event.tweet.authorId == user.value.mid) {
+                            Timber.tag("UserViewModel").d("Restoring tweet ${event.tweet.mid} after failed deletion")
+                            
+                            // Add back to tweets list if not already present
+                            if (!tweets.value.any { it.mid == event.tweet.mid }) {
+                                _tweets.value = (listOf(event.tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                            }
+                            
+                            // Note: Don't restore to pinned/favorites/bookmarks automatically
+                            // as we don't know which lists it was in before deletion attempt
+                        }
+                    }
+                    
+                    is TweetEvent.TweetRetweeted -> {
+                        // Add the retweet to the user's tweet list if it's the current user's retweet
+                        if (event.retweet.authorId == user.value.mid) {
+                            // Add the retweet to the beginning of the tweets list
+                            _tweets.update { currentTweets ->
+                                (listOf(event.retweet) + currentTweets)
+                                    .distinctBy { it.mid }
+                                    .sortedByDescending { it.timestamp }
+                            }
+                            
+                            // Don't update tweet count here - let UserDataUpdated event handle it
+                            // to avoid race conditions with the server refresh
+                        }
+                    }
+
+                    is TweetEvent.UserDataUpdated -> {
+                        // Update user data if this is the current user
+                        if (event.user.mid == userId) {
+                            val updatedUser = event.user.copy()
+                            _user.value = updatedUser
+                            _bookmarksCount.value = updatedUser.bookmarksCount
+                            _favoritesCount.value = updatedUser.favoritesCount
+                            _followersCount.value = updatedUser.followersCount
+                            _followingsCount.value = updatedUser.followingCount
+                            _tweetCount.value = updatedUser.tweetCount
+                        }
                     }
 
                     else -> {
@@ -1231,8 +1666,20 @@ class UserViewModel @AssistedInject constructor(
         _pinnedTweets.value = updatedPinnedTweets
         _favorites.value = updatedFavorites
         _bookmarks.value = updatedBookmarks
-
-        // Update user's tweet count while preserving other fields
-        _user.value = _user.value.copy(tweetCount = updatedTweets.size)
+    }
+    
+    fun restoreTweetToLists(tweet: Tweet, inTweets: Boolean, inPinned: Boolean, inFavorites: Boolean, inBookmarks: Boolean) {
+        if (inTweets && !tweets.value.any { it.mid == tweet.mid }) {
+            _tweets.value = (listOf(tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        if (inPinned && !pinnedTweets.value.any { it.mid == tweet.mid }) {
+            _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+        }
+        if (inFavorites && !favorites.value.any { it.mid == tweet.mid }) {
+            _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }
+        }
+        if (inBookmarks && !bookmarks.value.any { it.mid == tweet.mid }) {
+            _bookmarks.value = (listOf(tweet) + bookmarks.value).distinctBy { it.mid }
+        }
     }
 }

@@ -1,6 +1,8 @@
 package us.fireshare.tweet.profile
 
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,14 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import us.fireshare.tweet.HproseInstance.appUser
+import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.appUserState
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -39,20 +43,42 @@ fun ProfileTopBarButton(
     navController: NavHostController,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior?
 ) {
+    // Observe appUser changes via StateFlow
+    val appUser by appUserState.collectAsState()
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
     val user by viewModel.user.collectAsState()
-    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>()
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val context = LocalContext.current
+    val followOperationFailed by appUserViewModel.followOperationFailed.collectAsState()
+    
+    // Capture string resources at composable level
+    val followOperationFailedText = stringResource(R.string.follow_operation_failed)
+    val loginFollowText = stringResource(R.string.login_follow)
+    val editText = stringResource(R.string.edit)
+    val unfollowText = stringResource(R.string.unfollow)
 
     // Use local boolean state for immediate UI feedback
     var localIsFollowing by remember { mutableStateOf(false) }
-    var isOperationInProgress by remember { mutableStateOf(false) }
     
     // Update local state when followings change
     LaunchedEffect(followings) {
         localIsFollowing = followings.contains(user.mid)
+    }
+    
+    // Show toast when follow operation fails
+    LaunchedEffect(followOperationFailed) {
+        if (followOperationFailed == user.mid) {
+            Toast.makeText(
+                context,
+                followOperationFailedText,
+                Toast.LENGTH_LONG
+            ).show()
+            // Reset the failure signal
+            appUserViewModel.clearFollowOperationFailed()
+        }
     }
 
     // Determine button text based on user relationship
@@ -71,59 +97,43 @@ fun ProfileTopBarButton(
         text = buttonText,
         onClick = {
             when (buttonText) {
-                context.getString(R.string.edit) -> navController.navigate(ProfileEditor)
+                editText -> navController.navigate(ProfileEditor)
                 else -> {
                     if (!appUser.isGuest()) {
-                        // Prevent multiple simultaneous operations
-                        if (isOperationInProgress) {
-                            return@DebouncedButton
-                        }
-
-                        // Store the previous state for potential rollback
-                        val previousState = localIsFollowing
-                        
-                        // Toggle local state immediately for instant UI feedback
-                        localIsFollowing = !localIsFollowing
-                        isOperationInProgress = true
-
-                        appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                            try {
-                                // Attempt the actual toggle operation
-                                val result = appUserViewModel.toggleFollowingWithResult(user.mid) { isFollowingResult ->
-                                    viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                        tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
-                                    }
-                                }
-
-                                withContext(Dispatchers.Main) {
-                                    isOperationInProgress = false
+                        // Optimistically update followingList and enqueue worker
+                        appUserViewModel.toggleFollowingOptimistic(
+                            user.mid,
+                            appUser.mid,
+                            context,
+                            updateTweetFeed = { isFollowingResult ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
                                     
-                                    if (result == null) {
-                                        // Operation failed, revert the local state
-                                        localIsFollowing = previousState
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.follow_operation_failed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                    // Remove cache of the followed/unfollowed user to force refresh from server
+                                    TweetCacheManager.removeCachedUser(user.mid)
+                                    
+                                    // Refresh user data for the followed/unfollowed user
+                                    try {
+                                        // Get fresh user data from server and cache it
+                                        fetchUser(user.mid)?.let { refreshedUser ->
+                                            TweetCacheManager.saveUser(refreshedUser)
+                                            // Refresh the current viewmodel's user data
+                                            viewModel.refreshUserData()
+                                            Timber.tag("ProfileTopBarButtons").d("Refreshed user data for: ${user.mid}")
+                                        }
+                                    } catch (e: Exception) {
+                                        Timber.tag("ProfileTopBarButtons").e("Failed to refresh user data for ${user.mid}: $e")
                                     }
-                                    // If result is not null, the operation succeeded and local state is correct
                                 }
-                            } catch (e: Exception) {
-                                // Exception occurred, revert the local state
-                                withContext(Dispatchers.Main) {
-                                    localIsFollowing = previousState
-                                    isOperationInProgress = false
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.follow_operation_failed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                            },
+                            rollbackTweetFeed = { attemptedIsFollowing ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    tweetFeedViewModel.rollbackFollowingsTweets(user.mid, attemptedIsFollowing)
                                 }
                             }
-                        }
+                        )
                     } else {
-                        Toast.makeText(context, context.getString(R.string.login_follow), Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, loginFollowText, Toast.LENGTH_LONG).show()
                         // Navigate to login after a short delay
                         viewModel.viewModelScope.launch {
                             kotlinx.coroutines.delay(500)
@@ -133,7 +143,7 @@ fun ProfileTopBarButton(
                 }
             }
         },
-        textColor = if (buttonText == context.getString(R.string.unfollow)) {
+        textColor = if (buttonText == unfollowText) {
             MaterialTheme.colorScheme.onError
         } else {
             MaterialTheme.colorScheme.onPrimary
@@ -141,7 +151,7 @@ fun ProfileTopBarButton(
         textStyle = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .background(
-                color = if (buttonText == context.getString(R.string.unfollow)) {
+                color = if (buttonText == unfollowText) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.primary

@@ -2,12 +2,12 @@ package us.fireshare.tweet.datamodel
 
 import android.os.Parcelable
 import com.google.gson.annotations.Expose
-import hprose.client.HproseClient
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.network.HproseClientPool
 
 @Parcelize
 @Serializable
@@ -21,9 +21,10 @@ data class User(
     @Expose var avatar: MimeiId? = null,
     @Expose var email: String? = null,
     @Expose var profile: String? = null,
+    @Expose var domainToShare: String? = null,
     @Expose var timestamp: Long = System.currentTimeMillis(),
     @Expose var lastLogin: Long? = System.currentTimeMillis(),
-    @Expose var cloudDrivePort: Int = TW_CONST.CLOUD_PORT,
+    @Expose var cloudDrivePort: Int = 0,
 
     @Expose var tweetCount: Int = 0,
     @Expose var followingCount: Int = 0,
@@ -56,76 +57,10 @@ data class User(
         }
 
         /**
-         * Update user instance with backend data. Keep current baseUrl
-         */
-        fun from(dict: Map<String, Any>): User {
-            try {
-                val gson = com.google.gson.Gson()
-                
-                // Pre-process the dictionary to handle scientific notation in numeric fields
-                val processedDict = dict.toMutableMap()
-                
-                // Handle timestamp and lastLogin fields
-                processedDict["timestamp"]?.let { value ->
-                    when (value) {
-                        is Number -> processedDict["timestamp"] = value.toLong()
-                        is String -> {
-                            try {
-                                processedDict["timestamp"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
-                                Timber.w("Failed to parse timestamp: $value")
-                            }
-                        }
-                    }
-                }
-                
-                processedDict["lastLogin"]?.let { value ->
-                    when (value) {
-                        is Number -> processedDict["lastLogin"] = value.toLong()
-                        is String -> {
-                            try {
-                                processedDict["lastLogin"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
-                                Timber.w("Failed to parse lastLogin: $value")
-                            }
-                        }
-                    }
-                }
-                
-                val jsonString = gson.toJson(processedDict)
-                val decodedUser = gson.fromJson(jsonString, User::class.java)
-                
-                // Keep original baseUrl when updated by user dictionary from backend
-                val instance = getInstance(mid = decodedUser.mid)
-                val oldBaseUrl = instance.baseUrl
-                val oldWritableUrl = instance.writableUrl
-                decodedUser.baseUrl = instance.baseUrl
-                decodedUser.writableUrl = instance.writableUrl
-                
-                updateUserInstance(decodedUser)
-                
-                // Clear cached services if URLs changed
-                if (oldBaseUrl != instance.baseUrl) {
-                    instance.clearHproseService()
-                }
-                if (oldWritableUrl != instance.writableUrl) {
-                    instance.clearUploadService()
-                }
-                
-                return userInstances[decodedUser.mid]!!
-            } catch (e: Exception) {
-                Timber.e("Cannot decode dict to user: $e")
-                throw RuntimeException("Cannot decode dict to user", e)
-            }
-        }
-
-        /**
          * Update user instance with new data
          */
-        private fun updateUserInstance(user: User) {
+        fun updateUserInstance(user: User, shouldUpdateBaseUrl: Boolean = false) {
             val instance = getInstance(mid = user.mid)
-            val oldBaseUrl = instance.baseUrl
-            val oldWritableUrl = instance.writableUrl
             instance.apply {
                 name = user.name
                 username = user.username
@@ -133,11 +68,15 @@ data class User(
                 avatar = user.avatar
                 email = user.email
                 profile = user.profile
+                domainToShare = user.domainToShare
                 lastLogin = user.lastLogin
                 cloudDrivePort = user.cloudDrivePort
                 hostIds = user.hostIds
-                baseUrl = user.baseUrl
-                writableUrl = user.writableUrl
+
+                // CRITICAL: Never overwrite baseUrl from user parameter
+                if (shouldUpdateBaseUrl) {
+                    baseUrl = user.baseUrl
+                }
                 
                 tweetCount = user.tweetCount
                 followingCount = user.followingCount
@@ -145,21 +84,21 @@ data class User(
                 bookmarksCount = user.bookmarksCount
                 favoritesCount = user.favoritesCount
                 commentsCount = user.commentsCount
-            }
-            
-            // Clear cached services if URLs changed
-            if (oldBaseUrl != instance.baseUrl) {
-                instance.clearHproseService()
-            }
-            if (oldWritableUrl != instance.writableUrl) {
-                instance.clearUploadService()
+                
+                // Update array properties
+                fansList = user.fansList
+                followingList = user.followingList
+                bookmarkedTweets = user.bookmarkedTweets
+                favoriteTweets = user.favoriteTweets
+                repliedTweets = user.repliedTweets
+                commentsList = user.commentsList
+                topTweets = user.topTweets
             }
         }
     }
 
-    // Hprose service management
-    @IgnoredOnParcel
-    private var _hproseService: HproseService? = null
+    // Hprose service management using shared connection pool for distributed nodes
+    // Multiple users on the same node will share the same client instance
     @IgnoredOnParcel
     private var _lastBaseUrl: String? = null
     
@@ -167,47 +106,25 @@ data class User(
         get() {
             val baseUrl = baseUrl ?: return null
             
-            // Check if baseUrl has changed since last service creation
-            if (_hproseService != null && _lastBaseUrl == baseUrl) {
-                return _hproseService
-            } else {
-                // Clear old service if baseUrl changed
-                if (_lastBaseUrl != baseUrl) {
-                    _hproseService = null
-                    _lastBaseUrl = baseUrl
-                }
-                
-                try {
-                    // Use factory method to create client based on URL scheme
-                    val client = HproseClient.create("$baseUrl/webapi/")
-                    client.timeout = 300000
-                    _hproseService = client.useService(HproseService::class.java)
-                    return _hproseService
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to create Hprose client for baseUrl: $baseUrl")
-                    return null
-                }
-            }
+            // Use HproseClientPool for shared client management across users on same node
+            // This significantly reduces memory footprint and improves connection reuse
+            return HproseClientPool.getRegularClient(baseUrl)
         }
     
     /**
-     * Clear cached Hprose service to force recreation on next access
+     * Clear cached Hprose service from pool
+     * This will remove the client from the pool for this node
      */
     fun clearHproseService() {
-        _hproseService = null
+        val baseUrl = baseUrl ?: return
+        if (_lastBaseUrl != null && _lastBaseUrl != baseUrl) {
+            // Release old client if URL changed
+            HproseClientPool.releaseClient(_lastBaseUrl!!, isUploadClient = false)
+        }
+        HproseClientPool.clearClient(baseUrl)
         _lastBaseUrl = null
     }
-    
-    /**
-     * Clear all cached services to force recreation on next access
-     */
-    fun clearAllServices() {
-        clearHproseService()
-        clearUploadService()
-    }
 
-    @IgnoredOnParcel
-    private var _uploadService: HproseService? = null
     @IgnoredOnParcel
     private var _lastWritableUrl: String? = null
     
@@ -217,34 +134,22 @@ data class User(
             // The calling code should call resolveWritableUrl() before accessing uploadService
             val currentWritableUrl = writableUrl ?: return null
             
-            // Check if writableUrl has changed since last service creation
-            if (_uploadService != null && _lastWritableUrl == currentWritableUrl) {
-                return _uploadService
-            } else {
-                // Clear old service if writableUrl changed
-                if (_lastWritableUrl != currentWritableUrl) {
-                    _uploadService = null
-                    _lastWritableUrl = currentWritableUrl
-                }
-                
-                try {
-                    // Use factory method to create client based on URL scheme
-                    val client = HproseClient.create("$currentWritableUrl/webapi/")
-                    client.timeout = 3000000   // upload takes longer
-                    _uploadService = client.useService(HproseService::class.java)
-                    return _uploadService
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to create Hprose upload client for writableUrl: $currentWritableUrl")
-                    return null
-                }
-            }
+            // Use HproseClientPool for shared upload client management
+            // Upload clients have extended timeouts for long-running operations
+            return HproseClientPool.getUploadClient(currentWritableUrl)
         }
     
     /**
-     * Clear cached upload service to force recreation on next access
+     * Clear cached upload service from pool
+     * This will remove the upload client from the pool for this node
      */
     fun clearUploadService() {
-        _uploadService = null
+        val currentWritableUrl = writableUrl ?: return
+        if (_lastWritableUrl != null && _lastWritableUrl != currentWritableUrl) {
+            // Release old client if URL changed
+            HproseClientPool.releaseClient(_lastWritableUrl!!, isUploadClient = true)
+        }
+        HproseClientPool.clearClient(currentWritableUrl)
         _lastWritableUrl = null
     }
 
@@ -307,13 +212,9 @@ data class User(
                         }
                     }
                     else -> {
-                        // No port specified, use default port 8010
-                        val cleanIP = if (hostIP.startsWith("[") && hostIP.endsWith("]")) {
-                            hostIP.substring(1, hostIP.length - 1)
-                        } else {
-                            hostIP
-                        }
-                        cleanIP to "8010"
+                        // No port specified - cannot construct URL
+                        Timber.w("[resolveWritableUrl] No port specified in hostIP: $hostIP")
+                        return writableUrl
                     }
                 }
 
@@ -351,7 +252,7 @@ data class User(
     }
 
     /**
-     * Update user data from a map (similar to iOS updateFromMap)
+     * Update user data from a map, which should be from server.
      */
     fun from(userData: Map<String, Any>) {
         try {
@@ -365,7 +266,7 @@ data class User(
                     is String -> {
                         try {
                             processedData["timestamp"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse timestamp: $value")
                         }
                     }
@@ -378,7 +279,7 @@ data class User(
                     is String -> {
                         try {
                             processedData["lastLogin"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse lastLogin: $value")
                         }
                     }
@@ -392,7 +293,28 @@ data class User(
             avatar = processedData["avatar"] as? String ?: avatar
             email = processedData["email"] as? String ?: email
             profile = processedData["profile"] as? String ?: profile
-            cloudDrivePort = (processedData["cloudDrivePort"] as? Number)?.toInt() ?: cloudDrivePort
+            // Handle domainToShare: update if present in response (including null), otherwise keep existing
+            if (processedData.containsKey("domainToShare")) {
+                domainToShare = processedData["domainToShare"] as? String
+            }
+            // Handle cloudDrivePort: update if present in response (including null), handle both Number and String types
+            if (processedData.containsKey("cloudDrivePort")) {
+                val value = processedData["cloudDrivePort"]
+                cloudDrivePort = when (value) {
+                    null -> 0
+                    is Number -> value.toInt()
+                    is String -> {
+                        try {
+                            value.toIntOrNull() ?: 0
+                        } catch (_: NumberFormatException) {
+                            Timber.w("Failed to parse cloudDrivePort: $value")
+                            cloudDrivePort
+                        }
+                    }
+
+                    else -> cloudDrivePort
+                }
+            }
             
             tweetCount = (processedData["tweetCount"] as? Number)?.toInt() ?: tweetCount
             followingCount = (processedData["followingCount"] as? Number)?.toInt() ?: followingCount
@@ -416,13 +338,12 @@ data class User(
     }
 
     fun from(userData: User) {
-        val oldBaseUrl = baseUrl
-        val oldWritableUrl = writableUrl
         name = userData.name
         username = userData.username
         avatar = userData.avatar
         email = userData.email
         profile = userData.profile
+        domainToShare = userData.domainToShare
         cloudDrivePort = userData.cloudDrivePort
 
         tweetCount = userData.tweetCount
@@ -432,14 +353,6 @@ data class User(
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
         hostIds = userData.hostIds
-        
-        // Clear cached services if URLs changed
-        if (oldBaseUrl != baseUrl) {
-            clearHproseService()
-        }
-        if (oldWritableUrl != writableUrl) {
-            clearUploadService()
-        }
     }
 
     /**
@@ -450,12 +363,19 @@ data class User(
     }
 
     /**
-     * Computed property that returns writableUrl with TW_CONST.CLOUD_PORT
-     * Used for accessing netdisk and transcode services
+     * Computed property that returns writableUrl with cloudDrivePort
+     * Used for accessing TUS server (resumable upload server) and transcode services
+     * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
+     * Important: 
+     * - Callers must ensure writableUrl is resolved (call resolveWritableUrl() first) before accessing this property
+     * - Returns null if cloudDrivePort is not set (0 means not set)
      */
-    val netDiskUrl: String?
+    val tusServerUrl: String?
         get() {
             val baseUrl = writableUrl ?: return null
+            val port = cloudDrivePort
+            // cloudDrivePort of 0 means not set
+            if (port == 0) return null
             
             return try {
                 val uri = java.net.URI(baseUrl)
@@ -472,10 +392,10 @@ data class User(
                     host
                 }
                 
-                "$scheme://$hostPart:${TW_CONST.CLOUD_PORT}$path$query$fragment"
+                "$scheme://$hostPart:$port$path$query$fragment"
             } catch (e: Exception) {
                 Timber.w(e, "Failed to parse baseUrl for cloud port replacement: $baseUrl")
-                baseUrl
+                null
             }
         }
 
@@ -486,7 +406,7 @@ data class User(
         get() {
             val timestamp = TweetCacheManager.getUserCacheTimestamp(mid)
             val currentTime = System.currentTimeMillis()
-            return (currentTime - timestamp) > 30 * 60 * 1000L // 30 minutes in milliseconds
+            return (currentTime - timestamp) > TweetCacheManager.USER_CACHE_EXPIRATION_TIME
         }
 
     override fun equals(other: Any?): Boolean {

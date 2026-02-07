@@ -40,6 +40,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 
@@ -49,17 +51,38 @@ fun AudioPlayer(
     attachments: List<MimeiFileType>,
     initialIndex: Int = 0,
 ) {
+    if (attachments.isEmpty()) {
+        return
+    }
     val context = LocalContext.current
     val aspectRatio by remember { mutableFloatStateOf(16 / 9f) }
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
+    val resolvedAttachments = remember(attachments) {
+        attachments.mapNotNull { attachment ->
+            val resolvedUrl = attachment.url?.takeIf { it.isNotBlank() }
+                ?: HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl)
+            resolvedUrl?.let { attachment.copy(url = it) }
+        }
+    }
+
+    if (resolvedAttachments.isEmpty()) {
+        return
+    }
+
+    LaunchedEffect(resolvedAttachments.size) {
+        if (currentIndex >= resolvedAttachments.size) {
+            currentIndex = 0
+        }
+    }
+
     // Create a Player.Listener outside the DisposableEffect
     val playerListener = remember {
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && currentIndex < attachments.size - 1) {
-                    currentIndex = (currentIndex + 1) % attachments.size
+                if (playbackState == Player.STATE_ENDED && currentIndex < resolvedAttachments.size - 1) {
+                    currentIndex = (currentIndex + 1) % resolvedAttachments.size
                     exoPlayer.seekTo(currentIndex, 0)
                     exoPlayer.playWhenReady = true
                 }
@@ -67,19 +90,25 @@ fun AudioPlayer(
         }
     }
     // Create a list of MediaItems from the attachments
-    val mediaItems = remember {
-        attachments.map {
-            androidx.media3.common.MediaItem.fromUri(it.url!!)
+    val mediaItems = remember(resolvedAttachments) {
+        resolvedAttachments.mapNotNull { attachment ->
+            attachment.url?.let { url -> androidx.media3.common.MediaItem.fromUri(url) }
         }
     }
-    // Add the media items to the ExoPlayer
-    LaunchedEffect(key1 = mediaItems) {
-        exoPlayer.addMediaItems(mediaItems)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+
+    if (mediaItems.isEmpty()) {
+        return
     }
-    LaunchedEffect(currentIndex) {
-        println("current index = $currentIndex")
+    // Add the media items to the ExoPlayer
+    LaunchedEffect(mediaItems) {
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        exoPlayer.addMediaItems(mediaItems)
+        val targetIndex = currentIndex.coerceIn(0, mediaItems.lastIndex)
+        exoPlayer.prepare()
+        exoPlayer.seekTo(targetIndex, 0)
+        exoPlayer.playWhenReady = true
+        currentIndex = targetIndex
     }
     // Listen for playback completion
     DisposableEffect(exoPlayer) {
@@ -97,12 +126,13 @@ fun AudioPlayer(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         contentPadding = PaddingValues(vertical = 8.dp) // Add padding to the top and bottom
     ) {
-        items(attachments, key = { it.mid }) {
-            val isSelected = currentIndex == attachments.indexOf(it)
+        items(resolvedAttachments, key = { it.mid }) { attachment ->
+            val itemIndex = resolvedAttachments.indexOf(attachment)
+            val isSelected = currentIndex == itemIndex
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .clickable {
-                        currentIndex = attachments.indexOf(it)
+                        currentIndex = itemIndex
                         exoPlayer.seekTo(currentIndex, 0) // Seek to the selected track
                         exoPlayer.playWhenReady = true
                     }
@@ -122,7 +152,7 @@ fun AudioPlayer(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = it.fileName ?: it.mid,
+                    text = attachment.fileName ?: attachment.mid,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

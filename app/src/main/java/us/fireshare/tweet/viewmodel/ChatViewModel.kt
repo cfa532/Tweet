@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -21,11 +22,13 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.R
 import us.fireshare.tweet.chat.ChatRepository
 import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
@@ -65,7 +68,7 @@ class ChatViewModel @AssistedInject constructor(
     val shouldScrollToBottom: StateFlow<Boolean> get() = _shouldScrollToBottom.asStateFlow()
 
     companion object {
-        private const val MESSAGES_PER_PAGE = 10
+        private const val MESSAGES_PER_PAGE = 10  // Load only 10 most recent messages initially
         
         /**
          * Helper function to check if a message is new (not already in the list)
@@ -77,16 +80,119 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     init {
+        // Load initial data
         viewModelScope.launch(Dispatchers.IO) {
-            _receipt.value = HproseInstance.getUser(receiptId)
-                ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
-
-            // Load only the latest 10 messages from local database
+            // OPTIMIZED: Load cached user data FIRST to avoid blocking screen
+            val cachedUser = TweetCacheManager.getCachedUser(receiptId)
+            if (cachedUser != null && !cachedUser.isGuest()) {
+                _receipt.value = cachedUser
+                Timber.tag("ChatViewModel").d("Loaded cached user for chat: ${cachedUser.username}")
+            } else {
+                // No cached user, use guest placeholder temporarily
+                _receipt.value = User(mid = receiptId, username = "loading...", baseUrl = appUser.baseUrl)
+                Timber.tag("ChatViewModel").d("No cached user found, using placeholder")
+            }
+            
+            // Load messages from database (fast)
             _chatMessages.value = loadLatestMessages(receiptId)
                 .sortedBy { it.timestamp }
+            Timber.tag("ChatViewModel").d("Loaded ${_chatMessages.value.size} messages from database")
+            
+            // Fetch fresh user data from network in background (slow)
+            // This runs asynchronously and doesn't block the screen from appearing
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val freshUser = HproseInstance.fetchUser(receiptId)
+                    if (freshUser != null && !freshUser.isGuest()) {
+                        _receipt.value = freshUser
+                        Timber.tag("ChatViewModel").d("Updated with fresh user data from network: ${freshUser.username}")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ChatViewModel").e(e, "Failed to fetch fresh user data, using cached")
+                }
+            }
+        }
+        
+        // CRITICAL: Start SINGLE event listener for ALL background message uploads
+        // This prevents multiple collectors from interfering with each other
+        startListeningToMessageEvents()
+    }
+    
+    /**
+     * Start listening to message send events from background workers.
+     * This should only be called ONCE in init block to prevent multiple collectors.
+     */
+    private fun startListeningToMessageEvents() {
+        viewModelScope.launch {
+            Timber.tag("ChatViewModel").d("Starting single event listener for receiptId: $receiptId")
+            TweetNotificationCenter.events.collect { event ->
+                when (event) {
+                    is TweetEvent.ChatMessageSent -> {
+                        if (event.message.receiptId == receiptId) {
+                            Timber.tag("ChatViewModel").d("Received ChatMessageSent event: ${event.message.id}")
+                            
+                            // Check if this is replacing an optimistic message
+                            val hasOptimisticMessage = _chatMessages.value.any { 
+                                it.timestamp == event.message.timestamp && 
+                                it.localAttachmentUri != null &&
+                                it.attachments == null
+                            }
+                            
+                            if (hasOptimisticMessage) {
+                                // Replace optimistic message with real message
+                                _chatMessages.update { messages ->
+                                    messages.map { msg ->
+                                        if (msg.timestamp == event.message.timestamp && 
+                                            msg.localAttachmentUri != null &&
+                                            msg.attachments == null) {
+                                            // Replace with real message
+                                            event.message
+                                        } else {
+                                            msg
+                                        }
+                                    }.sortedBy { it.timestamp }
+                                }
+                                Timber.tag("ChatViewModel").d("Replaced optimistic message with real message: ${event.message.id}")
+                            } else if (isNewMessage(event.message, _chatMessages.value)) {
+                                // Add the real message to UI only if it's new
+                                _chatMessages.update { messages ->
+                                    (messages + event.message).sortedBy { it.timestamp }
+                                }
+                                Timber.tag("ChatViewModel").d("Added new message: ${event.message.id}")
+                            } else {
+                                Timber.tag("ChatViewModel").d("Skipping duplicate message: ${event.message.id}")
+                            }
 
-            // get unread messages from network
-            fetchNewMessage()
+                            // Insert message to database
+                            chatRepository.insertMessage(event.message)
+                            
+                            // Trigger scroll to bottom for messages from current user
+                            if (event.message.authorId == appUser.mid) {
+                                _shouldScrollToBottom.value = true
+                            }
+                            
+                            // Update chat session (always update, even if message already exists)
+                            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                                appUser.mid,
+                                receiptId,
+                                event.message,
+                                hasNews = false
+                            )
+                            chatListViewModel?.updateSession(previewMessage, hasNews = false)
+                        }
+                    }
+
+                    is TweetEvent.ChatMessageSendFailed -> {
+                        Timber.tag("ChatViewModel").e("Received ChatMessageSendFailed: ${event.error}")
+                        // Show error toast
+                        _toastMessage.value = "Failed to send message: ${event.error}"
+                    }
+
+                    else -> {
+                        // Ignore other events
+                    }
+                }
+            }
         }
     }
 
@@ -102,10 +208,11 @@ class ChatViewModel @AssistedInject constructor(
     }
 
     private suspend fun sendTextMessage(content: String) {
-        val messageContent = if (content.trim().isNotBlank()) content.trim() else null
+        val messageContent = content.trim().ifBlank { null }
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        Timber.tag("ChatViewModel").d("sendTextMessage: Using sessionId=$sessionId for message, appUser=${appUser.mid}, receipt=$receiptId")
 
         val message = ChatMessage(
             receiptId = receiptId,
@@ -119,21 +226,25 @@ class ChatViewModel @AssistedInject constructor(
         try {
             // Add message to UI immediately for instant feedback
             _chatMessages.value += message
+            Timber.tag("ChatViewModel").d("sendTextMessage: Inserting message to DB: id=${message.id}, sessionId=${message.sessionId}")
             chatRepository.insertMessage(message)
+            
+            // Update ChatSession immediately so ChatListView reflects the change
+            val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                appUser.mid,
+                receiptId,
+                message,
+                hasNews = false
+            )
+            chatListViewModel?.updateSession(previewMessage, hasNews = false)
             
             // Send message and get result
             val (success, errorMsg) = HproseInstance.sendMessage(receiptId, message)
             
             if (success) {
-                // Message sent successfully, update session
-                chatSessionRepository.updateChatSession(
-                    appUser.mid,
-                    receiptId,
-                    hasNews = false
-                )
+                // Message sent successfully, ensure session is updated (already updated above)
                 Timber.tag("ChatViewModel")
-                    .d("sendTextMessage calling updateSession with message: ${message.content}, authorId: ${message.authorId}")
-                chatListViewModel?.updateSession(message, hasNews = false)
+                    .d("sendTextMessage message sent successfully: ${message.content}")
                 
                 // Trigger scroll to bottom
                 _shouldScrollToBottom.value = true
@@ -162,10 +273,33 @@ class ChatViewModel @AssistedInject constructor(
         context: Context
     ) {
         // Show sending status toast
-        _toastMessage.value = "Uploading attachment in background..."
+        _toastMessage.value = context.getString(R.string.uploading_attachment_background)
 
         // Get or create session ID for this conversation
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        
+        val messageTimestamp = System.currentTimeMillis()
+
+        // Create optimistic message with local Uri for immediate display
+        val optimisticMessage = ChatMessage(
+            receiptId = receiptId,
+            authorId = appUser.mid,
+            timestamp = messageTimestamp,
+            content = content.trim().ifBlank { null },
+            attachments = null, // Will be filled in when upload completes
+            sessionId = sessionId,
+            localAttachmentUri = attachmentUri.toString() // Store local Uri for immediate display
+        )
+        
+        // Add optimistic message to UI immediately for instant feedback
+        _chatMessages.update { messages ->
+            (messages + optimisticMessage).sortedBy { it.timestamp }
+        }
+        
+        // Trigger scroll to bottom
+        _shouldScrollToBottom.value = true
+        
+        Timber.tag("ChatViewModel").d("Created optimistic message with local Uri: ${optimisticMessage.id}")
 
         // Create work request for background processing
         val workRequest = OneTimeWorkRequestBuilder<SendChatMessageWorker>()
@@ -175,66 +309,22 @@ class ChatViewModel @AssistedInject constructor(
                     "content" to content,
                     "attachmentUri" to attachmentUri.toString(),
                     "sessionId" to sessionId,
-                    "messageTimestamp" to System.currentTimeMillis()
+                    "messageTimestamp" to messageTimestamp,
+                    "optimisticMessageId" to optimisticMessage.id // Pass message ID to replace later
                 )
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10_000L, // 10 seconds
+                java.util.concurrent.TimeUnit.MILLISECONDS
             )
             .build()
 
         // Enqueue the work
         WorkManager.getInstance(context).enqueue(workRequest)
-
-        // Listen for worker completion events
-        viewModelScope.launch {
-            TweetNotificationCenter.events.collect { event ->
-                when (event) {
-                    is TweetEvent.ChatMessageSent -> {
-                        if (event.message.receiptId == receiptId) {
-                            // Deduplication using unique message IDs
-                            if (isNewMessage(event.message, _chatMessages.value)) {
-                                // Add the real message to UI and database only if it's new
-                                _chatMessages.update { messages ->
-                                    (messages + event.message).sortedBy { it.timestamp }
-                                }
-
-                                // Insert message to database
-                                chatRepository.insertMessage(event.message)
-
-                                // Update chat session
-                                chatSessionRepository.updateChatSession(
-                                    appUser.mid,
-                                    receiptId,
-                                    hasNews = false
-                                )
-                                
-                                // Trigger scroll to bottom for messages from current user
-                                if (event.message.authorId == appUser.mid) {
-                                    _shouldScrollToBottom.value = true
-                                }
-                                
-                                Timber.tag("ChatViewModel")
-                                    .d("ChatMessageSent: Added new message with ID: ${event.message.id}")
-                            } else {
-                                Timber.tag("ChatViewModel")
-                                    .d("ChatMessageSent: Skipped duplicate message with ID: ${event.message.id}")
-                            }
-                            
-                            chatListViewModel?.updateSession(event.message, hasNews = false)
-
-                            // No success toast for attachment messages - only show failure toasts
-                        }
-                    }
-
-                    is TweetEvent.ChatMessageSendFailed -> {
-                        // Show error toast
-                        _toastMessage.value = "Failed to send message: ${event.error}"
-                    }
-
-                    else -> {
-                        // Ignore other events
-                    }
-                }
-            }
-        }
+        
+        Timber.tag("ChatViewModel").d("Enqueued background message upload worker for receiptId: $receiptId")
+        // Worker completion events will be handled by the single event listener in init block
     }
 
     fun clearToastMessage() {
@@ -244,16 +334,11 @@ class ChatViewModel @AssistedInject constructor(
     fun resetScrollToBottomFlag() {
         _shouldScrollToBottom.value = false
     }
-    
-    fun scrollToBottom() {
-        // This will be called from the UI to trigger scroll to bottom
-        // The actual scrolling is handled in the ChatScreen
-    }
 
     /**
      * Check new messages on writable host of an user.
      * */
-    suspend fun fetchNewMessage(numOfMsgs: Int = 500) {
+    suspend fun fetchNewMessage() {
         val fetchedMessages = HproseInstance.fetchMessages(receiptId) ?: return
         val news = fetchedMessages.toMutableList()
         Timber.tag("ChatViewModel").d("fetchNewMessage fetched ${news.size} messages $receiptId")
@@ -261,29 +346,24 @@ class ChatViewModel @AssistedInject constructor(
             // Get or create session ID for this conversation
             val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
 
-            // Update timestamps with local system time for received messages and assign session ID
-            val currentTime = System.currentTimeMillis()
+            // Add session ID to messages
             val updatedNews = news.map { message ->
-                if (message.authorId != appUser.mid) {
-                    // Update timestamp for incoming messages with local time and assign session ID
-                    message.copy(timestamp = currentTime, sessionId = sessionId)
-                } else {
-                    // Assign session ID to outgoing messages
-                    message.copy(sessionId = sessionId)
-                }
+                message.copy(sessionId = sessionId)
             }
 
             /**
              * Deduplication logic using unique message IDs to prevent message duplication.
+             * Check both in-memory list and database to avoid duplicates from previewMessages.
              */
-            val newMessages = updatedNews.filter { message ->
-                val isNew = isNewMessage(message, _chatMessages.value)
+            val newMessages = chatSessionRepository.filterExistingMessages(updatedNews).filter { message ->
+                // Also check in-memory list to avoid adding messages already in UI
+                val isNewInMemory = isNewMessage(message, _chatMessages.value)
                 
-                if (!isNew) {
+                if (!isNewInMemory) {
                     Timber.tag("ChatViewModel")
-                        .d("fetchNewMessage: filtering out duplicate message with ID: ${message.id}")
+                        .d("fetchNewMessage: filtering out duplicate message with ID: ${message.id} (already in memory)")
                 }
-                isNew
+                isNewInMemory
             }
             Timber.tag("ChatViewModel")
                 .d("fetchNewMessage: existing messages count: ${_chatMessages.value.size}, new messages count: ${newMessages.size}, total fetched: ${updatedNews.size}")
@@ -293,22 +373,32 @@ class ChatViewModel @AssistedInject constructor(
                 chatRepository.insertMessages(newMessages)
             }
 
-            _chatMessages.update {
-                it.plus(newMessages).sortedBy { it.timestamp }
+            _chatMessages.update { existing ->
+                (existing + newMessages).sortedBy { it.timestamp }
             }
-            // update session in database
-            chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
-
-            // update session in memory
-            val lastMessage = updatedNews.last()
-            Timber.tag("ChatViewModel")
-                .d("fetchNewMessage calling updateSession with message: ${lastMessage.content}, authorId: ${lastMessage.authorId}")
-            chatListViewModel?.updateSession(lastMessage, hasNews = false)
+            // update session in memory - only update if we have new messages
+            // Don't call updateChatSessionWithMessage here as it will insert messages again
+            // Messages are already inserted above, just update the session metadata
+            if (newMessages.isNotEmpty()) {
+                val lastMessage = newMessages.maxByOrNull { it.timestamp }
+                lastMessage?.let { message ->
+                    Timber.tag("ChatViewModel")
+                        .d("fetchNewMessage updating session with message: ${message.content}, authorId: ${message.authorId}")
+                    // Just update the session, don't insert message again (it's already inserted above)
+                    // updateChatSession will find the latest message from the database and update the session
+                    chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
+                    // Update session in memory - use the message directly (preview will be handled by ChatListViewModel if needed)
+                    chatListViewModel?.updateSession(message, hasNews = false)
+                }
+            } else {
+                // No new messages, just mark session as read
+                chatSessionRepository.updateChatSession(appUser.mid, receiptId, hasNews = false)
+            }
         }
     }
 
     /**
-     * Load the latest 10 messages from database
+     * Load the latest 20 messages from database
      */
     private suspend fun loadLatestMessages(receiptId: MimeiId): List<ChatMessage> {
         // Get session ID for this conversation
@@ -318,6 +408,17 @@ class ChatViewModel @AssistedInject constructor(
         // update session flag to false, means it is read.
         chatSessionRepository.updateExistingChatSession(appUser.mid, receiptId, hasNews = false)
         return messages.map { it.toChatMessage() }
+    }
+
+    /**
+     * Reload messages from database (public method for screen re-entry)
+     */
+    suspend fun reloadMessagesFromDatabase() {
+        val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
+        Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loading from sessionId=$sessionId, appUser=${appUser.mid}, receipt=$receiptId")
+        val messages = loadLatestMessages(receiptId).sortedBy { it.timestamp }
+        _chatMessages.value = messages
+        Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loaded ${messages.size} messages from database")
     }
 
     /**
@@ -360,6 +461,63 @@ class ChatViewModel @AssistedInject constructor(
             _toastMessage.value = "Failed to load older messages: ${e.message}"
         } finally {
             _isLoadingOlderMessages.value = false
+        }
+    }
+
+    /**
+     * Resend a failed message
+     */
+    suspend fun resendMessage(message: ChatMessage) {
+        Timber.tag("ChatViewModel").d("Attempting to resend message: ${message.id}")
+        
+        // Reset the message to sending state with updated timestamp
+        val currentTime = System.currentTimeMillis()
+        val resendingMessage = message.copy(
+            success = true, 
+            errorMsg = null,
+            timestamp = currentTime
+        )
+        Timber.tag("ChatViewModel").d("Updated timestamp from ${message.timestamp} to $currentTime")
+        
+        _chatMessages.update { messages ->
+            messages.map { if (it.id == message.id) resendingMessage else it }.sortedBy { it.timestamp }
+        }
+        chatRepository.insertMessage(resendingMessage)
+        
+        try {
+            // Send message and get result
+            val (success, errorMsg) = HproseInstance.sendMessage(receiptId, resendingMessage)
+            
+            if (success) {
+                Timber.tag("ChatViewModel").d("Message resent successfully: ${message.content}")
+                
+                // Update ChatSession
+                val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                    appUser.mid,
+                    receiptId,
+                    resendingMessage,
+                    hasNews = false
+                )
+                chatListViewModel?.updateSession(previewMessage, hasNews = false)
+                
+                // Trigger scroll to bottom
+                _shouldScrollToBottom.value = true
+            } else {
+                // Message failed to send again, update with failure status
+                val failedMessage = resendingMessage.copy(success = false, errorMsg = errorMsg)
+                _chatMessages.update { messages ->
+                    messages.map { if (it.id == message.id) failedMessage else it }
+                }
+                chatRepository.insertMessage(failedMessage)
+            }
+        } catch (e: Exception) {
+            Timber.tag("ChatViewModel").e(e, "Error resending message")
+            // Update message with failure status
+            val failedMessage = resendingMessage.copy(success = false, errorMsg = e.message ?: "Network error")
+            _chatMessages.update { messages ->
+                messages.map { if (it.id == message.id) failedMessage else it }
+            }
+            chatRepository.insertMessage(failedMessage)
         }
     }
 

@@ -12,18 +12,30 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 import java.lang.reflect.Type
 import java.util.UUID
 
 // Custom deserializer to handle both Long and Double timestamp values
 class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
+    /**
+     * Validates that a MimeiFileType has all required non-null fields properly set.
+     * This is needed because Gson can bypass Kotlin's null-safety at runtime.
+     */
+    private fun isValidAttachment(attachment: MimeiFileType?): Boolean {
+        if (attachment == null) return false
+        // Check mid - must be non-null and non-blank
+        val midValue = try { attachment.mid } catch (_: Exception) { null }
+        return !midValue.isNullOrBlank()
+    }
+    
     override fun deserialize(
         json: JsonElement?,
         typeOfT: Type?,
@@ -43,8 +55,7 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
                 val primitive = timestampElement.asJsonPrimitive
                 when {
                     primitive.isNumber -> {
-                        val number = primitive.asNumber
-                        when (number) {
+                        when (val number = primitive.asNumber) {
                             is Long -> number
                             is Double -> number.toLong()
                             is Int -> number.toLong()
@@ -60,19 +71,94 @@ class ChatMessageDeserializer : JsonDeserializer<ChatMessage> {
         // Handle sessionId (optional)
         val sessionId = jsonObject.get("sessionId")?.asString
         
-        // Handle attachments (optional)
+        // Handle attachments (optional) - handle both array and single object
         val attachmentsElement = jsonObject.get("attachments")
-        val attachments = if (attachmentsElement?.isJsonArray == true) {
-            val gson = Gson()
-            gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java).toList()
-        } else null
+        val attachments = when {
+            attachmentsElement == null -> null
+            attachmentsElement.isJsonArray -> {
+                try {
+                    // Use GsonBuilder with MediaTypeDeserializer to properly handle MediaType enum
+                    val gson = GsonBuilder()
+                        .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
+                        .create()
+                    val deserialized = gson.fromJson(attachmentsElement, Array<MimeiFileType>::class.java)
+                    // Validate and filter out invalid attachments (mid and type must not be null)
+                    val validAttachments = deserialized.filterNotNull()
+                        .filter { attachment ->
+                            val isValid = isValidAttachment(attachment)
+                            if (!isValid) {
+                                Timber.tag("ChatMessageDeserializer")
+                                    .w("Filtering out invalid attachment: mid=${try { attachment.mid } catch (_: Exception) { "null" }}, type=${try { attachment.type } catch (_: Exception) { "null" }}")
+                            }
+                            isValid
+                        }
+                        .map { attachment ->
+                            // Infer media type if it's Unknown
+                            if (attachment.type == MediaType.Unknown) {
+                                val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(attachment)
+                                Timber.tag("ChatMessageDeserializer")
+                                    .d("Inferred type for attachment ${attachment.mid}: $inferredType from fileName: ${attachment.fileName}")
+                                attachment.copy(type = inferredType)
+                            } else {
+                                attachment
+                            }
+                        }
+                    // Return null if all attachments were invalid, otherwise return the valid list
+                    validAttachments.ifEmpty {
+                        Timber.tag("ChatMessageDeserializer")
+                            .w("All attachments were invalid, returning null instead of empty list")
+                        null
+                    }
+                } catch (e: Exception) {
+                    // Log deserialization error but don't fail the whole message
+                    Timber.tag("ChatMessageDeserializer").e(e, "Failed to deserialize attachments array")
+                    null
+                }
+            }
+            attachmentsElement.isJsonObject -> {
+                // Handle single attachment as object (convert to list)
+                try {
+                    // Use GsonBuilder with MediaTypeDeserializer to properly handle MediaType enum
+                    val gson = GsonBuilder()
+                        .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
+                        .create()
+                    val deserialized = gson.fromJson(attachmentsElement, MimeiFileType::class.java)
+                    // Validate attachment (mid and type must not be null)
+                    if (isValidAttachment(deserialized)) {
+                        // Infer media type if it's Unknown
+                        val finalAttachment = if (deserialized.type == MediaType.Unknown) {
+                            val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(deserialized)
+                            Timber.tag("ChatMessageDeserializer")
+                                .d("Inferred type for single attachment ${deserialized.mid}: $inferredType from fileName: ${deserialized.fileName}")
+                            deserialized.copy(type = inferredType)
+                        } else {
+                            deserialized
+                        }
+                        listOf(finalAttachment)
+                    } else {
+                        Timber.tag("ChatMessageDeserializer")
+                            .w("Filtering out invalid single attachment: mid=${try { deserialized?.mid } catch (_: Exception) { "null" }}, type=${try { deserialized?.type } catch (_: Exception) { "null" }}")
+                        null
+                    }
+                } catch (e: Exception) {
+                    // Log deserialization error but don't fail the whole message
+                    Timber.tag("ChatMessageDeserializer").e(e, "Failed to deserialize single attachment object")
+                    null
+                }
+            }
+            else -> null
+        }
         
         // Handle success and errorMsg (optional)
         val success = jsonObject.get("success")?.asBoolean ?: true
         val errorMsg = jsonObject.get("errorMsg")?.asString
         
+        // Generate deterministic ID based on message characteristics if server doesn't provide one
+        // This ensures the same message fetched multiple times has the same ID for deduplication
+        val messageId = id ?: ChatMessage.generateDeterministicId(authorId, receiptId, timestamp)
+        
         return ChatMessage(
-            id = id ?: ChatMessage.generateUniqueId(),
+            id = messageId,
             receiptId = receiptId,
             authorId = authorId,
             content = content,
@@ -95,118 +181,35 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val sessionId: String? = null,  // reference to the chat session (created locally)
     val success: Boolean = true,  // whether the message was sent successfully
-    val errorMsg: String? = null  // error message if sending failed
+    val errorMsg: String? = null,  // error message if sending failed
+    @kotlinx.serialization.Transient
+    val localAttachmentUri: String? = null  // local file Uri for optimistic display (not serialized, not stored in DB)
 ) {
     init {
-        // Validate that either content or attachments must be present
-        require(content?.isNotBlank() == true || !attachments.isNullOrEmpty()) {
-            "ChatMessage must have either non-empty content or attachments"
+        // Validate that either content or attachments or localAttachmentUri must be present
+        require(content?.isNotBlank() == true || !attachments.isNullOrEmpty() || localAttachmentUri != null) {
+            "ChatMessage must have either non-empty content, attachments, or localAttachmentUri"
         }
     }
     
     companion object {
         /**
          * Generate a unique message ID using UUID
+         * This is used for client-generated messages before sending to server
          */
         fun generateUniqueId(): String {
             return UUID.randomUUID().toString()
         }
         
         /**
-         * Create a ChatMessage with content only
+         * Generate a deterministic message ID based on message characteristics
+         * This ensures the same message from server gets the same ID every time for deduplication
+         * Uses authorId + receiptId + timestamp as the unique identifier
          */
-        fun createTextMessage(
-            receiptId: MimeiId,
-            authorId: MimeiId,
-            content: String,
-            sessionId: String? = null
-        ): ChatMessage {
-            require(content.isNotBlank()) { "Content cannot be empty for text message" }
-            return ChatMessage(
-                receiptId = receiptId,
-                authorId = authorId,
-                content = content,
-                sessionId = sessionId
-            )
+        fun generateDeterministicId(authorId: String, receiptId: String, timestamp: Long): String {
+            val combinedString = "${authorId}_${receiptId}_${timestamp}"
+            return UUID.nameUUIDFromBytes(combinedString.toByteArray()).toString()
         }
-        
-        /**
-         * Create a ChatMessage with attachments only
-         */
-        fun createMediaMessage(
-            receiptId: MimeiId,
-            authorId: MimeiId,
-            attachments: List<MimeiFileType>,
-            sessionId: String? = null
-        ): ChatMessage {
-            require(attachments.isNotEmpty()) { "Attachments cannot be empty for media message" }
-            return ChatMessage(
-                receiptId = receiptId,
-                authorId = authorId,
-                attachments = attachments,
-                sessionId = sessionId
-            )
-        }
-        
-        /**
-         * Create a ChatMessage with both content and attachments
-         */
-        fun createMixedMessage(
-            receiptId: MimeiId,
-            authorId: MimeiId,
-            content: String,
-            attachments: List<MimeiFileType>,
-            sessionId: String? = null
-        ): ChatMessage {
-            require(content.isNotBlank()) { "Content cannot be empty for mixed message" }
-            require(attachments.isNotEmpty()) { "Attachments cannot be empty for mixed message" }
-            return ChatMessage(
-                receiptId = receiptId,
-                authorId = authorId,
-                content = content,
-                attachments = attachments,
-                sessionId = sessionId
-            )
-        }
-    }
-    
-    /**
-     * Check if this message has content
-     */
-    fun hasContent(): Boolean = content?.isNotBlank() == true
-    
-    /**
-     * Check if this message has attachments
-     */
-    fun hasAttachments(): Boolean = !attachments.isNullOrEmpty()
-    
-    /**
-     * Check if this is a text-only message
-     */
-    fun isTextOnly(): Boolean = hasContent() && !hasAttachments()
-    
-    /**
-     * Check if this is a media-only message
-     */
-    fun isMediaOnly(): Boolean = !hasContent() && hasAttachments()
-    
-    /**
-     * Check if this is a mixed message (both content and attachments)
-     */
-    fun isMixedMessage(): Boolean = hasContent() && hasAttachments()
-    
-    /**
-     * Create a copy of this message with the given sessionId
-     */
-    fun withSessionId(sessionId: String): ChatMessage {
-        return this.copy(sessionId = sessionId)
-    }
-    
-    /**
-     * Check if this message belongs to the given session
-     */
-    fun belongsToSession(sessionId: String): Boolean {
-        return this.sessionId == sessionId
     }
 }
 
@@ -242,33 +245,13 @@ data class ChatSession(
         }
         
         /**
-         * Create a new chat session with auto-generated session ID
-         */
-        fun createSession(
-            userId: MimeiId,
-            receiptId: MimeiId,
-            lastMessage: ChatMessage,
-            hasNews: Boolean = false
-        ): ChatSession {
-            val sessionId = generateSessionId()
-            return ChatSession(
-                id = sessionId,
-                userId = userId,
-                receiptId = receiptId,
-                lastMessage = lastMessage.copy(sessionId = sessionId),
-                hasNews = hasNews
-            )
-        }
-        
-        /**
          * Get or create a session for the given participants
          * This ensures we always have a valid sessionId for message tracking
          */
         suspend fun getOrCreateSession(
             userId: MimeiId,
             receiptId: MimeiId,
-            chatSessionDao: ChatSessionDao,
-            chatMessageDao: ChatMessageDao
+            chatSessionDao: ChatSessionDao
         ): String {
             val sessionId = generateDeterministicSessionId(userId, receiptId)
             
@@ -289,79 +272,6 @@ data class ChatSession(
             )
             chatSessionDao.insertSession(newSession)
             return sessionId
-        }
-        
-        /**
-         * Load messages from backend and recreate sessions locally
-         * This method handles the case where we need to rebuild the local database
-         * from backend data that doesn't contain sessionId
-         */
-        suspend fun loadMessagesFromBackendAndRecreateSessions(
-            messagesFromBackend: List<ChatMessage>, // Messages without sessionId
-            userId: MimeiId,
-            chatSessionDao: ChatSessionDao,
-            chatMessageDao: ChatMessageDao
-        ): List<ChatMessage> {
-            // Group messages by conversation participants
-            val messagesByConversation = messagesFromBackend.groupBy { message ->
-                // Create a key based on sorted user IDs to ensure consistency
-                val participants = listOf(message.authorId, message.receiptId).sorted()
-                "${participants[0]}_${participants[1]}"
-            }
-            
-            val processedMessages = mutableListOf<ChatMessage>()
-            
-            for ((conversationKey, messages) in messagesByConversation) {
-                if (messages.isEmpty()) continue
-                
-                // Get the first message to determine participants
-                val firstMessage = messages.first()
-                val otherUserId = if (firstMessage.authorId == userId) {
-                    firstMessage.receiptId
-                } else {
-                    firstMessage.authorId
-                }
-                
-                // Generate sessionId for this conversation
-                val sessionId = generateDeterministicSessionId(userId, otherUserId)
-                
-                // Get or create session
-                val existingSession = chatSessionDao.getSessionById(sessionId)
-                if (existingSession == null) {
-                    // Create new session
-                    val latestMessage = messages.maxByOrNull { it.timestamp }
-                    val newSession = ChatSessionEntity(
-                        id = sessionId,
-                        timestamp = latestMessage?.timestamp ?: System.currentTimeMillis(),
-                        userId = userId,
-                        receiptId = otherUserId,
-                        hasNews = false,
-                        lastMessageId = 0 // Will be updated when messages are inserted
-                    )
-                    chatSessionDao.insertSession(newSession)
-                }
-                
-                // Add sessionId to all messages in this conversation
-                val messagesWithSessionId = messages.map { it.copy(sessionId = sessionId) }
-                processedMessages.addAll(messagesWithSessionId)
-            }
-            
-            return processedMessages
-        }
-        
-        /**
-         * Rebuild sessions from existing messages in the database
-         * This is useful when the database is recreated and sessions need to be rebuilt
-         * Note: This method is simplified since we're using destructive migration
-         */
-        suspend fun rebuildSessionsFromMessages(
-            userId: MimeiId,
-            chatSessionDao: ChatSessionDao,
-            chatMessageDao: ChatMessageDao
-        ) {
-            // With destructive migration, the database will be recreated fresh
-            // This method is kept for potential future use but is simplified
-            // since we don't need to migrate existing data
         }
     }
 }

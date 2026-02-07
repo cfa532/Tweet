@@ -106,16 +106,6 @@ data class Tweet(
         }
 
         /**
-         * Clear a specific tweet instance
-         */
-        @Synchronized
-        fun clearInstance(mid: String) {
-            synchronized(instanceLock) {
-                instances.remove(mid)
-            }
-        }
-
-        /**
          * Clear all tweet instances
          */
         @Synchronized
@@ -141,7 +131,8 @@ data class Tweet(
                 val mid = processedDict["mid"] as? String
                 val authorId = processedDict["authorId"] as? String
                 
-                if (mid.isNullOrBlank() || authorId.isNullOrBlank()) {
+                @Suppress("SENSELESS_COMPARISON")
+                if (mid == null || authorId == null) {
                     Timber.e("Tweet.from() - Missing required fields: mid=$mid, authorId=$authorId, dict=$dict")
                     throw IllegalArgumentException("Tweet missing required fields: mid=$mid, authorId=$authorId")
                 }
@@ -153,7 +144,7 @@ data class Tweet(
                         is String -> {
                             try {
                                 processedDict["timestamp"] = value.toDouble().toLong()
-                            } catch (e: NumberFormatException) {
+                            } catch (_: NumberFormatException) {
                                 Timber.w("Failed to parse timestamp: $value")
                             }
                         }
@@ -172,7 +163,7 @@ data class Tweet(
                                     is String -> {
                                         try {
                                             attachmentMap["timestamp"] = value.toDouble().toLong()
-                                        } catch (e: NumberFormatException) {
+                                        } catch (_: NumberFormatException) {
                                             Timber.w("Failed to parse attachment timestamp: $value")
                                         }
                                     }
@@ -232,15 +223,6 @@ data class Tweet(
             favorites!![1] = value
         }
 
-    var isRetweeted: Boolean
-        get() = favorites?.getOrNull(2) ?: false
-        set(value) {
-            if (favorites == null) {
-                favorites = mutableListOf(false, false, false)
-            }
-            favorites!![2] = value
-        }
-
     /**
      * Updates the tweet instance with values from another tweet
      */
@@ -276,7 +258,7 @@ data class Tweet(
                     is String -> {
                         try {
                             processedDict["timestamp"] = value.toDouble().toLong()
-                        } catch (e: NumberFormatException) {
+                        } catch (_: NumberFormatException) {
                             Timber.w("Failed to parse timestamp: $value")
                         }
                     }
@@ -299,7 +281,7 @@ data class Tweet(
                                 is String -> {
                                     try {
                                         attachmentMap["timestamp"] = value.toDouble().toLong()
-                                    } catch (e: NumberFormatException) {
+                                    } catch (_: NumberFormatException) {
                                         Timber.w("Failed to parse attachment timestamp: $value")
                                     }
                                 }
@@ -343,28 +325,6 @@ enum class MediaType {
     Image, Video, HLS_VIDEO, Audio, PDF, Word, Excel, PPT, Zip, Txt, Html, Unknown
 }
 
-/**
- * Extension function for merging tweets into an array
- */
-fun MutableList<Tweet>.mergeTweets(newTweets: List<Tweet>) {
-    // Create a dictionary to track unique tweets by their mid
-    val uniqueTweets = mutableMapOf<String, Tweet>()
-    
-    // Add existing tweets to dictionary
-    for (tweet in this) {
-        uniqueTweets[tweet.mid] = tweet
-    }
-    
-    // Add new tweets, overwriting existing ones if they have the same mid
-    for (tweet in newTweets) {
-        uniqueTweets[tweet.mid] = tweet
-    }
-    
-    // Convert back to array and sort by timestamp in descending order
-    this.clear()
-    this.addAll(uniqueTweets.values.sortedByDescending { it.timestamp })
-}
-
 @Serializable
 // url is in the format of http://ip/mm/mimei_id
 data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
@@ -379,7 +339,7 @@ typealias MimeiId = String      // 27 or 64 character long string
 object TW_CONST {
     const val GUEST_ID = "000000000000000000000000000"      // 27
     const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
-    const val CLOUD_PORT = 8010         // port to netdisk and transcode service.
+    const val MAX_FILE_SIZE = 512 * 1024 * 1024  // 512MB in bytes - max file size for attachments
     const val PAGE_SIZE = 10
     const val USER_BATCH_SIZE = 20      // Batch size for user fetching
 }

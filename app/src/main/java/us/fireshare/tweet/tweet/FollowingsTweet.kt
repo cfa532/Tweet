@@ -25,7 +25,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 /**
@@ -41,6 +40,7 @@ fun FollowingsTweet(
     scrollBehavior: TopAppBarScrollBehavior,
     viewModel: TweetFeedViewModel,
     onScrollStateChange: (ScrollState) -> Unit = {},
+    scrollToTopTrigger: Int = 0,
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val coroutineScope = rememberCoroutineScope()
@@ -76,7 +76,6 @@ fun FollowingsTweet(
                         if (isAtLastTweet && !isRefreshingAtBottom && tweets.size >= MINMIMUM_TWEET_COUNT) {
                             // Check if it's an upward gesture (negative Y means up)
                             if (y < -50) { // Threshold for upward gesture
-                                isRefreshingAtBottom = true
 
                                 // Trigger the loadmore in TweetListView
                                 triggerLoadMore()
@@ -84,7 +83,6 @@ fun FollowingsTweet(
                                 // Reset the loading state after a short delay
                                 coroutineScope.launch {
                                     kotlinx.coroutines.delay(100) // Small delay to allow TweetListView to process
-                                    isRefreshingAtBottom = false
                                 }
                             }
                         }
@@ -101,11 +99,11 @@ fun FollowingsTweet(
                 viewModel.fetchTweets(pageNumber)
             },
             scrollBehavior = scrollBehavior,
-            contentPadding = PaddingValues(bottom = 40.dp),
+            contentPadding = PaddingValues(bottom = 64.dp),
             showPrivateTweets = false,
             parentEntry = parentEntry,
             onScrollStateChange = onScrollStateChange,
-            currentUserId = appUser.mid, // Pass current user ID for change detection
+            // Don't pass currentUserId on main feed - it's only for profile screens
             onTweetUnavailable = { tweetId ->
                 // Remove the tweet from the list when it becomes unavailable
                 viewModel.removeTweet(tweetId)
@@ -115,14 +113,15 @@ fun FollowingsTweet(
                 isAtLastTweet = isAtLast
             },
             onTriggerLoadMore = triggerLoadMore,
-            context = "followingsTweet"
+            context = "followingsTweet",
+            scrollToTopTrigger = scrollToTopTrigger
         )
     }
     
     // Show full-screen video overlay
     if (fullScreenVideoUrl != null) {
         Dialog(
-            onDismissRequest = { fullScreenVideoUrl = null },
+            onDismissRequest = { },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = true,

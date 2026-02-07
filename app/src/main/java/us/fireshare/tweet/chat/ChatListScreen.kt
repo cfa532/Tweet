@@ -48,7 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -130,6 +130,19 @@ fun ChatListScreen(
         }
     }
 
+    // Filter out chat sessions with no messages
+    val filteredChatSessions = remember(chatSessions) {
+        chatSessions.filter { session ->
+            val message = session.lastMessage
+            // Include session if it has content or attachments (exclude empty/placeholder messages)
+            val hasContent = !message.content.isNullOrBlank()
+            val hasAttachments = !message.attachments.isNullOrEmpty()
+            // Filter out placeholder messages like "New chat started"
+            val isPlaceholder = message.content == "New chat started"
+            (hasContent || hasAttachments) && !isPlaceholder
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -146,12 +159,27 @@ fun ChatListScreen(
                         val currentTime = SystemClock.elapsedRealtime()
                         if (currentTime - lastClickTime > debounceTime) {
                             navController.popBackStack()
-                            lastClickTime = currentTime
                         }
                     } ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            // manually prevent fast continuous click of a button
+                            val currentTime = SystemClock.elapsedRealtime()
+                            if (currentTime - lastClickTime > debounceTime) {
+                                showFollowingsDialog = true
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = stringResource(R.string.add_chat),
                         )
                     }
                 },
@@ -170,7 +198,7 @@ fun ChatListScreen(
                     .padding(top = 8.dp),
                 verticalArrangement = Arrangement.Top
             ) {
-                items(chatSessions, key = {it.receiptId}) { chatSession ->
+                items(filteredChatSessions, key = {it.id}) { chatSession ->
                     ChatSession(chatSession, navController, viewModel)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 0.8.dp).alpha(0.7f),
@@ -179,7 +207,7 @@ fun ChatListScreen(
                     )
                 }
                 item {
-                    if (chatSessions.isEmpty()) {
+                    if (filteredChatSessions.isEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -215,11 +243,14 @@ fun ChatListScreen(
             onUserSelected = { selectedUserId ->
                 // Create a new in-memory chat session
                 viewModel.createInMemoryChatSession(selectedUserId)
-                showFollowingsDialog = false
                 // Navigate to the chat screen
                 navController.navigate(NavTweet.ChatBox(selectedUserId))
+                // Close the dialog
+                showFollowingsDialog = false
             },
-            onDismiss = { showFollowingsDialog = false }
+            onDismiss = { 
+                showFollowingsDialog = false
+            }
         )
     }
 }
@@ -272,17 +303,13 @@ fun ChatUserItem(
     // Proactively load user data for every user ID
     LaunchedEffect(userId) {
         withContext(Dispatchers.IO) {
-            userViewModel.refreshUser()
+            userViewModel.getUser()
         }
     }
     
-    // Retry loading if the user data failed to load (user is guest)
-    LaunchedEffect(user) {
-        if (user.isGuest()) {
-            withContext(Dispatchers.IO) {
-                userViewModel.refreshUser()
-            }
-        }
+    // Don't show invalid users (guests or users without username)
+    if (user.isGuest() || user.username.isNullOrBlank()) {
+        return
     }
     
     Row(
@@ -328,7 +355,7 @@ fun ChatSession(
     // Auto-hide delete button after 3 seconds
     LaunchedEffect(showDeleteButton) {
         if (showDeleteButton) {
-            kotlinx.coroutines.delay(3000)
+            delay(3000)
             showDeleteButton = false
         }
     }
@@ -404,9 +431,9 @@ fun ChatSession(
             Text(
                 text = if (chatMessage.content.isNullOrBlank() && !chatMessage.attachments.isNullOrEmpty()) {
                     if (chatMessage.authorId == appUser.mid) {
-                        "Attachment sent"
+                        stringResource(R.string.attachment_sent)
                     } else {
-                        "Attachment received"
+                        stringResource(R.string.attachment_received)
                     }
                 } else {
                     chatMessage.content ?: ""
