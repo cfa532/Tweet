@@ -56,6 +56,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.utils.ErrorMessageUtils
+import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 
 /**
@@ -89,9 +90,7 @@ fun VideoPreview(
     
     // PERF FIX: Throttle visibility updates to reduce expensive calculations during scrolling
     var lastVisibilityUpdate by remember(videoMid) { mutableLongStateOf(0L) }
-    var lastVisibilityRatio by remember(videoMid) { mutableStateOf(0f) }
     val visibilityUpdateThrottleMs = 100L // Only update every 100ms during scrolling
-    val visibilityRatioThreshold = 0.15f // Only trigger coordinator update if ratio changes by 15%
     
     // If using independent mute state (TweetDetailView/FullScreen), start unmuted and don't sync with global state
     // Otherwise (MediaItem in feeds), use global mute state
@@ -523,16 +522,25 @@ fun VideoPreview(
                 // PERF FIX: Throttle visibility calculations during scrolling
                 val now = System.currentTimeMillis()
                 val timeSinceLastUpdate = now - lastVisibilityUpdate
-                
+
                 // Always update local visibility state for UI (lightweight check)
                 val newVisibility = isElementVisible(layoutCoordinates)
                 if (isVideoVisible != newVisibility) {
                     isVideoVisible = newVisibility
                 }
-                
-                    // Video visibility is now tracked at the TweetItem level
-                    // No need to call VideoPlaybackCoordinator.updateVideoVisibility anymore
-                    lastVisibilityUpdate = now
+
+                // Report this video's own visibility ratio to the coordinator
+                if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                    if (timeSinceLastUpdate >= visibilityUpdateThrottleMs) {
+                        val visibilityRatio = calculateVisibilityRatio(layoutCoordinates)
+                        coordinator.updateVideoVisibility(
+                            videoMid = videoMid,
+                            tweetId = playbackTweetId,
+                            visibilityRatio = visibilityRatio
+                        )
+                        lastVisibilityUpdate = now
+                    }
+                }
             }
             .clickable {
                 // Auto-start video in full screen

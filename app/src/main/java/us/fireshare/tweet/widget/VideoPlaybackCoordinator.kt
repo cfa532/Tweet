@@ -282,8 +282,8 @@ class VideoPlaybackCoordinator(
     }
 
     /**
-     * Update video visibility based on MediaGrid visibility
-     * Called by MediaGrid when its visibility changes
+     * Update video visibility based on the video's own visibility ratio.
+     * Called by VideoPreview when its visibility changes.
      */
     fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, visibilityRatio: Float) {
         val identifier = "${tweetId}_$videoMid"
