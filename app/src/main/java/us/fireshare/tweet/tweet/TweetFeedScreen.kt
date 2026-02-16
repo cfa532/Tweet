@@ -104,10 +104,13 @@ fun TweetFeedScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(preferenceHelper.getTweetFeedTabIndex()) }
     var scrollToTopTrigger by remember { mutableIntStateOf(0) }
+    // Timestamp when scroll-to-top was triggered; suppresses scroll-direction fade for 500ms
+    var scrollToTopTime by remember { mutableStateOf(0L) }
 
     // Reset toolbar and navbar state when scroll-to-top is triggered
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
+            scrollToTopTime = System.currentTimeMillis()
             // Reset navbar to fully visible
             bottomBarTransparency = 0.98f
             currentScrollDirection = ScrollDirection.NONE
@@ -115,6 +118,9 @@ fun TweetFeedScreen(
             scrollBehavior.state.heightOffset = 0f
         }
     }
+
+
+
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
     LaunchedEffect(selectedTabIndex) {
@@ -216,6 +222,12 @@ fun TweetFeedScreen(
 
                                                 // Ignore NONE - when scroll stops, keep current opacity
                                                 if (newScrollState.direction == ScrollDirection.NONE) {
+                                                    return@FollowingsTweet
+                                                }
+
+                                                // Suppress scroll-direction opacity changes briefly after scroll-to-top
+                                                // to prevent the programmatic scroll from overriding the reset
+                                                if (System.currentTimeMillis() - scrollToTopTime < 500) {
                                                     return@FollowingsTweet
                                                 }
 

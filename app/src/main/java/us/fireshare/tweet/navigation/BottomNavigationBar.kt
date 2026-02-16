@@ -154,16 +154,14 @@ fun BottomNavigationBar(
         // Prefer popping back to an existing TweetFeed instance (keeps its state/scroll), otherwise navigate.
         if (targetRoute == NavTweet.TweetFeed) {
             val tweetFeedRouteName = NavTweet.TweetFeed::class.qualifiedName
-            val didPopToFeed = tweetFeedRouteName?.let { routeName ->
+            // Pop any screens above TweetFeed (e.g. TweetDetail)
+            tweetFeedRouteName?.let { routeName ->
                 navController.popBackStack(routeName, inclusive = false)
-            } ?: false
-            if (didPopToFeed) return@onNavigationClick
-
-            // Already on TweetFeed - scroll to top
-            if (currentRoute?.contains("TweetFeed") == true) {
-                onScrollToTop()
-                return@onNavigationClick
             }
+
+            // Always scroll to top and reset navbar/toolbar when home is tapped
+            onScrollToTop()
+            return@onNavigationClick
         }
 
         // Only navigate if we're not already on the target route

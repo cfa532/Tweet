@@ -210,7 +210,9 @@ fun TweetListView(
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
     onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top programmatically
     scrollToTopTrigger: Int = 0, // Increment to trigger scroll-to-top from parent
-    pinnedTweets: List<Tweet> = emptyList() // Pinned tweets to include in video navigation
+    pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
+    onScrolledToTop: (() -> Unit)? = null // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
+
 ) {
     // Inject SharedViewModel to get TweetListViewModel
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -286,9 +288,12 @@ fun TweetListView(
         activeJobs[id] = job
     }
     
-    // Create scroll-to-top function
+    // Create scroll-to-top function (use instant scroll, not animated,
+    // because animateScrollToItem falls short when a collapsing toolbar
+    // consumes part of the scroll distance via nestedScroll)
     val scrollToTop: suspend () -> Unit = {
-        listState.animateScrollToItem(0)
+        listState.scrollToItem(0, 0)
+        onScrolledToTop?.invoke()
     }
     
     // Cleanup coroutines on dispose

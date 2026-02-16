@@ -199,7 +199,11 @@ fun ProfileScreen(
                                         // Only restore when user starts scrolling up
                                     }
                                 }
-                            }
+                            },
+                        onScrolledToTop = {
+                            bottomBarTransparency = 0.98f
+                            scrollBehavior.state.heightOffset = 0f
+                        }
                         )
                 }
             }
@@ -231,7 +235,7 @@ private fun ProfileContentWithTweetListView(
     initState: Boolean,
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
-
+    onScrolledToTop: (() -> Unit)? = null,
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -300,6 +304,7 @@ private fun ProfileContentWithTweetListView(
         headerContent = headerContent,
         context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId", // Each user profile maintains its own scroll position
         isInitialLoading = initState, // Pass the initialization state to delay videolist creation
-        pinnedTweets = pinnedTweets // Include pinned tweets in video navigation
+        pinnedTweets = pinnedTweets, // Include pinned tweets in video navigation
+        onScrolledToTop = onScrolledToTop
     )
 }
