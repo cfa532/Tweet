@@ -91,6 +91,22 @@ data class ScrollState(
 )
 
 /**
+ * In-memory store for scroll positions, keyed by context string.
+ * Persists scroll positions across navigation as long as the app process is alive.
+ */
+object ScrollPositionStore {
+    private val positions = mutableMapOf<String, Pair<Int, Int>>()
+
+    fun save(context: String, firstVisibleItemIndex: Int, scrollOffset: Int) {
+        positions[context] = Pair(firstVisibleItemIndex, scrollOffset)
+    }
+
+    fun restore(context: String): Pair<Int, Int> {
+        return positions[context] ?: Pair(0, 0)
+    }
+}
+
+/**
  * Skeleton loader for tweets while initial data is loading
  */
 @Composable
@@ -189,8 +205,7 @@ fun TweetListView(
     headerContent: (@Composable () -> Unit)? = null, // Optional header content
     onIsAtLastTweetChange: ((Boolean) -> Unit)? = null, // Callback for external gesture detection
     onTriggerLoadMore: (() -> Unit)? = null, // Callback to trigger manual loadmore
-    restoreScrollPosition: Boolean = true, // Control whether to restore scroll position
-    context: String = "default", // Context to determine where this list is shown
+    context: String = "default", // Context to scope scroll position persistence
     onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
     onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top programmatically
@@ -227,28 +242,16 @@ fun TweetListView(
     var showNoMoreTweetsMessage by remember { mutableStateOf(false) }
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
-    // Remember scroll position and pagination state across recompositions and configuration changes
-    val shouldRestoreScroll = restoreScrollPosition
-    val savedScrollPosition = if (shouldRestoreScroll) {
-        rememberSaveable { mutableStateOf(Pair(0, 0)) }
-    } else {
-        remember { mutableStateOf(Pair(0, 0)) }
-    }
+    // Restore scroll position from in-memory store
+    val initialScrollPosition = remember { ScrollPositionStore.restore(context) }
+    val savedScrollPosition = remember { mutableStateOf(initialScrollPosition) }
 
-    // Pagination states - using positional scoping for state management
-    var lastLoadedPage by if (shouldRestoreScroll) {
-        rememberSaveable { mutableIntStateOf(-1) }
-    } else {
-        rememberSaveable { mutableIntStateOf(-1) }
-    }
-    var serverDepleted by if (shouldRestoreScroll) {
-        rememberSaveable { mutableStateOf(false) }
-    } else {
-        rememberSaveable { mutableStateOf(false) }
-    }
+    // Pagination states
+    var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
+    var serverDepleted by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = if (shouldRestoreScroll) savedScrollPosition.value.first else 0,
-        initialFirstVisibleItemScrollOffset = if (shouldRestoreScroll) savedScrollPosition.value.second else 0
+        initialFirstVisibleItemIndex = initialScrollPosition.first,
+        initialFirstVisibleItemScrollOffset = initialScrollPosition.second
     )
     val coroutineScope = rememberCoroutineScope()
 
@@ -260,21 +263,12 @@ fun TweetListView(
     var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
     val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
     
-    // Ensure bookmarks/favorites always start at top (no scroll restore)
-    LaunchedEffect(context, tweets.isNotEmpty(), shouldRestoreScroll) {
-        if (!shouldRestoreScroll && tweets.isNotEmpty()) {
-            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
-                listState.scrollToItem(0, 0)
-            }
-            savedScrollPosition.value = Pair(0, 0)
-        }
-    }
-    
     // Scroll to top when parent requests it (e.g., app icon tap in main feed)
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
             listState.scrollToItem(0, 0)
             savedScrollPosition.value = Pair(0, 0)
+            ScrollPositionStore.save(context, 0, 0)
         }
     }
     
@@ -300,6 +294,12 @@ fun TweetListView(
     // Cleanup coroutines on dispose
     DisposableEffect(Unit) {
         onDispose {
+            // Save scroll position to in-memory store before disposing
+            ScrollPositionStore.save(
+                context,
+                listState.firstVisibleItemIndex,
+                listState.firstVisibleItemScrollOffset
+            )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
@@ -489,6 +489,7 @@ fun TweetListView(
                 if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
                     savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
+                    ScrollPositionStore.save(context, firstVisibleItem, scrollOffset)
                     lastSaveTime = now
                 }
             }
@@ -550,6 +551,7 @@ fun TweetListView(
                 
                 // ALWAYS try load when at bottom (even if already there)
                 if (!isAtLastTweet) return@collect
+                if (serverDepleted) return@collect
                 if (isRefreshingAtBottom) return@collect
                 if (tweets.isEmpty()) return@collect
                 if (pendingLoadMorePage != -1) return@collect
@@ -614,8 +616,8 @@ fun TweetListView(
                             if (validCount > 0) {
                                 foundValidTweets = true
                                 lastLoadedPage = currentPage
-                                serverDepleted = false
-                                Timber.tag("TweetListView-LoadMore").d("✅ Found $validCount tweets")
+                                serverDepleted = result.size < TW_CONST.PAGE_SIZE
+                                Timber.tag("TweetListView-LoadMore").d("✅ Found $validCount tweets, depleted=$serverDepleted")
                             } else if (result.size < TW_CONST.PAGE_SIZE) {
                                 serverDepleted = true
                                 Timber.tag("TweetListView-LoadMore").d("🏁 Server depleted")
@@ -644,6 +646,7 @@ fun TweetListView(
                         // Show message if no tweets
                         if (!foundValidTweets) {
                             showNoMoreTweetsMessage = true
+                            lastNoMoreTweetsShown = System.currentTimeMillis()
                             delay(2000)
                             showNoMoreTweetsMessage = false
                             Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
@@ -695,7 +698,10 @@ fun TweetListView(
                     
                     if (validCount > 0) {
                         lastLoadedPage = nextPage
-                        Timber.tag("TweetListView").d("Preloaded $validCount tweets from page $nextPage")
+                        if (result.size < TW_CONST.PAGE_SIZE) {
+                            serverDepleted = true
+                        }
+                        Timber.tag("TweetListView").d("Preloaded $validCount tweets from page $nextPage, depleted=$serverDepleted")
                     } else if (result.size < TW_CONST.PAGE_SIZE) {
                         serverDepleted = true
                         Timber.tag("TweetListView").d("Server depleted during preload at page $nextPage")
@@ -823,13 +829,13 @@ fun TweetListView(
                 }
             }
             
-            // Show "no more tweets" message
-            if (showNoMoreTweetsMessage) {
+            // Show "no more tweets" message persistently when server is depleted
+            if (serverDepleted && tweets.isNotEmpty()) {
                 item(key = "no_more_tweets") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(),
+                            .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
