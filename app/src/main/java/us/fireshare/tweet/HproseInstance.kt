@@ -3291,13 +3291,7 @@ object HproseInstance {
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null && cachedUser.username != null) {
-                // Matching iOS behavior: only return cached user if baseUrl parameter is not empty
-                // This ensures that when ProfileScreen calls fetchUser with empty baseUrl,
-                // it always fetches fresh data from server (like iOS ProfileView)
-                if (!cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
-                    // Return valid cached user only if baseUrl parameter is provided
-                    return cachedUser
-                } else if (cachedUser.hasExpired && !baseUrl.isNullOrEmpty()) {
+                if (cachedUser.hasExpired) {
                     // Start background refresh if not already running
                     val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
                         if (!ongoingUserUpdates.contains(userId)) {
@@ -3317,11 +3311,9 @@ object HproseInstance {
                             baseUrl
                         )
                     }
-                    // Return stale cached user while background refresh is running
-                    return cachedUser
                 }
-                // If baseUrl is empty or cache expired, fall through to fetch from server
-                Timber.tag("fetchUser").d("📡 Cache check: baseUrl empty or cache expired, fetching from server for userId: $userId, baseUrl param: ${baseUrl ?: "null"}")
+                // Always return cached user immediately so UI can render avatar
+                return cachedUser
             }
         } else {
             Timber.tag("fetchUser").d("📡 forceRefresh=true, skipping cache and fetching from server for userId: $userId")
