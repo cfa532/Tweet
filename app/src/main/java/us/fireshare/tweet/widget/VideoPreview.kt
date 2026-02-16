@@ -219,6 +219,17 @@ fun VideoPreview(
             videoMid?.let { mid ->
                 VideoManager.markVideoInactive(mid)
             }
+            // Report 0 visibility so the coordinator removes this video from its
+            // visible list. Without this, the stale 100% entry persists after the
+            // composable is recycled by LazyColumn and the coordinator never
+            // switches to the correct primary video.
+            if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                coordinator.updateVideoVisibility(
+                    videoMid = videoMid,
+                    tweetId = playbackTweetId,
+                    visibilityRatio = 0f
+                )
+            }
         }
     }
 
