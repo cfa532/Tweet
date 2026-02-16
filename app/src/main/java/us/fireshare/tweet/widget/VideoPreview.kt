@@ -99,7 +99,18 @@ fun VideoPreview(
         mutableStateOf(if (useIndependentMuteState) false else preferenceHelper.getSpeakerMute()) 
     }
     var isLoading by remember(videoMid) {
-        mutableStateOf(videoMid?.let { !VideoManager.isVideoPreloaded(it) } ?: true)
+        mutableStateOf(
+            videoMid?.let { mid ->
+                val player = VideoManager.getCachedVideoPlayer(mid)
+                if (player != null) {
+                    // Player exists - only hide spinner if actually ready to play
+                    player.playbackState != androidx.media3.common.Player.STATE_READY
+                } else {
+                    // No player yet - show loading
+                    true
+                }
+            } ?: true
+        )
     }
     var hasError by remember(videoMid) { mutableStateOf(false) }
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
@@ -107,15 +118,20 @@ fun VideoPreview(
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
     var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
     val maxRetries = 3
+    val coordinator = LocalVideoCoordinator.current
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
     var coordinatorWantsToPlay by remember(videoMid, playbackTweetId) { mutableStateOf(false) }
     val shouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
-    LaunchedEffect(videoMid, playbackTweetId) {
+    LaunchedEffect(videoMid, playbackTweetId, coordinator) {
         if (!shouldUseCoordinator) {
             coordinatorWantsToPlay = false
             return@LaunchedEffect
         }
-        VideoPlaybackCoordinator.playbackCommands.collect { command ->
+        // Check current primary state immediately instead of relying on SharedFlow replay.
+        // The replay buffer (size 1) can be overwritten by unrelated commands (e.g.,
+        // ShouldStopVideo for another video), causing this video to miss its play command.
+        coordinatorWantsToPlay = coordinator.shouldAutoPlay(videoMid!!, playbackTweetId!!)
+        coordinator.playbackCommands.collect { command ->
             when (command) {
                 is VideoPlaybackCommand.ShouldPlayVideo -> {
                     coordinatorWantsToPlay = command.videoMid == videoMid && command.tweetId == playbackTweetId
@@ -140,11 +156,14 @@ fun VideoPreview(
     // Use lifecycle-aware coroutine scope for retry operations to prevent memory leaks
     val retryScope = rememberCoroutineScope()
 
-    // Use VideoLoadingManager to track visibility and manage loading
+    // Use VideoLoadingManager to track visibility and manage loading.
+    // Use effectivelyVisible (not raw isVideoVisible) so the coordinator's primary video
+    // won't be stopped by markVideoNotVisible() while still selected for playback.
+    val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
     videoMid?.let { mid ->
         rememberVideoLoadingManager(
             videoMid = mid,
-            isVisible = isVideoVisible
+            isVisible = effectivelyVisible
         )
     }
 
@@ -205,23 +224,20 @@ fun VideoPreview(
     }
 
     LaunchedEffect(isVideoVisible, shouldPlay) {
-        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
         if (effectivelyVisible) {
             // Mark video as active in VideoManager
             videoMid?.let { mid ->
                 VideoManager.markVideoActive(mid)
             }
 
-            // Ensure repeat mode is disabled
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
 
             // Handle different player states properly to avoid stuck states
             when (exoPlayer.playbackState) {
                 androidx.media3.common.Player.STATE_READY -> {
-                    // Player is ready, just start playing if needed
                     exoPlayer.playWhenReady = shouldPlay
                     isLoading = false
-                    hasError = false // Clear any previous errors when becoming visible
+                    hasError = false
                 }
                 androidx.media3.common.Player.STATE_IDLE -> {
                     // Player is idle (e.g., stopped when scrolled off-screen).
@@ -229,31 +245,25 @@ fun VideoPreview(
                     isLoading = true
                     hasError = false
                     if (exoPlayer.mediaItemCount == 0) {
-                        // Player was released completely, need to recreate media source
                         if (videoMid != null && url != null) {
                             VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                         }
                     } else {
-                        // Player has media items (retained after stop()), just re-prepare
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = shouldPlay
                     }
                 }
                 androidx.media3.common.Player.STATE_BUFFERING -> {
-                    // Player is buffering, just set play state
                     exoPlayer.playWhenReady = shouldPlay
                     isLoading = true
                     hasError = false
                 }
                 androidx.media3.common.Player.STATE_ENDED -> {
-                    // Video ended - rewind is handled by CreateExoPlayer listener
                     hasError = false
                 }
                 else -> {
-                    // For other states, try to recover
                     isLoading = true
                     hasError = false
-
                     if (videoMid != null && url != null) {
                         VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
                     }
@@ -261,7 +271,6 @@ fun VideoPreview(
             }
         } else {
             // Only pause if this is the only active instance of this video
-            // Don't pause if the video is being used in full screen
             videoMid?.let { mid ->
                 val activeCount = VideoManager.getVideoActiveCount(mid)
                 val isInFullScreen = VideoManager.isVideoInFullScreen(mid)
@@ -269,54 +278,8 @@ fun VideoPreview(
                     exoPlayer.playWhenReady = false
                 }
             } ?: run {
-                // If no videoMid, this is a standalone player, so pause it
                 exoPlayer.playWhenReady = false
-                Timber.tag("VideoPreview").d("⏸️ STANDALONE PLAYER PAUSED: no videoMid")
             }
-        }
-    }
-
-    // React to changes in autoPlay while visible (for sequential playback)
-    LaunchedEffect(shouldPlay, isVideoVisible) {
-        val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
-        if (!effectivelyVisible) return@LaunchedEffect
-        try {
-            // Always keep repeat mode off for previews
-            exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
-            
-            // Check if player is in a valid state before attempting to play
-            when (exoPlayer.playbackState) {
-                androidx.media3.common.Player.STATE_READY -> {
-                    // Player is ready, safe to play/pause
-                    exoPlayer.playWhenReady = shouldPlay
-                }
-                androidx.media3.common.Player.STATE_IDLE -> {
-                    // Player is idle, check if we have media items
-                    if (exoPlayer.mediaItemCount > 0) {
-                        exoPlayer.prepare()
-                        // Don't set playWhenReady yet, wait for STATE_READY
-                    } else {
-                        // No media items, need to recover
-                        if (videoMid != null && url != null) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
-                        }
-                    }
-                }
-                androidx.media3.common.Player.STATE_BUFFERING -> {
-                    // Player is buffering, safe to set play state
-                    exoPlayer.playWhenReady = shouldPlay
-                }
-                androidx.media3.common.Player.STATE_ENDED -> {
-                    // Video ended - rewind is handled by CreateExoPlayer listener
-                    exoPlayer.playWhenReady = false
-                }
-                else -> {
-                    // For other states, just set play state
-                    exoPlayer.playWhenReady = shouldPlay
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("VideoPreview").d("Error handling autoPlay change: ${e.message}")
         }
     }
 
@@ -396,15 +359,23 @@ fun VideoPreview(
                             VideoManager.onVideoCompleted(mid)
                         }
                     if (videoMid != null && playbackTweetId != null) {
-                        VideoPlaybackCoordinator.handleVideoFinished(videoMid, playbackTweetId)
+                        coordinator.handleVideoFinished(videoMid, playbackTweetId)
                     }
                         // Call the completion callback for sequential playback
                         onVideoCompleted?.invoke()
                     }
 
                     androidx.media3.common.Player.STATE_IDLE -> {
-                        // Show loading spinner when video is idle and preparing
                         isLoading = true
+                        // If this video should be playing, re-prepare immediately.
+                        // This handles external stops (e.g., markVideoNotVisible from
+                        // another composable's disposal) that the LaunchedEffect can't
+                        // detect because its keys (isVideoVisible, shouldPlay) didn't change.
+                        val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
+                        if (currentShouldPlay && exoPlayer.mediaItemCount > 0) {
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        }
                     }
                 }
             }
@@ -530,10 +501,12 @@ fun VideoPreview(
     DisposableEffect(exoPlayer) {
         exoPlayer.addListener(playerListener)
         
-        // Check current state immediately in case we missed the state change
-        // This handles race conditions where the player becomes READY before listener attachment
-        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_READY) {
-            isLoading = false
+        // Sync isLoading with actual player state immediately in case we missed state changes
+        // This handles race conditions where the player state changed before listener attachment
+        when (exoPlayer.playbackState) {
+            androidx.media3.common.Player.STATE_READY -> isLoading = false
+            androidx.media3.common.Player.STATE_BUFFERING,
+            androidx.media3.common.Player.STATE_IDLE -> isLoading = true
         }
         
         onDispose {

@@ -103,6 +103,7 @@ fun TweetItem(
     var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
     val debounceMs = 100L // 100ms debounce for visibility detection
+    val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
     val isRetweet by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
@@ -142,7 +143,7 @@ fun TweetItem(
 
                     // Update VideoPlaybackCoordinator with cell position and visibility
                     // This replaces the old video-based tracking with cell-based tracking like iOS
-                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateTweetCellPosition(
+                    coordinator.updateTweetCellPosition(
                         tweetId = tweet.mid,
                         cellTopY = layoutCoordinates.boundsInRoot().top,
                         cellHeight = layoutCoordinates.size.height.toFloat(),
@@ -206,6 +207,7 @@ private fun RetweetContent(
     containerTopY: Float? = null
 ) {
     val navController = LocalNavController.current
+    val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     Surface(
         modifier = Modifier.clickable(onClick = {
             // Navigate to detail view when tapping on non-tappable areas
@@ -238,7 +240,7 @@ private fun RetweetContent(
                             Timber.tag("TweetItem")
                                 .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
                             // Notify VideoPlaybackCoordinator about the loaded original tweet for retweet
-                            us.fireshare.tweet.widget.VideoPlaybackCoordinator.addRetweetVideos(tweet.mid, originalTweet!!)
+                            coordinator.addRetweetVideos(tweet.mid, originalTweet!!)
                         } else {
                             Timber.tag("TweetItem")
                                 .w("Original tweet not found: $originalTweetId")
@@ -553,6 +555,7 @@ private fun QuotedTweetContent(
     val originalTweetId = tweet.originalTweetId
     var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
     var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
+    val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
 
     LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
         if (originalTweetId != null && tweet.originalAuthorId != null) {
@@ -565,7 +568,7 @@ private fun QuotedTweetContent(
                 }
                 // Notify VideoPlaybackCoordinator about the loaded embedded tweet
                 originalTweet?.let { loadedTweet ->
-                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.addEmbeddedTweetVideos(tweet.mid, loadedTweet)
+                    coordinator.addEmbeddedTweetVideos(tweet.mid, loadedTweet)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetItem").e(

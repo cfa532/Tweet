@@ -85,9 +85,11 @@ fun UserFavorites(
         }
     }
 
-    // Scroll to top when initial server load completes (after cached data)
+    // Only scroll to top on first-ever load (list was empty on entry).
+    // On navigation back, ViewModel still holds data so list won't be empty.
+    val wasEmptyOnEntry = remember { favorites.isEmpty() }
     LaunchedEffect(favoritesInitialLoadComplete) {
-        if (favoritesInitialLoadComplete) {
+        if (favoritesInitialLoadComplete && wasEmptyOnEntry) {
             scrollToTopTrigger++
         }
     }
@@ -138,7 +140,6 @@ fun UserFavorites(
                     showPrivateTweets = true,
                     context = "appUserFavorites",
                     parentEntry = parentEntry,
-                    restoreScrollPosition = true,
                     scrollToTopTrigger = scrollToTopTrigger,
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState

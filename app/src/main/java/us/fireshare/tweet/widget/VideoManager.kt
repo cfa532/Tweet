@@ -215,21 +215,23 @@ object VideoManager {
 
     /**
      * Mark a video as not visible (user has scrolled past it)
-     * This stops loading the video to save resources
+     * This stops loading the video to save resources, but only if no other
+     * composable is actively using the same player (e.g., DetailView sharing
+     * the same ExoPlayer while the feed item is being disposed).
      */
     fun markVideoNotVisible(videoMid: MimeiId) {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
 
         // Don't stop the video if it's currently in full-screen mode
-        if (!isVideoInFullScreen(videoMid)) {
+        // or if another composable is still actively using this player
+        val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
+        if (!isVideoInFullScreen(videoMid) && !stillActive) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
             // Stop the player to release codec and HTTP connection resources.
             // In Media3, stop() does NOT clear media items — the playlist is retained
             // and the player can be re-prepared when visible again.
-            // This prevents resource contention where too many paused players hold
-            // codecs/connections, starving visible players of bandwidth.
             videoPlayers[videoMid]?.let { player ->
                 try {
                     player.stop()

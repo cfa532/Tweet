@@ -90,6 +90,7 @@ fun MediaGrid(
     Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
+    val coordinator = LocalVideoCoordinator.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
     val maxItems by remember(mediaItems.size) {
@@ -225,7 +226,7 @@ fun MediaGrid(
                         limitedMediaList.forEachIndexed { index, item ->
                             val mediaType = inferMediaTypeFromAttachment(item)
                             if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
-                                VideoPlaybackCoordinator.updateVideoVisibility(
+                                coordinator.updateVideoVisibility(
                                     videoMid = item.mid,
                                     tweetId = tweetIdForVisibility,
                                     visibilityRatio = visibility

@@ -83,9 +83,11 @@ fun UserBookmarks(
         }
     }
 
-    // Scroll to top when initial server load completes (after cached data)
+    // Only scroll to top on first-ever load (list was empty on entry).
+    // On navigation back, ViewModel still holds data so list won't be empty.
+    val wasEmptyOnEntry = remember { bookmarks.isEmpty() }
     LaunchedEffect(bookmarksInitialLoadComplete) {
-        if (bookmarksInitialLoadComplete) {
+        if (bookmarksInitialLoadComplete && wasEmptyOnEntry) {
             scrollToTopTrigger++
         }
     }
@@ -136,7 +138,6 @@ fun UserBookmarks(
                     context = "appUserBookmarks",
                     showPrivateTweets = true,
                     parentEntry = parentEntry,
-                    restoreScrollPosition = true,
                     scrollToTopTrigger = scrollToTopTrigger,
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState

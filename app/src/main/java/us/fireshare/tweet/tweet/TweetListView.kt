@@ -377,14 +377,14 @@ fun TweetListView(
                         withContext(Dispatchers.Main) {
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
-                            VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+                            VideoPlaybackCoordinator.shared.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                         }
                     } else if (tweets.size > lastProcessedTweetCount) {
                         // PERF FIX: Use takeLast instead of filter for O(1) slice
                         // Incremental update - only process new tweets
                         val newCount = tweets.size - lastProcessedTweetCount
                         val newTweets = tweets.takeLast(newCount)
-                        
+
                         if (newTweets.isNotEmpty()) {
                             Timber.tag("TweetListView").d("Incremental video list update: ${newTweets.size} new tweets")
                             val newVideos = createVideoIndexedListAsync(newTweets)
@@ -395,7 +395,7 @@ fun TweetListView(
                                 videoIndexedList = videoIndexedList + newVideos
                                 tweetListViewModel.setVideoIndexedList(videoIndexedList)
                                 onVideoIndexedListChange?.invoke(videoIndexedList)
-                                VideoPlaybackCoordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+                                VideoPlaybackCoordinator.shared.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                             }
                         }
                     }
@@ -466,7 +466,7 @@ fun TweetListView(
                 // Only update on significant scroll changes (>2 items or >200px) to reduce overhead
                 if (isScrolling && abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                     val currentOffset = firstVisibleItem * 1000f + scrollOffset // Approximate offset
-                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.updateScrollDirection(currentOffset)
+                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.shared.updateScrollDirection(currentOffset)
                 }
 
                 // PERF FIX: Only invoke callback if state actually changed
@@ -728,7 +728,7 @@ fun TweetListView(
                 .let { if (scrollBehavior != null) it.nestedScroll(scrollBehavior.nestedScrollConnection) else it }
                 .onSizeChanged { size ->
                     // Update VideoPlaybackCoordinator with viewport size
-                    VideoPlaybackCoordinator.updateViewportSize(
+                    VideoPlaybackCoordinator.shared.updateViewportSize(
                         size.width.toFloat(),
                         size.height.toFloat()
                     )

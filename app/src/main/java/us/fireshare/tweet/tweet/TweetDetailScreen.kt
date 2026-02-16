@@ -72,6 +72,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import kotlin.math.abs
 
@@ -134,6 +135,10 @@ fun TweetDetailScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
+    // Per-instance coordinator for comment video playback (iOS CommentsVideoPlaybackCoordinator pattern)
+    // This ensures comment videos don't interfere with the feed's coordinator state.
+    val commentsCoordinator = remember { VideoPlaybackCoordinator() }
+
     // Track LazyColumn viewport size for VideoPlaybackCoordinator
     var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
 
@@ -174,10 +179,10 @@ fun TweetDetailScreen(
                 showTopAppBar = true
             }
 
-            // Update VideoPlaybackCoordinator scroll direction for video autoplay
+            // Update comments coordinator scroll direction for video autoplay
             if (abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                 val approximateOffset = currentIndex * 1000f + currentOffset
-                VideoPlaybackCoordinator.updateScrollDirection(approximateOffset)
+                commentsCoordinator.updateScrollDirection(approximateOffset)
             }
         }
     }
@@ -324,24 +329,28 @@ fun TweetDetailScreen(
         }
     }
 
-    // Build video list from comments for VideoPlaybackCoordinator
+    // Build video list from comments on the per-instance coordinator.
+    // This doesn't touch the shared feed coordinator, so navigating back preserves the feed's state.
     LaunchedEffect(comments) {
         if (comments.isNotEmpty()) {
             withContext(Dispatchers.IO) {
-                VideoPlaybackCoordinator.buildVideoList(comments)
+                commentsCoordinator.buildVideoList(comments)
             }
-            Timber.tag("TweetDetailScreen").d("Built video list from ${comments.size} comments")
+            Timber.tag("TweetDetailScreen").d("Built comment video list with ${comments.size} comments")
         }
     }
 
-    // Clear VideoPlaybackCoordinator state when leaving the screen
+    // Clear the per-instance coordinator when leaving.
     DisposableEffect(Unit) {
         onDispose {
-            VideoPlaybackCoordinator.clear()
-            Timber.tag("TweetDetailScreen").d("Cleared VideoPlaybackCoordinator on dispose")
+            commentsCoordinator.clear()
+            Timber.tag("TweetDetailScreen").d("Cleared comments VideoPlaybackCoordinator")
         }
     }
 
+    // Provide the per-instance coordinator to all child composables (TweetItem, MediaGrid, VideoPreview)
+    // so comment videos use the comments coordinator instead of the shared feed coordinator.
+    androidx.compose.runtime.CompositionLocalProvider(LocalVideoCoordinator provides commentsCoordinator) {
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -425,8 +434,8 @@ fun TweetDetailScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { size ->
                         viewportSize = size
-                        // Update VideoPlaybackCoordinator with viewport size
-                        VideoPlaybackCoordinator.updateViewportSize(
+                        // Update comments coordinator with viewport size
+                        commentsCoordinator.updateViewportSize(
                             size.width.toFloat(),
                             size.height.toFloat()
                         )
@@ -540,4 +549,5 @@ fun TweetDetailScreen(
             )
         }
     }
+    } // CompositionLocalProvider
 }
