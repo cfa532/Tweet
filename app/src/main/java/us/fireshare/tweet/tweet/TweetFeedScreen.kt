@@ -24,7 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +45,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
+import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import androidx.compose.ui.res.stringResource
@@ -95,8 +96,6 @@ fun TweetFeedScreen(
         derivedStateOf { scrollBehavior.state.collapsedFraction > 0.9f }
     }
 
-    // Calculate the transparency based on scrolling state with proper thresholds
-    var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
     val coroutineScope = rememberCoroutineScope()
 
     // Track current direction for transparency
@@ -112,14 +111,20 @@ fun TweetFeedScreen(
         if (scrollToTopTrigger > 0) {
             scrollToTopTime = System.currentTimeMillis()
             // Reset navbar to fully visible
-            bottomBarTransparency = 0.98f
+            BottomBarState.opacity = 0.98f
             currentScrollDirection = ScrollDirection.NONE
             // Reset top bar scroll state (expand the toolbar)
             scrollBehavior.state.heightOffset = 0f
         }
     }
 
-
+    // When home button is tapped from ANY screen (including TweetDetail, Profile, etc.),
+    // BottomBarState.homeTapTrigger increments. Reset toolbar + scroll to top here.
+    LaunchedEffect(BottomBarState.homeTapTrigger) {
+        if (BottomBarState.homeTapTrigger > 0) {
+            scrollToTopTrigger++
+        }
+    }
 
     val pagerState = rememberPagerState(pageCount = { tabs.size })
 
@@ -243,12 +248,12 @@ fun TweetFeedScreen(
                                                 when (newScrollState.direction) {
                                                     ScrollDirection.UP -> {
                                                         // Scroll UP (content moves down): restore navbar
-                                                        bottomBarTransparency = 0.98f
+                                                        BottomBarState.opacity = 0.98f
                                                     }
 
                                                     ScrollDirection.DOWN -> {
                                                         // Scroll DOWN (content moves up): fade navbar
-                                                        bottomBarTransparency = 0.2f
+                                                        BottomBarState.opacity = 0.2f
                                                     }
 
                                                     ScrollDirection.NONE -> {
@@ -274,7 +279,7 @@ fun TweetFeedScreen(
         // Place the BottomNavigationBar on top with opacity control
         BottomNavigationBar(
             Modifier
-                .alpha(bottomBarTransparency)
+                .alpha(BottomBarState.opacity)
                 .align(Alignment.BottomCenter),
             navController,
             selectedBottomBarItemIndex,

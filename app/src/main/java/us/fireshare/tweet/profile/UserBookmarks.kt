@@ -21,7 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +40,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -66,7 +67,6 @@ fun UserBookmarks(
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val coroutineScope = rememberCoroutineScope()
-    var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
 
     // Start listening to tweet and comment notifications
     LaunchedEffect(Unit) {
@@ -143,13 +143,13 @@ fun UserBookmarks(
                         scrollState = newScrollState
                         when (newScrollState.direction) {
                             ScrollDirection.UP -> {
-                                bottomBarTransparency = 0.98f
+                                BottomBarState.opacity = 0.98f
                             }
                             ScrollDirection.DOWN -> {
                                 coroutineScope.launch {
                                     delay(100)
                                     if (scrollState.direction == ScrollDirection.DOWN) {
-                                        bottomBarTransparency = 0.2f
+                                        BottomBarState.opacity = 0.2f
                                     }
                                 }
                             }
@@ -162,7 +162,7 @@ fun UserBookmarks(
 
         BottomNavigationBar(
             Modifier
-                .alpha(bottomBarTransparency)
+                .alpha(BottomBarState.opacity)
                 .align(Alignment.BottomCenter),
             navController,
             0

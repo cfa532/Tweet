@@ -27,7 +27,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +51,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
@@ -94,8 +95,7 @@ fun ProfileScreen(
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Calculate the transparency based on scrolling state
-    var bottomBarTransparency by remember { mutableFloatStateOf(0.98f) }
+
 
     val activity = context as? Activity
     activity?.let { OrientationManager.lockToPortrait(it) }
@@ -179,7 +179,7 @@ fun ProfileScreen(
                                 when (newScrollState.direction) {
                                     ScrollDirection.UP -> {
                                         // Scroll UP (content moves down): restore header and bottom bar
-                                        bottomBarTransparency = 0.98f
+                                        BottomBarState.opacity = 0.98f
                                     }
 
                                     ScrollDirection.DOWN -> {
@@ -188,7 +188,7 @@ fun ProfileScreen(
                                             withContext(Dispatchers.Main) {
                                                 delay(100) // Small delay for smooth transition
                                                 if (scrollState.direction == ScrollDirection.DOWN) {
-                                                    bottomBarTransparency = 0.2f
+                                                    BottomBarState.opacity = 0.2f
                                                 }
                                             }
                                         }
@@ -201,7 +201,8 @@ fun ProfileScreen(
                                 }
                             },
                         onScrolledToTop = {
-                            bottomBarTransparency = 0.98f
+                            BottomBarState.opacity = 0.98f
+                            scrollState = ScrollState(false, ScrollDirection.NONE)
                             scrollBehavior.state.heightOffset = 0f
                         }
                         )
@@ -212,7 +213,7 @@ fun ProfileScreen(
         // Place the BottomNavigationBar on top with opacity control
         BottomNavigationBar(
             Modifier
-                .alpha(bottomBarTransparency)
+                .alpha(BottomBarState.opacity)
                 .align(Alignment.BottomCenter),
             navController,
             0

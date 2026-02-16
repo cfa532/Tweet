@@ -2,6 +2,8 @@ package us.fireshare.tweet.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -54,6 +56,16 @@ import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
+
+/** Global bottom-bar opacity shared across all screens so that
+ *  navigating to TweetDetail (or any sub-screen) keeps the navbar
+ *  at the same translucency the user left it in. */
+object BottomBarState {
+    var opacity by mutableFloatStateOf(0.98f)
+    /** Incremented every time the Home button is tapped; TweetFeedScreen
+     *  observes this to reset toolbar + scroll to top. */
+    var homeTapTrigger by mutableIntStateOf(0)
+}
 
 data class BottomNavigationItem(
     val title: String,
@@ -159,7 +171,9 @@ fun BottomNavigationBar(
                 navController.popBackStack(routeName, inclusive = false)
             }
 
-            // Always scroll to top and reset navbar/toolbar when home is tapped
+            // Always reset navbar and signal TweetFeedScreen to reset toolbar + scroll to top
+            BottomBarState.opacity = 0.98f
+            BottomBarState.homeTapTrigger++
             onScrollToTop()
             return@onNavigationClick
         }

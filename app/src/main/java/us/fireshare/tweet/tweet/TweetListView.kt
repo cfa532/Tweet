@@ -423,6 +423,7 @@ fun TweetListView(
         var pendingDirection = ScrollDirection.NONE
         var directionStableCount = 0
         val stabilityThreshold = 3 // Require 3 consecutive frames to confirm direction change
+        var wasAtTop = true // Track top-of-list transitions for onScrolledToTop
 
         snapshotFlow {
             Pair(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
@@ -480,6 +481,13 @@ fun TweetListView(
                     lastDirection = confirmedDirection
                     lastScrollingState = isScrolling
                 }
+
+                // Detect when list arrives at the top (transition from not-at-top to at-top)
+                val isAtTop = firstVisibleItem == 0 && !isScrolling
+                if (isAtTop && !wasAtTop) {
+                    onScrolledToTop?.invoke()
+                }
+                wasAtTop = isAtTop
 
                 // Update previous values for next delta calculation
                 previousFirstVisibleItem = firstVisibleItem

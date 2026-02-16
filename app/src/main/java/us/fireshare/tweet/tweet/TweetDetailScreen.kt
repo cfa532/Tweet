@@ -68,6 +68,8 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
+import androidx.compose.ui.draw.alpha
+import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
@@ -410,6 +412,7 @@ fun TweetDetailScreen(
                     }
                 )
                 BottomNavigationBar(
+                    modifier = Modifier.alpha(BottomBarState.opacity),
                     navController = navController,
                     selectedIndex = 0 // Home tab
                 )
