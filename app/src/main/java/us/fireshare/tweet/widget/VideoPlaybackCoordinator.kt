@@ -310,6 +310,14 @@ class VideoPlaybackCoordinator(
     }
 
     private fun checkPrimaryVideoDuringScroll() {
+        // If current primary is still visible above threshold, keep it playing
+        if (primaryVideoId != null) {
+            val currentVisibility = videoVisibilityMap[primaryVideoId] ?: 0f
+            if (currentVisibility >= VISIBILITY_THRESHOLD) {
+                return
+            }
+        }
+
         val currentVisible = if (visibleVideos.isNotEmpty()) {
             visibleVideos.filter { videoInfo ->
                 val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
@@ -421,14 +429,8 @@ class VideoPlaybackCoordinator(
             primaryVideoId = null
         }
 
-        if (visibleVideos.isNotEmpty()) {
-            val correctPrimary = identifyPrimaryVideo()
-            if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
-                Timber.d("VideoPlaybackCoordinator: Updating primary video to: ${correctPrimary.videoMid}")
-                startPrimaryVideoPlayback()
-            }
-        }
-
+        // Only pick a new primary when there isn't one.
+        // Don't switch away from a playing primary that is still visible.
         if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
             startPlaybackWithDebounce()
         }
