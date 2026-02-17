@@ -569,7 +569,19 @@ class VideoPlaybackCoordinator(
                         )
                     }
                 } else {
-                    stopAllVideos()
+                    // No next video, but current video is still visible — loop it
+                    val currentVideo = visibleVideos[currentIndex]
+                    Timber.d("VideoPlaybackCoordinator: Looping video: ${currentVideo.videoMid}")
+                    CoroutineScope(Dispatchers.Main).launch {
+                        _playbackCommands.emit(
+                            VideoPlaybackCommand.ShouldPlayVideo(
+                                tweetId = currentVideo.tweetId,
+                                videoMid = currentVideo.videoMid,
+                                videoIndex = currentVideo.index,
+                                isPrimary = true
+                            )
+                        )
+                    }
                 }
             } else {
                 stopAllVideos()

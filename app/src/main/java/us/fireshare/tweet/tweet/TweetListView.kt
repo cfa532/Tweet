@@ -336,7 +336,7 @@ fun TweetListView(
 
             // Initialize data asynchronously without blocking
             isInitializingData = true
-            val initJob = launch(Dispatchers.IO) {
+            val initJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
                 try {
                     val result = fetchTweets(0)
                     if (result.size < TW_CONST.PAGE_SIZE) {
@@ -697,7 +697,7 @@ fun TweetListView(
             val nextPage = lastLoadedPage + 1
             pendingLoadMorePage = nextPage
             
-            val preloadJob = launch(Dispatchers.IO) {
+            val preloadJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
                 try {
                     Timber.tag("TweetListView").d("Preloading page: $nextPage")
                     val result = fetchTweets(nextPage)
