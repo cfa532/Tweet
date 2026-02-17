@@ -850,19 +850,25 @@ object VideoManager {
                 // Stop playback and clear media sources to prevent leaks
                 player.stop()
                 player.clearMediaItems()
-                
+
                 // Clear video surface to prevent surface leaks
                 player.clearVideoSurface()
-                
+
                 // Release the player completely
                 player.release()
-                
+
                 Timber.tag("VideoManager").d("✅ PLAYER RELEASED: videoMid: $videoMid")
             } catch (e: Exception) {
                 Timber.tag("VideoManager").w("⚠️ Error releasing player for $videoMid: ${e.message}")
             }
         }
-        
+
+        // Notify any live VideoPreview composable that the player was released so it
+        // re-runs its remember(videoMid, playerGeneration) block and gets a fresh player.
+        // Without this, VideoPreview holds the stale released player indefinitely — the
+        // same mechanism forceRecreatePlayer() uses for MediaCodec failures.
+        playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+
         // Clean up tracking data
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
