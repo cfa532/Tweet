@@ -328,12 +328,19 @@ object VideoManager {
     // ===== PLAYER MANAGEMENT =====
 
     /**
-     * Get or create an ExoPlayer instance for a video
-     * Only creates new players for visible or preloading videos
+     * Get or create an ExoPlayer instance for a video.
+     *
+     * @param resolvedHlsUrl Pre-resolved HLS URL from [HlsUrlResolver]; when non-null it is
+     *   passed directly to [createExoPlayer], skipping the master/playlist guessing entirely.
      */
-    fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
+    fun getVideoPlayer(
+        context: Context,
+        videoMid: MimeiId,
+        videoUrl: String,
+        videoType: MediaType? = null,
+        resolvedHlsUrl: String? = null
+    ): ExoPlayer {
         // Mark as preloaded if it was in the preload queue
-        val wasPreloading = preloadQueue.contains(videoMid)
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
 
@@ -341,11 +348,15 @@ object VideoManager {
 
         return videoPlayers.getOrPut(videoMid) {
             try {
-                val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
+                val player = createExoPlayer(
+                    context,
+                    videoUrl,
+                    videoType ?: MediaType.Video,
+                    resolvedHlsUrl = resolvedHlsUrl
+                )
                 player
             } catch (e: Exception) {
                 Timber.tag("VideoManager").e("Player creation failed: ${e.message}")
-                // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
             }
@@ -462,16 +473,18 @@ object VideoManager {
     // ===== PRELOADING =====
 
     /**
-     * Preload a video in the background
-     * Only preloads videos that are not visible to avoid resource waste
+     * Preload a video in the background.
+     *
+     * For HLS videos this resolves the correct playlist URL (master.m3u8 vs playlist.m3u8)
+     * via parallel HEAD probing BEFORE creating the player, so ExoPlayer starts with the
+     * right URL immediately. The result is persisted to disk by [HlsUrlResolver] so that
+     * subsequent loads (including the visible player in VideoPreview) skip the probe entirely.
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
         // Don't preload if video is already visible
         if (isVideoVisible(videoMid)) {
             return
         }
-
-        // No player count limit - let system memory warnings handle memory pressure
 
         if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
             return // Already cached or preloaded
@@ -480,15 +493,27 @@ object VideoManager {
         if (!preloadQueue.contains(videoMid)) {
             preloadQueue.add(videoMid)
 
-            // Start preloading in background
             val job = videoLoadingScope.launch {
                 try {
-                    // Throttle concurrent player creation on main thread
                     preloadSemaphore.acquire()
                     if (!isActive) return@launch
-                    val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
-                    // Add to cache on main thread
-                    // No player count limit - let system memory warnings handle memory pressure
+
+                    // Resolve the correct HLS URL before player creation.
+                    // HlsUrlResolver probes master.m3u8 and playlist.m3u8 in parallel
+                    // and caches the winner to disk — O(0) cost on all future loads.
+                    val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                        HlsUrlResolver.resolve(context, videoUrl)
+                    } else null
+
+                    if (!isActive) return@launch
+
+                    val player = createExoPlayer(
+                        context,
+                        videoUrl,
+                        videoType ?: MediaType.Video,
+                        resolvedHlsUrl = resolvedHlsUrl
+                    )
+
                     if (!isActive) {
                         try { player.release() } catch (_: Exception) {}
                         return@launch
@@ -496,7 +521,7 @@ object VideoManager {
                     videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
                     preloadQueue.remove(videoMid)
-                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid")
+                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid (resolvedHls=${resolvedHlsUrl != null})")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")

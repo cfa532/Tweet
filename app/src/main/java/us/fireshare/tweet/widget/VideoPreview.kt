@@ -168,10 +168,17 @@ fun VideoPreview(
 
     // Use videoMid as the only key to prevent ExoPlayer recreation
     val exoPlayer = remember(videoMid) {
+        // For HLS videos, check the resolver cache synchronously (zero network cost).
+        // If preloadVideo already ran for this video the correct URL is already cached
+        // and the player skips the master/playlist guess entirely.
+        val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO && url != null) {
+            HlsUrlResolver.getCached(context, url)
+        } else null
+
         val player = if (videoMid != null && url != null) {
-            VideoManager.getVideoPlayer(context, videoMid, url, videoType)
+            VideoManager.getVideoPlayer(context, videoMid, url, videoType, resolvedHlsUrl)
         } else if (url != null) {
-            createExoPlayer(context, url, videoType ?: MediaType.Video)
+            createExoPlayer(context, url, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
         } else {
             // Fallback to an empty player if url is null
             createExoPlayer(context, "", videoType ?: MediaType.Video)
