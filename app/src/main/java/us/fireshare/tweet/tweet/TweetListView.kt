@@ -602,12 +602,6 @@ fun TweetListView(
                 Timber.tag("TweetListView-LoadMore").d("🎡 Spinner ON (isRefreshingAtBottom=$isRefreshingAtBottom)")
                 val spinnerShowTime = System.currentTimeMillis()
                 
-                // Scroll to ensure spinner is visible (with delay for compose to add the item)
-                coroutineScope.launch {
-                    delay(50)  // Wait for spinner item to be added
-                    listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
-                }
-                
                 // Timeout job to force-hide spinner after 30 seconds if server hangs
                 val timeoutJob = coroutineScope.launch {
                     delay(10000) // 10 seconds
