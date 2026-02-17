@@ -366,6 +366,16 @@ fun VideoPreview(
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
                         isLoading = false
+                        // Start playing immediately if coordinator/autoPlay already wants it.
+                        // Without this, there is a black-screen window: the player finishes
+                        // buffering (IDLE → READY after stop()+prepare()) with isLoading=false
+                        // but playWhenReady=false, because the LaunchedEffect already ran before
+                        // the player reached READY. The coordinator's debounce (100-250ms) means
+                        // the next LaunchedEffect run is delayed, leaving a visible black frame.
+                        val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
+                        if (currentShouldPlay && !exoPlayer.isPlaying) {
+                            exoPlayer.playWhenReady = true
+                        }
                         onLoadComplete?.invoke()
                     }
 
