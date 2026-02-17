@@ -43,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -122,7 +123,6 @@ fun TweetDetailScreen(
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
     
@@ -141,12 +141,9 @@ fun TweetDetailScreen(
     // This ensures comment videos don't interfere with the feed's coordinator state.
     val commentsCoordinator = remember { VideoPlaybackCoordinator() }
 
-    // Track LazyColumn viewport size for VideoPlaybackCoordinator
-    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-
     // Scroll-based top app bar visibility
-    var previousFirstVisibleItemIndex by remember { mutableStateOf(0) }
-    var previousScrollOffset by remember { mutableStateOf(0) }
+    var previousFirstVisibleItemIndex by remember { mutableIntStateOf(0) }
+    var previousScrollOffset by remember { mutableIntStateOf(0) }
     var showTopAppBar by remember { mutableStateOf(true) }
     
     // Animate top app bar visibility
@@ -197,7 +194,6 @@ fun TweetDetailScreen(
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage = 0 // Reset to page 0 for refresh
                         viewModel.loadComments(tweet, 0)
                         lastLoadedPage = 0
                     }
@@ -249,7 +245,6 @@ fun TweetDetailScreen(
             isInitialLoading = true
             withContext(Dispatchers.IO) {
                 val newCommentsCount = viewModel.loadComments(tweet, 0)
-                currentPage = 0
                 lastLoadedPage = 0
                 // If page 0 returned no comments, stop pagination immediately
                 if (newCommentsCount == 0) {
@@ -262,7 +257,7 @@ fun TweetDetailScreen(
     }
 
     // Track last pagination attempt to prevent rapid repeated calls
-    var lastPaginationAttempt by remember { mutableStateOf(-1L) }
+    var lastPaginationAttempt by remember { mutableLongStateOf(-1L) }
 
     // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
     LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
@@ -292,7 +287,6 @@ fun TweetDetailScreen(
                             Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
                         } else {
                             // Got new comments, continue pagination
-                            currentPage = nextPage
                             lastLoadedPage = nextPage
                             Timber.tag("TweetDetailScreen").d("Page $nextPage returned $newCommentsCount comments, continuing pagination")
                         }
@@ -436,7 +430,6 @@ fun TweetDetailScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { size ->
-                        viewportSize = size
                         // Update comments coordinator with viewport size
                         commentsCoordinator.updateViewportSize(
                             size.width.toFloat(),

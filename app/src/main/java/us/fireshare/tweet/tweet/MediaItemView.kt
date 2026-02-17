@@ -83,8 +83,6 @@ fun MediaItemView(
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
-    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -98,7 +96,7 @@ fun MediaItemView(
     // If parentTweetId is provided, it represents the retweet/quote container tweet
     // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
     val playbackTweetId = if (enableCoordinator) {
-        if (parentTweetId != null && parentTweetId.isNotEmpty()) {
+        if (!parentTweetId.isNullOrEmpty()) {
             // Always use parentTweetId (retweet/quote ID) when available
             parentTweetId
         } else {
@@ -119,7 +117,6 @@ fun MediaItemView(
             MediaType.Image -> {
                 // Show full-screen image directly
                 fullScreenImageMid = mediaItems[idx].mid
-                fullScreenBitmap = currentBitmap // Pass the current bitmap to fullscreen
                 showFullScreenImage = true
             }
             MediaType.Audio -> {
@@ -204,9 +201,6 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
-                        onBitmapLoaded = { bitmap ->
-                            currentBitmap = bitmap
-                        }
                     )
                 }
             }
@@ -354,7 +348,6 @@ fun MediaItemView(
                                 }
                                 val (nextMediaIndex, _) = imageAttachments[nextIndex]
                                 fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
-                                fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         },
                         onPreviousImage = {
@@ -367,7 +360,6 @@ fun MediaItemView(
                                 }
                                 val (prevMediaIndex, _) = imageAttachments[prevIndex]
                                 fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
-                                fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         }
                     )

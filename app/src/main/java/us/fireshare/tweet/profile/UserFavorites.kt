@@ -140,6 +140,7 @@ fun UserFavorites(
                     showPrivateTweets = true,
                     context = "appUserFavorites",
                     parentEntry = parentEntry,
+                    isInitialLoading = favorites.isEmpty() && !favoritesInitialLoadComplete,
                     scrollToTopTrigger = scrollToTopTrigger,
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState

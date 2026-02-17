@@ -76,26 +76,3 @@ fun CameraHandler(
         }
     }
 }
-
-/**
- * Camera button click handler
- */
-@Composable
-fun rememberCameraClickHandler(
-    onCameraClick: () -> Unit
-): () -> Unit {
-    val context = LocalContext.current
-    
-    return {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            onCameraClick()
-        } else {
-            // Permission will be handled by CameraHandler
-            onCameraClick()
-        }
-    }
-}

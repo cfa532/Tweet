@@ -138,6 +138,7 @@ fun UserBookmarks(
                     context = "appUserBookmarks",
                     showPrivateTweets = true,
                     parentEntry = parentEntry,
+                    isInitialLoading = bookmarks.isEmpty() && !bookmarksInitialLoadComplete,
                     scrollToTopTrigger = scrollToTopTrigger,
                     onScrollStateChange = { newScrollState ->
                         scrollState = newScrollState
