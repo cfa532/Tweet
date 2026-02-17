@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
@@ -208,7 +207,6 @@ fun TweetListView(
     context: String = "default", // Context to scope scroll position persistence
     onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
-    onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top programmatically
     scrollToTopTrigger: Int = 0, // Increment to trigger scroll-to-top from parent
     pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
     onScrolledToTop: (() -> Unit)? = null // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
@@ -241,7 +239,6 @@ fun TweetListView(
     var lastUserId by remember { mutableStateOf<MimeiId?>(null) }
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
     var isInitializingData by remember { mutableStateOf(false) }
-    var showNoMoreTweetsMessage by remember { mutableStateOf(false) }
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Restore scroll position from in-memory store
@@ -312,7 +309,6 @@ fun TweetListView(
             isRefreshingAtTop = false
             pendingLoadMorePage = -1
             lastLoadMoreTrigger = 0L
-            showNoMoreTweetsMessage = false
             Timber.tag("TweetListView").d("Cleared loading states on dispose")
         }
     }
@@ -437,7 +433,7 @@ fun TweetListView(
 
                 val detectedDirection = if (!isScrolling) {
                     ScrollDirection.NONE
-                } else if (Math.abs(indexDelta) > 1 || Math.abs(offsetDelta) > 50) {
+                } else if (abs(indexDelta) > 1 || abs(offsetDelta) > 50) {
                     // Significant movement - update direction
                     when {
                         indexDelta < 0 || offsetDelta < 0 -> ScrollDirection.UP
@@ -472,7 +468,7 @@ fun TweetListView(
                 // Only update on significant scroll changes (>2 items or >200px) to reduce overhead
                 if (isScrolling && abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                     val currentOffset = firstVisibleItem * 1000f + scrollOffset // Approximate offset
-                    us.fireshare.tweet.widget.VideoPlaybackCoordinator.shared.updateScrollDirection(currentOffset)
+                    VideoPlaybackCoordinator.shared.updateScrollDirection(currentOffset)
                 }
 
                 // PERF FIX: Only invoke callback if state actually changed
@@ -652,10 +648,8 @@ fun TweetListView(
                         
                         // Show message if no tweets
                         if (!foundValidTweets) {
-                            showNoMoreTweetsMessage = true
                             lastNoMoreTweetsShown = System.currentTimeMillis()
                             delay(2000)
-                            showNoMoreTweetsMessage = false
                             Timber.tag("TweetListView-LoadMore").d("🙈 Message hidden, 2s cooldown")
                         }
                     }
