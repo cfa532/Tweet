@@ -1066,7 +1066,7 @@ class UserViewModel @AssistedInject constructor(
             if (user.value.baseUrl != null && appUser.baseUrl != null) {
                 Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
                 // Fetch tweets of the author and update _tweets
-                val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber)
+                val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber, TW_CONST.PAGE_SIZE)
 
                 // Filter out null elements and get valid tweets
                 val newTweets = newTweetsWithNulls.filterNotNull()
