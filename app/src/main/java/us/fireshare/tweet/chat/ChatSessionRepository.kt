@@ -211,9 +211,6 @@ class ChatSessionRepository @Inject constructor(
      * Chat message is identified by its Normalized pair of authorId and receiptId.
      * The session's author is always the current app user, and its receipt is the one
      * engaging in conversation with the appUser.
-     * 
-     * This implementation matches the iOS version which determines the partner ID
-     * directly from the message (authorId for incoming, receiptId for outgoing).
      * */
     fun mergeMessagesWithSessions(
         existingSessions: List<ChatSession>,
@@ -229,27 +226,27 @@ class ChatSessionRepository @Inject constructor(
                 message.authorId   // Incoming: use authorId (sender)
             }
         }
-        
+
         val updatedSessions = existingSessions.toMutableList()
-        
+
         // Process each group of messages by partner
         messagesByPartner.forEach { (partnerId, messages) ->
             // Use the last message from the group (newest message)
             val lastMessage = messages.maxByOrNull { it.timestamp } ?: return@forEach
-            
+
             // Create preview message for display (original message content is preserved)
             val msg = lastMessage.withAttachmentPreview(context)
-            
+
             Timber.tag("ChatSessionRepository").d(
                 "mergeMessagesWithSessions: Processing message - " +
-                "authorId=${lastMessage.authorId}, receiptId=${lastMessage.receiptId}, " +
-                "partnerId=$partnerId, appUser.mid=${appUser.mid}, " +
-                "isIncoming=${lastMessage.authorId != appUser.mid}"
+                        "authorId=${lastMessage.authorId}, receiptId=${lastMessage.receiptId}, " +
+                        "partnerId=$partnerId, appUser.mid=${appUser.mid}, " +
+                        "isIncoming=${lastMessage.authorId != appUser.mid}"
             )
-            
+
             // Find existing session by partnerId (the other user)
             val existingSession = existingSessions.find { it.receiptId == partnerId }
-            
+
             if (existingSession == null) {
                 // Create new session - use partnerId (authorId for incoming messages) as session ID
                 Timber.tag("ChatSessionRepository").d(
@@ -273,7 +270,7 @@ class ChatSessionRepository @Inject constructor(
                 if (isDifferentMessage || isNewerTimestamp) {
                     Timber.tag("ChatSessionRepository").d(
                         "mergeMessagesWithSessions: Updating existing session for partnerId=$partnerId, " +
-                        "oldMessageId=${existingSession.lastMessage.id}, newMessageId=${msg.id}"
+                                "oldMessageId=${existingSession.lastMessage.id}, newMessageId=${msg.id}"
                     )
                     val index = updatedSessions.indexOf(existingSession)
                     if (index >= 0) {
@@ -286,7 +283,7 @@ class ChatSessionRepository @Inject constructor(
                 }
             }
         }
-        
+
         return updatedSessions.toList()
     }
 
