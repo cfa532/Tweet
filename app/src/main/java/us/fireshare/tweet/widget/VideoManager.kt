@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import androidx.compose.runtime.mutableStateMapOf
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -50,6 +51,10 @@ object VideoManager {
     // ===== PLAYER MANAGEMENT =====
     // Thread-safe map to store ExoPlayer instances by video mid
     private val videoPlayers = ConcurrentHashMap<MimeiId, ExoPlayer>()
+
+    // Compose-observable generation counter: incremented whenever a player is force-recreated.
+    // VideoPreview uses this as a remember() key so it picks up the new player instance.
+    val playerGenerations = mutableStateMapOf<MimeiId, Int>()
 
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
@@ -894,7 +899,9 @@ object VideoManager {
             // Create a completely new player with software decoder to avoid MediaCodec failures
             val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
             videoPlayers[videoMid] = newPlayer
-            
+            // Notify Compose that VideoPreview should re-read the player for this video.
+            playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+
             Timber.tag("VideoManager").d("✅ PLAYER FORCE RECREATED WITH SOFTWARE DECODER: videoMid: $videoMid")
             return true
             

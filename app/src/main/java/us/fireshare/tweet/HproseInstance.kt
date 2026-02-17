@@ -657,6 +657,12 @@ object HproseInstance {
         } else {
             val alphaIds = getAlphaIds()
             appUser.followingList = alphaIds
+            // Ensure baseUrl is set so hproseService is non-null for login (getUserId) calls
+            if (appUser.baseUrl.isNullOrBlank()) {
+                val entryIP = findEntryIP()
+                appUser.baseUrl = "http://$entryIP"
+                Timber.tag("initAppEntry").d("🔍 Guest user: resolved entry IP for baseUrl: ${appUser.baseUrl}")
+            }
             TweetCacheManager.saveUser(appUser)
             Timber.tag("initAppEntry").d("🔍 Guest user initialized. appId: $appId")
             Timber.tag("initAppEntry").d("🔍 Guest user alphaIds: $alphaIds")

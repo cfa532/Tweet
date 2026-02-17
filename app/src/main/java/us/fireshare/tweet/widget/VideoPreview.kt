@@ -115,6 +115,7 @@ fun VideoPreview(
     var showTimeLabel by remember(videoMid) { mutableStateOf(false) }
     var remainingTime by remember(videoMid) { mutableLongStateOf(0L) }
     var retryCount by remember(videoMid) { mutableIntStateOf(0) }
+    var isMediaCodecRecoveryInProgress by remember(videoMid) { mutableStateOf(false) }
     var showControls by remember(videoMid) { mutableStateOf(false) } // Simple state for tap-to-show controls
     val maxRetries = 3
     val coordinator = LocalVideoCoordinator.current
@@ -166,8 +167,13 @@ fun VideoPreview(
         )
     }
 
-    // Use videoMid as the only key to prevent ExoPlayer recreation
-    val exoPlayer = remember(videoMid) {
+    // Observe the generation counter so that Compose re-reads the player after forceRecreatePlayer.
+    val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
+
+    // Use videoMid + playerGeneration as keys: playerGeneration increments when the player is
+    // force-recreated (e.g. after a MediaCodec failure), causing this block to re-run and pick
+    // up the new software-decoder player from VideoManager.
+    val exoPlayer = remember(videoMid, playerGeneration) {
         // For HLS videos, check the resolver cache synchronously (zero network cost).
         // If preloadVideo already ran for this video the correct URL is already cached
         // and the player skips the master/playlist guess entirely.
@@ -398,8 +404,15 @@ fun VideoPreview(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // Ignore transient errors that fire while the player is being torn down and
+                // replaced during a MediaCodec recovery. The new player will re-attach shortly.
+                if (isMediaCodecRecoveryInProgress) {
+                    Timber.tag("VideoPreview").d("Ignoring transient error during MediaCodec recovery for $videoMid: ${error.message}")
+                    return
+                }
+
                 Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
-                
+
                 // Check if this is a MediaCodec decoder failure
                 val errorMessage = error.cause?.message ?: ""
                 val isMediaCodecError = errorMessage.contains("MediaCodec", ignoreCase = true) ||
@@ -450,21 +463,22 @@ fun VideoPreview(
                     Timber.tag("VideoPreview").w("MediaCodec decoder failure detected (attempt $retryCount/$maxRetries), force recreating with software decoder for video: $videoMid")
                     isLoading = true
                     hasError = false
-                    
+                    isMediaCodecRecoveryInProgress = true
+
                     // Force recreate with software decoder with delay to prevent rapid retries
                     // Use lifecycle-aware scope to prevent memory leaks if composable is disposed
                     retryScope.launch {
                         try {
                             // Add delay before retry to prevent rapid retry loops
                             delay(1000) // Wait 1 second before MediaCodec recovery attempt
-                            
+
                             // Force recreate the entire player with software decoder
                             val recreateSuccess = if (videoMid != null && url != null) {
                                 VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
                             } else {
                                 false
                             }
-                            
+
                             if (recreateSuccess) {
                                 Timber.tag("VideoPreview").d("Player force recreated with software decoder for video: $videoMid")
                                 isLoading = false
@@ -478,6 +492,8 @@ fun VideoPreview(
                             Timber.tag("VideoPreview").e("Exception during MediaCodec recovery for video: $videoMid - ${e.message}")
                             isLoading = false
                             hasError = true
+                        } finally {
+                            isMediaCodecRecoveryInProgress = false
                         }
                     }
                 } else if (isMediaCodecError && videoMid != null) {
