@@ -305,16 +305,28 @@ object HproseInstance {
             val oldBaseUrl = _appUserState.value.baseUrl
             val oldAvatar = _appUserState.value.avatar
 
-            _appUserState.value = value
-            _appUserAvatar.value = value.avatar  // Always emit avatar separately
+            _isInsideAppUserSetter = true
+            try {
+                // Ensure the singleton instance is updated with all fields from value,
+                // so that User.getInstance(mid) and appUser stay in sync.
+                if (value !== User.getInstance(value.mid)) {
+                    User.getInstance(value.mid).from(value)
+                }
+            } finally {
+                _isInsideAppUserSetter = false
+            }
+            val instance = User.getInstance(value.mid)
+
+            _appUserState.value = instance
+            _appUserAvatar.value = instance.avatar  // Always emit avatar separately
 
             // Log if avatar changed (helps debug toolbar avatar issues)
-            if (oldAvatar != value.avatar) {
-                Timber.tag("appUser").d("Avatar updated: $oldAvatar -> ${value.avatar}")
+            if (oldAvatar != instance.avatar) {
+                Timber.tag("appUser").d("Avatar updated: $oldAvatar -> ${instance.avatar}")
             }
-            
+
             // If baseUrl changed from null to a valid value, trigger tweet feed refresh
-            if (oldBaseUrl == null && value.baseUrl != null && !value.isGuest()) {
+            if (oldBaseUrl == null && instance.baseUrl != null && !instance.isGuest()) {
                 Timber.tag("appUser").d("BaseUrl became available for logged-in user, triggering tweet feed refresh")
                 TweetApplication.applicationScope.launch {
                     try {
@@ -322,13 +334,53 @@ object HproseInstance {
                         TweetNotificationCenter.post(
                             TweetEvent.FeedResetRequested(FeedResetReason.BASEURL_AVAILABLE)
                         )
-                        Timber.tag("appUser").d("Posted FeedResetRequested notification after baseUrl became available: ${value.baseUrl}")
+                        Timber.tag("appUser").d("Posted FeedResetRequested notification after baseUrl became available: ${instance.baseUrl}")
                     } catch (e: Exception) {
                         Timber.tag("appUser").e(e, "Error triggering tweet refresh after baseUrl became available")
                     }
                 }
             }
         }
+
+    // Reentrance guard: when the appUser setter calls from(User)/updateUserInstance,
+    // those methods should NOT fire notifyAppUserChanged because the setter already
+    // handles its own StateFlow updates and side effects.
+    private var _isInsideAppUserSetter = false
+
+    /**
+     * Notify that the appUser singleton's fields have been mutated directly
+     * (e.g., via User.updateUserInstance, User.from(Map), User.from(User)).
+     * Updates StateFlows to trigger UI recomposition and fires side effects
+     * (feed refresh when baseUrl becomes available).
+     *
+     * @param oldBaseUrl the baseUrl before mutation
+     * @param oldAvatar  the avatar before mutation
+     */
+    internal fun notifyAppUserChanged(oldBaseUrl: String?, oldAvatar: MimeiId?) {
+        if (_isInsideAppUserSetter) return  // Setter handles notifications itself
+        val current = _appUserState.value
+
+        // Always re-emit avatar so observers of appUserAvatar pick up changes
+        _appUserAvatar.value = current.avatar
+
+        if (oldAvatar != current.avatar) {
+            Timber.tag("appUser").d("Avatar synced: $oldAvatar -> ${current.avatar}")
+        }
+
+        // Trigger feed refresh when baseUrl transitions from null → non-null
+        if (oldBaseUrl == null && current.baseUrl != null && !current.isGuest()) {
+            Timber.tag("appUser").d("BaseUrl became available via user instance update, triggering feed refresh")
+            TweetApplication.applicationScope.launch {
+                try {
+                    TweetNotificationCenter.post(
+                        TweetEvent.FeedResetRequested(FeedResetReason.BASEURL_AVAILABLE)
+                    )
+                } catch (e: Exception) {
+                    Timber.tag("appUser").e(e, "Error triggering feed refresh after baseUrl sync")
+                }
+            }
+        }
+    }
 
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
