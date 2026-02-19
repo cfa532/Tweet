@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.view.TextureView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -611,39 +612,42 @@ fun VideoPreview(
             }
     ) {
         AndroidView(
-            factory = {
-                PlayerView(context).apply {
-                    player = exoPlayer
-                    useController = if (enableTapToShowControls) showControls else false // Use state for tap-to-show controls
+            factory = { ctx ->
+                // Use TextureView directly instead of PlayerView with SurfaceView.
+                // TextureView renders within the normal view hierarchy, preventing
+                // blank video frames during swipe/scroll animations. SurfaceView
+                // uses a separate window layer that can't move in sync with the view.
+                AspectRatioFrameLayout(ctx).apply {
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    // Set background color to light gray (Material3 surface variant equivalent)
                     setBackgroundColor(android.graphics.Color.rgb(245, 245, 245))
-                    // Keep last frame to avoid black flashes when resetting/pausing
-                    setKeepContentOnPlayerReset(true)
-                    // Disable built-in buffering indicator - we show our own CircularProgressIndicator
-                    // This prevents duplicate loading spinners
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    // Force hardware acceleration and proper clipping for Media3 1.7.1
-                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                    val textureView = TextureView(ctx)
+                    addView(
+                        textureView,
+                        android.widget.FrameLayout.LayoutParams(
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    )
+                    exoPlayer.setVideoTextureView(textureView)
                 }
             },
-            update = { playerView ->
-                // Update player reference in case it changes (e.g., after recovery)
-                // This fixes black screen issue when player is recreated
-                if (playerView.player != exoPlayer) {
-                    playerView.player = exoPlayer
-                }
-                // Update controller visibility when state changes
-                if (enableTapToShowControls) {
-                    playerView.useController = showControls // Use state for tap-to-show controls
+            update = { frame ->
+                // Update player reference when it changes (e.g., after recovery).
+                // Find the TextureView child and reconnect the player.
+                val textureView = (0 until frame.childCount)
+                    .map { frame.getChildAt(it) }
+                    .filterIsInstance<TextureView>()
+                    .firstOrNull()
+                if (textureView != null) {
+                    exoPlayer.setVideoTextureView(textureView)
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .clipToBounds() // Ensure content is clipped to bounds
+                .clipToBounds()
                 .then(
                     if (enableTapToShowControls) {
-                        Modifier.clickable { 
+                        Modifier.clickable {
                             showControls = !showControls
                         }
                     } else {

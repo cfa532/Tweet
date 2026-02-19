@@ -264,18 +264,12 @@ fun IndependentFullScreenPlayer(
                 ),
             factory = {
                 PlayerView(context).apply {
-                    useController = true // Always show native controls
+                    useController = true
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
-                    // Set shutter background to black to prevent white flash on initial load
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    // Keep last frame to avoid black flashes when resetting/pausing
                     setKeepContentOnPlayerReset(true)
-                    // Only show buffering indicator when playing and buffering
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    // Force hardware acceleration and proper clipping for Media3 1.7.1
-                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                    // Keep showControls state in sync with native controller visibility
                     setControllerVisibilityListener(
                         PlayerView.ControllerVisibilityListener { visibility ->
                             val isVisible = visibility == android.view.View.VISIBLE

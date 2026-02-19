@@ -361,15 +361,11 @@ fun MediaBrowser(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
                                 player = exoPlayer
-                                useController = true    // otherwise video won't play
-//                                setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-//                                    showControls = visibility == View.VISIBLE
-//                                })
+                                useController = true
                                 controllerShowTimeoutMs = 2000
                                 controllerAutoShow = true
-                                // Force hardware acceleration and proper clipping for Media3 1.7.1
-                                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                                hideController()    // hide control buttons
+                                setKeepContentOnPlayerReset(true)
+                                hideController()
                             }
                         },
                         modifier = Modifier
