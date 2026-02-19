@@ -175,7 +175,7 @@ fun TweetItemBody(
                     SelectableText(
                         text = tweet.content!!,
                         maxLines = 7,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 20.sp),
                         modifier = Modifier.padding(bottom = 4.dp),
                         onTextClick = {
                             // Navigate to detail view when text (not username) is clicked

@@ -268,12 +268,12 @@ fun VideoPreview(
                 if (state.isMuted) android.R.drawable.ic_lock_silent_mode
                 else android.R.drawable.ic_lock_silent_mode_off
             )
-            muteBtn.alpha = 0.5f
+            muteBtn.alpha = if (state.isMuted) 1.0f else 0.6f
             muteBtn.setBackgroundResource(0)
             // Apply a circular semi-transparent background
             val bgDrawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(android.graphics.Color.argb(51, 0, 0, 0)) // 0.2 alpha black
+                setColor(android.graphics.Color.argb(100, 0, 0, 0)) // 0.4 alpha black
             }
             muteBtn.background = bgDrawable
             // Time label

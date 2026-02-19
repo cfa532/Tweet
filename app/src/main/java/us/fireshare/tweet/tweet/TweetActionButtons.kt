@@ -184,13 +184,13 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
                 contentDescription = stringResource(R.string.like),
                 modifier = Modifier.size(ButtonDefaults.IconSize),
-                tint = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+                tint = if (isFavorite) Color(0xFFBB5555) else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                color = if (isFavorite) color ?: MaterialTheme.colorScheme.primary else color
+                color = if (isFavorite) Color(0xFFBB5555) else color
                     ?: MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.width(28.dp)
             )

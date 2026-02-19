@@ -10,6 +10,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import timber.log.Timber
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -41,17 +42,31 @@ object Gadget {
     /**
      * Annotate HTTP URL and @username in a text. Make both clickable.
      * */
+    private fun AnnotatedString.Builder.appendWithBlankLineStyle(segment: String) {
+        val blankLineStyle = SpanStyle(fontSize = 2.sp)
+        val parts = segment.split("\u200B")
+        parts.forEachIndexed { index, part ->
+            append(part)
+            if (index < parts.size - 1) {
+                withStyle(blankLineStyle) { append("\u200B") }
+            }
+        }
+    }
+
     fun buildAnnotatedText(text: String): AnnotatedString = buildAnnotatedString {
+        // Collapse consecutive blank lines: replace \n\n with \n + small-height line
+        val processed = text.replace(Regex("\n{2,}")) { "\n\u200B\n" }
+
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
         val mentionRegex = "@([\\w_]+)".toRegex()
         var lastIndex = 0
 
-        urlRegex.findAll(text).forEach { matchResult ->
+        urlRegex.findAll(processed).forEach { matchResult ->
             val url = matchResult.value
             val start = matchResult.range.first
 
             if (start > lastIndex) {
-                append(text.substring(lastIndex, start))
+                appendWithBlankLineStyle(processed.substring(lastIndex, start))
             }
 
             pushStringAnnotation(tag = "URL", annotation = url)
@@ -68,8 +83,8 @@ object Gadget {
             lastIndex = matchResult.range.last + 1
         }
 
-        while (lastIndex < text.length) {
-            val mentionMatch = mentionRegex.find(text, lastIndex)
+        while (lastIndex < processed.length) {
+            val mentionMatch = mentionRegex.find(processed, lastIndex)
             if (mentionMatch != null) {
                 val start = mentionMatch.range.first
                 val originalMentionText = mentionMatch.value
@@ -78,7 +93,7 @@ object Gadget {
                     val username = mentionMatch.groupValues[1]
 
                     if (start > lastIndex) {
-                        append(text.substring(lastIndex, start))
+                        appendWithBlankLineStyle(processed.substring(lastIndex, start))
                     }
 
                     pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
@@ -99,8 +114,8 @@ object Gadget {
                     lastIndex = start + originalMentionText.length // or mentionMatch.range.last + 1
                 }
             } else {
-                append(text.substring(lastIndex))
-                lastIndex = text.length
+                appendWithBlankLineStyle(processed.substring(lastIndex))
+                lastIndex = processed.length
             }
         }
 
