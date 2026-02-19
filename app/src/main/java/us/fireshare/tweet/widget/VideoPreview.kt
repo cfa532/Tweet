@@ -38,7 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,8 +59,6 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.utils.ErrorMessageUtils
-import us.fireshare.tweet.widget.Gadget.calculateVisibilityRatio
-import us.fireshare.tweet.widget.Gadget.isElementVisible
 
 /**
  * @param index: when there are multiple videos in a grid, the first one is played automatically.
@@ -85,10 +85,11 @@ fun VideoPreview(
     containerTopY: Float? = null
 ) {
     val context = LocalContext.current
+    val rootView = LocalView.current
 
     // Use completely stable state that doesn't change during recompositions
     var isVideoVisible by remember(videoMid) { mutableStateOf(false) }
-    
+
     // PERF FIX: Throttle visibility updates to reduce expensive calculations during scrolling
     var lastVisibilityUpdate by remember(videoMid) { mutableLongStateOf(0L) }
     val visibilityUpdateThrottleMs = 100L // Only update every 100ms during scrolling
@@ -377,14 +378,11 @@ fun VideoPreview(
                 when (playbackState) {
                     androidx.media3.common.Player.STATE_READY -> {
                         isLoading = false
-                        // Start playing immediately if coordinator/autoPlay already wants it.
-                        // Without this, there is a black-screen window: the player finishes
-                        // buffering (IDLE → READY after stop()+prepare()) with isLoading=false
-                        // but playWhenReady=false, because the LaunchedEffect already ran before
-                        // the player reached READY. The coordinator's debounce (100-250ms) means
-                        // the next LaunchedEffect run is delayed, leaving a visible black frame.
+                        // Start playing immediately if coordinator/autoPlay already wants it
+                        // AND the video is actually visible. Without the visibility check,
+                        // this overrides the LaunchedEffect's pause when scrolled off-screen.
                         val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
-                        if (currentShouldPlay && !exoPlayer.isPlaying) {
+                        if (currentShouldPlay && isVideoVisible && !exoPlayer.isPlaying) {
                             exoPlayer.playWhenReady = true
                         }
                         onLoadComplete?.invoke()
@@ -412,11 +410,9 @@ fun VideoPreview(
                     androidx.media3.common.Player.STATE_IDLE -> {
                         isLoading = true
                         // If this video should be playing, re-prepare immediately.
-                        // This handles external stops (e.g., markVideoNotVisible from
-                        // another composable's disposal) that the LaunchedEffect can't
-                        // detect because its keys (isVideoVisible, shouldPlay) didn't change.
+                        // Only if visible — otherwise this overrides the pause from scrolling off.
                         val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
-                        if (currentShouldPlay && exoPlayer.mediaItemCount > 0) {
+                        if (currentShouldPlay && isVideoVisible && exoPlayer.mediaItemCount > 0) {
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         }
@@ -578,8 +574,21 @@ fun VideoPreview(
                 val now = System.currentTimeMillis()
                 val timeSinceLastUpdate = now - lastVisibilityUpdate
 
-                // Always update local visibility state for UI (lightweight check)
-                val newVisibility = isElementVisible(layoutCoordinates)
+                // Use positionInWindow + visible display frame for reliable visibility.
+                // boundsInWindow/boundsInRoot don't clip by LazyColumn's graphicsLayer clip.
+                val totalHeight = layoutCoordinates.size.height.toFloat()
+                val visibilityRatio = if (totalHeight > 0) {
+                    val windowPos = layoutCoordinates.positionInWindow()
+                    val videoTop = windowPos.y
+                    val videoBottom = videoTop + totalHeight
+                    val displayFrame = android.graphics.Rect()
+                    rootView.getWindowVisibleDisplayFrame(displayFrame)
+                    val visibleTop = kotlin.math.max(displayFrame.top.toFloat(), videoTop)
+                    val visibleBottom = kotlin.math.min(displayFrame.bottom.toFloat(), videoBottom)
+                    val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
+                    (visibleHeight / totalHeight).coerceIn(0f, 1f)
+                } else 0f
+                val newVisibility = visibilityRatio >= 0.5f
                 if (isVideoVisible != newVisibility) {
                     isVideoVisible = newVisibility
                 }
@@ -587,7 +596,6 @@ fun VideoPreview(
                 // Report this video's own visibility ratio to the coordinator
                 if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
                     if (timeSinceLastUpdate >= visibilityUpdateThrottleMs) {
-                        val visibilityRatio = calculateVisibilityRatio(layoutCoordinates)
                         coordinator.updateVideoVisibility(
                             videoMid = videoMid,
                             tweetId = playbackTweetId,

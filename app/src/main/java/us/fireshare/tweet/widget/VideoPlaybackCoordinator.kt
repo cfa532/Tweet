@@ -102,6 +102,19 @@ class VideoPlaybackCoordinator(
     private var viewportWidth = 1080f
     private var viewportHeight = 2340f
 
+    /** When true, the coordinator suppresses auto-play selection.
+     *  Used in TweetDetailScreen to prevent comment videos from playing
+     *  while the main tweet video is still visible. */
+    var isPaused: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                if (value) {
+                    stopAllVideos()
+                }
+            }
+        }
+
     private var primaryVideoId: String? = null
 
     private var scrollDirection: Boolean = true
@@ -310,6 +323,7 @@ class VideoPlaybackCoordinator(
     }
 
     private fun checkPrimaryVideoDuringScroll() {
+        if (isPaused) return
         // If current primary is still visible above threshold, keep it playing
         if (primaryVideoId != null) {
             val currentVisibility = videoVisibilityMap[primaryVideoId] ?: 0f
@@ -496,6 +510,7 @@ class VideoPlaybackCoordinator(
     }
 
     private fun startPrimaryVideoPlayback() {
+        if (isPaused) return
         if (visibleVideos.isEmpty()) {
             Timber.w("VideoPlaybackCoordinator: No visible videos to play")
             return

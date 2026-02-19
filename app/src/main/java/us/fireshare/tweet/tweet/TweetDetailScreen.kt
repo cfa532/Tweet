@@ -446,7 +446,10 @@ fun TweetDetailScreen(
                         parentEntry = parentEntry,
                         parentTweetId = parentTweetId,
                         parentAuthorId = parentAuthorId,
-                        onExpandReply = { isReplyBoxExpanded = true }
+                        onExpandReply = { isReplyBoxExpanded = true },
+                        onVideoVisibilityChanged = { visible ->
+                            commentsCoordinator.isPaused = visible
+                        }
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 1.dp),
