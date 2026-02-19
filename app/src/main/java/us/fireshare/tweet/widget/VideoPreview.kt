@@ -629,11 +629,26 @@ fun VideoPreview(
                         )
                     )
                     exoPlayer.setVideoTextureView(textureView)
+                    // Listen for video size changes to update aspect ratio
+                    val frame = this
+                    exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+                        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                            if (videoSize.width > 0 && videoSize.height > 0) {
+                                val ratio = (videoSize.width * videoSize.pixelWidthHeightRatio) / videoSize.height.toFloat()
+                                frame.setAspectRatio(ratio)
+                            }
+                        }
+                    })
+                    // Apply aspect ratio immediately if video size is already known
+                    val currentSize = exoPlayer.videoSize
+                    if (currentSize.width > 0 && currentSize.height > 0) {
+                        val ratio = (currentSize.width * currentSize.pixelWidthHeightRatio) / currentSize.height.toFloat()
+                        setAspectRatio(ratio)
+                    }
                 }
             },
             update = { frame ->
                 // Update player reference when it changes (e.g., after recovery).
-                // Find the TextureView child and reconnect the player.
                 val textureView = (0 until frame.childCount)
                     .map { frame.getChildAt(it) }
                     .filterIsInstance<TextureView>()
@@ -772,7 +787,7 @@ fun VideoPreview(
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(26.dp)
                     .background(
                         color = Color.Black.copy(alpha = 0.2f),
                         shape = CircleShape
@@ -789,7 +804,7 @@ fun VideoPreview(
                     imageVector = if (isMuted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
                     contentDescription = if (isMuted) "Unmute" else "Mute",
                     tint = Color.White.copy(alpha = 0.5f),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
