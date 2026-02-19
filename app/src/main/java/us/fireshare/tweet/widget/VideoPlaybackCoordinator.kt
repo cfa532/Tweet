@@ -88,8 +88,10 @@ class VideoPlaybackCoordinator(
         private const val PLAYBACK_DEBOUNCE_MS = 100L
         private const val VISIBILITY_THRESHOLD = 0.5f
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
-        private const val IMMEDIATE_CHECK_THROTTLE_MS = 50L
     }
+
+    // Single reusable coroutine scope to avoid allocating a new CoroutineScope on every event
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
 
     private var visibleVideos = mutableListOf<VideoPlaybackInfo>()
     private var allVideos = mutableListOf<VideoPlaybackInfo>()
@@ -98,6 +100,8 @@ class VideoPlaybackCoordinator(
     private val tweetCellBoundsMap = mutableMapOf<String, android.graphics.RectF>()
     private val tweetVisibilityMap = mutableMapOf<String, Boolean>()
     private val videoVisibilityMap = mutableMapOf<String, Float>()
+    // Videos that have finished playing — excluded from auto-play selection
+    private val finishedVideoIds = mutableSetOf<String>()
 
     private var viewportWidth = 1080f
     private var viewportHeight = 2340f
@@ -122,10 +126,9 @@ class VideoPlaybackCoordinator(
 
     private var playbackDebounceJob: Job? = null
     private var visibilityUpdateDebounceJob: Job? = null
-    private var immediateCheckThrottleJob: Job? = null
 
     // Command flow - similar to iOS NotificationCenter
-    private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 1, extraBufferCapacity = 64)
+    private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 0, extraBufferCapacity = 64)
     val playbackCommands: SharedFlow<VideoPlaybackCommand> = _playbackCommands.asSharedFlow()
 
     /**
@@ -147,7 +150,7 @@ class VideoPlaybackCoordinator(
         }
 
         if (videosToAdd.isNotEmpty()) {
-            kotlinx.coroutines.runBlocking {
+            scope.launch {
                 buildVideoList(currentTweets, emptyList())
             }
         }
@@ -172,7 +175,7 @@ class VideoPlaybackCoordinator(
         }
 
         if (videosToAdd.isNotEmpty()) {
-            kotlinx.coroutines.runBlocking {
+            scope.launch {
                 buildVideoList(currentTweets, emptyList())
             }
         }
@@ -307,15 +310,11 @@ class VideoPlaybackCoordinator(
                                (previousRatio >= VISIBILITY_THRESHOLD && visibilityRatio < VISIBILITY_THRESHOLD)
 
         if (crossesThreshold) {
-            immediateCheckThrottleJob?.cancel()
-            immediateCheckThrottleJob = CoroutineScope(Dispatchers.Main).launch {
-                delay(IMMEDIATE_CHECK_THROTTLE_MS)
-                checkPrimaryVideoDuringScroll()
-            }
+            checkPrimaryVideoDuringScroll()
         }
 
         visibilityUpdateDebounceJob?.cancel()
-        visibilityUpdateDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+        visibilityUpdateDebounceJob = scope.launch {
             delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
             updateVisibleVideos()
             checkAndSwitchVideoIfNeeded()
@@ -332,16 +331,10 @@ class VideoPlaybackCoordinator(
             }
         }
 
-        val currentVisible = if (visibleVideos.isNotEmpty()) {
-            visibleVideos.filter { videoInfo ->
-                val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
-                visibilityRatio >= VISIBILITY_THRESHOLD
-            }
-        } else {
-            allVideos.filter { videoInfo ->
-                val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
-                visibilityRatio >= VISIBILITY_THRESHOLD
-            }
+        val source = if (visibleVideos.isNotEmpty()) visibleVideos else allVideos
+        val currentVisible = source.filter { videoInfo ->
+            videoInfo.identifier !in finishedVideoIds &&
+            (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
         }
 
         val sortedVisible = if (currentVisible.isNotEmpty()) {
@@ -364,7 +357,7 @@ class VideoPlaybackCoordinator(
                 val previousPrimaryId = primaryVideoId
                 primaryVideoId = correctPrimary.identifier
 
-                CoroutineScope(Dispatchers.Main).launch {
+                scope.launch {
                     if (previousPrimaryId != null && previousPrimaryId != correctPrimary.identifier) {
                         val previousPrimary = videoMetaMap[previousPrimaryId]
                         if (previousPrimary != null) {
@@ -431,9 +424,11 @@ class VideoPlaybackCoordinator(
         val currentVisibleIds = visibleVideos.map { it.identifier }.toSet()
         val videosToStop = previousVisibleIds - currentVisibleIds
         videosToStop.forEach { identifier ->
+            // Reset finished state so the video can play again when scrolled back
+            finishedVideoIds.remove(identifier)
             val info = videoMetaMap[identifier]
             if (info != null) {
-                CoroutineScope(Dispatchers.Main).launch {
+                scope.launch {
                     _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.videoMid))
                 }
             }
@@ -451,12 +446,13 @@ class VideoPlaybackCoordinator(
     }
 
     private fun identifyPrimaryVideo(): VideoPlaybackInfo? {
-        if (visibleVideos.isEmpty()) return null
+        val candidates = visibleVideos.filter { it.identifier !in finishedVideoIds }
+        if (candidates.isEmpty()) return null
 
         return if (scrollDirection) {
-            visibleVideos.firstOrNull()
+            candidates.firstOrNull()
         } else {
-            visibleVideos.lastOrNull()
+            candidates.lastOrNull()
         }
     }
 
@@ -469,7 +465,7 @@ class VideoPlaybackCoordinator(
         if (visibilityRatio < VISIBILITY_THRESHOLD) {
             val newPrimary = identifyPrimaryVideo()
             if (newPrimary != null && newPrimary.identifier != primaryId) {
-                CoroutineScope(Dispatchers.Main).launch {
+                scope.launch {
                     _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(primaryVideo.videoMid))
 
                     visibleVideos.forEach { videoInfo ->
@@ -500,7 +496,7 @@ class VideoPlaybackCoordinator(
     private fun startPlaybackWithDebounce() {
         playbackDebounceJob?.cancel()
 
-        playbackDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+        playbackDebounceJob = scope.launch {
             delay(PLAYBACK_DEBOUNCE_MS)
 
             if (visibleVideos.isNotEmpty() && primaryVideoId == null) {
@@ -516,11 +512,11 @@ class VideoPlaybackCoordinator(
             return
         }
 
-        val primary = identifyPrimaryVideo() ?: visibleVideos.first()
+        val primary = identifyPrimaryVideo() ?: return
         val previousPrimaryId = primaryVideoId
         primaryVideoId = primary.identifier
 
-        CoroutineScope(Dispatchers.Main).launch {
+        scope.launch {
             if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
                 val previousPrimary = videoMetaMap[previousPrimaryId]
                 if (previousPrimary != null) {
@@ -555,52 +551,15 @@ class VideoPlaybackCoordinator(
 
     fun handleVideoFinished(videoMid: MimeiId, tweetId: String) {
         val identifier = "${tweetId}_$videoMid"
+        finishedVideoIds.add(identifier)
 
         if (primaryVideoId == identifier) {
-            val currentIndex = visibleVideos.indexOfFirst { it.identifier == identifier }
-            if (currentIndex >= 0) {
-                val nextVideo = if (scrollDirection) {
-                    if (currentIndex < visibleVideos.size - 1) {
-                        visibleVideos[currentIndex + 1]
-                    } else null
-                } else {
-                    if (currentIndex > 0) {
-                        visibleVideos[currentIndex - 1]
-                    } else null
-                }
-
-                if (nextVideo != null) {
-                    primaryVideoId = nextVideo.identifier
-                    val direction = if (scrollDirection) "next (scrolling DOWN)" else "previous (scrolling UP)"
-                    Timber.d("VideoPlaybackCoordinator: Moving to $direction video: ${nextVideo.videoMid}")
-                    CoroutineScope(Dispatchers.Main).launch {
-                        _playbackCommands.emit(
-                            VideoPlaybackCommand.ShouldPlayVideo(
-                                tweetId = nextVideo.tweetId,
-                                videoMid = nextVideo.videoMid,
-                                videoIndex = nextVideo.index,
-                                isPrimary = true
-                            )
-                        )
-                    }
-                } else {
-                    // No next video, but current video is still visible — loop it
-                    val currentVideo = visibleVideos[currentIndex]
-                    Timber.d("VideoPlaybackCoordinator: Looping video: ${currentVideo.videoMid}")
-                    CoroutineScope(Dispatchers.Main).launch {
-                        _playbackCommands.emit(
-                            VideoPlaybackCommand.ShouldPlayVideo(
-                                tweetId = currentVideo.tweetId,
-                                videoMid = currentVideo.videoMid,
-                                videoIndex = currentVideo.index,
-                                isPrimary = true
-                            )
-                        )
-                    }
-                }
-            } else {
-                stopAllVideos()
+            primaryVideoId = null
+            // Emit stop so VideoPreview clears coordinatorWantsToPlay
+            scope.launch {
+                _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(videoMid))
             }
+            Timber.d("VideoPlaybackCoordinator: Video finished: $videoMid — stopping")
         }
     }
 
@@ -608,7 +567,7 @@ class VideoPlaybackCoordinator(
         playbackDebounceJob?.cancel()
         playbackDebounceJob = null
         primaryVideoId = null
-        CoroutineScope(Dispatchers.Main).launch {
+        scope.launch {
             _playbackCommands.emit(VideoPlaybackCommand.ShouldStopAllVideos)
         }
         Timber.d("VideoPlaybackCoordinator: Stopped all videos")
@@ -622,8 +581,6 @@ class VideoPlaybackCoordinator(
         playbackDebounceJob = null
         visibilityUpdateDebounceJob?.cancel()
         visibilityUpdateDebounceJob = null
-        immediateCheckThrottleJob?.cancel()
-        immediateCheckThrottleJob = null
 
         stopAllVideos()
 
@@ -634,6 +591,7 @@ class VideoPlaybackCoordinator(
         tweetCellBoundsMap.clear()
         tweetVisibilityMap.clear()
         videoVisibilityMap.clear()
+        finishedVideoIds.clear()
         previousContentOffset = 0f
         scrollDirection = true
 
