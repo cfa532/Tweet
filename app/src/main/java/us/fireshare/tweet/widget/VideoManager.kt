@@ -239,6 +239,9 @@ object VideoManager {
             // and the player can be re-prepared when visible again.
             videoPlayers[videoMid]?.let { player ->
                 try {
+                    // Detach surface before stopping to prevent MediaCodec IllegalStateException
+                    // when the codec tries to flush against a destroyed surface.
+                    player.clearVideoSurface()
                     player.stop()
                 } catch (e: Exception) {
                     Timber.e("VideoManager - Error stopping video: $e")
@@ -460,7 +463,7 @@ object VideoManager {
 
         videoPlayers.values.forEach { player ->
             try {
-                // Stop playback before releasing
+                player.clearVideoSurface()
                 player.stop()
                 player.release()
                 Timber.tag("VideoManager").d("✅ PLAYER RELEASED: Successfully released player")
@@ -847,12 +850,13 @@ object VideoManager {
         val player = videoPlayers.remove(videoMid)
         if (player != null) {
             try {
+                // Detach surface FIRST to prevent MediaCodec IllegalStateException
+                // during flush/stop when the surface is already destroyed.
+                player.clearVideoSurface()
+
                 // Stop playback and clear media sources to prevent leaks
                 player.stop()
                 player.clearMediaItems()
-
-                // Clear video surface to prevent surface leaks
-                player.clearVideoSurface()
 
                 // Release the player completely
                 player.release()
@@ -888,6 +892,7 @@ object VideoManager {
             val oldPlayer = videoPlayers[videoMid]
             oldPlayer?.let { player ->
                 try {
+                    player.clearVideoSurface()
                     player.stop()
                     player.clearMediaItems()
                     player.release()

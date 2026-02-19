@@ -757,12 +757,28 @@ fun ImageViewer(
     val mid = remember(imageUrl) { imageUrl?.getMimeiKeyFromUrl() }
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
     val imageFailedMessage = stringResource(R.string.failed_to_save_image)
-    var loadState by remember(mid) { 
+    // Synchronous cache lookup (memory + disk) to avoid blank frames during LazyColumn scroll.
+    // When items are recycled, this ensures cached images display instantly on recomposition.
+    // For loadOriginalImage=true (single-image grids), the bitmap is stored under "${mid}_original".
+    var loadState by remember(mid) {
+        val cachedBitmap = when {
+            initialBitmap != null -> initialBitmap
+            mid != null -> {
+                if (loadOriginalImage) {
+                    // Single-image grid: check original key first, then compressed fallback
+                    ImageCacheManager.getCachedBitmapSync(context, "${mid}_original")
+                        ?: ImageCacheManager.getCachedBitmapSync(context, mid)
+                } else {
+                    ImageCacheManager.getCachedBitmapSync(context, mid)
+                }
+            }
+            else -> null
+        }
         mutableStateOf(
-            if (initialBitmap != null) {
-                ImageLoadState(bitmap = initialBitmap, isLoading = false, isVisible = isVisible)
+            if (cachedBitmap != null) {
+                ImageLoadState(bitmap = cachedBitmap, isLoading = false, isVisible = isVisible)
             } else {
-                ImageLoadState(isVisible = isVisible)
+                ImageLoadState(isLoading = true, isVisible = isVisible)
             }
         )
     }

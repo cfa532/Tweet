@@ -755,7 +755,7 @@ fun TweetListView(
                         ) {
                             HorizontalDivider(
                                 modifier = Modifier
-                                    .padding(bottom = 8.dp)
+                                    .padding(top = 4.dp, bottom = 8.dp)
                                     .padding(horizontal = 1.dp),
                                 thickness = 1.dp,
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)

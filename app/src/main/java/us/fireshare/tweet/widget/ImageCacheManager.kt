@@ -45,9 +45,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object ImageCacheManager {
     private const val CACHE_DIR = "image_cache"
-    // Match iOS configuration: 35MB total cost limit, 100 image count limit
-    private const val MAX_MEMORY_CACHE_SIZE = 35 * 1024 * 1024 // 35MB (matches iOS totalCostLimit)
-    private const val MAX_MEMORY_CACHE_COUNT = 100 // Maximum number of images in memory (matches iOS countLimit)
+    private const val MAX_MEMORY_CACHE_SIZE = 100 * 1024 * 1024 // 100MB
+    private const val MAX_MEMORY_CACHE_COUNT = 200 // Maximum number of images in memory
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
@@ -125,6 +124,39 @@ object ImageCacheManager {
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
     private var currentMemoryUsage = AtomicInteger(0)
+
+    /**
+     * Synchronous memory cache lookup - no coroutine overhead.
+     * Use this from composable initialization to avoid blank frames during LazyColumn scroll.
+     */
+    fun getMemoryCachedBitmap(mid: String): Bitmap? {
+        return memoryCache[mid]?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 }
+    }
+
+    /**
+     * Synchronous cache lookup: memory first, then disk.
+     * Called from composable remember{} to prevent blank frames when LazyColumn recycles items.
+     * Disk reads are acceptable here because cached files are small compressed JPEGs (< 200KB).
+     */
+    fun getCachedBitmapSync(context: Context, mid: String): Bitmap? {
+        // Memory cache (fastest)
+        getMemoryCachedBitmap(mid)?.let { return it }
+
+        // Disk cache fallback (synchronous file decode)
+        try {
+            val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
+            if (file.exists()) {
+                val bitmap = decodeBitmapFromFileWithCorrectOrientation(file.absolutePath)
+                if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+                    addToMemoryCache(mid, bitmap)
+                    return bitmap
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore decode errors; LaunchedEffect will retry asynchronously
+        }
+        return null
+    }
     
     /**
      * Add bitmap to memory cache with size and count management (matches iOS NSCache limits)
