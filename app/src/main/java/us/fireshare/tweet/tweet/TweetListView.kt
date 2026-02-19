@@ -731,31 +731,36 @@ fun TweetListView(
                     )
                 }
             } else {
-                // Use itemsIndexed for efficient LazyColumn item management with inline dividers
-                itemsIndexed(
-                    items = visibleTweets,
-                    key = { _, tweet -> tweet.mid },
-                    contentType = { _, _ -> "tweet" }
-                ) { index, tweet ->
-                    parentEntry?.let {
-                        TweetItem(
-                            tweet = tweet,
-                            parentEntry = it,
-                            onTweetUnavailable = onTweetUnavailable,
-                            context = context,
-                            currentUserId = currentUserId,
-                            onScrollToTop = scrollToTop
-                        )
+                // Separate tweet and divider items for granular recycling and lighter scroll
+                visibleTweets.forEachIndexed { index, tweet ->
+                    item(
+                        key = tweet.mid,
+                        contentType = "tweet"
+                    ) {
+                        parentEntry?.let {
+                            TweetItem(
+                                tweet = tweet,
+                                parentEntry = it,
+                                onTweetUnavailable = onTweetUnavailable,
+                                context = context,
+                                currentUserId = currentUserId,
+                                onScrollToTop = scrollToTop
+                            )
+                        }
                     }
-                    // Inline divider (except after last tweet)
                     if (index < visibleTweets.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .padding(horizontal = 1.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                        )
+                        item(
+                            key = "divider_${tweet.mid}",
+                            contentType = "divider"
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp)
+                                    .padding(horizontal = 1.dp),
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                            )
+                        }
                     }
                 }
             }
