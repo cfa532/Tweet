@@ -217,7 +217,7 @@ fun TweetItemBody(
                     
                     Column(
                         modifier = Modifier.fillMaxWidth()
-                            .padding(top = 4.dp, end = 4.dp)
+                            .padding(top = 4.dp, end = 6.dp)
                     ) {
                         // MediaGrid for images, videos, and audio (visual content)
                         if (mediaAttachments.isNotEmpty()) {
