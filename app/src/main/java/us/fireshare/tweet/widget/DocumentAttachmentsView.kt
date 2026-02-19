@@ -408,8 +408,8 @@ private fun downloadDocument(
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     val downloadId = downloadManager.enqueue(request)
 
-    // Monitor download completion
-    Thread {
+    // Monitor download completion using a coroutine instead of blocking a thread
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
         var downloading = true
         while (downloading) {
             val query = DownloadManager.Query().setFilterById(downloadId)
@@ -418,7 +418,7 @@ private fun downloadDocument(
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                             Toast.makeText(
                                 context,
                                 context.getString(R.string.downloading_file),
@@ -429,7 +429,7 @@ private fun downloadDocument(
                         downloading = false
                     }
                     DownloadManager.STATUS_FAILED -> {
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                             Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
                             onDownloadingChange(false)
                         }
@@ -439,10 +439,10 @@ private fun downloadDocument(
             }
             cursor.close()
             if (downloading) {
-                Thread.sleep(500)
+                kotlinx.coroutines.delay(500)
             }
         }
-    }.start()
+    }
 }
 
 /**

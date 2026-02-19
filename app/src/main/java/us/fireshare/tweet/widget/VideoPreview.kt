@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -202,22 +203,28 @@ fun VideoPreview(
     /**
      * Stop playing when screen is locked or closed. Resume play when unlocked.
      * Keep ExoPlayer in memory for better user experience.
+     *
+     * rememberUpdatedState keeps the lifecycle observer's references current
+     * without recreating the DisposableEffect. After forceRecreatePlayer(),
+     * exoPlayer changes via remember(playerGeneration) — without this, the
+     * observer would still pause/resume the OLD (released) player.
      * */
+    val currentExoPlayer by rememberUpdatedState(exoPlayer)
+    val currentShouldPlay by rememberUpdatedState(shouldPlay)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
-        // Do not play video by default.
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
                     // Pause video playback but keep player in memory
-                    exoPlayer.playWhenReady = false
+                    currentExoPlayer.playWhenReady = false
                 }
 
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     // Resume video playback if coordinator/autoPlay wants it
-                    val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || shouldPlay) else isVideoVisible
-                    if (effectivelyVisible && shouldPlay) {
-                        exoPlayer.playWhenReady = true
+                    val effectivelyVisible = if (shouldUseCoordinator) (isVideoVisible || currentShouldPlay) else isVideoVisible
+                    if (effectivelyVisible && currentShouldPlay) {
+                        currentExoPlayer.playWhenReady = true
                     }
                 }
 
@@ -228,10 +235,11 @@ fun VideoPreview(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            // Mark video as inactive in VideoManager instead of releasing
-            videoMid?.let { mid ->
-                VideoManager.markVideoInactive(mid)
-            }
+            // Active tracking is handled exclusively by rememberVideoLoadingManager
+            // (markVideoVisible/markVideoNotVisible). Do NOT call markVideoInactive here
+            // — it would double-decrement the count and desync from the balanced
+            // increment/decrement in VideoLoadingManager.
+
             // Report 0 visibility so the coordinator removes this video from its
             // visible list. Without this, the stale 100% entry persists after the
             // composable is recycled by LazyColumn and the coordinator never
@@ -248,10 +256,11 @@ fun VideoPreview(
 
     LaunchedEffect(isVideoVisible, shouldPlay) {
         if (effectivelyVisible) {
-            // Mark video as active in VideoManager
-            videoMid?.let { mid ->
-                VideoManager.markVideoActive(mid)
-            }
+            // Active tracking is handled by rememberVideoLoadingManager exclusively.
+            // Do NOT call markVideoActive here — this LaunchedEffect re-runs on every
+            // isVideoVisible/shouldPlay change, inflating the active count without a
+            // matching decrement. The inflated count then prevents markVideoNotVisible
+            // from stopping the player when the video scrolls off screen.
 
             exoPlayer.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
 
@@ -308,7 +317,11 @@ fun VideoPreview(
 
     // Note: Stream parsing error monitoring removed - errors are now ignored to keep playback continuous
 
-    LaunchedEffect(isMuted) {
+    // Key on playerGeneration so the mute state is reapplied when the player is
+    // force-recreated (e.g. after retry). Without this, the new player starts at
+    // default volume 1.0f (unmuted) and LaunchedEffect never re-runs because
+    // isMuted itself hasn't changed.
+    LaunchedEffect(isMuted, playerGeneration) {
         try {
             exoPlayer.volume = if (isMuted) 0f else 1f
             // Only persist mute state to global preferences if NOT using independent mute state
@@ -321,16 +334,14 @@ fun VideoPreview(
         }
     }
 
-    // Watch for global mute state changes only when visible, at a relaxed cadence
-    // Skip this synchronization if using independent mute state (TweetDetailView/FullScreen)
-    LaunchedEffect(isVideoVisible, useIndependentMuteState) {
-        if (!isVideoVisible || useIndependentMuteState) return@LaunchedEffect
-        while (isVideoVisible) {
-            val globalMuteState = preferenceHelper.getSpeakerMute()
+    // Reactively sync with global mute state via StateFlow instead of polling every 500ms.
+    // Skip if using independent mute state (TweetDetailView/FullScreen).
+    LaunchedEffect(useIndependentMuteState) {
+        if (useIndependentMuteState) return@LaunchedEffect
+        preferenceHelper.speakerMuteFlow.collect { globalMuteState ->
             if (isMuted != globalMuteState) {
                 isMuted = globalMuteState
             }
-            delay(500) // Check every 500ms while visible
         }
     }
 
@@ -697,10 +708,12 @@ fun VideoPreview(
                                             false
                                         }
                                         if (success) {
-                                            // Ensure playback resumes if visible and allowed
-                                            if (isVideoVisible && autoPlay) {
-                                                exoPlayer.playWhenReady = true
-                                            }
+                                            // forceRecreatePlayer increments playerGenerations,
+                                            // triggering recomposition. The new player will get
+                                            // playWhenReady from the coordinator/LaunchedEffect
+                                            // and mute state from LaunchedEffect(isMuted, playerGeneration).
+                                            // Do NOT set exoPlayer.playWhenReady here — exoPlayer is
+                                            // the stale (released) reference.
                                             Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
                                         } else {
                                             // If recovery failed, show error again

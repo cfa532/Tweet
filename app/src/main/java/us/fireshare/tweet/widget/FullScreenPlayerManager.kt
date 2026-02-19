@@ -3,6 +3,9 @@ package us.fireshare.tweet.widget
 import android.content.Context
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
@@ -16,6 +19,9 @@ import us.fireshare.tweet.datamodel.Tweet
  */
 object FullScreenPlayerManager {
     private var exoPlayer: ExoPlayer? = null
+    private val _playerFlow = MutableStateFlow<ExoPlayer?>(null)
+    /** Observe this instead of polling getCurrentPlayer() every 100ms. */
+    val playerFlow: StateFlow<ExoPlayer?> = _playerFlow.asStateFlow()
     private var currentVideoList: List<Pair<MimeiId, MediaType>>? = null
     private var videoBaseUrlMap: Map<MimeiId, String> = emptyMap() // Map videoMid to author's baseUrl
     private var currentVideoIndex: Int = 0
@@ -33,7 +39,8 @@ object FullScreenPlayerManager {
         if (exoPlayer == null) {
             Timber.d("FullScreenPlayerManager - Initializing singleton player")
             exoPlayer = createExoPlayer(context.applicationContext, "")
-            
+            _playerFlow.value = exoPlayer
+
             // Add listener for automatic video rewinding when finished
             exoPlayer?.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -220,6 +227,7 @@ object FullScreenPlayerManager {
             // Release the old player and set the new one
             player.release()
             exoPlayer = newPlayer
+            _playerFlow.value = newPlayer
 
             // Reset manual navigation flag when starting a fresh video
             // so that natural video completion can auto-advance
@@ -314,6 +322,7 @@ object FullScreenPlayerManager {
         exoPlayer?.playWhenReady = false
         exoPlayer?.release()
         exoPlayer = null
+        _playerFlow.value = null
         currentVideoList = null
         videoBaseUrlMap = emptyMap()
         currentVideoIndex = 0

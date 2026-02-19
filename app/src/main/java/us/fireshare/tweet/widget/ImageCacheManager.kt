@@ -120,6 +120,7 @@ object ImageCacheManager {
     // Pause/resume mechanism
     private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
     private val pausedDownloadMutex = Any()
+    private var resumerJob: kotlinx.coroutines.Job? = null
 
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
@@ -886,6 +887,7 @@ object ImageCacheManager {
         synchronized(pausedDownloadMutex) {
             pausedDownloads[mid] = true
         }
+        ensureResumerRunning()
     }
     
     /**
@@ -907,38 +909,39 @@ object ImageCacheManager {
     }
     
     /**
-     * Start background task to periodically resume paused downloads and clean up stuck downloads
+     * Start an on-demand background task to resume paused downloads and clean up stuck downloads.
+     * Runs only while there are paused downloads, then stops automatically.
      */
-    private fun startPausedDownloadResumer() {
-        imageLoadingScope.launch {
+    private fun ensureResumerRunning() {
+        if (resumerJob?.isActive == true) return
+        resumerJob = imageLoadingScope.launch {
             while (true) {
-                delay(5000L) // Check every 5 seconds
+                delay(5000L)
 
                 synchronized(pausedDownloadMutex) {
-                    if (pausedDownloads.isNotEmpty()) {
-                        // Resume paused downloads if we have available slots
-                        if (downloadSemaphore.availablePermits > 0) {
-                            val pausedMids = pausedDownloads.keys.toList()
-                            for (mid in pausedMids) {
-                                if (downloadSemaphore.availablePermits > 0) {
-                                    pausedDownloads.remove(mid)
-                                } else {
-                                    break // No more slots available
-                                }
+                    if (pausedDownloads.isNotEmpty() && downloadSemaphore.availablePermits > 0) {
+                        val pausedMids = pausedDownloads.keys.toList()
+                        for (mid in pausedMids) {
+                            if (downloadSemaphore.availablePermits > 0) {
+                                pausedDownloads.remove(mid)
+                            } else {
+                                break
                             }
                         }
                     }
                 }
 
-                // Clean up stuck downloads
                 cleanupStuckDownloads()
+
+                // Stop the resumer when there's nothing left to manage
+                val hasPaused = synchronized(pausedDownloadMutex) { pausedDownloads.isNotEmpty() }
+                val hasOngoing = ongoingDownloads.isNotEmpty()
+                if (!hasPaused && !hasOngoing) {
+                    Timber.d("ImageCacheManager - Resumer stopping: no paused or ongoing downloads")
+                    break
+                }
             }
         }
-    }
-    
-    // Initialize the paused download resumer
-    init {
-        startPausedDownloadResumer()
     }
 
     /**

@@ -3,6 +3,9 @@ package us.fireshare.tweet
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.TW_CONST
 
@@ -67,8 +70,13 @@ class PreferenceHelper(context: Context) {
         return urls
     }
 
+    private val _speakerMuteFlow = MutableStateFlow(sharedPreferences.getBoolean("speakerMuted", true))
+    /** Observe global mute state reactively instead of polling SharedPreferences. */
+    val speakerMuteFlow: StateFlow<Boolean> = _speakerMuteFlow.asStateFlow()
+
     fun setSpeakerMute(isMuted: Boolean) {
         sharedPreferences.edit { putBoolean("speakerMuted", isMuted) }
+        _speakerMuteFlow.value = isMuted
     }
     fun getSpeakerMute(): Boolean {
         return sharedPreferences.getBoolean("speakerMuted", true)

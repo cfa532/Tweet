@@ -142,22 +142,8 @@ fun IndependentFullScreenPlayer(
         totalVideos = FullScreenPlayerManager.getTotalVideos()
     }
     
-    var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
-    
-    // Update exoPlayer when FullScreenPlayerManager creates a new player
-    LaunchedEffect(Unit) {
-        // Initial check
-        exoPlayer = FullScreenPlayerManager.getCurrentPlayer()
-        
-        // Listen for player changes (this is a simple approach - in a real app you might want a more sophisticated observer)
-        while (true) {
-            kotlinx.coroutines.delay(100) // Check every 100ms
-            val currentPlayer = FullScreenPlayerManager.getCurrentPlayer()
-            if (currentPlayer != exoPlayer) {
-                exoPlayer = currentPlayer
-            }
-        }
-    }
+    // Reactively observe player changes via StateFlow instead of polling every 100ms
+    val exoPlayer by FullScreenPlayerManager.playerFlow.collectAsState()
     
     // Handle immersive mode and allow rotation during fullscreen
     LaunchedEffect(Unit) {
