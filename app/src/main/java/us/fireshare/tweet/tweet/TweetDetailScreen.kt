@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -151,6 +152,13 @@ fun TweetDetailScreen(
         targetValue = if (showTopAppBar) 1f else 0f,
         animationSpec = tween(durationMillis = 300),
         label = "topAppBarAlpha"
+    )
+
+    // Animate bottom navigation bar height (hide when scrolling down)
+    val bottomNavHeight by animateDpAsState(
+        targetValue = if (showTopAppBar) 72.dp else 0.dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "bottomNavHeight"
     )
 
     // Track scroll direction with improved logic
@@ -405,11 +413,18 @@ fun TweetDetailScreen(
                         }
                     }
                 )
-                BottomNavigationBar(
-                    modifier = Modifier.alpha(BottomBarState.opacity),
-                    navController = navController,
-                    selectedIndex = 0 // Home tab
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(bottomNavHeight)
+                        .clipToBounds()
+                ) {
+                    BottomNavigationBar(
+                        modifier = Modifier.alpha(BottomBarState.opacity),
+                        navController = navController,
+                        selectedIndex = 0 // Home tab
+                    )
+                }
             }
         },
     ) { innerPadding ->
