@@ -125,7 +125,6 @@ fun TweetItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 8000.dp)
             .clickable(onClick = {
                 // Navigate to detail view when tapping on non-tappable areas
                 navController.navigate(
@@ -259,12 +258,13 @@ private fun RetweetContent(
 
         when {
             isLoadingOriginal -> {
-                // Show loading state with spinner
+                // Show loading state with minimum height to reduce layout jump when content loads
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 120.dp)
                         .padding(16.dp),
-                    contentAlignment = androidx.compose.ui.Alignment.Center
+                    contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.material3.CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
@@ -585,7 +585,7 @@ private fun QuotedTweetContent(
 
     when {
         isLoadingOriginal -> {
-            // Show loading state for quoted tweet with spinner
+            // Show loading state with minimum height to reduce layout jump when content loads
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 tonalElevation = 8.dp,
@@ -598,8 +598,9 @@ private fun QuotedTweetContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 100.dp)
                         .padding(16.dp),
-                    contentAlignment = androidx.compose.ui.Alignment.Center
+                    contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.material3.CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
