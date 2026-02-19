@@ -102,7 +102,7 @@ fun TweetItem(
     var isVisible by remember { mutableStateOf(false) }
     var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
-    val debounceMs = 100L // 100ms debounce for visibility detection
+    val debounceMs = 200L // 200ms debounce for visibility detection
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
@@ -140,16 +140,18 @@ fun TweetItem(
                     isVisible = isElementVisible(layoutCoordinates, 50)
                     lastVisibilityUpdate = now
 
+                    val bounds = layoutCoordinates.boundsInRoot()
+                    tweetTopY = bounds.top
+
                     // Update VideoPlaybackCoordinator with cell position and visibility
                     // This replaces the old video-based tracking with cell-based tracking like iOS
                     coordinator.updateTweetCellPosition(
                         tweetId = tweet.mid,
-                        cellTopY = layoutCoordinates.boundsInRoot().top,
+                        cellTopY = bounds.top,
                         cellHeight = layoutCoordinates.size.height.toFloat(),
                         isVisible = isVisible
                     )
                 }
-                tweetTopY = layoutCoordinates.boundsInRoot().top
             }
     ) {
         when {
