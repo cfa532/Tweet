@@ -150,7 +150,7 @@ fun TweetDetailBody(
                         SelectableText(
                             modifier = Modifier.padding(bottom = 8.dp),
                             text = it,
-                            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 20.sp),
+                            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
                         ) { username ->
                             viewModel.viewModelScope.launch(IO) {
                                 HproseInstance.getUserId(username)?.let {
