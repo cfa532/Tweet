@@ -272,6 +272,22 @@ fun TweetListView(
             ScrollPositionStore.save(context, 0, 0)
         }
     }
+
+    // Restore scroll position when list is populated (fixes restore when list was empty on first frame)
+    var scrollRestoredForSession by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        if (scrollRestoredForSession || initialScrollPosition.first <= 0) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.totalItemsCount }
+            .collect { totalItems ->
+                if (totalItems > initialScrollPosition.first && !scrollRestoredForSession) {
+                    scrollRestoredForSession = true
+                    listState.scrollToItem(
+                        initialScrollPosition.first,
+                        initialScrollPosition.second
+                    )
+                }
+            }
+    }
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup
     fun addJob(id: String, job: Job) {
