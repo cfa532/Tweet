@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -35,8 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -104,6 +107,10 @@ fun TweetItem(
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
     val debounceMs = 150L // Match iOS videoVisibilityThrottleInterval for scroll smoothness
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
+    val density = LocalDensity.current
+    // Cached height for scroll-up stability (match iOS TweetHeightCache + willDisplay)
+    val cachedHeightPx = remember(tweet.mid) { TweetHeightCache.getHeightPx(tweet.mid) }
+    val cachedHeightDp: Dp? = cachedHeightPx?.let { px -> density.run { px.toDp() } }
     
     // Optimize: Pre-compute derived values to avoid recalculation
     val isRetweet by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
@@ -125,6 +132,7 @@ fun TweetItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (cachedHeightDp != null) Modifier.heightIn(min = cachedHeightDp) else Modifier)
             .clickable(onClick = {
                 // Navigate to detail view when tapping on non-tappable areas
                 navController.navigate(
@@ -135,6 +143,11 @@ fun TweetItem(
                 )
             })
             .onGloballyPositioned { layoutCoordinates ->
+                val measuredHeightPx = layoutCoordinates.size.height.toFloat()
+                // Cache height for scroll-up stability (match iOS willDisplay); skip placeholder heights
+                if (measuredHeightPx >= 60f) {
+                    TweetHeightCache.setHeight(tweet.mid, measuredHeightPx)
+                }
                 val now = System.currentTimeMillis()
                 if (now - lastVisibilityUpdate > debounceMs) {
                     isVisible = isElementVisible(layoutCoordinates, 50)
@@ -148,7 +161,7 @@ fun TweetItem(
                     coordinator.updateTweetCellPosition(
                         tweetId = tweet.mid,
                         cellTopY = bounds.top,
-                        cellHeight = layoutCoordinates.size.height.toFloat(),
+                        cellHeight = measuredHeightPx,
                         isVisible = isVisible
                     )
                 }
