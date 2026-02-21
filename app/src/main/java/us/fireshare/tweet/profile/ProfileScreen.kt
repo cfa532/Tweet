@@ -23,11 +23,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,6 +60,8 @@ import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -165,14 +167,19 @@ fun ProfileScreen(
                         )
                     }
                 } else {
-                    ProfileContentWithTweetListView(
-                        viewModel = viewModel,
-                        navController = navController,
-                        parentEntry = parentEntry,
-                        scrollBehavior = scrollBehavior,
-                        initState = initState,
-                        userId = userId,
-                        onScrollStateChange = { newScrollState ->
+                    // Use a dedicated coordinator for this profile so leaving main feed
+                    // (or returning from profile) does not clear this list's playback state.
+                    CompositionLocalProvider(
+                        LocalVideoCoordinator provides remember { VideoPlaybackCoordinator() }
+                    ) {
+                        ProfileContentWithTweetListView(
+                            viewModel = viewModel,
+                            navController = navController,
+                            parentEntry = parentEntry,
+                            scrollBehavior = scrollBehavior,
+                            initState = initState,
+                            userId = userId,
+                            onScrollStateChange = { newScrollState ->
                                 scrollState = newScrollState
 
                                 // Update bottom bar transparency based on scroll direction
@@ -206,6 +213,7 @@ fun ProfileScreen(
                             scrollBehavior.state.heightOffset = 0f
                         }
                         )
+                    }
                 }
             }
         }

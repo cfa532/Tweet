@@ -74,6 +74,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
+import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
@@ -229,6 +230,10 @@ fun TweetListView(
     // play full screen videos in order.
     sharedViewModel.tweetListViewModel = tweetListViewModel
 
+    // Use the coordinator from CompositionLocal (main feed = shared, profile = per-screen instance)
+    // so clearing on dispose only affects this list and does not stop the other screen's playback.
+    val coordinator = LocalVideoCoordinator.current
+
     // Create video-indexed list that maintains feed order and handles retweets properly
     var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }
     val processedTweetIds = remember { Collections.synchronizedSet(mutableSetOf<MimeiId>()) }
@@ -326,8 +331,10 @@ fun TweetListView(
             )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
-            // Release inactive video players when leaving feed to free memory
-            VideoPlaybackCoordinator.shared.clear()
+            // Release inactive video players when leaving this feed to free memory.
+            // Clear only this list's coordinator (from LocalVideoCoordinator) so main feed and
+            // profile coordinators do not clear each other when switching screens.
+            coordinator.clear()
             VideoManager.cleanupInactivePlayers()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
             isRefreshingAtBottom = false
@@ -405,7 +412,7 @@ fun TweetListView(
                         withContext(Dispatchers.Main) {
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
-                            VideoPlaybackCoordinator.shared.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+                            coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                         }
                     } else if (tweets.size > lastProcessedTweetCount) {
                         // PERF FIX: Use takeLast instead of filter for O(1) slice
@@ -423,7 +430,7 @@ fun TweetListView(
                                 videoIndexedList = videoIndexedList + newVideos
                                 tweetListViewModel.setVideoIndexedList(videoIndexedList)
                                 onVideoIndexedListChange?.invoke(videoIndexedList)
-                                VideoPlaybackCoordinator.shared.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+                                coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                             }
                         }
                     }
@@ -513,7 +520,7 @@ fun TweetListView(
                 // Throttle VideoPlaybackCoordinator scroll direction updates
                 if (isScrolling && (abs(indexDelta) >= 2 || abs(offsetDelta) > 200)) {
                     val currentOffset = firstVisibleItem * 1000f + scrollOffset
-                    VideoPlaybackCoordinator.shared.updateScrollDirection(currentOffset)
+                    coordinator.updateScrollDirection(currentOffset)
                 }
 
                 // Only invoke callback if state actually changed
@@ -720,7 +727,7 @@ fun TweetListView(
                     if (size.width != lastViewportWidth || size.height != lastViewportHeight) {
                         lastViewportWidth = size.width
                         lastViewportHeight = size.height
-                        VideoPlaybackCoordinator.shared.updateViewportSize(
+                        coordinator.updateViewportSize(
                             size.width.toFloat(),
                             size.height.toFloat()
                         )
