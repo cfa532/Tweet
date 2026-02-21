@@ -37,6 +37,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -273,18 +274,22 @@ fun TweetListView(
         }
     }
 
-    // Restore scroll position when list is populated (re-read from store and wait for layout)
+    // Restore scroll position when list is populated (same-session navigation).
+    // We must wait for LazyColumn to complete first layout before scrollToItem(), otherwise
+    // the scroll is wrong or the list jumps. iOS uses DispatchQueue.main.async (no fixed delay)
+    // or 0.1s for load-more scroll; we wait one frame to avoid the visible jump that a 100ms
+    // delay caused.
     var scrollRestoredForSession by remember { mutableStateOf(false) }
     LaunchedEffect(tweets.size, context) {
         if (scrollRestoredForSession || tweets.isEmpty()) return@LaunchedEffect
         val (index, offset) = ScrollPositionStore.restore(context)
         if (index <= 0) return@LaunchedEffect
-        // LazyColumn item count is ~2 per tweet (tweet + divider); cap index to avoid OOB
-        if (index >= tweets.size * 2) return@LaunchedEffect
-        delay(100) // allow LazyColumn to complete first layout
+        val maxIndex = (tweets.size * 2) + 4
+        if (index >= maxIndex) return@LaunchedEffect
+        withFrameMillis { } // one frame so first layout is done (avoids 100ms visible jump)
         if (!scrollRestoredForSession) {
             scrollRestoredForSession = true
-            listState.scrollToItem(index, offset)
+            listState.scrollToItem(index.coerceIn(0, maxIndex), offset)
         }
     }
     
