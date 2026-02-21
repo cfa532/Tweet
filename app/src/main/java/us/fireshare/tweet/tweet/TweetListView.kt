@@ -74,6 +74,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import us.fireshare.tweet.widget.rememberTweetVideoPreloader
@@ -322,6 +323,9 @@ fun TweetListView(
             )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
+            // Release inactive video players when leaving feed to free memory
+            VideoPlaybackCoordinator.shared.clear()
+            VideoManager.cleanupInactivePlayers()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
             isRefreshingAtBottom = false
             isRefreshingAtTop = false
