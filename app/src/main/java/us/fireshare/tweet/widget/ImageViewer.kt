@@ -265,7 +265,21 @@ fun AdvancedImageViewer(
             if (initialBitmap == null) {
                 try {
                     val originalMid = "${mid}_original"
-                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
+                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible) { preview ->
+                        // Show partial (low-res) image while full image loads so user sees progress
+                        if (loadState.isLoading && !preview.isRecycled) {
+                            loadState = loadState.copy(bitmap = preview)
+                        }
+                    }
+                    val downloadedBitmap = try {
+                        deferred.await()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Debounce cancellation: let download continue 3s then pause so scroll-back gets result
+                        loadState = loadState.copy(isLoading = false)
+                        ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
+                        Timber.tag("ImageViewer").d("Image loading cancelled, scheduled pause in 3s: $imageUrl")
+                        return@LaunchedEffect
+                    }
                     
                     if (downloadedBitmap != null) {
                         // Update with original high-resolution image
@@ -282,16 +296,18 @@ fun AdvancedImageViewer(
                         
                         onLoadComplete?.invoke()
                         Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl")
+                    } else {
                         // Server load failed - show error or fallback to compressed
                         if (compressedBitmap == null) {
                             loadState = loadState.copy(
-                                isLoading = false, 
+                                isLoading = false,
                                 hasError = true
                             )
                             Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl")
                             
                             // Auto-retry if within limit and debounced
                             if (retryCount < 3 && shouldRetry()) {
+                                loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                                 delay(2000L) // Wait 2 seconds before retry
                                 retryCount++
                                 lastRetryTime = System.currentTimeMillis()
@@ -305,12 +321,13 @@ fun AdvancedImageViewer(
                     Timber.tag("ImageViewer").e(e, "Error loading original image from server: $imageUrl")
                     if (compressedBitmap == null) {
                         loadState = loadState.copy(
-                            isLoading = false, 
+                            isLoading = false,
                             hasError = true
                         )
                         
                         // Auto-retry if within limit and debounced
                         if (retryCount < 3 && shouldRetry()) {
+                            loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                             delay(2000L) // Wait 2 seconds before retry
                             retryCount++
                             lastRetryTime = System.currentTimeMillis()
@@ -328,17 +345,22 @@ fun AdvancedImageViewer(
             // Handle cancellation gracefully - don't retry on cancellation
             if (e is kotlinx.coroutines.CancellationException) {
                 Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
+                loadState = loadState.copy(isLoading = false)
+                // Debounce cancellation: schedule pause in 3s so scroll-back can still get result
+                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
                 return@LaunchedEffect
             }
             
             loadState = loadState.copy(
-                isLoading = false, 
+                isLoading = false,
                 hasError = true
             )
             Timber.tag("ImageViewer").e("Error loading image: $e")
             
             // Auto-retry if within limit and debounced
             if (retryCount < 3 && shouldRetry()) {
+                loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                 delay(2000L) // Wait 2 seconds before retry
                 retryCount++
                 lastRetryTime = System.currentTimeMillis()
@@ -360,7 +382,8 @@ fun AdvancedImageViewer(
                 retryCount++
             }
         } else {
-            // If image becomes invisible, pause the download instead of cancelling
+            // Debounce 3s before pausing so quick scroll-back still gets the result
+            delay(3000L)
             ImageCacheManager.pauseDownload(mid)
             Timber.tag("ImageViewer").d("AdvancedImageViewer became invisible, paused download: $imageUrl")
         }
@@ -544,17 +567,15 @@ fun AdvancedImageViewer(
                                     } catch (_: Exception) {
                                         false
                                     }
-                                    
-                                    // Only set image if we haven't set one yet for this imageUrl
-                                    // This prevents flicker when upgrading from compressed to original
-                                    if (!imageSetInView || !hasImage) {
+                                    // Upgrade from progressive preview (temp file) to full image when final loads
+                                    val isUpgradeFromPreview = currentImageUri?.toString()?.contains("temp_image") == true
+                                    val shouldSetImage = !imageSetInView || !hasImage || isUpgradeFromPreview
+                                    if (shouldSetImage) {
                                         currentImageUri = imageUri
                                         imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
                                         imageSetInView = true
                                         Timber.tag("ImageViewer").d("Setting image in SubsamplingScaleImageView: $imageUri")
                                     } else {
-                                        // Image is already loaded - don't reload to prevent flicker
-                                        // Update currentImageUri to match so we don't keep trying
                                         currentImageUri = imageUri
                                         Timber.tag("ImageViewer").d("Skipping image reload to prevent flicker - image already loaded")
                                     }
@@ -825,7 +846,8 @@ fun ImageViewer(
                     retryCount++
                 }
             } else {
-                // If image becomes invisible, pause the download instead of cancelling
+                // Debounce 3s before pausing so quick scroll-back still gets the result
+                delay(3000L)
                 ImageCacheManager.pauseDownload(mid)
                 Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
             }
@@ -894,9 +916,23 @@ fun ImageViewer(
             // Step 2: Load image from server (only if no cached images found)
             try {
                 if (loadOriginalImage) {
-                    // Load original high-res image from server
+                    // Load original high-res image from server (deferred so cancellation can be debounced)
                     val originalMid = "${mid}_original"
-                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(context, imageUrl, mid, isVisible)
+                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible) { preview ->
+                        // Show partial (low-res) image while full image loads so user sees progress
+                        if (loadState.isLoading && !preview.isRecycled) {
+                            loadState = loadState.copy(bitmap = preview)
+                        }
+                    }
+                    val downloadedBitmap = try {
+                        deferred.await()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Debounce cancellation: let download continue 3s then pause so scroll-back gets result
+                        loadState = loadState.copy(isLoading = false)
+                        ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
+                        Timber.tag("ImageViewer").d("Image loading cancelled, scheduled pause in 3s: $imageUrl")
+                        return@LaunchedEffect
+                    }
                     
                     if (downloadedBitmap != null) {
                         // Update with loaded original image
@@ -925,6 +961,7 @@ fun ImageViewer(
                             
                             // Auto-retry if within limit, visible, and debounced
                             if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                                loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                                 delay(2000L) // Wait 2 seconds before retry
                                 retryCount++
                                 lastRetryTime = System.currentTimeMillis()
@@ -957,13 +994,14 @@ fun ImageViewer(
                         // Server load failed - show error
                         if (initialBitmap == null) {
                             loadState = loadState.copy(
-                                isLoading = false, 
+                                isLoading = false,
                                 hasError = true
                             )
                             Timber.tag("ImageViewer").e("Failed to load compressed image from server: $imageUrl - hasError: true, retryCount: $retryCount")
                             
                             // Auto-retry if within limit, visible, and debounced
                             if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                                loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                                 delay(2000L) // Wait 2 seconds before retry
                                 retryCount++
                                 lastRetryTime = System.currentTimeMillis()
@@ -978,12 +1016,13 @@ fun ImageViewer(
                 Timber.tag("ImageViewer").e(e, "Error loading image from server: $imageUrl")
                 if (initialBitmap == null) {
                     loadState = loadState.copy(
-                        isLoading = false, 
+                        isLoading = false,
                         hasError = true
                     )
                     
                     // Auto-retry if within limit, visible, and debounced
                     if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                        loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                         delay(2000L) // Wait 2 seconds before retry
                         retryCount++
                         lastRetryTime = System.currentTimeMillis()
@@ -997,17 +1036,23 @@ fun ImageViewer(
             // Handle cancellation gracefully - don't retry on cancellation
             if (e is kotlinx.coroutines.CancellationException) {
                 Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
+                loadState = loadState.copy(isLoading = false)
+                // Debounce cancellation: schedule pause in 3s so scroll-back can still get result (both keys for original/compressed)
+                ImageCacheManager.schedulePauseDownload(mid, 3000L)
+                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
                 return@LaunchedEffect
             }
             
             loadState = loadState.copy(
-                isLoading = false, 
+                isLoading = false,
                 hasError = true
             )
             Timber.tag("ImageViewer").d("Error loading image: $e")
             
             // Auto-retry if within limit, visible, and debounced
             if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                 delay(2000L) // Wait 2 seconds before retry
                 retryCount++
                 lastRetryTime = System.currentTimeMillis()

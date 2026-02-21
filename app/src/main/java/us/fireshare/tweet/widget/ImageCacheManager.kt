@@ -17,8 +17,10 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -570,9 +572,44 @@ object ImageCacheManager {
                 if (!dir.exists()) dir.mkdirs()
                 tempFile = File.createTempFile("img_${mid}_", ".tmp", dir)
                 
-                // Stream download directly to file (avoids loading entire image into memory)
+                // Progressive: stream in chunks and try to show partial preview during download
+                val bufferSize = 8192
+                val buffer = ByteArray(bufferSize)
+                var progressivePreviewSent = false
+                val progressiveThreshold = 80 * 1024L // Try first preview after 80KB
+                val previewOptions = BitmapFactory.Options().apply {
+                    inSampleSize = PROGRESSIVE_SAMPLE_SIZE
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+
                 FileOutputStream(tempFile).use { out ->
-                    inputStream.copyTo(out, bufferSize = 8192) // 8KB buffer for efficient streaming
+                    var len: Int
+                    while (inputStream.read(buffer).also { len = it } != -1) {
+                        if (isDownloadPaused(mid)) break
+                        out.write(buffer, 0, len)
+                        // Try to decode and show partial preview during download (once we have enough bytes)
+                        if (onProgressiveLoad != null && !progressivePreviewSent && tempFile.length() >= progressiveThreshold) {
+                            var preview: Bitmap? = null
+                            try {
+                                preview = BitmapFactory.decodeFile(tempFile.absolutePath, previewOptions)
+                                if (preview != null && !preview.isRecycled && preview.width > 0 && preview.height > 0) {
+                                    progressivePreviewSent = true
+                                    withContext(Dispatchers.Main) {
+                                        try {
+                                            onProgressiveLoad(preview)
+                                        } catch (e: Exception) {
+                                            Timber.tag("ImageCacheManager").w(e, "Progressive preview callback failed")
+                                        } finally {
+                                            preview = null // Callback was given the bitmap; must not recycle
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) { /* incomplete file, keep downloading */ }
+                            preview?.let {
+                                if (!it.isRecycled) try { it.recycle() } catch (_: Exception) { }
+                            }
+                        }
+                    }
                 }
                 
                 // Check if download was paused during streaming
@@ -581,40 +618,27 @@ object ImageCacheManager {
                     return@withContext null
                 }
                 
-                // Progressive loading: First decode low-quality preview (1/4 resolution) from file
-                if (onProgressiveLoad != null && tempFile != null && tempFile.length() > 50 * 1024) { // Only for images > 50KB
+                // Decode final low-quality preview (1/4 resolution) from complete file and show before full decode
+                if (onProgressiveLoad != null && tempFile != null && tempFile.length() > 50 * 1024) {
                     var preview: Bitmap? = null
                     try {
-                        val previewOptions = BitmapFactory.Options().apply {
-                            inSampleSize = PROGRESSIVE_SAMPLE_SIZE // 1/4 resolution
-                            inPreferredConfig = Bitmap.Config.RGB_565
-                        }
-                        // Decode preview directly from file (no memory load)
                         preview = BitmapFactory.decodeFile(tempFile.absolutePath, previewOptions)
                         if (preview != null && !preview.isRecycled) {
                             withContext(Dispatchers.Main) {
                                 try {
                                     onProgressiveLoad(preview)
-                                    preview = null  // Callback owns the bitmap now, don't recycle
                                 } catch (e: Exception) {
-                                    // Callback failed, bitmap will be recycled in finally block
                                     Timber.tag("ImageCacheManager").w(e, "Preview callback failed")
+                                } finally {
+                                    preview = null // Callback was given the bitmap; must not recycle
                                 }
                             }
                         }
                     } catch (e: Exception) {
-                        // Ignore preview decode errors
                         Timber.tag("ImageCacheManager").w(e, "Preview decode failed")
                     } finally {
-                        // FIX P0-1: Always recycle preview bitmap if we still own it
                         preview?.let {
-                            if (!it.isRecycled) {
-                                try {
-                                    it.recycle()
-                                } catch (e: Exception) {
-                                    // Ignore recycle errors
-                                }
-                            }
+                            if (!it.isRecycled) try { it.recycle() } catch (_: Exception) { }
                         }
                     }
                 }
@@ -912,6 +936,33 @@ object ImageCacheManager {
         return "Available: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}, Queued: ${downloadQueue.size}, Paused: ${pausedDownloads.size}"
     }
     
+    /**
+     * Schedule a pause for a download after a delay. Used to debounce cancellation:
+     * when the UI is cancelled we let the download continue for [delayMs] then pause it.
+     * @param pauseKey The key used for the download (e.g. mid for compressed, "${mid}_original" for original)
+     */
+    fun schedulePauseDownload(pauseKey: String, delayMs: Long = 3000L) {
+        imageLoadingScope.launch {
+            delay(delayMs)
+            pauseDownload(pauseKey)
+            Timber.tag("ImageCacheManager").d("Scheduled pause applied for $pauseKey after ${delayMs}ms")
+        }
+    }
+
+    /**
+     * Run loadOriginalImage in the manager's scope so it is not cancelled when the caller is cancelled.
+     * Caller should await() and on CancellationException call schedulePauseDownload to debounce cancellation.
+     */
+    fun loadOriginalImageDeferred(
+        context: Context,
+        imageUrl: String,
+        mid: String,
+        isVisible: Boolean = true,
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null
+    ): Deferred<Bitmap?> = imageLoadingScope.async {
+        loadOriginalImage(context, imageUrl, mid, isVisible, onProgressiveLoad)
+    }
+
     /**
      * Pause a download by marking it as paused
      */
