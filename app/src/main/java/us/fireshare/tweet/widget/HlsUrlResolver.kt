@@ -9,11 +9,18 @@ import timber.log.Timber
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.LinkedHashMap
 import java.util.Properties
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Resolves the correct HLS playlist URL (master.m3u8 vs playlist.m3u8) for a given base URL.
+ *
+ * **Why base URL (not host id) as key?**
+ * The key is the full normalised base URL (scheme + host + path with trailing slash), e.g.
+ * `https://cdn.example.com/videos/stream123/`. We do *not* use only host (e.g. "cdn.example.com")
+ * because the same host can serve different paths with different conventions: one path might
+ * use `master.m3u8`, another `playlist.m3u8`. Keying by host would incorrectly reuse one
+ * result for all paths on that host. So the key must identify the exact base URL (path included).
  *
  * Strategy:
  *  1. Check in-memory cache  — instant, zero network cost.
@@ -31,14 +38,20 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Only the short filename suffix ("master.m3u8" / "playlist.m3u8") is stored as the value,
  * not the full URL, keeping the file compact.
+ *
+ * In-memory cache is size-bounded (LRU) so it does not grow unbounded with many distinct base URLs.
  */
 object HlsUrlResolver {
 
     private const val CACHE_FILE = "hls_url_cache.properties"
     private const val PROBE_TIMEOUT_MS = 5_000
+    private const val MAX_MEM_CACHE_ENTRIES = 200
 
-    // In-memory cache: normalised baseUrl -> suffix ("master.m3u8" or "playlist.m3u8")
-    private val memCache = ConcurrentHashMap<String, String>()
+    // In-memory cache: normalised baseUrl -> suffix ("master.m3u8" or "playlist.m3u8"). LRU, size-bounded.
+    private val memCache = object : LinkedHashMap<String, String>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > MAX_MEM_CACHE_ENTRIES
+    }
+    private val memCacheLock = Any()
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -50,12 +63,16 @@ object HlsUrlResolver {
         val base = normalise(baseUrl)
 
         // 1. Memory cache (populated at startup or after first resolve)
-        memCache[base]?.let { return "$base$it" }
+        synchronized(memCacheLock) {
+            memCache[base]?.let { return "$base$it" }
+        }
 
         // 2. Disk cache
         val suffix = readDiskCache(context)[base] as? String ?: return null
 
-        memCache[base] = suffix    // warm the memory cache for next call
+        synchronized(memCacheLock) {
+            memCache[base] = suffix
+        }
         return "$base$suffix"
     }
 
@@ -100,7 +117,9 @@ object HlsUrlResolver {
         Timber.d("HlsUrlResolver: resolved $base -> $suffix")
 
         // Persist to memory and disk
-        memCache[base] = suffix
+        synchronized(memCacheLock) {
+            memCache[base] = suffix
+        }
         withContext(Dispatchers.IO) { writeDiskCache(context, base, suffix) }
 
         return "$base$suffix"

@@ -171,10 +171,12 @@ fun BottomNavigationBar(
                 navController.popBackStack(routeName, inclusive = false)
             }
 
-            // Always reset navbar and signal TweetFeedScreen to reset toolbar + scroll to top
             BottomBarState.opacity = 0.98f
-            BottomBarState.homeTapTrigger++
-            onScrollToTop()
+            // Only scroll to top when user was already on feed (second tap); otherwise keep persisted position
+            if (currentRoute?.contains("TweetFeed") == true) {
+                BottomBarState.homeTapTrigger++
+                onScrollToTop()
+            }
             return@onNavigationClick
         }
 

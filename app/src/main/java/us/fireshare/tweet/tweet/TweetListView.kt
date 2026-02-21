@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
@@ -274,20 +273,19 @@ fun TweetListView(
         }
     }
 
-    // Restore scroll position when list is populated (fixes restore when list was empty on first frame)
+    // Restore scroll position when list is populated (re-read from store and wait for layout)
     var scrollRestoredForSession by remember { mutableStateOf(false) }
-    LaunchedEffect(listState) {
-        if (scrollRestoredForSession || initialScrollPosition.first <= 0) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.totalItemsCount }
-            .collect { totalItems ->
-                if (totalItems > initialScrollPosition.first && !scrollRestoredForSession) {
-                    scrollRestoredForSession = true
-                    listState.scrollToItem(
-                        initialScrollPosition.first,
-                        initialScrollPosition.second
-                    )
-                }
-            }
+    LaunchedEffect(tweets.size, context) {
+        if (scrollRestoredForSession || tweets.isEmpty()) return@LaunchedEffect
+        val (index, offset) = ScrollPositionStore.restore(context)
+        if (index <= 0) return@LaunchedEffect
+        // LazyColumn item count is ~2 per tweet (tweet + divider); cap index to avoid OOB
+        if (index >= tweets.size * 2) return@LaunchedEffect
+        delay(100) // allow LazyColumn to complete first layout
+        if (!scrollRestoredForSession) {
+            scrollRestoredForSession = true
+            listState.scrollToItem(index, offset)
+        }
     }
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup

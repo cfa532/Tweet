@@ -70,7 +70,7 @@ The codebase has already been through several optimization passes (see `PERFORMA
 | Component | Storage | Risk | Recommendation |
 |-----------|---------|------|-----------------|
 | **TweetCacheManager** | `memoryCache`, `userStateFlows` | Grow with tweets/users over long sessions | Optional: add max size + LRU (or time-based) eviction for in-memory maps; document as “unbounded by design” if acceptable. |
-| **HlsUrlResolver** | `memCache` (ConcurrentHashMap) | Keyed by base URL; in practice small | Optional: cap size (e.g. 200 entries) if many distinct video servers. |
+| **HlsUrlResolver** | `memCache` (ConcurrentHashMap) | Keyed by base URL; in practice small | LRU cap implemented: 200 entries; key is full base URL (not host id—see HlsUrlResolver KDoc). |
 | **VideoManager** | `videoPlayers`, `activeVideos`, etc. | Bounded by cleanup; now also cleaned on feed dispose | Monitor; consider calling `cleanupInactivePlayers()` on other list disposals (e.g. ChatScreen) if needed. |
 
 ### 3.4 Lifecycle and leaks
@@ -92,8 +92,8 @@ The codebase has already been through several optimization passes (see `PERFORMA
 ## 5. Suggested order of work (future)
 
 1. **Validate with Android Profiler:** After this pass, confirm TweetViewModel and VideoManager release behavior (no growth in ExoPlayer count when opening/closing many tweet details; feed leave reduces player count).
-2. **TweetCacheManager:** If metrics show in-memory tweet/user growth over long sessions, add a cap or eviction policy for `memoryCache` and/or `userStateFlows`.
-3. **HlsUrlResolver:** If you ever support a very large number of distinct video base URLs, add a max size for `memCache`.
+2. **TweetCacheManager:** LRU cap and eviction are in place; tune `MAX_MEMORY_TWEETS` / `MAX_MEMORY_USERS` if needed.
+3. **HlsUrlResolver:** LRU cap (200 entries) is in place; key remains full base URL (not host id).
 4. **Other list screens:** If ChatScreen or other LazyColumn screens hold many videos, consider calling `VideoManager.cleanupInactivePlayers()` (and coordinator clear if applicable) in their dispose logic.
 
 ---
@@ -115,3 +115,5 @@ The codebase has already been through several optimization passes (see `PERFORMA
 |------|--------|
 | `app/.../viewmodel/TweetViewModel.kt` | `onCleared()` calls `releaseAllPlayers()`; `releaseAllPlayers()` also clears `playbackPositions`. |
 | `app/.../tweet/TweetListView.kt` | `DisposableEffect` onDispose calls `VideoPlaybackCoordinator.shared.clear()` and `VideoManager.cleanupInactivePlayers()`; added `VideoManager` import. |
+| `app/.../datamodel/TweetCacheManager.kt` | LRU for in-memory caches: `LinkedHashMap` (access order), max 500 tweets / 200 users; `evictTweetLruIfNeeded()` and `evictUserLruIfNeeded()`; user eviction also clears `userStateFlows`. |
+| `app/.../widget/HlsUrlResolver.kt` | KDoc explains why key is full base URL (not host id); `memCache` made LRU with max 200 entries; thread-safe via `memCacheLock`. |
