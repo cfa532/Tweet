@@ -262,20 +262,21 @@ fun VideoPreview(
                 view.findViewById<Button>(R.id.retry_button).text =
                     if (state.retryCount > 0) "Retry Again" else "Retry"
             }
-            // Mute button icon
+            // Mute button icon (same foreground/background as time label)
             val muteBtn = view.findViewById<ImageView>(R.id.mute_button)
             muteBtn.setImageResource(
                 if (state.isMuted) android.R.drawable.ic_lock_silent_mode
                 else android.R.drawable.ic_lock_silent_mode_off
             )
-            muteBtn.alpha = if (state.isMuted) 1.0f else 0.6f
+            muteBtn.setColorFilter(android.graphics.Color.argb(153, 255, 255, 255)) // #99FFFFFF, same as time_label
+            muteBtn.alpha = if (state.isMuted) 0.6f else 0.8f
             muteBtn.setBackgroundResource(0)
-            // Apply a circular semi-transparent background
-            val bgDrawable = android.graphics.drawable.GradientDrawable().apply {
+            // Same background shade as time label: argb(51, 0, 0, 0)
+            val muteBgDrawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(android.graphics.Color.argb(100, 0, 0, 0)) // 0.4 alpha black
+                setColor(android.graphics.Color.argb(51, 0, 0, 0))
             }
-            muteBtn.background = bgDrawable
+            muteBtn.background = muteBgDrawable
             // Time label
             val timeLabel = view.findViewById<TextView>(R.id.time_label)
             if (state.showTimeLabel) {
