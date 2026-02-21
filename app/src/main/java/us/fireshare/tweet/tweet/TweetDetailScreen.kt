@@ -428,12 +428,18 @@ fun TweetDetailScreen(
             }
         },
     ) { innerPadding ->
+        // Animate top padding so content doesn't jump when app bar hides/shows (prevents scroll feedback shake)
+        val animatedTopPadding by animateDpAsState(
+            targetValue = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+            animationSpec = tween(durationMillis = 300),
+            label = "topPadding"
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(
-                    top = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+                    top = animatedTopPadding,
                     bottom = innerPadding.calculateBottomPadding(),
                     start = innerPadding.calculateLeftPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateRightPadding(LocalLayoutDirection.current)

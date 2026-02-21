@@ -37,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -317,6 +318,10 @@ fun AttachmentBrowser(
     
     val pagerState = rememberPagerState(pageCount = { stableAttachments.size })
 
+    // Hysteresis + only-notify-on-change to prevent shake when portrait video is ~50% visible during scroll
+    var lastReportedVisible by remember { mutableStateOf<Boolean?>(null) }
+    val visibilityCallback = rememberUpdatedState(onVideoVisibilityChanged)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -335,7 +340,16 @@ fun AttachmentBrowser(
                             val visibleBottom = kotlin.math.min(displayFrame.bottom.toFloat(), bottom)
                             val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
                             val ratio = (visibleHeight / totalHeight).coerceIn(0f, 1f)
-                            onVideoVisibilityChanged(ratio >= 0.5f)
+                            // Hysteresis: visible >= 0.6, not visible <= 0.4, else keep previous (avoids flip at 0.5)
+                            val visible = when {
+                                ratio >= 0.6f -> true
+                                ratio <= 0.4f -> false
+                                else -> lastReportedVisible ?: (ratio >= 0.5f)
+                            }
+                            if (lastReportedVisible != visible) {
+                                lastReportedVisible = visible
+                                visibilityCallback.value?.invoke(visible)
+                            }
                         }
                     }
                 } else Modifier
