@@ -102,7 +102,7 @@ fun TweetItem(
     var isVisible by remember { mutableStateOf(false) }
     var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
-    val debounceMs = 200L // 200ms debounce for visibility detection
+    val debounceMs = 150L // Match iOS videoVisibilityThrottleInterval for scroll smoothness
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     
     // Optimize: Pre-compute derived values to avoid recalculation
