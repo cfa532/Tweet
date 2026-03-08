@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import timber.log.Timber
@@ -69,9 +70,21 @@ fun createExoPlayer(
         }
     }
 
+    // Aggressive buffering to minimize rebuffer pauses, especially for cached videos
+    val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            50_000,   // min buffer (50s) - default
+            120_000,  // max buffer (2 min) - increased from default 50s
+            1_000,    // buffer for playback (1s) - faster initial start
+            2_000     // buffer for playback after rebuffer (2s) - reduced from default 5s
+        )
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+
     val player = ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
         .setRenderersFactory(renderersFactory)
+        .setLoadControl(loadControl)
         .build()
         .apply {
             // Add listener for HLS fallback logic.

@@ -567,10 +567,39 @@ object VideoManager {
     /**
      * Get the dedicated full screen video player
      */
+    @OptIn(UnstableApi::class)
     fun getFullScreenPlayer(context: Context): ExoPlayer {
         if (fullScreenPlayer == null) {
             Timber.d("VideoManager - Creating dedicated full screen player")
-            fullScreenPlayer = ExoPlayer.Builder(context).build()
+            // Use cache-aware data source and aggressive buffering for smooth fullscreen playback
+            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(30000)
+                .setReadTimeoutMs(30000)
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("TweetApp/1.0")
+            val upstreamFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val cache = getCache(context)
+            val cacheDataSourceFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(MediaIdCacheKeyFactory())
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    50_000,   // min buffer (50s)
+                    120_000,  // max buffer (2 min)
+                    1_000,    // buffer for playback (1s) - faster start
+                    2_000     // buffer after rebuffer (2s) - reduced from 5s
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+
+            fullScreenPlayer = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .setLoadControl(loadControl)
+                .build()
         }
         return fullScreenPlayer!!
     }
