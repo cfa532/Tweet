@@ -110,7 +110,7 @@ android {
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")  // RELEASE APP_ID
             buildConfigField("String", "APP_ID_HASH", "\"h5U5jxPr2p2tg2kMr8UeyRMNIJ_\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
-            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
+            buildConfigField("String", "ALPHA_ID", "\"mKOihoVuFnQ2xt33R51KTQXSBkX\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
         }
     }
