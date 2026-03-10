@@ -265,6 +265,7 @@ fun IndependentFullScreenPlayer(
             factory = {
                 PlayerView(context).apply {
                     useController = true
+                    controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
