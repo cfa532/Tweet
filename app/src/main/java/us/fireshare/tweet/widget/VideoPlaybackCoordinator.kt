@@ -215,7 +215,10 @@ class VideoPlaybackCoordinator(
 
             if (isPureRetweet) {
                 if (tweet.originalTweetId != null) {
-                    val originalTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+                    // Use memory-only lookup: buildVideoList runs on the main thread, so we
+                    // must not call getCachedTweet (which may hit the database and block).
+                    // addRetweetVideos() will add the video later when TweetItem fetches it.
+                    val originalTweet = TweetCacheManager.getCachedTweetMemoryOnly(tweet.originalTweetId!!)
 
                     originalTweet?.attachments?.forEachIndexed { index, attachment ->
                         if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
@@ -245,7 +248,8 @@ class VideoPlaybackCoordinator(
                 }
 
                 if (isQuotedTweet && tweet.originalTweetId != null) {
-                    val embeddedTweet = TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+                    // Same: memory-only to avoid blocking the main thread with a DB query.
+                    val embeddedTweet = TweetCacheManager.getCachedTweetMemoryOnly(tweet.originalTweetId!!)
 
                     embeddedTweet?.attachments?.forEachIndexed { index, attachment ->
                         if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {

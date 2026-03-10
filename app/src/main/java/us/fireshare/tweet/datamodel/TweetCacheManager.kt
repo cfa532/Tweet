@@ -163,6 +163,17 @@ object TweetCacheManager {
     }
 
     /**
+     * Memory-only cache lookup. Safe to call from the main thread.
+     * Does NOT fall through to the database, so it never blocks.
+     * Returns null if the tweet is not already in memory.
+     */
+    fun getCachedTweetMemoryOnly(tweetId: MimeiId): Tweet? {
+        return synchronized(cacheLock) {
+            memoryCache[tweetId]?.originalTweet
+        }
+    }
+
+    /**
      * Update an existing cached tweet
      */
     fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
