@@ -967,9 +967,10 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
         }
     }
     
-    // Sort and convert
+    // Sort by feed position so fullscreen video order matches the on-screen tweet order.
+    // (Sorting by tweetTimestamp breaks bookmarks/favorites whose display order is not timestamp-based.)
     videoInfoList
-        .sortedByDescending { it.tweetTimestamp }
+        .sortedBy { it.feedIndex }
         .map { Pair(it.mid, it.mediaType) }
 }
 
