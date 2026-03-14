@@ -615,10 +615,10 @@ object VideoManager {
 
             val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    50_000,   // min buffer (50s)
-                    120_000,  // max buffer (2 min)
+                    15_000,   // min buffer (15s) - reduced from 50s to save RAM
+                    50_000,   // max buffer (50s) - reduced from 120s to save ~100MB RAM
                     1_000,    // buffer for playback (1s) - faster start
-                    2_000     // buffer after rebuffer (2s) - reduced from 5s
+                    2_000     // buffer after rebuffer (2s)
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()

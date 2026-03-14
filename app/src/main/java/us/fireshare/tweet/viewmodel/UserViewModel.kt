@@ -309,7 +309,12 @@ class UserViewModel @AssistedInject constructor(
             try {
                 withContext(IO) {
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                        // Downsample avatar to max 256px to save memory on low-end devices
+                        val options = android.graphics.BitmapFactory.Options().apply {
+                            inSampleSize = 2
+                            inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                        }
+                        val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream, null, options)
                         if (bitmap != null) {
                             Timber.tag("updateAvatar").d("Caching new avatar locally for CID: $avatarId")
                             us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, avatarId, bitmap)

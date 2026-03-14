@@ -146,40 +146,36 @@ fun MediaGrid(
         return firstVideoIndex >= 0 && gridIndex == firstVideoIndex
     }
     
-    // Preload videos and images
+    // Preload videos and images with limited concurrency to avoid thread pool contention
     LaunchedEffect(limitedMediaList) {
-        // Preload videos to reduce memory pressure
-        // Use LaunchedEffect's coroutine scope (launch) so children are cancelled when composable is disposed
+        val preloadSemaphore = kotlinx.coroutines.sync.Semaphore(2) // Max 2 concurrent preloads
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
-            if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
-                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-                if (!VideoManager.isVideoPreloaded(item.mid)) {
-                    // Launch in LaunchedEffect's scope so it's cancelled when composable is disposed
+            val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+            when {
+                (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) &&
+                        !VideoManager.isVideoPreloaded(item.mid) -> {
                     launch(Dispatchers.IO) {
+                        preloadSemaphore.acquire()
                         try {
                             VideoManager.preloadVideo(context, item.mid, mediaUrl, item.type)
                         } catch (e: Exception) {
-                            // Log error but don't block UI
                             Timber.tag("MediaGrid").e(e, "Failed to preload video: ${item.mid}")
+                        } finally {
+                            preloadSemaphore.release()
                         }
                     }
                 }
-            }
-        }
-        
-        // Preload images for faster loading
-        limitedMediaList.forEach { item ->
-            val mediaType = inferMediaTypeFromAttachment(item)
-            if (mediaType == MediaType.Image) {
-                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-                // Launch in LaunchedEffect's scope so it's cancelled when composable is disposed
-                launch(Dispatchers.IO) {
-                    try {
-                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
-                    } catch (e: Exception) {
-                        // Log error but don't block UI
-                        Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
+                mediaType == MediaType.Image -> {
+                    launch(Dispatchers.IO) {
+                        preloadSemaphore.acquire()
+                        try {
+                            ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
+                        } catch (e: Exception) {
+                            Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
+                        } finally {
+                            preloadSemaphore.release()
+                        }
                     }
                 }
             }

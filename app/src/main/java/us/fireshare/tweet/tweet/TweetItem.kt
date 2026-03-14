@@ -105,7 +105,7 @@ fun TweetItem(
     var isVisible by remember { mutableStateOf(false) }
     var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
-    val debounceMs = 150L // Match iOS videoVisibilityThrottleInterval for scroll smoothness
+    val debounceMs = 300L // Increased from 150ms to reduce per-frame work on low-end devices
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     val density = LocalDensity.current
     // Cached height for scroll-up stability (match iOS TweetHeightCache + willDisplay)

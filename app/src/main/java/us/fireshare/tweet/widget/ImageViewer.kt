@@ -5,9 +5,6 @@ import android.graphics.PointF
 import android.view.View
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
@@ -88,7 +85,7 @@ data class ImageLoadState(
 )
 
 /**
- * Animated loading text with moving dots
+ * Static loading text with ellipsis — avoids infinite animation overhead on low-end devices
  */
 @Composable
 fun AnimatedLoadingText(
@@ -96,40 +93,11 @@ fun AnimatedLoadingText(
     text: String = "Loading",
     color: Color = Color.Gray
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "loading_dots")
-    
-    // Animate the number of dots (0 to 5)
-    val dotCount by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = androidx.compose.animation.core.LinearEasing)
-        ),
-        label = "dot_count"
+    Text(
+        text = "$text...",
+        color = color,
+        modifier = modifier
     )
-    
-    val dots = "•".repeat(dotCount.toInt())
-    
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = text,
-            color = color
-        )
-        // Fixed width container for dots to prevent shifting
-        Box(
-            modifier = Modifier.width(80.dp), // Fixed width for 5 dots
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text = dots,
-                color = color,
-                fontSize = 12.sp // Larger dots
-            )
-        }
-    }
 }
 
 /**

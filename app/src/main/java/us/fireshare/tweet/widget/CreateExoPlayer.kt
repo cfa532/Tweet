@@ -70,13 +70,13 @@ fun createExoPlayer(
         }
     }
 
-    // Aggressive buffering to minimize rebuffer pauses, especially for cached videos
+    // Moderate buffering to balance smooth playback with memory usage on low-end devices
     val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
-            50_000,   // min buffer (50s) - default
-            120_000,  // max buffer (2 min) - increased from default 50s
+            15_000,   // min buffer (15s) - reduced from 50s to save RAM
+            50_000,   // max buffer (50s) - reduced from 120s to save ~100MB RAM
             1_000,    // buffer for playback (1s) - faster initial start
-            2_000     // buffer for playback after rebuffer (2s) - reduced from default 5s
+            2_000     // buffer for playback after rebuffer (2s)
         )
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()

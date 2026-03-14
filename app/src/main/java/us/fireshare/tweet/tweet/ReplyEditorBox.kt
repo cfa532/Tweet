@@ -168,7 +168,7 @@ fun ReplyEditorBox(
                     Color.Transparent
             )
             .shadow(
-                elevation = if (isExpanded) 12.dp else 4.dp,
+                elevation = 4.dp,
                 ambientColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 spotColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.05f)
             )
