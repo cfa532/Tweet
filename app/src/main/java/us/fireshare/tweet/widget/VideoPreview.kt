@@ -150,6 +150,9 @@ fun VideoPreview(
                     state.isVideoVisible, coordinator, playbackTweetId, onLoadComplete, onVideoCompleted
                 )
             }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                state.isPlaying = isPlaying
+            }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 state.onPlayerError(error, context, url, videoType, retryScope)
             }
@@ -231,6 +234,13 @@ fun VideoPreview(
                 findViewById<ImageView>(R.id.mute_button).setOnClickListener {
                     state.toggleMute()
                 }
+                // Play button click - resume playback
+                findViewById<ImageView>(R.id.play_button).setOnClickListener {
+                    if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                        exoPlayer.seekTo(0)
+                    }
+                    exoPlayer.playWhenReady = true
+                }
                 // Retry button click
                 findViewById<Button>(R.id.retry_button).setOnClickListener {
                     state.manualRetry(ctx, url, videoType, retryScope)
@@ -248,6 +258,26 @@ fun VideoPreview(
             // Rebind player on generation change
             if (playerView.player !== exoPlayer) {
                 playerView.player = exoPlayer
+            }
+            // Play button (show when not playing, not loading, not error)
+            val playBtn = view.findViewById<ImageView>(R.id.play_button)
+            val showPlayButton = !state.isPlaying && !state.isLoading && !state.hasError
+            if (showPlayButton && playBtn.visibility != View.VISIBLE) {
+                playBtn.alpha = 1f
+                playBtn.visibility = View.VISIBLE
+            } else if (!showPlayButton && playBtn.visibility == View.VISIBLE) {
+                playBtn.animate().alpha(0f).setDuration(300).withEndAction {
+                    playBtn.visibility = View.GONE
+                }.start()
+            }
+            if (showPlayButton) {
+                val playBgDrawable = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(android.graphics.Color.argb(200, 33, 150, 243))
+                    setStroke(4, android.graphics.Color.WHITE)
+                }
+                playBtn.background = playBgDrawable
+                playBtn.setColorFilter(android.graphics.Color.WHITE)
             }
             // Loading spinner
             view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =

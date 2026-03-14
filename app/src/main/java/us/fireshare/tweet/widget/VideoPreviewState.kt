@@ -43,6 +43,7 @@ class VideoPreviewState(
     var isMediaCodecRecoveryInProgress by mutableStateOf(false)
     var showControls by mutableStateOf(false)
     var coordinatorWantsToPlay by mutableStateOf(false)
+    var isPlaying by mutableStateOf(false)
 
     val maxRetries = 3
     val visibilityUpdateThrottleMs = 100L
