@@ -39,7 +39,11 @@ class TweetApplication : Application(), ComponentCallbacks2 {
     private val appLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             // App has come to foreground
-            Timber.tag("AppLifecycle").d("App came to foreground, refreshing appUser...")
+            Timber.tag("AppLifecycle").d("App came to foreground, online=${HproseInstance.isOnline.value}")
+            if (!HproseInstance.isOnline.value) {
+                Timber.tag("AppLifecycle").d("Offline: skipping appUser refresh")
+                return
+            }
             applicationScope.launch {
                 try {
                     // Only refresh if appUser is properly initialized (has baseUrl) and is not a guest

@@ -616,8 +616,10 @@ fun TweetListView(
                                     serverDepleted = result.size < TW_CONST.PAGE_SIZE
                                     Timber.tag("TweetListView-LoadMore").d("Found $validCount tweets, depleted=$serverDepleted")
                                 } else if (result.size < TW_CONST.PAGE_SIZE) {
+                                    lastLoadedPage = currentPage
                                     serverDepleted = true
-                                    Timber.tag("TweetListView-LoadMore").d("Server depleted")
+                                    Timber.tag("TweetListView-LoadMore").d("No more data")
+                                    break
                                 } else {
                                     currentPage++
                                 }
@@ -694,7 +696,7 @@ fun TweetListView(
                             Timber.tag("TweetListView").d("Preloaded $validCount tweets from page $nextPage, depleted=$serverDepleted")
                         } else if (result.size < TW_CONST.PAGE_SIZE) {
                             serverDepleted = true
-                            Timber.tag("TweetListView").d("Server depleted during preload at page $nextPage")
+                            Timber.tag("TweetListView").d("No more data during preload at page $nextPage")
                         }
                     }
                 } catch (e: Exception) {

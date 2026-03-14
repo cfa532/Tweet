@@ -354,6 +354,14 @@ object VideoManager {
 
         val isReusing = videoPlayers.containsKey(videoMid)
 
+        // When offline, only reuse existing players — don't create new ones that trigger network
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value && !isReusing) {
+            Timber.tag("VideoManager").d("Offline: creating placeholder player for $videoMid (no network fetch)")
+            val player = ExoPlayer.Builder(context).build()
+            videoPlayers[videoMid] = player
+            return player
+        }
+
         return videoPlayers.getOrPut(videoMid) {
             try {
                 val player = createExoPlayer(
@@ -449,6 +457,24 @@ object VideoManager {
     }
 
     /**
+     * Stop all video players to prevent network requests when offline.
+     * Players are kept alive so they can resume when back online.
+     */
+    fun stopAllVideos() {
+        Timber.tag("VideoManager").d("Stopping all ${videoPlayers.size} video players (offline)")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            videoPlayers.values.forEach { player ->
+                try {
+                    player.stop()
+                } catch (e: Exception) {
+                    Timber.tag("VideoManager").w("Error stopping player: ${e.message}")
+                }
+            }
+            fullScreenPlayer?.stop()
+        }
+    }
+
+    /**
      * Release all video players
      * Note: This method must be called on the main thread
      */
@@ -489,6 +515,7 @@ object VideoManager {
      * subsequent loads (including the visible player in VideoPreview) skip the probe entirely.
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
         // Don't preload if video is already visible
         if (isVideoVisible(videoMid)) {
             return
@@ -610,6 +637,7 @@ object VideoManager {
      * For HLS videos: tries master.m3u8 first, then playlist.m3u8 if that fails
      */
     fun loadVideo(context: Context, videoUrl: String, videoType: MediaType? = null) {
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
         if (currentVideoUrl == videoUrl) {
             return
         }

@@ -87,6 +87,11 @@ object HlsUrlResolver {
         // Fast path — already cached
         getCached(context, base)?.let { return it }
 
+        // Skip probing when offline — default to master so ExoPlayer handles the error
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value) {
+            return "${base}master.m3u8"
+        }
+
         // Slow path — parallel probe both candidates simultaneously
         val masterUrl   = "${base}master.m3u8"
         val playlistUrl = "${base}playlist.m3u8"

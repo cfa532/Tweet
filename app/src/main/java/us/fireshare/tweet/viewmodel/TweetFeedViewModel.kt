@@ -101,15 +101,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     Timber.tag("TweetFeedViewModel").d("No cached tweets found, keeping spinner until network fetch completes")
                 }
                 
-                // Try to fetch from network
-                waitForAppUser()
-                if (appUser.baseUrl != null) {
-                    // BaseUrl available, try to load tweets from server
-                    Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
-                    refresh(0)
+                // Try to fetch from network only when online
+                if (!HproseInstance.isOnline.value) {
+                    Timber.tag("TweetFeedViewModel").d("Offline: skipping network fetch, using cached tweets only")
                 } else {
-                    // BaseUrl not available, cached tweets already loaded (or none available)
-                    Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
+                    waitForAppUser()
+                    if (appUser.baseUrl != null) {
+                        Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
+                        refresh(0)
+                    } else {
+                        Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
+                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization: ${e.message}")
@@ -258,6 +260,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 }
             }
 
+            // When offline, skip network entirely and return cached tweets
+            if (!HproseInstance.isOnline.value) {
+                Timber.tag("TweetFeedViewModel").d("Offline: serving ${cachedTweets.size} cached tweets for page $pageNumber")
+                if (pageNumber == 0) {
+                    initState.value = false
+                }
+                return cachedTweets
+            }
+
             /**
              * Load tweet feed from network with error handling
              * */
@@ -286,7 +297,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     initState.value = false  // Stop showing spinner after all retries exhausted
                     Timber.tag("MainFeed").w("⚠️ Network fetch failed after retries, showing ${_tweets.value.size} cached tweets")
                 }
-                emptyList()
+                cachedTweets
             }
             
             // Clear retry message and loading state on success
@@ -337,7 +348,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * val followingTweets = deferredFollowing.await()
              * // Process both results together
              * */
-            if (pageNumber == 0 && followingTweetsJob?.isActive != true) {
+            if (pageNumber == 0 && followingTweetsJob?.isActive != true && HproseInstance.isOnline.value) {
                 followingTweetsJob = applicationScope.launch(IO) {
                     try {
                         val followingTweetsWithNulls = HproseInstance.getTweetFeed(

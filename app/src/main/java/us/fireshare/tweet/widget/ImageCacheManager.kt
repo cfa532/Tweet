@@ -462,6 +462,7 @@ object ImageCacheManager {
      */
     private suspend fun performDownload(imageUrl: String, context: Context): Bitmap? =
         withContext(Dispatchers.IO) {
+            if (!us.fireshare.tweet.HproseInstance.isOnline.value) return@withContext null
             var inputStream: InputStream? = null
 
             try {
@@ -539,6 +540,7 @@ object ImageCacheManager {
         onProgressiveLoad: ((Bitmap) -> Unit)? = null
     ): Bitmap? =
         withContext(Dispatchers.IO) {
+            if (!us.fireshare.tweet.HproseInstance.isOnline.value) return@withContext null
             var inputStream: InputStream? = null
             var tempFile: File? = null
 

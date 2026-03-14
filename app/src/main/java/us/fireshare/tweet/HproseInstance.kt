@@ -283,6 +283,10 @@ object HproseInstance {
     // Track if appUser has been fully initialized from server (not just entry IP)
     private val _isAppUserInitialized = MutableStateFlow(false)
     val isAppUserInitialized: StateFlow<Boolean> = _isAppUserInitialized.asStateFlow()
+
+    // Network connectivity state
+    private val _isOnline = MutableStateFlow(true)
+    val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
     
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
@@ -409,6 +413,9 @@ object HproseInstance {
         this.applicationContext = context.applicationContext as Application
         HproseClassManager.register(Tweet::class.java, "Tweet")
         HproseClassManager.register(User::class.java, "User")
+
+        // Register network connectivity callback
+        registerNetworkCallback()
 
         this.preferenceHelper = PreferenceHelper(context)
         chatDatabase = ChatDatabase.getInstance(context)
@@ -554,6 +561,10 @@ object HproseInstance {
     }
 
     private suspend fun initAppEntry(onBaseUrlReady: (suspend () -> Unit)? = null) {
+        if (!isOnline.value) {
+            Timber.tag("initAppEntry").d("Offline: skipping")
+            return
+        }
         val userId = preferenceHelper.getUserId()
         Timber.tag("initAppEntry").d("Retrieved userId from preferences: $userId")
 
@@ -741,6 +752,10 @@ object HproseInstance {
      * 2. Send message_incoming to recipient's node (with retry and baseUrl refresh)
      */
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage): Pair<Boolean, String?> {
+        if (!isOnline.value) {
+            Timber.tag("sendMessage").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         // Step 1: Send to sender's own node (message_outgoing) with retry
         Timber.tag("sendMessage").d("📤 Step 1: Sending message_outgoing to sender's node")
         val senderSendResult = sendToSenderNodeWithRetry(receiptId, msg, maxRetries = 2)
@@ -962,6 +977,10 @@ object HproseInstance {
     // get the recent unread message from a sender.
     // Matches iOS implementation which unwraps v2 response and filters out outgoing messages.
     suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
+        if (!isOnline.value) {
+            Timber.tag("fetchMessages").d("Offline: skipping")
+            return null
+        }
         val entry = "message_fetch"
         val params = mapOf(
             "aid" to appId,
@@ -1051,6 +1070,10 @@ object HproseInstance {
      * */
     suspend fun checkNewMessages(): List<ChatMessage>? {
         if (appUser.isGuest()) return null
+        if (!isOnline.value) {
+            Timber.tag("checkNewMessages").d("Offline: skipping message check")
+            return null
+        }
         val entry = "message_check"
         val params = mapOf(
             "aid" to appId,
@@ -1133,6 +1156,10 @@ object HproseInstance {
     }
 
     suspend fun checkUpgrade(): Map<String, String>? {
+        if (!isOnline.value) {
+            Timber.tag("checkUpgrade").d("Offline: skipping")
+            return null
+        }
         val entry = "check_upgrade"
         val params = mapOf(
             "aid" to appId,
@@ -1152,6 +1179,10 @@ object HproseInstance {
     }
 
     suspend fun getUserId(username: String): MimeiId? {
+        if (!isOnline.value) {
+            Timber.tag("getUserId").d("Offline: skipping")
+            return null
+        }
         val entry = "get_userid"
         val params = mapOf(
             "aid" to appId,
@@ -1183,6 +1214,10 @@ object HproseInstance {
         context: Context,
         maxRetries: Int = 3
     ): Pair<User?, String?> {
+        if (!isOnline.value) {
+            Timber.tag("login").d("Offline: skipping")
+            return Pair(null, "No network connection")
+        }
         var lastError: String? = null
         
         repeat(maxRetries) { attempt ->
@@ -1314,6 +1349,10 @@ object HproseInstance {
      * 4. Update NodePool with successful result
      * */
     suspend fun getHostIP(nodeId: MimeiId, v4Only: String = HproseInstance.v4Only.toString()): String? {
+        if (!isOnline.value) {
+            Timber.tag("getHostIP").d("Offline: skipping")
+            return null
+        }
         // Step 1: Check NodePool for known IPs and verify health
         val poolIP = NodePool.getIPFromNodeId(nodeId)
         if (poolIP != null) {
@@ -1440,6 +1479,10 @@ object HproseInstance {
         cloudDrivePort: Int = 0,
         domainToShare: String? = null
     ): Pair<Boolean, String?> {
+        if (!isOnline.value) {
+            Timber.tag("registerUser").d("Offline: skipping")
+            return Pair(false, "No network connection")
+        }
         // Validate hostId if provided
         hostId?.let { id ->
             val trimmedId = id.trim()
@@ -1579,6 +1622,10 @@ object HproseInstance {
         cloudDrivePort: Int = 0,
         domainToShare: String? = null
     ): Pair<Boolean, String?> {
+        if (!isOnline.value) {
+            Timber.tag("updateUserCore").d("Offline: skipping")
+            return Pair(false, "No network connection")
+        }
         // Validate hostId if provided
         hostId?.let { id ->
             val trimmedId = id.trim()
@@ -1650,6 +1697,10 @@ object HproseInstance {
     }
 
     suspend fun setUserAvatar(user: User, avatar: MimeiId): MimeiId? {
+        if (!isOnline.value) {
+            Timber.tag("setUserAvatar").d("Offline: skipping")
+            return null
+        }
         val entry = "set_user_avatar"
         val json = """
             {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
@@ -1671,6 +1722,10 @@ object HproseInstance {
      * Includes retry logic with exponential backoff for network-related failures.
      * */
     suspend fun getFollowings(user: User, maxRetries: Int = 5): List<MimeiId> {
+        if (!isOnline.value) {
+            Timber.tag("getFollowings").d("Offline: skipping")
+            return emptyList()
+        }
         if (user.isGuest()) return getAlphaIds()
         val entry = "get_followings_sorted"
         val params = mapOf(
@@ -1729,6 +1784,10 @@ object HproseInstance {
      * Includes retry logic with exponential backoff for network-related failures.
      * */
     suspend fun getFans(user: User, maxRetries: Int = 5): List<MimeiId>? {
+        if (!isOnline.value) {
+            Timber.tag("getFans").d("Offline: skipping")
+            return null
+        }
         if (user.isGuest()) return null
         val entry = "get_followers_sorted"
         val params = mapOf(
@@ -1794,9 +1853,14 @@ object HproseInstance {
         maxRetries: Int = 5,
         onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
     ): List<Tweet?> {
+        if (!isOnline.value) {
+            Timber.tag("getTweetFeed").d("Offline: skipping network call for page $pageNumber")
+            return emptyList()
+        }
+
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
-        
+
         // For guest users, if no alpha IDs are configured, return empty list
         if (appUser.isGuest() && alphaIds.isEmpty()) {
             Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
@@ -1974,6 +2038,10 @@ object HproseInstance {
         pageSize: Int = 5,
         entry: String = "get_tweets_by_user"
     ): List<Tweet?> {
+        if (!isOnline.value) {
+            Timber.tag("getTweetsByUser").d("Offline: skipping network call")
+            return emptyList()
+        }
         try {
             val params = mapOf(
                 "aid" to appId,
@@ -2099,6 +2167,10 @@ object HproseInstance {
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("fetchTweet").d("Offline: skipping")
+            return null
+        }
         // Check if tweet is blacklisted
         if (BlackList.isBlacklisted(tweetId)) {
             Timber.tag("fetchTweet").d("Tweet $tweetId is blacklisted, returning null")
@@ -2222,6 +2294,10 @@ object HproseInstance {
         tweetId: MimeiId?,
         authorId: MimeiId?
     ): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("refreshTweet").d("Offline: skipping")
+            return null
+        }
         if (tweetId == null || authorId == null) {
             Timber.tag("refreshTweet").w("Null parameters: tweetId=$tweetId, authorId=$authorId")
             return null
@@ -2313,6 +2389,29 @@ object HproseInstance {
 
             null
         }
+    }
+
+    private fun registerNetworkCallback() {
+        val cm = applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+                as android.net.ConnectivityManager
+        // Set initial state
+        val network = cm.activeNetwork
+        val caps = if (network != null) cm.getNetworkCapabilities(network) else null
+        _isOnline.value = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        Timber.tag("Network").d("Initial online state: ${_isOnline.value}")
+
+        cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                _isOnline.value = true
+                Timber.tag("Network").d("Network available")
+            }
+            override fun onLost(network: android.net.Network) {
+                _isOnline.value = false
+                Timber.tag("Network").d("Network lost")
+                // Stop all video players to prevent futile network retries
+                VideoManager.stopAllVideos()
+            }
+        })
     }
 
     suspend fun loadCachedTweets(
@@ -2530,6 +2629,10 @@ object HproseInstance {
         retweetId: MimeiId,
         direction: Int = 1
     ): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("updateRetweetCount").d("Offline: skipping")
+            return null
+        }
         val entry = if (direction == 1) "retweet_added" else "retweet_removed"
         val params = mapOf(
             "aid" to appId,
@@ -2559,6 +2662,10 @@ object HproseInstance {
     }
 
     suspend fun uploadTweet(tweet: Tweet): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("uploadTweet").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         Timber.tag("HproseInstance").d("uploadTweet called for tweet: ${tweet.mid}, content: '${tweet.content}', attachments: ${tweet.attachments?.size ?: 0}")
 
         val entry = "add_tweet"
@@ -2632,6 +2739,10 @@ object HproseInstance {
 
 
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) {
+        if (!isOnline.value) {
+            Timber.tag("delComment").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         val entry = "delete_comment"
         val params = mapOf(
             "aid" to appId,
@@ -2670,6 +2781,10 @@ object HproseInstance {
         followedId: MimeiId,
         followingId: MimeiId = appUser.mid
     ): Boolean? {
+        if (!isOnline.value) {
+            Timber.tag("toggleFollowing").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         val entry = "toggle_following"
         val params = mapOf(
             "aid" to appId,
@@ -2780,6 +2895,10 @@ object HproseInstance {
     suspend fun retweet(
         tweet: Tweet     // original tweet to be retweeted
     ) {
+        if (!isOnline.value) {
+            Timber.tag("retweet").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         try {
             // upload the retweet, simply a few dozen bytes.
             val retweet = uploadTweet(
@@ -2810,6 +2929,10 @@ object HproseInstance {
      * Load favorite status of the tweet by appUser.
      * */
     suspend fun toggleFavorite(tweet: Tweet): Tweet {
+        if (!isOnline.value) {
+            Timber.tag("toggleFavorite").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         val entry = "toggle_favorite"
         val params = mapOf(
             "aid" to appId,
@@ -2871,6 +2994,10 @@ object HproseInstance {
      * Load bookmark status of the tweet by appUser.
      * */
     suspend fun toggleBookmark(tweet: Tweet): Tweet {
+        if (!isOnline.value) {
+            Timber.tag("toggleBookmark").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         val entry = "toggle_bookmark"
         val params = mapOf(
             "aid" to appId,
@@ -2939,6 +3066,10 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = TW_CONST.PAGE_SIZE
     ): List<Tweet?> {
+        if (!isOnline.value) {
+            Timber.tag("getUserTweetsByType").d("Offline: skipping")
+            return emptyList()
+        }
         val entry = "get_user_meta"
         val params = mapOf(
             "aid" to appId,
@@ -3012,6 +3143,10 @@ object HproseInstance {
      * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
      */
     suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
+        if (!isOnline.value) {
+            Timber.tag("deleteTweet").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         // Check if hproseService is available
         if (appUser.hproseService == null) {
             val errorMsg = "Cannot delete tweet: hproseService is null. User may not be properly initialized."
@@ -3081,6 +3216,10 @@ object HproseInstance {
      * @param pageNumber
      * */
     suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 5): List<Tweet>? {
+        if (!isOnline.value) {
+            Timber.tag("getComments").d("Offline: skipping")
+            return null
+        }
         return try {
             // CRITICAL: Use the tweet's author's baseUrl to fetch comments
             // Comments are stored on the tweet author's node, not the appUser's node
@@ -3146,6 +3285,10 @@ object HproseInstance {
      * @Return the updated parent tweet.
      * */
     suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("uploadComment").d("Offline: skipping")
+            throw Exception("No network connection")
+        }
         val entry = "add_comment"
         val params = mapOf(
             "aid" to appId,
@@ -3343,6 +3486,13 @@ object HproseInstance {
         if (!skipRetryAndBlacklist && BlackList.isBlacklisted(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
+        }
+
+        // When offline, return cached user only
+        if (!isOnline.value) {
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            Timber.tag("getUser").d("Offline: returning cached user for $userId (found=${cachedUser != null})")
+            return cachedUser
         }
 
         // Check cache first (if not forcing refresh)
@@ -3868,6 +4018,10 @@ object HproseInstance {
      * @return The updated User object from server, or null if failed
      */
     suspend fun resyncUser(userId: MimeiId): User? {
+        if (!isOnline.value) {
+            Timber.tag("resyncUser").d("Offline: skipping")
+            return null
+        }
         return try {
             Timber.tag("resyncUser").d("Starting resync for user: $userId")
             
@@ -3978,6 +4132,10 @@ object HproseInstance {
      * unhealthy list - no point in redundant lookup.
      */
     suspend fun getProviderIP(mid: MimeiId): String? {
+        if (!isOnline.value) {
+            Timber.tag("getProviderIP").d("Offline: skipping")
+            return null
+        }
         // Safety check: never try to get provider IP for GUEST_ID
         if (mid == TW_CONST.GUEST_ID) {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
@@ -4120,6 +4278,10 @@ object HproseInstance {
      * Return the current tweet list that is pinned to top.
      * */
     suspend fun togglePinnedTweet(tweetId: MimeiId): Boolean? {
+        if (!isOnline.value) {
+            Timber.tag("togglePinnedTweet").d("Offline: skipping")
+            return null
+        }
         val entry = "toggle_pinned_tweet"
         val params = mapOf(
             "aid" to appId,
@@ -4181,6 +4343,10 @@ object HproseInstance {
      * the tweet is pinned.
      * */
     suspend fun getPinnedTweetsWithTimestamp(user: User): List<Map<String, Any>>? {
+        if (!isOnline.value) {
+            Timber.tag("getPinnedTweetsWithTimestamp").d("Offline: skipping")
+            return null
+        }
         val entry = "get_pinned_tweets"
         val params = mapOf(
             "aid" to appId,
@@ -4208,6 +4374,10 @@ object HproseInstance {
         uri: Uri,
         referenceId: MimeiId? = null
     ): MimeiFileType? {
+        if (!isOnline.value) {
+            Timber.tag("uploadToIPFS").d("Offline: skipping")
+            return null
+        }
         return mediaUploadService.uploadToIPFS(uri, referenceId)
     }
 
@@ -4466,6 +4636,7 @@ object HproseInstance {
      * Resume incomplete uploads when app comes to foreground
      */
     fun resumeIncompleteUploads(context: Context) {
+        if (!isOnline.value) return
         val incompleteUploads = getIncompleteUploads(context)
         if (incompleteUploads.isEmpty()) {
             Timber.tag("HproseInstance").d("No incomplete uploads to resume")
