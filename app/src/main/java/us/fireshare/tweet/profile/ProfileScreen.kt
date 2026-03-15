@@ -102,9 +102,12 @@ fun ProfileScreen(
     val activity = context as? Activity
     activity?.let { OrientationManager.lockToPortrait(it) }
 
-    // Load tweets when screen opens
+    // Load tweets when screen opens (on IO dispatcher to avoid blocking main thread
+    // with synchronous Hprose network calls, especially when user's IP has changed)
     LaunchedEffect(userId) {
-        viewModel.initLoad()
+        withContext(Dispatchers.IO) {
+            viewModel.initLoad()
+        }
     }
 
     // Refresh user data when screen opens (in background, non-blocking)
