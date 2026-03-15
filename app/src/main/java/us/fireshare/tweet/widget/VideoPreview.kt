@@ -98,7 +98,7 @@ fun VideoPreview(
         rememberVideoLoadingManager(videoMid = mid, isVisible = effectivelyVisible)
     }
 
-    // --- ExoPlayer (regenerated on force-recreate) ---
+    // --- ExoPlayer from shared pool (regenerated on force-recreate) ---
     val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
     val exoPlayer = remember(videoMid, playerGeneration) {
         val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO && url != null) {

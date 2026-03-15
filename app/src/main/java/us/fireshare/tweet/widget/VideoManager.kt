@@ -28,18 +28,18 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Unified VideoManager handles all video-related functionality:
- * - ExoPlayer instance management and lifecycle
+ * - Delegates feed video playback to [ExoPlayerPool] (fixed pool of 6 shared ExoPlayers)
  * - Visibility-based loading control (stop videos scrolled past)
- * - Smart preloading based on scroll position
- * - Memory leak prevention (not aggressive cleanup)
- * - Full-screen video support
- * - Disk caching for video segments
- * 
- * Memory Management Philosophy:
- * - Focus on preventing leaks rather than limiting player count
- * - Allow many concurrent players (20+) as long as no leaks exist
- * - Only cleanup truly inactive players (not referenced by any Composable)
- * - Proper resource cleanup in releasePlayer() to prevent surface/buffer leaks
+ * - Smart preloading (HLS URL resolution + disk cache warming, no player creation)
+ * - Full-screen video support (separate dedicated player)
+ * - Disk caching for video segments via SimpleCache (2GB LRU, keyed by mediaId)
+ *
+ * Architecture (matching iOS SharedAssetCache):
+ * - 6 ExoPlayers are created once and reused across all feed videos
+ * - When a video scrolls into view, a player is acquired from the pool
+ * - When a video scrolls out, the player is returned (paused, not destroyed)
+ * - LRU eviction reclaims the oldest non-visible player when the pool is full
+ * - SimpleCache persists downloaded segments by mediaId, independent of player lifecycle
  */
 @OptIn(UnstableApi::class)
 object VideoManager {
@@ -49,14 +49,15 @@ object VideoManager {
     private val videoLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // ===== PLAYER MANAGEMENT =====
-    // Thread-safe map to store ExoPlayer instances by video mid
+    // Legacy per-video map kept only for full-screen and recovery paths.
+    // Feed videos use ExoPlayerPool instead.
     private val videoPlayers = ConcurrentHashMap<MimeiId, ExoPlayer>()
 
     // Compose-observable generation counter: incremented whenever a player is force-recreated.
     // VideoPreview uses this as a remember() key so it picks up the new player instance.
     val playerGenerations = mutableStateMapOf<MimeiId, Int>()
 
-    // Track which videos are currently being used
+    // Track which videos are currently being used (reference counting for legacy paths)
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
     
     // ===== MEMORY MANAGEMENT =====
@@ -210,43 +211,27 @@ object VideoManager {
     // ===== VISIBILITY-BASED LOADING CONTROL =====
 
     /**
-     * Mark a video as visible (user is currently viewing it)
-     * This allows the video to continue loading and playing
+     * Mark a video as visible (user is currently viewing it).
+     * Delegates to ExoPlayerPool for feed videos.
      */
     fun markVideoVisible(videoMid: MimeiId) {
         visibleVideos.add(videoMid)
+        ExoPlayerPool.markVisible(videoMid)
         markVideoActive(videoMid)
     }
 
     /**
-     * Mark a video as not visible (user has scrolled past it)
-     * This stops loading the video to save resources, but only if no other
-     * composable is actively using the same player (e.g., DetailView sharing
-     * the same ExoPlayer while the feed item is being disposed).
+     * Mark a video as not visible (user has scrolled past it).
+     * Delegates to ExoPlayerPool which pauses and frees codec resources.
      */
     fun markVideoNotVisible(videoMid: MimeiId) {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
 
         // Don't stop the video if it's currently in full-screen mode
-        // or if another composable is still actively using this player
-        val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
-        if (!isVideoInFullScreen(videoMid) && !stillActive) {
-            // Cancel any ongoing preload/network loading for this video
+        if (!isVideoInFullScreen(videoMid)) {
             cancelPreload(videoMid)
-            // Stop the player to release codec and HTTP connection resources.
-            // In Media3, stop() does NOT clear media items — the playlist is retained
-            // and the player can be re-prepared when visible again.
-            videoPlayers[videoMid]?.let { player ->
-                try {
-                    // Detach surface before stopping to prevent MediaCodec IllegalStateException
-                    // when the codec tries to flush against a destroyed surface.
-                    player.clearVideoSurface()
-                    player.stop()
-                } catch (e: Exception) {
-                    Timber.e("VideoManager - Error stopping video: $e")
-                }
-            }
+            ExoPlayerPool.markNotVisible(videoMid)
         }
     }
 
@@ -336,10 +321,12 @@ object VideoManager {
     // ===== PLAYER MANAGEMENT =====
 
     /**
-     * Get or create an ExoPlayer instance for a video.
+     * Get an ExoPlayer for a video from the shared pool.
+     * The pool manages a fixed set of players, reusing them via LRU eviction.
+     * Video segment data stays in SimpleCache (2GB disk LRU) independent of player lifecycle.
      *
      * @param resolvedHlsUrl Pre-resolved HLS URL from [HlsUrlResolver]; when non-null it is
-     *   passed directly to [createExoPlayer], skipping the master/playlist guessing entirely.
+     *   passed directly to the pool, skipping the master/playlist guessing entirely.
      */
     fun getVideoPlayer(
         context: Context,
@@ -352,60 +339,27 @@ object VideoManager {
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
 
-        val isReusing = videoPlayers.containsKey(videoMid)
-
-        // When offline, only reuse existing players — don't create new ones that trigger network
-        if (!us.fireshare.tweet.HproseInstance.isOnline.value && !isReusing) {
-            Timber.tag("VideoManager").d("Offline: creating placeholder player for $videoMid (no network fetch)")
+        // When offline and no player assigned, return a bare placeholder
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value && !ExoPlayerPool.hasPlayer(videoMid)) {
+            Timber.tag("VideoManager").d("Offline: creating placeholder player for $videoMid")
             val player = ExoPlayer.Builder(context).build()
-            videoPlayers[videoMid] = player
+            videoPlayers[videoMid] = player  // legacy map for offline fallback
             return player
         }
 
-        return videoPlayers.getOrPut(videoMid) {
-            try {
-                val player = createExoPlayer(
-                    context,
-                    videoUrl,
-                    videoType ?: MediaType.Video,
-                    resolvedHlsUrl = resolvedHlsUrl
-                )
-                player
-            } catch (e: Exception) {
-                Timber.tag("VideoManager").e("Player creation failed: ${e.message}")
-                videoPlayers.remove(videoMid)
-                throw e
-            }
-        }.also { player ->
-            // Reset player state when reusing an existing player
-            if (isReusing) {
-                resetPlayerState(player)
-            }
+        // Delegate to the shared pool
+        val player = ExoPlayerPool.acquirePlayer(
+            context, videoMid, videoUrl, videoType, resolvedHlsUrl
+        )
+        if (player != null) {
+            return player
         }
-    }
 
-    /**
-     * Reset player state to ensure proper playback when reused
-     */
-    private fun resetPlayerState(player: ExoPlayer) {
-        try {
-            when (player.playbackState) {
-                Player.STATE_READY, Player.STATE_BUFFERING -> {
-                    // Don't stop — just pause to preserve already-buffered data
-                    player.playWhenReady = false
-                }
-                else -> {
-                    // For IDLE or ENDED states, reset and re-prepare
-                    player.stop()
-                    player.seekTo(0)
-                    player.playWhenReady = false
-                    if (player.playbackState == Player.STATE_IDLE) {
-                        player.prepare()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e("VideoManager - Error resetting player state: $e")
+        // Fallback: all pool players are visible (extremely rare with 6 players).
+        // Create a temporary player via legacy path.
+        Timber.tag("VideoManager").w("Pool full — fallback to legacy player for $videoMid")
+        return videoPlayers.getOrPut(videoMid) {
+            createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
         }
     }
 
@@ -442,18 +396,16 @@ object VideoManager {
      * Pause a specific video
      */
     fun pauseVideo(videoMid: MimeiId) {
-        videoPlayers[videoMid]?.let { player ->
-            player.playWhenReady = false
-        }
+        val player = ExoPlayerPool.getAssignedPlayer(videoMid) ?: videoPlayers[videoMid]
+        player?.playWhenReady = false
     }
 
     /**
      * Resume a specific video
      */
     fun resumeVideo(videoMid: MimeiId, shouldPlay: Boolean = true) {
-        videoPlayers[videoMid]?.let { player ->
-            player.playWhenReady = shouldPlay
-        }
+        val player = ExoPlayerPool.getAssignedPlayer(videoMid) ?: videoPlayers[videoMid]
+        player?.playWhenReady = shouldPlay
     }
 
     /**
@@ -461,8 +413,10 @@ object VideoManager {
      * Players are kept alive so they can resume when back online.
      */
     fun stopAllVideos() {
-        Timber.tag("VideoManager").d("Stopping all ${videoPlayers.size} video players (offline)")
+        Timber.tag("VideoManager").d("Stopping all video players (offline)")
         android.os.Handler(android.os.Looper.getMainLooper()).post {
+            ExoPlayerPool.stopAll()
+            // Also stop any legacy fallback players
             videoPlayers.values.forEach { player ->
                 try {
                     player.stop()
@@ -475,24 +429,27 @@ object VideoManager {
     }
 
     /**
-     * Release all video players
-     * Note: This method must be called on the main thread
+     * Release all video players (pool + any legacy fallback players).
+     * Note: This method must be called on the main thread.
      */
     fun releaseAllVideos() {
-        Timber.tag("VideoManager").d("🧹 RELEASING ALL VIDEOS: playerCount: ${videoPlayers.size}, activeCount: ${activeVideos.size}")
-        
+        Timber.tag("VideoManager").d("🧹 RELEASING ALL VIDEOS")
+
         // Ensure we're on the main thread
         if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-            Timber.tag("VideoManager").e("❌ WRONG THREAD: releaseAllVideos() called on wrong thread. Current: ${Thread.currentThread().name}, Expected: main")
+            Timber.tag("VideoManager").e("❌ WRONG THREAD: releaseAllVideos() called on wrong thread")
             throw IllegalStateException("VideoManager.releaseAllVideos() must be called on the main thread")
         }
 
+        // Release the shared pool
+        ExoPlayerPool.releaseAll()
+
+        // Release any legacy fallback players
         videoPlayers.values.forEach { player ->
             try {
                 player.clearVideoSurface()
                 player.stop()
                 player.release()
-                Timber.tag("VideoManager").d("✅ PLAYER RELEASED: Successfully released player")
             } catch (e: Exception) {
                 Timber.tag("VideoManager").e("❌ PLAYER RELEASE ERROR: $e")
             }
@@ -501,7 +458,7 @@ object VideoManager {
         activeVideos.clear()
         visibleVideos.clear()
         preloadedVideos.clear()
-        Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED: Cleared all video collections")
+        Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED")
     }
 
     // ===== PRELOADING =====
@@ -509,21 +466,15 @@ object VideoManager {
     /**
      * Preload a video in the background.
      *
-     * For HLS videos this resolves the correct playlist URL (master.m3u8 vs playlist.m3u8)
-     * via parallel HEAD probing BEFORE creating the player, so ExoPlayer starts with the
-     * right URL immediately. The result is persisted to disk by [HlsUrlResolver] so that
-     * subsequent loads (including the visible player in VideoPreview) skip the probe entirely.
+     * With the shared player pool, preloading does NOT create an ExoPlayer.
+     * Instead it resolves the HLS URL (cached to disk) so that when the video
+     * scrolls into view and acquires a pool player, loading is instant.
+     * SimpleCache handles disk-level segment caching automatically.
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
         if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
-        // Don't preload if video is already visible
-        if (isVideoVisible(videoMid)) {
-            return
-        }
-
-        if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
-            return // Already cached or preloaded
-        }
+        if (isVideoVisible(videoMid)) return
+        if (preloadedVideos.contains(videoMid)) return
 
         if (!preloadQueue.contains(videoMid)) {
             preloadQueue.add(videoMid)
@@ -533,30 +484,17 @@ object VideoManager {
                     preloadSemaphore.acquire()
                     if (!isActive) return@launch
 
-                    // Resolve the correct HLS URL before player creation.
-                    // HlsUrlResolver probes master.m3u8 and playlist.m3u8 in parallel
-                    // and caches the winner to disk — O(0) cost on all future loads.
-                    val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                    // Resolve the correct HLS URL and cache it to disk.
+                    // This is the main value of preloading — when the video later
+                    // acquires a pool player, it gets the correct URL instantly.
+                    if (videoType == MediaType.HLS_VIDEO) {
                         HlsUrlResolver.resolve(context, videoUrl)
-                    } else null
+                    }
 
                     if (!isActive) return@launch
-
-                    val player = createExoPlayer(
-                        context,
-                        videoUrl,
-                        videoType ?: MediaType.Video,
-                        resolvedHlsUrl = resolvedHlsUrl
-                    )
-
-                    if (!isActive) {
-                        try { player.release() } catch (_: Exception) {}
-                        return@launch
-                    }
-                    videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
                     preloadQueue.remove(videoMid)
-                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid (resolvedHls=${resolvedHlsUrl != null})")
+                    Timber.tag("preloadVideo").d("Preloaded HLS URL for $videoMid")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
@@ -583,10 +521,13 @@ object VideoManager {
     }
 
     /**
-     * Check if a video is preloaded
+     * Check if a video is preloaded (HLS URL resolved + segments warming in cache)
+     * or already has a player assigned in the pool.
      */
     fun isVideoPreloaded(videoMid: MimeiId): Boolean {
-        return preloadedVideos.contains(videoMid) || videoPlayers.containsKey(videoMid)
+        return preloadedVideos.contains(videoMid) ||
+               ExoPlayerPool.hasPlayer(videoMid) ||
+               videoPlayers.containsKey(videoMid)
     }
 
     // ===== FULL-SCREEN MANAGEMENT =====
@@ -771,7 +712,8 @@ object VideoManager {
      * Get a cached video player if it exists (without creating a new one)
      * Used for frame capture during sharing
      */
-    fun getCachedVideoPlayer(videoMid: MimeiId): ExoPlayer? = videoPlayers[videoMid]
+    fun getCachedVideoPlayer(videoMid: MimeiId): ExoPlayer? =
+        ExoPlayerPool.getAssignedPlayer(videoMid) ?: videoPlayers[videoMid]
 
     /**
      * Get the number of active videos
@@ -797,7 +739,7 @@ object VideoManager {
      * @param forceSoftwareDecoder If true, forces software decoder usage to avoid MediaCodec failures
      */
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null, forceSoftwareDecoder: Boolean = false): Boolean {
-        val player = videoPlayers[videoMid] ?: return false
+        val player = ExoPlayerPool.getAssignedPlayer(videoMid) ?: videoPlayers[videoMid] ?: return false
 
         Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid (software: $forceSoftwareDecoder)")
 
@@ -988,7 +930,7 @@ object VideoManager {
      * Get cache statistics
      */
     fun getCacheStats(): String {
-        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Visible: ${visibleVideos.size}, Preloaded: ${preloadedVideos.size}"
+        return "${ExoPlayerPool.getStats()}, Preloaded: ${preloadedVideos.size}"
     }
 
     // Player count checking removed - now relies entirely on system memory warnings
@@ -1070,7 +1012,8 @@ object VideoManager {
      * This allows seamless transition from preview to full-screen without losing position
      */
     fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
-        return videoPlayers[videoMid]?.also {
+        val player = ExoPlayerPool.getAssignedPlayer(videoMid) ?: videoPlayers[videoMid]
+        return player?.also {
             Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
             currentFullScreenVideoMid = videoMid
         }
