@@ -327,6 +327,9 @@ fun VideoPreview(
             .onGloballyPositioned { layoutCoordinates ->
                 val now = System.currentTimeMillis()
                 val timeSinceLastUpdate = now - state.lastVisibilityUpdate
+                // Skip expensive position/visibility calculations during rapid scroll
+                if (timeSinceLastUpdate < 200L) return@onGloballyPositioned
+                state.lastVisibilityUpdate = now
                 val totalHeight = layoutCoordinates.size.height.toFloat()
                 val visibilityRatio = if (totalHeight > 0) {
                     val windowPos = layoutCoordinates.positionInWindow()
@@ -344,10 +347,7 @@ fun VideoPreview(
                     state.isVideoVisible = newVisibility
                 }
                 if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
-                    if (timeSinceLastUpdate >= state.visibilityUpdateThrottleMs) {
-                        coordinator.updateVideoVisibility(videoMid, playbackTweetId, visibilityRatio)
-                        state.lastVisibilityUpdate = now
-                    }
+                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, visibilityRatio)
                 }
             }
             .clickable { callback(index) }

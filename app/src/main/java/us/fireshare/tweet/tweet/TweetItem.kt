@@ -105,7 +105,6 @@ fun TweetItem(
     var isVisible by remember { mutableStateOf(false) }
     var tweetTopY by remember { mutableStateOf(0f) }
     var lastVisibilityUpdate by remember { mutableLongStateOf(0L) }
-    val debounceMs = 300L // Increased from 150ms to reduce per-frame work on low-end devices
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
     val density = LocalDensity.current
     // Cached height for scroll-up stability (match iOS TweetHeightCache + willDisplay)
@@ -148,21 +147,26 @@ fun TweetItem(
                 if (measuredHeightPx >= 60f) {
                     TweetHeightCache.setHeight(tweet.mid, measuredHeightPx)
                 }
+                // Skip expensive visibility/bounds calculations during rapid scroll.
+                // boundsInRoot() and isElementVisible() are costly per-frame operations.
                 val now = System.currentTimeMillis()
-                if (now - lastVisibilityUpdate > debounceMs) {
-                    isVisible = isElementVisible(layoutCoordinates, 50)
+                if (now - lastVisibilityUpdate > 500L) {
                     lastVisibilityUpdate = now
+                    val newVisible = isElementVisible(layoutCoordinates, 50)
+                    // Only update state (triggering recomposition) if visibility actually changed
+                    if (newVisible != isVisible) {
+                        isVisible = newVisible
+                    }
 
                     val bounds = layoutCoordinates.boundsInRoot()
                     tweetTopY = bounds.top
 
                     // Update VideoPlaybackCoordinator with cell position and visibility
-                    // This replaces the old video-based tracking with cell-based tracking like iOS
                     coordinator.updateTweetCellPosition(
                         tweetId = tweet.mid,
                         cellTopY = bounds.top,
                         cellHeight = measuredHeightPx,
-                        isVisible = isVisible
+                        isVisible = newVisible
                     )
                 }
             }
@@ -240,6 +244,8 @@ private fun RetweetContent(
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
             if (originalTweetId != null && tweet.originalAuthorId != null) {
+                // Delay fetch so fast-scrolling cancels the coroutine before hitting the network
+                kotlinx.coroutines.delay(200L)
                 withContext(IO) {
                     try {
                         val originalAuthorId = tweet.originalAuthorId ?: ""
@@ -574,6 +580,8 @@ private fun QuotedTweetContent(
 
     LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
         if (originalTweetId != null && tweet.originalAuthorId != null) {
+            // Delay fetch so fast-scrolling cancels the coroutine before hitting the network
+            kotlinx.coroutines.delay(200L)
             try {
                 withContext(IO) {
                     originalTweet = HproseInstance.fetchTweet(

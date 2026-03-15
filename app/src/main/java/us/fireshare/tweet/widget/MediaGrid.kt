@@ -79,7 +79,6 @@ fun MediaGrid(
     enableCoordinator: Boolean = true,
     containerTopY: Float? = null
 ) {
-    Timber.d("MediaPreviewGrid: Composable called with ${mediaItems.size} items")
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
     // Optimize: Pre-compute derived values to avoid recalculation
@@ -148,6 +147,8 @@ fun MediaGrid(
     
     // Preload videos and images with limited concurrency to avoid thread pool contention
     LaunchedEffect(limitedMediaList) {
+        // Delay preloading so fast-scrolling cancels before starting heavy work
+        kotlinx.coroutines.delay(300L)
         val preloadSemaphore = kotlinx.coroutines.sync.Semaphore(2) // Max 2 concurrent preloads
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)

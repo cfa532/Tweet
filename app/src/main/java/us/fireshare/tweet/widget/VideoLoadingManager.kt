@@ -117,6 +117,8 @@ fun rememberTweetVideoPreloader(
 
     LaunchedEffect(currentVisibleIndex, tweets.size) {
         if (tweets.isNotEmpty() && currentVisibleIndex >= 0) {
+            // Delay so rapid scrolling cancels before triggering preload work
+            kotlinx.coroutines.delay(400L)
             VideoLoadingManager.preloadUpcomingVideos(
                 context = context,
                 currentTweetIndex = currentVisibleIndex,
