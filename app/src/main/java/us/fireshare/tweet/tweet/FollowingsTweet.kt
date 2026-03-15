@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavBackStackEntry
 import timber.log.Timber
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 
 /**
  * Tweets of the followings of current user.
@@ -39,6 +42,7 @@ fun FollowingsTweet(
     scrollToTopTrigger: Int = 0,
 ) {
     val tweets by viewModel.tweets.collectAsState()
+    val followingsCoordinator = remember { VideoPlaybackCoordinator() }
 
     // State for full-screen video
     var fullScreenVideoUrl by remember { mutableStateOf<String?>(null) }
@@ -47,27 +51,29 @@ fun FollowingsTweet(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        TweetListView(
-            tweets = tweets.also {
+        CompositionLocalProvider(LocalVideoCoordinator provides followingsCoordinator) {
+            TweetListView(
+                tweets = tweets.also {
 //                timber.log.Timber.tag("FollowingsTweet").d("Passing tweets to TweetListView: ${it.size}")
-            },
-            fetchTweets = { pageNumber ->
-                // Call the ViewModel's fetchTweets and return the result
-                viewModel.fetchTweets(pageNumber)
-            },
-            scrollBehavior = scrollBehavior,
-            contentPadding = PaddingValues(bottom = 64.dp),
-            showPrivateTweets = false,
-            parentEntry = parentEntry,
-            onScrollStateChange = onScrollStateChange,
-            // Don't pass currentUserId on main feed - it's only for profile screens
-            onTweetUnavailable = { tweetId ->
-                // Remove the tweet from the list when it becomes unavailable
-                viewModel.removeTweet(tweetId)
-            },
-            context = "followingsTweet",
-            scrollToTopTrigger = scrollToTopTrigger
-        )
+                },
+                fetchTweets = { pageNumber ->
+                    // Call the ViewModel's fetchTweets and return the result
+                    viewModel.fetchTweets(pageNumber)
+                },
+                scrollBehavior = scrollBehavior,
+                contentPadding = PaddingValues(bottom = 64.dp),
+                showPrivateTweets = false,
+                parentEntry = parentEntry,
+                onScrollStateChange = onScrollStateChange,
+                // Don't pass currentUserId on main feed - it's only for profile screens
+                onTweetUnavailable = { tweetId ->
+                    // Remove the tweet from the list when it becomes unavailable
+                    viewModel.removeTweet(tweetId)
+                },
+                context = "followingsTweet",
+                scrollToTopTrigger = scrollToTopTrigger
+            )
+        }
     }
     
     // Show full-screen video overlay

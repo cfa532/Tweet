@@ -120,6 +120,8 @@ class VideoPlaybackCoordinator(
         }
 
     private var primaryVideoId: String? = null
+    /** Set by [requestPlay] to prevent debounced visibility updates from immediately stopping a user-initiated play. */
+    private var userRequestedPlayAt: Long = 0L
 
     private var scrollDirection: Boolean = true
     private var previousContentOffset: Float = 0f
@@ -281,6 +283,20 @@ class VideoPlaybackCoordinator(
         }
 
         Timber.d("VideoPlaybackCoordinator: Built video list with ${videos.size} videos")
+
+        // Try to start playback using visibility data that arrived before the list was built.
+        // Only attempt to start — never stop, since VideoPreview may not have reported yet.
+        if (videos.isNotEmpty() && primaryVideoId == null && videoVisibilityMap.isNotEmpty()) {
+            val nowVisible = videos.filter { videoInfo ->
+                (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
+            }
+            if (nowVisible.isNotEmpty()) {
+                visibleVideos = nowVisible.sortedBy { videoInfo ->
+                    tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
+                }.toMutableList()
+                startPlaybackWithDebounce()
+            }
+        }
     }
 
     /**
@@ -421,6 +437,12 @@ class VideoPlaybackCoordinator(
         }
 
         if (visibleVideos.isEmpty()) {
+            // Don't stop a user-initiated play within 500ms of the request
+            val timeSinceUserRequest = System.currentTimeMillis() - userRequestedPlayAt
+            if (timeSinceUserRequest < 500L) {
+                Timber.d("VideoPlaybackCoordinator: Skipping stopAll — user requested play ${timeSinceUserRequest}ms ago")
+                return
+            }
             stopAllVideos()
             return
         }
@@ -548,6 +570,41 @@ class VideoPlaybackCoordinator(
         }
     }
 
+    /**
+     * Force a specific video to become the primary (user tapped play button).
+     * Stops the current primary and starts the requested video.
+     */
+    fun requestPlay(videoMid: MimeiId, tweetId: String) {
+        val identifier = "${tweetId}_$videoMid"
+        val info = videoMetaMap[identifier] ?: return
+
+        // Remove from finished set so it can play again
+        finishedVideoIds.remove(identifier)
+        // Protect from debounced stopAllVideos for 500ms
+        userRequestedPlayAt = System.currentTimeMillis()
+
+        val previousPrimaryId = primaryVideoId
+        primaryVideoId = identifier
+
+        scope.launch {
+            if (previousPrimaryId != null && previousPrimaryId != identifier) {
+                val prev = videoMetaMap[previousPrimaryId]
+                if (prev != null) {
+                    _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(prev.videoMid))
+                }
+            }
+            _playbackCommands.emit(
+                VideoPlaybackCommand.ShouldPlayVideo(
+                    tweetId = info.tweetId,
+                    videoMid = info.videoMid,
+                    videoIndex = info.index,
+                    isPrimary = true
+                )
+            )
+        }
+        Timber.d("VideoPlaybackCoordinator: User requested play for $videoMid")
+    }
+
     fun shouldAutoPlay(videoMid: MimeiId, tweetId: String): Boolean {
         val identifier = "${tweetId}_$videoMid"
         return primaryVideoId == identifier && visibleVideos.isNotEmpty()
@@ -598,6 +655,7 @@ class VideoPlaybackCoordinator(
         finishedVideoIds.clear()
         previousContentOffset = 0f
         scrollDirection = true
+        userRequestedPlayAt = 0L
 
         Timber.d("VideoPlaybackCoordinator: Cleared all state")
     }

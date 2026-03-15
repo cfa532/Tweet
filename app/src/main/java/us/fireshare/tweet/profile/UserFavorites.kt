@@ -18,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +51,8 @@ import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,6 +65,8 @@ fun UserFavorites(
     val favorites by viewModel.favorites.collectAsState()
     val favoritesInitialLoadComplete by viewModel.favoritesInitialLoadComplete.collectAsState()
     val user = appUser
+
+    val favoritesCoordinator = remember { VideoPlaybackCoordinator() }
 
     // Track scroll-to-top trigger
     var scrollToTopTrigger by remember { mutableIntStateOf(0) }
@@ -132,34 +137,36 @@ fun UserFavorites(
                     .background(color = Color.LightGray)
                     .padding(innerPadding),
             ) {
-                TweetListView(
-                    tweets = favorites,
-                    fetchTweets = { pageNumber ->
-                        viewModel.getFavorites(pageNumber)
-                    },
-                    showPrivateTweets = true,
-                    context = "appUserFavorites",
-                    parentEntry = parentEntry,
-                    isInitialLoading = favorites.isEmpty() && !favoritesInitialLoadComplete,
-                    scrollToTopTrigger = scrollToTopTrigger,
-                    onScrollStateChange = { newScrollState ->
-                        scrollState = newScrollState
-                        when (newScrollState.direction) {
-                            ScrollDirection.UP -> {
-                                BottomBarState.opacity = 0.98f
-                            }
-                            ScrollDirection.DOWN -> {
-                                coroutineScope.launch {
-                                    delay(100)
-                                    if (scrollState.direction == ScrollDirection.DOWN) {
-                                        BottomBarState.opacity = 0.2f
+                CompositionLocalProvider(LocalVideoCoordinator provides favoritesCoordinator) {
+                    TweetListView(
+                        tweets = favorites,
+                        fetchTweets = { pageNumber ->
+                            viewModel.getFavorites(pageNumber)
+                        },
+                        showPrivateTweets = true,
+                        context = "appUserFavorites",
+                        parentEntry = parentEntry,
+                        isInitialLoading = favorites.isEmpty() && !favoritesInitialLoadComplete,
+                        scrollToTopTrigger = scrollToTopTrigger,
+                        onScrollStateChange = { newScrollState ->
+                            scrollState = newScrollState
+                            when (newScrollState.direction) {
+                                ScrollDirection.UP -> {
+                                    BottomBarState.opacity = 0.98f
+                                }
+                                ScrollDirection.DOWN -> {
+                                    coroutineScope.launch {
+                                        delay(100)
+                                        if (scrollState.direction == ScrollDirection.DOWN) {
+                                            BottomBarState.opacity = 0.2f
+                                        }
                                     }
                                 }
+                                ScrollDirection.NONE -> {}
                             }
-                            ScrollDirection.NONE -> {}
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 

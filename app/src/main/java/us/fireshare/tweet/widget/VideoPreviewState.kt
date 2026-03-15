@@ -181,6 +181,10 @@ class VideoPreviewState(
                 }
                 Player.STATE_ENDED -> {
                     hasError = false
+                    if (shouldPlay) {
+                        player.seekTo(0)
+                        player.playWhenReady = true
+                    }
                 }
                 else -> {
                     isLoading = true
