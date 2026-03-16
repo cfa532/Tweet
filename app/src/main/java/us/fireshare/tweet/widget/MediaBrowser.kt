@@ -77,7 +77,6 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
-import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
 import us.fireshare.tweet.tweet.CommentButton
@@ -111,26 +110,23 @@ fun MediaBrowser(
     }
     val tweet by viewModel.tweetState.collectAsState()
     
-    // Inject SharedViewModel to get TweetListViewModel
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    
-    // Observe the video list from TweetListViewModel
-    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
-    val videoList = videoIndexedList.map { it.first } // Extract video mids from video-indexed list
-    
+    // Use the video list from FullScreenPlayerManager (synced by the coordinator when video was tapped)
+    val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
+    val videoList = fullScreenVideoList?.map { it.first } ?: emptyList()
+
     // Find the video mid from the current tweet's attachments
     val currentVideoMid = tweet.attachments?.firstOrNull { attachment ->
         val mediaType = inferMediaTypeFromAttachment(attachment)
         mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
     }?.mid
-    
-    val startIndex = if (currentVideoMid != null) {
-        sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(currentVideoMid)
+
+    val startIndex = if (currentVideoMid != null && fullScreenVideoList != null) {
+        fullScreenVideoList.indexOfFirst { it.first == currentVideoMid }.coerceAtLeast(0)
     } else {
         0
     }
-    
-    Timber.d("MediaBrowser - Using video list from TweetListViewModel: ${videoList.size} videos, start index: $startIndex")
+
+    Timber.d("MediaBrowser - Using video list from FullScreenPlayerManager: ${videoList.size} videos, start index: $startIndex")
     
     // Get attachments from the current tweet
     val tweetAttachments = tweet.attachments

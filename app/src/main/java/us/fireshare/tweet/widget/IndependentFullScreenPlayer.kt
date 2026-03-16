@@ -75,19 +75,18 @@ fun IndependentFullScreenPlayer(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    
-    // Observe the video list from TweetListViewModel
-    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
-    val actualVideoList = videoIndexedList // Use the full video list with MediaType info
+
+    // Use the video list from FullScreenPlayerManager (synced by the coordinator when video was tapped)
+    val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
+    val actualVideoList = fullScreenVideoList ?: emptyList()
     val actualStartIndex = if (tappedTweet != null) {
         // Find the video mid from the tapped tweet's attachments
         val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
             val mediaType = inferMediaTypeFromAttachment(attachment)
             mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
         }?.mid
-        if (videoMid != null) {
-            val foundIndex = sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+        if (videoMid != null && fullScreenVideoList != null) {
+            val foundIndex = fullScreenVideoList.indexOfFirst { it.first == videoMid }.coerceAtLeast(0)
             Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in video list")
             foundIndex
         } else {

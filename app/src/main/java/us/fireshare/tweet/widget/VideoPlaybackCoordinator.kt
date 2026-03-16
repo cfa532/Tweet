@@ -714,6 +714,22 @@ class VideoPlaybackCoordinator(
     }
 
     /**
+     * Sync this coordinator's video list to FullScreenPlayerManager.
+     * Called when the user taps a video for full-screen playback, so the full-screen player
+     * uses the same video list as the current screen's coordinator (not the main feed's list).
+     */
+    fun syncToFullScreenPlayer() {
+        val videoListForFullScreen = allVideos.map { videoInfo ->
+            val tweet = currentTweets.find { it.mid == videoInfo.tweetId }
+            val attachment = tweet?.attachments?.getOrNull(videoInfo.index)
+            val mediaType = attachment?.type ?: MediaType.Video
+            Pair(videoInfo.videoMid, mediaType)
+        }
+        FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
+        Timber.d("VideoPlaybackCoordinator: Synced ${videoListForFullScreen.size} videos to FullScreenPlayerManager")
+    }
+
+    /**
      * Clear all coordinator state. Call when the screen using this coordinator is disposed.
      */
     fun clear() {

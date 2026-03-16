@@ -58,6 +58,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.AudioPreview
 import us.fireshare.tweet.widget.ImageViewer
+import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
@@ -92,6 +93,7 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val videoCoordinator = LocalVideoCoordinator.current
     // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
     // If parentTweetId is provided, it represents the retweet/quote container tweet
     // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
@@ -123,6 +125,9 @@ fun MediaItemView(
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
+                // Sync the current coordinator's video list to FullScreenPlayerManager
+                // so full-screen playback uses the same list (bookmarks/favorites/profile)
+                videoCoordinator.syncToFullScreenPlayer()
                 // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
                 val params = MediaViewerParams(
                     mediaItems.map {
