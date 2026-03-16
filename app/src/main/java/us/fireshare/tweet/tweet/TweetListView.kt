@@ -331,11 +331,13 @@ fun TweetListView(
             )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
-            // Release inactive video players when leaving this feed to free memory.
             // Clear only this list's coordinator (from LocalVideoCoordinator) so main feed and
             // profile coordinators do not clear each other when switching screens.
             coordinator.clear()
-            VideoManager.cleanupInactivePlayers()
+            // Defer inactive player cleanup so the incoming screen has time to mark its
+            // players as active/visible. Synchronous cleanup here races with navigation
+            // and releases players that the next screen just created but hasn't registered yet.
+            VideoManager.cleanupInactivePlayersDeferred()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
             isRefreshingAtBottom = false
             isRefreshingAtTop = false

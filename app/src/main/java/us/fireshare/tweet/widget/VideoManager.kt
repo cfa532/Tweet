@@ -889,12 +889,25 @@ object VideoManager {
         val inactivePlayers = videoPlayers.keys.filter { videoMid ->
             !activeVideos.containsKey(videoMid) && !visibleVideos.contains(videoMid)
         }
-        
+
         if (inactivePlayers.isNotEmpty()) {
             Timber.tag("VideoManager").d("🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players")
             inactivePlayers.forEach { videoMid ->
                 releasePlayer(videoMid)
             }
+        }
+    }
+
+    /**
+     * Deferred version of [cleanupInactivePlayers]. Waits 500ms before cleaning up
+     * so that incoming screens have time to mark their players as active/visible.
+     * This prevents a race condition during navigation where the outgoing screen's
+     * onDispose releases players that the incoming screen just created.
+     */
+    fun cleanupInactivePlayersDeferred() {
+        videoLoadingScope.launch {
+            delay(500L)
+            cleanupInactivePlayers()
         }
     }
     

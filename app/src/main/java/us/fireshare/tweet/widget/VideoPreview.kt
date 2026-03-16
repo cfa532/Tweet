@@ -234,17 +234,9 @@ fun VideoPreview(
                 findViewById<ImageView>(R.id.mute_button).setOnClickListener {
                     state.toggleMute()
                 }
-                // Play button click - resume playback via coordinator
-                findViewById<ImageView>(R.id.play_button).setOnClickListener {
-                    if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                        exoPlayer.seekTo(0)
-                    }
-                    if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
-                        coordinator.requestPlay(videoMid, playbackTweetId)
-                    } else {
-                        exoPlayer.playWhenReady = true
-                    }
-                }
+                // Play button click handler is set in the update block so it always
+                // references the current exoPlayer (factory closures go stale after
+                // player recreation via playerGeneration changes).
                 // Retry button click
                 findViewById<Button>(R.id.retry_button).setOnClickListener {
                     state.manualRetry(ctx, url, videoType, retryScope)
@@ -263,8 +255,20 @@ fun VideoPreview(
             if (playerView.player !== exoPlayer) {
                 playerView.player = exoPlayer
             }
-            // Play button (show when not playing, not loading, not error)
+            // Re-wire play button on every update so it always references the current
+            // exoPlayer and coordinator (factory closures go stale after player recreation).
             val playBtn = view.findViewById<ImageView>(R.id.play_button)
+            playBtn.setOnClickListener {
+                if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                    exoPlayer.seekTo(0)
+                }
+                if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                    coordinator.requestPlay(videoMid, playbackTweetId)
+                } else {
+                    exoPlayer.playWhenReady = true
+                }
+            }
+            // Play button (show when not playing, not loading, not error)
             val showPlayButton = !state.isPlaying && !state.isLoading && !state.hasError
             if (showPlayButton && playBtn.visibility != View.VISIBLE) {
                 playBtn.alpha = 1f
