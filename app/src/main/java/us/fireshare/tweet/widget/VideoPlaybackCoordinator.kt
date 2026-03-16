@@ -122,6 +122,8 @@ class VideoPlaybackCoordinator(
     private var primaryVideoId: String? = null
     /** Set by [requestPlay] to prevent debounced visibility updates from immediately stopping a user-initiated play. */
     private var userRequestedPlayAt: Long = 0L
+    /** Set by [buildVideoList] to protect auto-play from visibility fluctuations during screen load. */
+    private var videoListBuiltAt: Long = 0L
 
     private var scrollDirection: Boolean = true
     private var previousContentOffset: Float = 0f
@@ -138,24 +140,7 @@ class VideoPlaybackCoordinator(
      * Called by TweetItem when embedded tweets are loaded
      */
     fun addEmbeddedTweetVideos(quotingTweetId: MimeiId, embeddedTweet: Tweet) {
-        val videosToAdd = mutableListOf<VideoPlaybackInfo>()
-
-        embeddedTweet.attachments?.forEachIndexed { index, attachment ->
-            if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                val videoInfo = VideoPlaybackInfo(
-                    tweetId = quotingTweetId,
-                    videoMid = attachment.mid,
-                    index = index
-                )
-                videosToAdd.add(videoInfo)
-            }
-        }
-
-        if (videosToAdd.isNotEmpty()) {
-            scope.launch {
-                buildVideoList(currentTweets, emptyList())
-            }
-        }
+        addVideosFromTweet(quotingTweetId, embeddedTweet, "embedded")
     }
 
     /**
@@ -163,22 +148,57 @@ class VideoPlaybackCoordinator(
      * Called by TweetItem when retweet original tweets are loaded
      */
     fun addRetweetVideos(retweetId: MimeiId, originalTweet: Tweet) {
-        val videosToAdd = mutableListOf<VideoPlaybackInfo>()
+        addVideosFromTweet(retweetId, originalTweet, "retweet")
+    }
 
-        originalTweet.attachments?.forEachIndexed { index, attachment ->
+    /**
+     * Directly insert videos from a lazily-loaded tweet (retweet original or quoted embed)
+     * into the coordinator's tracking structures. Unlike the old approach that called
+     * buildVideoList (which relies on getCachedTweetMemoryOnly and may still miss the tweet),
+     * this inserts the already-available videos immediately.
+     *
+     * Called from IO thread (RetweetContent/QuotedTweetContent), so dispatch to Main
+     * since allVideos/videoMetaMap are not thread-safe.
+     */
+    private fun addVideosFromTweet(parentTweetId: MimeiId, tweet: Tweet, source: String) {
+        val videosToInsert = mutableListOf<VideoPlaybackInfo>()
+        tweet.attachments?.forEachIndexed { index, attachment ->
             if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                val videoInfo = VideoPlaybackInfo(
-                    tweetId = retweetId,
-                    videoMid = attachment.mid,
-                    index = index
+                videosToInsert.add(
+                    VideoPlaybackInfo(
+                        tweetId = parentTweetId,
+                        videoMid = attachment.mid,
+                        index = index
+                    )
                 )
-                videosToAdd.add(videoInfo)
             }
         }
+        if (videosToInsert.isEmpty()) return
 
-        if (videosToAdd.isNotEmpty()) {
-            scope.launch {
-                buildVideoList(currentTweets, emptyList())
+        scope.launch {
+            var added = 0
+            videosToInsert.forEach { videoInfo ->
+                if (!videoMetaMap.containsKey(videoInfo.identifier)) {
+                    allVideos.add(videoInfo)
+                    videoMetaMap[videoInfo.identifier] = videoInfo
+                    added++
+                }
+            }
+            if (added > 0) {
+                Timber.d("VideoPlaybackCoordinator: Added $added $source video(s) for tweet $parentTweetId (total: ${allVideos.size})")
+                // If nothing is playing yet, check whether any of the newly-added videos
+                // are already visible and should auto-play.
+                if (primaryVideoId == null && videoVisibilityMap.isNotEmpty()) {
+                    val nowVisible = allVideos.filter { videoInfo ->
+                        (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
+                    }
+                    if (nowVisible.isNotEmpty()) {
+                        visibleVideos = nowVisible.sortedBy { videoInfo ->
+                            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
+                        }.toMutableList()
+                        startPlaybackWithDebounce()
+                    }
+                }
             }
         }
     }
@@ -284,6 +304,10 @@ class VideoPlaybackCoordinator(
 
         Timber.d("VideoPlaybackCoordinator: Built video list with ${videos.size} videos")
 
+        // Protect auto-play from premature stopAllVideos caused by layout instability
+        // during screen transitions (visibility can temporarily drop below threshold).
+        videoListBuiltAt = System.currentTimeMillis()
+
         // Try to start playback using visibility data that arrived before the list was built.
         // Only attempt to start — never stop, since VideoPreview may not have reported yet.
         if (videos.isNotEmpty() && primaryVideoId == null && videoVisibilityMap.isNotEmpty()) {
@@ -322,7 +346,22 @@ class VideoPlaybackCoordinator(
      * Called by VideoPreview when its visibility changes.
      */
     fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, visibilityRatio: Float) {
-        val identifier = "${tweetId}_$videoMid"
+        val rawIdentifier = "${tweetId}_$videoMid"
+        // Normalize: if allVideos has a video with the same videoMid under a different tweetId,
+        // use that identifier instead. This fixes the mismatch between the playbackTweetId
+        // from VideoPreview and the tweetId used by buildVideoList (e.g. for retweets in bookmarks).
+        val identifier = if (videoMetaMap.containsKey(rawIdentifier)) {
+            rawIdentifier
+        } else {
+            val existing = allVideos.find { it.videoMid == videoMid }
+            if (existing != null && existing.identifier != rawIdentifier) {
+                // Also cache the alias so requestPlay/shouldAutoPlay can use either identifier
+                videoMetaMap[rawIdentifier] = existing
+                existing.identifier
+            } else {
+                rawIdentifier
+            }
+        }
         val previousRatio = videoVisibilityMap[identifier] ?: 0f
         videoVisibilityMap[identifier] = visibilityRatio
 
@@ -437,10 +476,18 @@ class VideoPlaybackCoordinator(
         }
 
         if (visibleVideos.isEmpty()) {
+            val now = System.currentTimeMillis()
             // Don't stop a user-initiated play within 500ms of the request
-            val timeSinceUserRequest = System.currentTimeMillis() - userRequestedPlayAt
+            val timeSinceUserRequest = now - userRequestedPlayAt
             if (timeSinceUserRequest < 500L) {
                 Timber.d("VideoPlaybackCoordinator: Skipping stopAll — user requested play ${timeSinceUserRequest}ms ago")
+                return
+            }
+            // Don't stop auto-play within 500ms of building the video list — layout
+            // settling during screen transitions can temporarily report 0% visibility.
+            val timeSinceListBuilt = now - videoListBuiltAt
+            if (timeSinceListBuilt < 500L) {
+                Timber.d("VideoPlaybackCoordinator: Skipping stopAll — video list built ${timeSinceListBuilt}ms ago")
                 return
             }
             stopAllVideos()
@@ -576,7 +623,27 @@ class VideoPlaybackCoordinator(
      */
     fun requestPlay(videoMid: MimeiId, tweetId: String) {
         val identifier = "${tweetId}_$videoMid"
-        val info = videoMetaMap[identifier] ?: return
+        var info = videoMetaMap[identifier]
+        if (info == null) {
+            // Fallback: search by videoMid alone. This handles mismatches between the tweetId
+            // used in buildVideoList (e.g. retweet wrapper ID) and the playbackTweetId from
+            // the UI (e.g. original tweet ID), which can happen in bookmarks/profile contexts.
+            info = videoMetaMap.values.find { it.videoMid == videoMid }
+            if (info != null) {
+                Timber.d("VideoPlaybackCoordinator: requestPlay resolved '$identifier' via videoMid fallback (actual tweetId: ${info.tweetId})")
+                // Cache the alias so future lookups succeed directly
+                videoMetaMap[identifier] = info
+            }
+        }
+        if (info == null) {
+            // Video not yet in coordinator — register it on the fly so playback can proceed.
+            // This happens when the original tweet for a retweet/quote hasn't been added via
+            // addRetweetVideos/addEmbeddedTweetVideos yet (timing gap).
+            info = VideoPlaybackInfo(tweetId = tweetId, videoMid = videoMid, index = 0)
+            allVideos.add(info)
+            videoMetaMap[identifier] = info
+            Timber.d("VideoPlaybackCoordinator: requestPlay registered missing video '$identifier' on the fly")
+        }
 
         // Remove from finished set so it can play again
         finishedVideoIds.remove(identifier)
@@ -595,8 +662,8 @@ class VideoPlaybackCoordinator(
             }
             _playbackCommands.emit(
                 VideoPlaybackCommand.ShouldPlayVideo(
-                    tweetId = info.tweetId,
-                    videoMid = info.videoMid,
+                    tweetId = tweetId,
+                    videoMid = videoMid,
                     videoIndex = info.index,
                     isPrimary = true
                 )
@@ -607,14 +674,26 @@ class VideoPlaybackCoordinator(
 
     fun shouldAutoPlay(videoMid: MimeiId, tweetId: String): Boolean {
         val identifier = "${tweetId}_$videoMid"
-        return primaryVideoId == identifier && visibleVideos.isNotEmpty()
+        // Also check if primaryVideoId matches via videoMid fallback
+        if (primaryVideoId == identifier && visibleVideos.isNotEmpty()) return true
+        if (primaryVideoId != null && visibleVideos.isNotEmpty()) {
+            val primaryInfo = videoMetaMap[primaryVideoId]
+            return primaryInfo?.videoMid == videoMid
+        }
+        return false
     }
 
     fun handleVideoFinished(videoMid: MimeiId, tweetId: String) {
         val identifier = "${tweetId}_$videoMid"
         finishedVideoIds.add(identifier)
 
-        if (primaryVideoId == identifier) {
+        // Also check if primaryVideoId matches via videoMid (handles tweetId mismatch)
+        val isPrimary = primaryVideoId == identifier ||
+            (primaryVideoId != null && videoMetaMap[primaryVideoId]?.videoMid == videoMid)
+        if (isPrimary) {
+            if (primaryVideoId != null && primaryVideoId != identifier) {
+                finishedVideoIds.add(primaryVideoId!!)
+            }
             primaryVideoId = null
             // Emit stop so VideoPreview clears coordinatorWantsToPlay
             scope.launch {
@@ -656,6 +735,7 @@ class VideoPlaybackCoordinator(
         previousContentOffset = 0f
         scrollDirection = true
         userRequestedPlayAt = 0L
+        videoListBuiltAt = 0L
 
         Timber.d("VideoPlaybackCoordinator: Cleared all state")
     }
