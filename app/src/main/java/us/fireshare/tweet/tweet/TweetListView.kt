@@ -245,6 +245,8 @@ fun TweetListView(
     var lastUserId by remember { mutableStateOf<MimeiId?>(null) }
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
     var isInitializingData by remember { mutableStateOf(false) }
+    // Track whether the user has actually scrolled, to prevent preloading on initial layout
+    var hasUserScrolled by remember { mutableStateOf(false) }
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Restore scroll position from in-memory store
@@ -254,6 +256,8 @@ fun TweetListView(
     // Pagination states
     var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
     var serverDepleted by rememberSaveable { mutableStateOf(false) }
+    // Track pages currently being fetched to prevent duplicate in-flight requests
+    val inFlightPages = remember { mutableSetOf<Int>() }
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = initialScrollPosition.first,
         initialFirstVisibleItemScrollOffset = initialScrollPosition.second
@@ -350,39 +354,24 @@ fun TweetListView(
     // EFFECT 1: Data initialization and user changes (non-blocking)
     LaunchedEffect(currentUserId) {
         if (currentUserId != lastUserId) {
+            lastUserId = currentUserId
             lastLoadedPage = -1
             serverDepleted = false
-            
+            inFlightPages.clear()
+            hasUserScrolled = false
+
             // PERF FIX: Clear processedTweetIds to prevent memory leak on user change
             processedTweetIds.clear()
             lastProcessedTweetCount = 0
 
-            // If tweets already loaded, infer state
+            // If tweets already loaded (e.g., by ViewModel.initialize()), just infer state.
+            // Skip redundant fetchTweets(0) — the ViewModel already handles initial loading.
             if (tweets.isNotEmpty()) {
                 serverDepleted = tweets.size < TW_CONST.PAGE_SIZE
                 lastLoadedPage = 0
-                return@LaunchedEffect
             }
-
-            // Initialize data asynchronously without blocking
-            isInitializingData = true
-            val initJob = coroutineScope.launch {
-                try {
-                    withContext(Dispatchers.IO) {
-                        val result = fetchTweets(0)
-                        if (result.size < TW_CONST.PAGE_SIZE) {
-                            serverDepleted = true
-                        }
-                        lastLoadedPage = 0
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("TweetListView").e(e, "Initialization error")
-                    serverDepleted = true
-                } finally {
-                    isInitializingData = false
-                }
-            }
-            addJob("init", initJob)
+            // When tweets are empty, ViewModel.initialize()/reset() will populate them,
+            // and EFFECT 2 will set lastLoadedPage when tweets arrive.
         }
     }
 
@@ -552,6 +541,11 @@ fun TweetListView(
                     lastSaveTime = now
                 }
 
+                // Track that user has interacted with the list
+                if (isScrolling && !hasUserScrolled) {
+                    hasUserScrolled = true
+                }
+
                 // --- Pagination checks (only when scroll stops) ---
                 if (isScrolling) return@collect
 
@@ -568,8 +562,9 @@ fun TweetListView(
                     onIsAtLastTweetChange?.invoke(isAtLastTweet)
                 }
 
-                // Load-more trigger when at bottom
+                // Load-more trigger when at bottom (only after user has scrolled)
                 if (!isAtLastTweet) return@collect
+                if (!hasUserScrolled) return@collect
                 if (serverDepleted) return@collect
                 if (isRefreshingAtBottom) return@collect
                 if (tweets.isEmpty()) return@collect
@@ -586,8 +581,10 @@ fun TweetListView(
                 if (timeSinceLastTrigger < loadMoreDebounceMs) return@collect
 
                 val nextPage = lastLoadedPage + 1
+                if (nextPage in inFlightPages) return@collect // Deduplicate in-flight request
                 pendingLoadMorePage = nextPage
                 lastLoadMoreTrigger = now
+                inFlightPages.add(nextPage)
 
                 Timber.tag("TweetListView-LoadMore").d("TRIGGERING: page=$nextPage")
 
@@ -599,6 +596,7 @@ fun TweetListView(
                     Timber.tag("TweetListView-LoadMore").w("TIMEOUT: forcing spinner to hide")
                     isRefreshingAtBottom = false
                     pendingLoadMorePage = -1
+                    inFlightPages.remove(nextPage)
                 }
 
                 val loadJob = coroutineScope.launch {
@@ -640,6 +638,7 @@ fun TweetListView(
 
                             isRefreshingAtBottom = false
                             pendingLoadMorePage = -1
+                            inFlightPages.remove(nextPage)
 
                             if (!foundValidTweets) {
                                 lastNoMoreTweetsShown = System.currentTimeMillis()
@@ -663,6 +662,7 @@ fun TweetListView(
                     withContext(Dispatchers.IO) {
                         serverDepleted = false
                         lastLoadedPage = -1
+                        inFlightPages.clear()
                         fetchTweets(0)
                     }
                     listState.scrollToItem(0, 0)
@@ -677,11 +677,13 @@ fun TweetListView(
         }
     )
 
-    // EFFECT 4: Preload next page when near bottom
+    // EFFECT 4: Preload next page when near bottom (only after user has scrolled)
     LaunchedEffect(isNearBottom, serverDepleted, lastLoadedPage) {
-        if (isNearBottom && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
+        if (isNearBottom && hasUserScrolled && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
             val nextPage = lastLoadedPage + 1
+            if (nextPage in inFlightPages) return@LaunchedEffect // Deduplicate in-flight request
             pendingLoadMorePage = nextPage
+            inFlightPages.add(nextPage)
             
             val preloadJob = coroutineScope.launch {
                 try {
@@ -705,6 +707,7 @@ fun TweetListView(
                     Timber.tag("TweetListView").e(e, "Preload error")
                 } finally {
                     pendingLoadMorePage = -1
+                    inFlightPages.remove(nextPage)
                 }
             }
             addJob("preload-$nextPage", preloadJob)
