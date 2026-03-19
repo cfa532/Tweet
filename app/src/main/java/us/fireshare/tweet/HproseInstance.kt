@@ -584,8 +584,35 @@ object HproseInstance {
             val hasCachedBaseUrl = !appUser.baseUrl.isNullOrBlank()
 
             if (hasCachedBaseUrl) {
-                Timber.tag("initAppEntry")
-                    .d("Found cached baseUrl: ${appUser.baseUrl}, will try it first before resolving new IP")
+                // Health-check cached baseUrl before showing UI.
+                // If stale (e.g. dynamic IP changed), resolve fresh IP first to prevent
+                // all subsequent operations (getFans, getTweetFeed, images) from
+                // hammering a dead IP for 30+ seconds.
+                Timber.tag("initAppEntry").d("Health-checking cached baseUrl: ${appUser.baseUrl}")
+                val cachedHealthy = withContext(Dispatchers.IO) {
+                    isServerHealthy(appUser.baseUrl!!)
+                }
+                if (cachedHealthy) {
+                    Timber.tag("initAppEntry").d("✅ Cached baseUrl is healthy")
+                } else {
+                    Timber.tag("initAppEntry").w("Cached baseUrl unhealthy, resolving fresh IP...")
+                    invalidateIPCache(appUser.baseUrl)
+                    try {
+                        val providerIP = withContext(Dispatchers.IO) { getProviderIP(userId) }
+                        if (providerIP != null) {
+                            appUser.baseUrl = if (providerIP.startsWith("http://")) providerIP else "http://$providerIP"
+                        } else {
+                            val entryIP = findEntryIP()
+                            appUser.baseUrl = "http://$entryIP"
+                        }
+                    } catch (e: Exception) {
+                        val entryIP = findEntryIP()
+                        appUser.baseUrl = "http://$entryIP"
+                    }
+                    appUser.clearHproseService()
+                    User.updateUserInstance(appUser, true)
+                    Timber.tag("initAppEntry").d("✅ Updated baseUrl to: ${appUser.baseUrl}")
+                }
             } else {
                 // No cached baseUrl, resolve new IP immediately
                 val entryIP = findEntryIP()
@@ -594,57 +621,37 @@ object HproseInstance {
                 User.updateUserInstance(appUser, true)
             }
 
-            // If we have cached user data, show UI immediately
-            // Otherwise, wait for network fetch to complete first
+            // Show UI now that we have a verified baseUrl
             if (hasCachedData) {
-                // Cached user has valid data, mark as initialized
                 _isAppUserInitialized.value = true
                 Timber.tag("initAppEntry").d("🚀 BaseUrl ready with cached data, showing UI now (initialized: true)")
                 onBaseUrlReady?.invoke()
             }
 
-            // THEN: Fetch fresh data from network in background (IO dispatcher)
-            // If we have cached data, this runs in background without blocking UI
-            // If no cached data, this still runs but may delay UI briefly
+            // Fetch fresh user data from network
             Timber.tag("initAppEntry").d("Fetching user data from network...")
 
-            // Fetch user data from network on IO dispatcher to avoid blocking main thread
-            // Retry up to 3 times with exponential backoff if user fetch fails
             var refreshedUser: User? = null
             val maxFetchAttempts = 3
-            var resolvedNewIP = false  // Track if we've already resolved new IP
 
             try {
                 for (attempt in 1..maxFetchAttempts) {
                     Timber.tag("initAppEntry").d("User fetch attempt $attempt/$maxFetchAttempts for userId: $userId")
 
-                    // Use withTimeoutOrNull with 20 second timeout per attempt
                     refreshedUser = withContext(Dispatchers.IO) {
                         withTimeoutOrNull(20_000) {
-                            // First attempt: use cached baseUrl if available
-                            // Subsequent attempts: pass empty string to force IP re-resolution
-                            val baseUrlParam = if (attempt == 1 && hasCachedBaseUrl) {
+                            val baseUrlParam = if (attempt == 1) {
                                 appUser.baseUrl ?: ""
                             } else {
-                                ""
+                                ""  // Force IP re-resolution on retry
                             }
                             fetchUser(userId, baseUrl = baseUrlParam, forceRefresh = true)
                         }
                     }
 
-                    // If successful, break out of retry loop
                     if (refreshedUser != null && !refreshedUser.baseUrl.isNullOrBlank()) {
                         Timber.tag("initAppEntry").d("✅ User fetch successful on attempt $attempt")
                         break
-                    }
-
-                    // If first attempt with cached IP failed, resolve new IP before retry
-                    if (attempt == 1 && hasCachedBaseUrl && !resolvedNewIP) {
-                        Timber.tag("initAppEntry").w("Cached baseUrl failed, resolving new IP...")
-                        val entryIP = findEntryIP()
-                        appUser.baseUrl = "http://$entryIP"
-                        resolvedNewIP = true
-                        Timber.tag("initAppEntry").d("Resolved new IP for retry: ${appUser.baseUrl}")
                     }
 
                     // If failed and not last attempt, wait before retrying
@@ -677,18 +684,12 @@ object HproseInstance {
                         onBaseUrlReady?.invoke()
                     }
                 } else {
-                    // All retry attempts failed - resolve new IP if we haven't already
-                    if (!resolvedNewIP) {
-                        Timber.tag("initAppEntry").w("All attempts failed with cached IP, resolving new IP as fallback...")
-                        val entryIP = findEntryIP()
-                        appUser.baseUrl = "http://$entryIP"
-                        Timber.tag("initAppEntry").w("Resolved fallback IP: ${appUser.baseUrl}")
-                    } else if (appUser.baseUrl.isNullOrBlank()) {
-                        // fetchUser may have cleared baseUrl when user not found
+                    // All retry attempts failed - ensure we have a usable baseUrl
+                    if (appUser.baseUrl.isNullOrBlank()) {
                         val entryIP = findEntryIP()
                         appUser.baseUrl = "http://$entryIP"
                         Timber.tag("initAppEntry")
-                            .w("All user fetch attempts failed, resolved new baseUrl: ${appUser.baseUrl}")
+                            .w("All user fetch attempts failed, resolved fallback baseUrl: ${appUser.baseUrl}")
                     } else {
                         Timber.tag("initAppEntry")
                             .w("All user fetch attempts failed, continuing with existing baseUrl: ${appUser.baseUrl}")
@@ -3753,6 +3754,14 @@ object HproseInstance {
                     // MATCH iOS: Clear baseUrl and let retry loop handle it
                     // This ensures next attempt will resolve fresh IP
                     Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
+
+                    // Remove unhealthy node from pool (null response indicates node issue)
+                    val accessNodeMid = user.hostIds?.getOrNull(1)
+                    if (accessNodeMid != null) {
+                        Timber.tag("updateUserFromServer").d("Removing node $accessNodeMid from pool after null response")
+                        NodePool.removeNode(accessNodeMid)
+                    }
+
                     user.baseUrl = null
 
                     // If this was the last attempt, fail
@@ -3782,39 +3791,46 @@ object HproseInstance {
                 
                 lastError = e
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
-                
-                if (skipRetryAndBlacklist) {
-                    // Restore original baseUrl before returning
-                    if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
-                        user.baseUrl = originalBaseUrl
-                        Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after exception: $originalBaseUrl")
+
+                // Invalidate IP cache so retry's getProviderIP() health check won't
+                // return stale "healthy" for the failed IP
+                invalidateIPCache(user.baseUrl)
+
+                // Remove unhealthy node from pool only for genuine connection failures.
+                // Timeouts and cancellations can be caused by backgrounding/task teardown,
+                // not necessarily an unhealthy node.
+                val isTransient = e is java.net.SocketTimeoutException ||
+                        e.message?.contains("timeout", ignoreCase = true) == true
+                if (!isTransient) {
+                    val accessNodeMid = user.hostIds?.getOrNull(1)
+                    if (accessNodeMid != null) {
+                        Timber.tag("updateUserFromServer").d("Removing unhealthy node $accessNodeMid from pool after failure")
+                        NodePool.removeNode(accessNodeMid)
                     }
+                }
+
+                if (skipRetryAndBlacklist) {
                     return false
                 }
-                
+
                 if (attempt < maxRetries) {
                     val delayMs = attempt * 1000L
                     delay(delayMs)
-                } else {
-                    // Last attempt failed - restore original baseUrl
-                    if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
-                        user.baseUrl = originalBaseUrl
-                        Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after final attempt exception: $originalBaseUrl")
-                    }
                 }
             }
         }
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
-        
-        // CRITICAL: Restore original baseUrl if all retries failed
-        // Don't leave baseUrl as null - IPFS network instability can cause temporary failures
-        // Preserve the last known working baseUrl so user can retry later
-        if (!originalBaseUrl.isNullOrEmpty() && user.baseUrl.isNullOrEmpty()) {
-            user.baseUrl = originalBaseUrl
-            Timber.tag("updateUserFromServer").d("🔧 Restored originalBaseUrl after all retries failed: $originalBaseUrl")
+
+        // MATCH iOS: Remove node from pool and clear stale baseUrl
+        // so the NEXT fetchUser call forces fresh IP resolution via getProviderIP()
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+        if (accessNodeMid != null && !user.baseUrl.isNullOrEmpty()) {
+            Timber.tag("updateUserFromServer").d("Removing failed node $accessNodeMid from pool after all retries failed")
+            NodePool.removeNode(accessNodeMid)
         }
-        
+        user.baseUrl = null
+
         if (!skipRetryAndBlacklist && lastError != null) {
             BlackList.recordFailure(user.mid)
         }
@@ -3852,6 +3868,21 @@ object HproseInstance {
      */
     private suspend fun cacheIPHealth(ipAddress: String, isHealthy: Boolean) = ipCacheMutex.withLock {
         ipHealthCache[ipAddress] = Pair(isHealthy, System.currentTimeMillis())
+    }
+
+    /**
+     * Invalidate IP cache entry so retry's getProviderIP() health check
+     * won't return stale "healthy" for a failed IP
+     */
+    private suspend fun invalidateIPCache(baseUrl: String?) {
+        if (baseUrl.isNullOrEmpty()) return
+        val cacheKey = baseUrl
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .substringBefore("/")
+        ipCacheMutex.withLock {
+            ipHealthCache.remove(cacheKey)
+        }
     }
 
     /**
@@ -4141,58 +4172,17 @@ object HproseInstance {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
             return findEntryIP()
         }
-        
-        // Step 1: Try lookup using appUser's client
-        try {
-            val providerIP = _getProviderIP(mid)
-            if (providerIP != null) {
-                return providerIP
-            }
-            // null means: server responded but no IPs found (user not found)
-            // Continue to fallback logic
-        } catch (e: Exception) {
-            // Network error occurred - propagate exception to trigger retry
-            Timber.tag("getProviderIP").w(e, "Network error in _getProviderIP for $mid, propagating exception")
-            throw e
-        }
 
-        // Step 2: Check if user is appUser
-        if (mid == appUser.mid) {
-            // User IS appUser
-            // Only use entry IP as fallback if appUser.baseUrl is not yet initialized
-            if (appUser.baseUrl.isNullOrBlank()) {
-                // App is still initializing - use entry IP to lookup appUser's IPs
-                Timber.tag("getProviderIP").d("appUser not yet initialized, using entry IP for lookup")
-                return try {
-                    val entryIP = findEntryIP()
-                    val baseUrl = "http://$entryIP"
-                    _getProviderIP(mid, HproseClientPool.getRegularClient(baseUrl))
-                } catch(e: Exception) {
-                    Timber.tag("getProviderIP").e(e, "Entry IP lookup failed for appUser $mid")
-                    // Propagate network errors
-                    throw e
-                }
-            } else {
-                // App is already initialized - appUser lookup failed, return null
-                Timber.tag("getProviderIP").w("appUser lookup failed despite initialized baseUrl: ${appUser.baseUrl}")
-                return null
-            }
-        }
-        
-        // Step 3: For non-appUser - check appUser health
-        val appUserBaseUrl = appUser.baseUrl ?: return null
-        
-        if (!isServerHealthy(appUserBaseUrl)) {
-            // AppUser UNHEALTHY - This could be temporary network issue
-            // In most cases during normal app operation, we should just return null
-            // and let the caller handle the failure, rather than triggering a full entry IP lookup
-            Timber.tag("getProviderIP").w("appUser server unhealthy at $appUserBaseUrl - provider lookup failed")
-            return null
-        } else {
-            // AppUser HEALTHY - user's servers are genuinely down
-            // Entry IP would return the same unhealthy list, so return null
-            Timber.tag("getProviderIP").d("appUser healthy but user $mid IPs all unhealthy - servers genuinely down")
-            return null
+        // MATCH iOS: get_provider_ips is a discovery operation — always use the entry node,
+        // not appUser.hproseService which may point to a stale provider IP.
+        return try {
+            val entryIP = findEntryIP()
+            val baseUrl = "http://$entryIP"
+            val entryClient = HproseClientPool.getRegularClient(baseUrl)
+            _getProviderIP(mid, entryClient)
+        } catch (e: Exception) {
+            Timber.tag("getProviderIP").w(e, "Network error in getProviderIP for $mid")
+            throw e
         }
     }
 
@@ -4228,7 +4218,7 @@ object HproseInstance {
     private val healthCheckHttpClient = HttpClient(OkHttp) {
         engine {
             config {
-                connectTimeout(3, TimeUnit.SECONDS)
+                connectTimeout(6, TimeUnit.SECONDS)
                 readTimeout(5, TimeUnit.SECONDS)
                 writeTimeout(5, TimeUnit.SECONDS)
                 // HTTP/2 and HTTP/1.1 support for better performance
