@@ -895,11 +895,13 @@ fun MediaGrid(
             val singleItem = limitedMediaList[0]
             val singleItemType = inferMediaTypeFromAttachment(singleItem)
             if (singleItemType == MediaType.Video || singleItemType == MediaType.HLS_VIDEO) {
-                // Prefer tweet title; fallback to file name without extension
+                // Prefer tweet title; fallback to file name only when tweet has no text content
                 val rawTitle = tweet.title?.takeIf { it.isNotBlank() }
-                val fileNameWithoutExt = singleItem.fileName
-                    ?.substringBeforeLast('.', missingDelimiterValue = singleItem.fileName)
-                    ?.takeIf { it.isNotBlank() }
+                val fileNameWithoutExt = if (tweet.content.isNullOrBlank()) {
+                    singleItem.fileName
+                        ?.substringBeforeLast('.', missingDelimiterValue = singleItem.fileName)
+                        ?.takeIf { it.isNotBlank() }
+                } else null
 
                 val captionText = rawTitle ?: fileNameWithoutExt
 
