@@ -2945,8 +2945,10 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         return try {
+            val authorClient = tweet.author?.hproseService
+                ?: throw Exception("Author client not available for toggleFavorite")
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("toggleFavorite").e(e, "Exception calling runMApp for toggleFavorite, tweetId: ${tweet.mid}")
                 throw e
