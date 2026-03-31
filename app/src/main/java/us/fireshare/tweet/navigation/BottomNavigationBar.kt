@@ -2,6 +2,8 @@ package us.fireshare.tweet.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -54,6 +56,16 @@ import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.tweet.guestWarning
+
+/** Global bottom-bar opacity shared across all screens so that
+ *  navigating to TweetDetail (or any sub-screen) keeps the navbar
+ *  at the same translucency the user left it in. */
+object BottomBarState {
+    var opacity by mutableFloatStateOf(0.98f)
+    /** Incremented every time the Home button is tapped; TweetFeedScreen
+     *  observes this to reset toolbar + scroll to top. */
+    var homeTapTrigger by mutableIntStateOf(0)
+}
 
 data class BottomNavigationItem(
     val title: String,
@@ -154,16 +166,18 @@ fun BottomNavigationBar(
         // Prefer popping back to an existing TweetFeed instance (keeps its state/scroll), otherwise navigate.
         if (targetRoute == NavTweet.TweetFeed) {
             val tweetFeedRouteName = NavTweet.TweetFeed::class.qualifiedName
-            val didPopToFeed = tweetFeedRouteName?.let { routeName ->
+            // Pop any screens above TweetFeed (e.g. TweetDetail)
+            tweetFeedRouteName?.let { routeName ->
                 navController.popBackStack(routeName, inclusive = false)
-            } ?: false
-            if (didPopToFeed) return@onNavigationClick
-
-            // Already on TweetFeed - scroll to top
-            if (currentRoute?.contains("TweetFeed") == true) {
-                onScrollToTop()
-                return@onNavigationClick
             }
+
+            BottomBarState.opacity = 0.98f
+            // Only scroll to top when user was already on feed (second tap); otherwise keep persisted position
+            if (currentRoute?.contains("TweetFeed") == true) {
+                BottomBarState.homeTapTrigger++
+                onScrollToTop()
+            }
+            return@onNavigationClick
         }
 
         // Only navigate if we're not already on the target route

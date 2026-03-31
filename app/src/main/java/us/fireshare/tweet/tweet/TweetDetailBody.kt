@@ -37,12 +37,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -80,7 +84,8 @@ fun TweetDetailBody(
     parentEntry: NavBackStackEntry,
     parentTweetId: String? = null,
     parentAuthorId: String? = null,
-    onExpandReply: (() -> Unit)? = null
+    onExpandReply: (() -> Unit)? = null,
+    onVideoVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -145,7 +150,8 @@ fun TweetDetailBody(
                      tweet.content?.let {
                         SelectableText(
                             modifier = Modifier.padding(bottom = 8.dp),
-                            text = it
+                            text = it,
+                            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
                         ) { username ->
                             viewModel.viewModelScope.launch(IO) {
                                 HproseInstance.getUserId(username)?.let {
@@ -185,7 +191,8 @@ fun TweetDetailBody(
                             } else {
                                 AttachmentBrowser(
                                     mediaItems = mediaAttachments,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onVideoVisibilityChanged = onVideoVisibilityChanged
                                 )
                             }
                         }
@@ -295,8 +302,10 @@ fun TweetDetailBody(
 @Composable
 fun AttachmentBrowser(
     mediaItems: List<MimeiFileType>,
-    viewModel: TweetViewModel
+    viewModel: TweetViewModel,
+    onVideoVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
+    val rootView = LocalView.current
     // Stabilize attachments to prevent recomposition issues (like iOS implementation)
     val stableAttachments = remember(mediaItems.map { it.mid }) {
         mediaItems
@@ -309,10 +318,42 @@ fun AttachmentBrowser(
     
     val pagerState = rememberPagerState(pageCount = { stableAttachments.size })
 
+    // Hysteresis + only-notify-on-change to prevent shake when portrait video is ~50% visible during scroll
+    var lastReportedVisible by remember { mutableStateOf<Boolean?>(null) }
+    val visibilityCallback = rememberUpdatedState(onVideoVisibilityChanged)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.Transparent)
+            .then(
+                if (onVideoVisibilityChanged != null) {
+                    Modifier.onGloballyPositioned { layoutCoordinates ->
+                        val totalHeight = layoutCoordinates.size.height.toFloat()
+                        if (totalHeight > 0) {
+                            val windowPos = layoutCoordinates.positionInWindow()
+                            val top = windowPos.y
+                            val bottom = top + totalHeight
+                            val displayFrame = android.graphics.Rect()
+                            rootView.getWindowVisibleDisplayFrame(displayFrame)
+                            val visibleTop = kotlin.math.max(displayFrame.top.toFloat(), top)
+                            val visibleBottom = kotlin.math.min(displayFrame.bottom.toFloat(), bottom)
+                            val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
+                            val ratio = (visibleHeight / totalHeight).coerceIn(0f, 1f)
+                            // Hysteresis: visible >= 0.6, not visible <= 0.4, else keep previous (avoids flip at 0.5)
+                            val visible = when {
+                                ratio >= 0.6f -> true
+                                ratio <= 0.4f -> false
+                                else -> lastReportedVisible ?: (ratio >= 0.5f)
+                            }
+                            if (lastReportedVisible != visible) {
+                                lastReportedVisible = visible
+                                visibilityCallback.value?.invoke(visible)
+                            }
+                        }
+                    }
+                } else Modifier
+            )
     ) {
         HorizontalPager(
             state = pagerState,

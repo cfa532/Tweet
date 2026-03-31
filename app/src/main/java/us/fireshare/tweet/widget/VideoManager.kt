@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import androidx.compose.runtime.mutableStateMapOf
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -50,6 +51,10 @@ object VideoManager {
     // ===== PLAYER MANAGEMENT =====
     // Thread-safe map to store ExoPlayer instances by video mid
     private val videoPlayers = ConcurrentHashMap<MimeiId, ExoPlayer>()
+
+    // Compose-observable generation counter: incremented whenever a player is force-recreated.
+    // VideoPreview uses this as a remember() key so it picks up the new player instance.
+    val playerGenerations = mutableStateMapOf<MimeiId, Int>()
 
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
@@ -215,23 +220,28 @@ object VideoManager {
 
     /**
      * Mark a video as not visible (user has scrolled past it)
-     * This stops loading the video to save resources
+     * This stops loading the video to save resources, but only if no other
+     * composable is actively using the same player (e.g., DetailView sharing
+     * the same ExoPlayer while the feed item is being disposed).
      */
     fun markVideoNotVisible(videoMid: MimeiId) {
         visibleVideos.remove(videoMid)
         markVideoInactive(videoMid)
 
         // Don't stop the video if it's currently in full-screen mode
-        if (!isVideoInFullScreen(videoMid)) {
+        // or if another composable is still actively using this player
+        val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
+        if (!isVideoInFullScreen(videoMid) && !stillActive) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
             // Stop the player to release codec and HTTP connection resources.
             // In Media3, stop() does NOT clear media items — the playlist is retained
             // and the player can be re-prepared when visible again.
-            // This prevents resource contention where too many paused players hold
-            // codecs/connections, starving visible players of bandwidth.
             videoPlayers[videoMid]?.let { player ->
                 try {
+                    // Detach surface before stopping to prevent MediaCodec IllegalStateException
+                    // when the codec tries to flush against a destroyed surface.
+                    player.clearVideoSurface()
                     player.stop()
                 } catch (e: Exception) {
                     Timber.e("VideoManager - Error stopping video: $e")
@@ -326,24 +336,43 @@ object VideoManager {
     // ===== PLAYER MANAGEMENT =====
 
     /**
-     * Get or create an ExoPlayer instance for a video
-     * Only creates new players for visible or preloading videos
+     * Get or create an ExoPlayer instance for a video.
+     *
+     * @param resolvedHlsUrl Pre-resolved HLS URL from [HlsUrlResolver]; when non-null it is
+     *   passed directly to [createExoPlayer], skipping the master/playlist guessing entirely.
      */
-    fun getVideoPlayer(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null): ExoPlayer {
+    fun getVideoPlayer(
+        context: Context,
+        videoMid: MimeiId,
+        videoUrl: String,
+        videoType: MediaType? = null,
+        resolvedHlsUrl: String? = null
+    ): ExoPlayer {
         // Mark as preloaded if it was in the preload queue
-        val wasPreloading = preloadQueue.contains(videoMid)
         preloadedVideos.add(videoMid)
         preloadQueue.remove(videoMid)
 
         val isReusing = videoPlayers.containsKey(videoMid)
 
+        // When offline, only reuse existing players — don't create new ones that trigger network
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value && !isReusing) {
+            Timber.tag("VideoManager").d("Offline: creating placeholder player for $videoMid (no network fetch)")
+            val player = ExoPlayer.Builder(context).build()
+            videoPlayers[videoMid] = player
+            return player
+        }
+
         return videoPlayers.getOrPut(videoMid) {
             try {
-                val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
+                val player = createExoPlayer(
+                    context,
+                    videoUrl,
+                    videoType ?: MediaType.Video,
+                    resolvedHlsUrl = resolvedHlsUrl
+                )
                 player
             } catch (e: Exception) {
                 Timber.tag("VideoManager").e("Player creation failed: ${e.message}")
-                // If creation fails, remove from map and rethrow
                 videoPlayers.remove(videoMid)
                 throw e
             }
@@ -428,6 +457,24 @@ object VideoManager {
     }
 
     /**
+     * Stop all video players to prevent network requests when offline.
+     * Players are kept alive so they can resume when back online.
+     */
+    fun stopAllVideos() {
+        Timber.tag("VideoManager").d("Stopping all ${videoPlayers.size} video players (offline)")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            videoPlayers.values.forEach { player ->
+                try {
+                    player.stop()
+                } catch (e: Exception) {
+                    Timber.tag("VideoManager").w("Error stopping player: ${e.message}")
+                }
+            }
+            fullScreenPlayer?.stop()
+        }
+    }
+
+    /**
      * Release all video players
      * Note: This method must be called on the main thread
      */
@@ -442,7 +489,7 @@ object VideoManager {
 
         videoPlayers.values.forEach { player ->
             try {
-                // Stop playback before releasing
+                player.clearVideoSurface()
                 player.stop()
                 player.release()
                 Timber.tag("VideoManager").d("✅ PLAYER RELEASED: Successfully released player")
@@ -460,16 +507,19 @@ object VideoManager {
     // ===== PRELOADING =====
 
     /**
-     * Preload a video in the background
-     * Only preloads videos that are not visible to avoid resource waste
+     * Preload a video in the background.
+     *
+     * For HLS videos this resolves the correct playlist URL (master.m3u8 vs playlist.m3u8)
+     * via parallel HEAD probing BEFORE creating the player, so ExoPlayer starts with the
+     * right URL immediately. The result is persisted to disk by [HlsUrlResolver] so that
+     * subsequent loads (including the visible player in VideoPreview) skip the probe entirely.
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
         // Don't preload if video is already visible
         if (isVideoVisible(videoMid)) {
             return
         }
-
-        // No player count limit - let system memory warnings handle memory pressure
 
         if (videoPlayers.containsKey(videoMid) || preloadedVideos.contains(videoMid)) {
             return // Already cached or preloaded
@@ -478,15 +528,27 @@ object VideoManager {
         if (!preloadQueue.contains(videoMid)) {
             preloadQueue.add(videoMid)
 
-            // Start preloading in background
             val job = videoLoadingScope.launch {
                 try {
-                    // Throttle concurrent player creation on main thread
                     preloadSemaphore.acquire()
                     if (!isActive) return@launch
-                    val player = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video)
-                    // Add to cache on main thread
-                    // No player count limit - let system memory warnings handle memory pressure
+
+                    // Resolve the correct HLS URL before player creation.
+                    // HlsUrlResolver probes master.m3u8 and playlist.m3u8 in parallel
+                    // and caches the winner to disk — O(0) cost on all future loads.
+                    val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                        HlsUrlResolver.resolve(context, videoUrl)
+                    } else null
+
+                    if (!isActive) return@launch
+
+                    val player = createExoPlayer(
+                        context,
+                        videoUrl,
+                        videoType ?: MediaType.Video,
+                        resolvedHlsUrl = resolvedHlsUrl
+                    )
+
                     if (!isActive) {
                         try { player.release() } catch (_: Exception) {}
                         return@launch
@@ -494,7 +556,7 @@ object VideoManager {
                     videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
                     preloadQueue.remove(videoMid)
-                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid")
+                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid (resolvedHls=${resolvedHlsUrl != null})")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
@@ -532,10 +594,39 @@ object VideoManager {
     /**
      * Get the dedicated full screen video player
      */
+    @OptIn(UnstableApi::class)
     fun getFullScreenPlayer(context: Context): ExoPlayer {
         if (fullScreenPlayer == null) {
             Timber.d("VideoManager - Creating dedicated full screen player")
-            fullScreenPlayer = ExoPlayer.Builder(context).build()
+            // Use cache-aware data source and aggressive buffering for smooth fullscreen playback
+            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(30000)
+                .setReadTimeoutMs(30000)
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("TweetApp/1.0")
+            val upstreamFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+            val cache = getCache(context)
+            val cacheDataSourceFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(MediaIdCacheKeyFactory())
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    15_000,   // min buffer (15s) - reduced from 50s to save RAM
+                    50_000,   // max buffer (50s) - reduced from 120s to save ~100MB RAM
+                    1_000,    // buffer for playback (1s) - faster start
+                    2_000     // buffer after rebuffer (2s)
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+
+            fullScreenPlayer = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .setLoadControl(loadControl)
+                .build()
         }
         return fullScreenPlayer!!
     }
@@ -546,6 +637,7 @@ object VideoManager {
      * For HLS videos: tries master.m3u8 first, then playlist.m3u8 if that fails
      */
     fun loadVideo(context: Context, videoUrl: String, videoType: MediaType? = null) {
+        if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
         if (currentVideoUrl == videoUrl) {
             return
         }
@@ -797,12 +889,25 @@ object VideoManager {
         val inactivePlayers = videoPlayers.keys.filter { videoMid ->
             !activeVideos.containsKey(videoMid) && !visibleVideos.contains(videoMid)
         }
-        
+
         if (inactivePlayers.isNotEmpty()) {
             Timber.tag("VideoManager").d("🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players")
             inactivePlayers.forEach { videoMid ->
                 releasePlayer(videoMid)
             }
+        }
+    }
+
+    /**
+     * Deferred version of [cleanupInactivePlayers]. Waits 500ms before cleaning up
+     * so that incoming screens have time to mark their players as active/visible.
+     * This prevents a race condition during navigation where the outgoing screen's
+     * onDispose releases players that the incoming screen just created.
+     */
+    fun cleanupInactivePlayersDeferred() {
+        videoLoadingScope.launch {
+            delay(500L)
+            cleanupInactivePlayers()
         }
     }
     
@@ -815,22 +920,29 @@ object VideoManager {
         val player = videoPlayers.remove(videoMid)
         if (player != null) {
             try {
+                // Detach surface FIRST to prevent MediaCodec IllegalStateException
+                // during flush/stop when the surface is already destroyed.
+                player.clearVideoSurface()
+
                 // Stop playback and clear media sources to prevent leaks
                 player.stop()
                 player.clearMediaItems()
-                
-                // Clear video surface to prevent surface leaks
-                player.clearVideoSurface()
-                
+
                 // Release the player completely
                 player.release()
-                
+
                 Timber.tag("VideoManager").d("✅ PLAYER RELEASED: videoMid: $videoMid")
             } catch (e: Exception) {
                 Timber.tag("VideoManager").w("⚠️ Error releasing player for $videoMid: ${e.message}")
             }
         }
-        
+
+        // Notify any live VideoPreview composable that the player was released so it
+        // re-runs its remember(videoMid, playerGeneration) block and gets a fresh player.
+        // Without this, VideoPreview holds the stale released player indefinitely — the
+        // same mechanism forceRecreatePlayer() uses for MediaCodec failures.
+        playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+
         // Clean up tracking data
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
@@ -850,6 +962,7 @@ object VideoManager {
             val oldPlayer = videoPlayers[videoMid]
             oldPlayer?.let { player ->
                 try {
+                    player.clearVideoSurface()
                     player.stop()
                     player.clearMediaItems()
                     player.release()
@@ -867,7 +980,9 @@ object VideoManager {
             // Create a completely new player with software decoder to avoid MediaCodec failures
             val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
             videoPlayers[videoMid] = newPlayer
-            
+            // Notify Compose that VideoPreview should re-read the player for this video.
+            playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+
             Timber.tag("VideoManager").d("✅ PLAYER FORCE RECREATED WITH SOFTWARE DECODER: videoMid: $videoMid")
             return true
             

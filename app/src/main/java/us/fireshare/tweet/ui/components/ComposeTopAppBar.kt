@@ -18,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -27,10 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import us.fireshare.tweet.R
-import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 
 /**
@@ -66,10 +62,8 @@ fun ComposeTopAppBar(
             },
             actions = {
                 var isLoading by remember { mutableStateOf(false) }
-                val coroutineScope = rememberCoroutineScope()
                 val context = LocalContext.current
                 val activity = LocalActivity.current as ComponentActivity
-                val sharedViewModel: SharedViewModel = hiltViewModel()
                 val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
 
                 LaunchedEffect(Unit) {
@@ -82,12 +76,6 @@ fun ComposeTopAppBar(
                         if (hasContent) {
                             isLoading = true
                             onSendClick()
-                            
-                            // Navigate back after a short delay
-                            coroutineScope.launch {
-                                delay(100)
-                                // Navigation will be handled by parent
-                            }
                         }
                     },
                     modifier = Modifier.padding(horizontal = 16.dp)

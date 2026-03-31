@@ -59,7 +59,7 @@ fun TweetDropdownMenuItems(
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val navController = LocalNavController.current
+
     // Use the singleton TweetFeedViewModel from AppModule
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
     val context = LocalContext.current

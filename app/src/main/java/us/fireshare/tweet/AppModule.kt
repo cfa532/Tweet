@@ -80,25 +80,3 @@ object AppModule {
     }
 }
 
-//    @Provides
-//    fun provideTweetViewModel(tweet: Tweet): TweetViewModel {
-//        return TweetViewModel(tweet)
-//    }
-
-//    @Provides
-//    fun provideViewModelStoreOwner(application: Application): ViewModelStoreOwner {
-//        return application as TweetApplication
-//    }
-
-//    class TweetViewModelFactory(
-//        private val tweet: Tweet,
-//    ) : ViewModelProvider.Factory {
-//        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-//            if (modelClass.isAssignableFrom(TweetViewModel::class.java)) {
-//                @Suppress("UNCHECKED_CAST")
-//                return TweetViewModel(tweet) as T
-//            }
-//            throw IllegalArgumentException("Unknown ViewModel class")
-//        }
-//    }
-

@@ -122,6 +122,12 @@ class TweetViewModel @AssistedInject constructor(
     fun releaseAllPlayers() {
         exoPlayers.values.forEach { it.release() }
         exoPlayers.clear()
+        playbackPositions.clear()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        releaseAllPlayers()
     }
 
     fun stopPlayer(url: String) {

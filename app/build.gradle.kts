@@ -15,7 +15,7 @@ plugins {
 }
 
 // Load keystore properties
-val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystorePropertiesFile: File = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
@@ -30,10 +30,10 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 106    // Full release version code. Must be increased each time,
+        versionCode = 112    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "46"  // compared with App Mimei version to check for upgrade.
+        versionName = "52"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -110,7 +110,7 @@ android {
             buildConfigField("String", "APP_ID", "\"heWgeGkeBX2gaENbIBS_Iy1mdTS\"")  // RELEASE APP_ID
             buildConfigField("String", "APP_ID_HASH", "\"h5U5jxPr2p2tg2kMr8UeyRMNIJ_\"")  // DEBUG APP_ID
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
-            buildConfigField("String", "ALPHA_ID", "\"mwmQCHCEHClCIJy-bItx5ALAhq9\"")
+            buildConfigField("String", "ALPHA_ID", "\"mKOihoVuFnQ2xt33R51KTQXSBkX\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
         }
     }
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 106  // Play version code increased for release
+            versionCode = 112  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")

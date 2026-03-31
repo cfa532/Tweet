@@ -19,6 +19,8 @@ import us.fireshare.tweet.chat.ChatSessionRepository
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import javax.inject.Inject
 
 @HiltViewModel
@@ -47,6 +49,23 @@ class ChatListViewModel @Inject constructor(
 
             // Check for new messages on initialization
             previewMessages()
+        }
+
+        // Listen for ChatMessageSent events (e.g. from background worker after attachment upload)
+        // so that the chat list updates even if ChatViewModel was destroyed.
+        viewModelScope.launch {
+            TweetNotificationCenter.events.collect { event ->
+                if (event is TweetEvent.ChatMessageSent && event.message.authorId == appUser.mid) {
+                    // Reload the updated session from database
+                    val previewMessage = chatSessionRepository.updateChatSessionWithMessage(
+                        appUser.mid,
+                        event.message.receiptId,
+                        event.message,
+                        hasNews = false
+                    )
+                    updateSession(previewMessage, hasNews = false)
+                }
+            }
         }
     }
 

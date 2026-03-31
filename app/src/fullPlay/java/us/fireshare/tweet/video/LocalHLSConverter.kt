@@ -571,49 +571,6 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Determine if COPY codec should be used based on video resolution and target resolution
-     * Use COPY if source resolution <= target resolution to preserve original quality and bitrate
-     */
-    private fun shouldUseCopyCodecForResolution(videoResolution: Pair<Int, Int>?, targetResolution: Int): Boolean {
-        if (videoResolution == null) {
-            Timber.tag(TAG).w("Video resolution is null, defaulting to normal conversion")
-            return false
-        }
-
-        val (width, height) = videoResolution
-
-        // Determine if video is landscape or portrait
-        val isLandscape = width > height
-
-        // Calculate target dimensions for the given resolution
-        val (targetWidth, targetHeight) = when (targetResolution) {
-            720 -> if (isLandscape) Pair(1280, 720) else Pair(720, 1280)
-            480 -> if (isLandscape) Pair(854, 480) else Pair(480, 854)
-            360 -> if (isLandscape) Pair(640, 360) else Pair(360, 640)
-            else -> {
-                // Fallback for any other resolution - calculate based on 16:9 aspect ratio
-                val aspectRatio = if (isLandscape) 16.0/9.0 else 9.0/16.0
-                if (isLandscape) {
-                    Pair((targetResolution * aspectRatio).toInt(), targetResolution)
-                } else {
-                    Pair(targetResolution, (targetResolution / aspectRatio).toInt())
-                }
-            }
-        }
-
-        // Use COPY codec if source dimensions are <= target dimensions
-        // This preserves original resolution and bitrate when source is already at or below target quality
-        val shouldUseCopy = if (isLandscape) {
-            width <= targetWidth && height <= targetHeight
-        } else {
-            width <= targetWidth && height <= targetHeight
-        }
-
-        Timber.tag(TAG).d("Video resolution check for ${targetResolution}p: source=${width}x${height}, target=${targetWidth}x${targetHeight}, isLandscape: $isLandscape, shouldUseCopy: $shouldUseCopy")
-        return shouldUseCopy
-    }
-
-    /**
      * Build FFmpeg command for single resolution HLS conversion
      * This method will be called twice - once for 720p and once for 480p
      * Enhanced with better stream formatting to reduce PesReader errors

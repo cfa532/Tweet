@@ -3,6 +3,13 @@ package us.fireshare.tweet.widget
 import android.content.Context
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
@@ -16,6 +23,9 @@ import us.fireshare.tweet.datamodel.Tweet
  */
 object FullScreenPlayerManager {
     private var exoPlayer: ExoPlayer? = null
+    private val _playerFlow = MutableStateFlow<ExoPlayer?>(null)
+    /** Observe this instead of polling getCurrentPlayer() every 100ms. */
+    val playerFlow: StateFlow<ExoPlayer?> = _playerFlow.asStateFlow()
     private var currentVideoList: List<Pair<MimeiId, MediaType>>? = null
     private var videoBaseUrlMap: Map<MimeiId, String> = emptyMap() // Map videoMid to author's baseUrl
     private var currentVideoIndex: Int = 0
@@ -23,6 +33,10 @@ object FullScreenPlayerManager {
     private var onPlayerStateChanged: ((PlayerState) -> Unit)? = null
     private var applicationContext: Context? = null // Use Application context to avoid memory leaks
     private var isManualNavigation: Boolean = false // Flag to prevent double progression when user manually skips
+    private var autoAdvanceListener: Player.Listener? = null // Track listener to remove before adding new one
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var preloadedNextPlayer: ExoPlayer? = null // Pre-buffered player for next video
+    private var preloadedNextIndex: Int = -1 // Index of the preloaded video
     
     /**
      * Initialize the singleton player instance
@@ -30,33 +44,8 @@ object FullScreenPlayerManager {
     fun initialize(context: Context) {
         // Store Application context to avoid memory leaks
         this.applicationContext = context.applicationContext
-        if (exoPlayer == null) {
-            Timber.d("FullScreenPlayerManager - Initializing singleton player")
-            exoPlayer = createExoPlayer(context.applicationContext, "")
-            
-            // Add listener for automatic video rewinding when finished
-            exoPlayer?.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
-                    when (playbackState) {
-                        Player.STATE_ENDED -> {
-                            // Rewind is handled by CreateExoPlayer listener
-                            Timber.d("FullScreenPlayerManager - Video ended")
-                        }
-                        Player.STATE_READY -> {
-                            Timber.d("FullScreenPlayerManager - Video ready to play")
-                        }
-                        Player.STATE_BUFFERING -> {
-                            Timber.d("FullScreenPlayerManager - Video buffering")
-                        }
-                    }
-                }
-                
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.e("FullScreenPlayerManager - Player error: ${error.message}")
-                }
-            })
-        }
+        // No placeholder player — playCurrentVideo() will create the real one.
+        // Creating a player with empty URL causes immediate Source error.
     }
     
     /**
@@ -66,10 +55,7 @@ object FullScreenPlayerManager {
         Timber.d("FullScreenPlayerManager - Setting video list with ${videoList.size} videos, start index: $startIndex")
         currentVideoList = videoList
         currentVideoIndex = startIndex.coerceIn(0, videoList.size - 1)
-        // Use runBlocking to call suspend function from non-suspend context
-        kotlinx.coroutines.runBlocking {
-            playCurrentVideo()
-        }
+        scope.launch { playCurrentVideo() }
     }
     
     /**
@@ -150,10 +136,7 @@ object FullScreenPlayerManager {
             val (nextVideoMid, nextMediaType) = videoList[nextIndex]
             Timber.d("FullScreenPlayerManager - Moving from index $currentVideoIndex to $nextIndex, next video: $nextVideoMid, type: $nextMediaType")
             currentVideoIndex = nextIndex
-            // Use runBlocking to call suspend function from non-suspend context
-            kotlinx.coroutines.runBlocking {
-                playCurrentVideo()
-            }
+            scope.launch { playCurrentVideo() }
         } else {
             // End of list - stop playing
             Timber.d("FullScreenPlayerManager - End of list, stopping playback")
@@ -178,91 +161,183 @@ object FullScreenPlayerManager {
             Timber.d("FullScreenPlayerManager - Beginning of list, looping to end")
             currentVideoIndex = videoList.size - 1
         }
-        // Use runBlocking to call suspend function from non-suspend context
-        kotlinx.coroutines.runBlocking {
-            playCurrentVideo()
-        }
+        scope.launch { playCurrentVideo() }
     }
-    
+
     /**
      * Play the video at the current index
      */
     private suspend fun playCurrentVideo() {
         val videoList = currentVideoList ?: return
         val (videoMid, mediaType) = videoList[currentVideoIndex]
-        
+
         Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
-        
-        // Get baseUrl from map (author's baseUrl), with fallback to appUser's baseUrl
+
+        // 1. Check if we already preloaded this video
+        if (preloadedNextPlayer != null && preloadedNextIndex == currentVideoIndex) {
+            Timber.d("FullScreenPlayerManager - Using preloaded player for index $currentVideoIndex")
+            val preloaded = preloadedNextPlayer!!
+            preloadedNextPlayer = null
+            preloadedNextIndex = -1
+            switchToPlayer(preloaded)
+            onVideoChanged?.invoke(videoMid, currentVideoIndex)
+            // Preload the next one
+            preloadNextVideo()
+            return
+        }
+
+        // 2. Create a new player with resolved HLS URL
         val baseUrl = videoBaseUrlMap[videoMid] ?: HproseInstance.appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
         val videoUrl = HproseInstance.getMediaUrl(videoMid, baseUrl)
         if (videoUrl != null) {
             Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
             loadVideo(videoUrl, mediaType)
             onVideoChanged?.invoke(videoMid, currentVideoIndex)
+            // Preload the next one
+            preloadNextVideo()
         } else {
             Timber.w("FullScreenPlayerManager - Could not generate video URL for attachment: $videoMid")
         }
     }
-    
-    /**
-     * Load a video into the player
-     */
-    private fun loadVideo(videoUrl: String, mediaType: MediaType) {
-        val player = exoPlayer ?: return
-        val ctx = applicationContext ?: return
-        
-        try {
-            // Create a new ExoPlayer with the video URL (like VideoPreview does when videoMid is null)
-            Timber.d("FullScreenPlayerManager - Creating new ExoPlayer for video")
-            val newPlayer = createExoPlayer(ctx, videoUrl, mediaType)
-            
-            // Release the old player and set the new one
-            player.release()
-            exoPlayer = newPlayer
 
-            // Reset manual navigation flag when starting a fresh video
-            // so that natural video completion can auto-advance
-            isManualNavigation = false
-            
-            // Add listener for automatic video rewinding when finished
-            newPlayer.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
-                    when (playbackState) {
-                        Player.STATE_ENDED -> {
-                            Timber.d("FullScreenPlayerManager - Video ended")
-                            // If this wasn't a manual skip, automatically play the next video
-                            if (!isManualNavigation) {
-                                Timber.d("FullScreenPlayerManager - Auto-playing next video after completion")
-                                playNextVideo()
-                            } else {
-                                // Clear the manual flag so the next natural end can auto-advance
-                                Timber.d("FullScreenPlayerManager - Manual navigation flag cleared after end")
-                                isManualNavigation = false
-                            }
-                        }
-                        Player.STATE_READY -> {
-                            Timber.d("FullScreenPlayerManager - Video ready to play")
-                        }
-                        Player.STATE_BUFFERING -> {
-                            Timber.d("FullScreenPlayerManager - Video buffering")
-                        }
+    /**
+     * Preload the next video in the list so it has time to buffer before the user swipes.
+     */
+    private fun preloadNextVideo() {
+        val videoList = currentVideoList ?: return
+        val nextIndex = currentVideoIndex + 1
+        if (nextIndex >= videoList.size) return
+
+        // Don't re-preload if already preloaded for this index
+        if (preloadedNextIndex == nextIndex && preloadedNextPlayer != null) return
+
+        // Release any stale preloaded player
+        preloadedNextPlayer?.release()
+        preloadedNextPlayer = null
+        preloadedNextIndex = -1
+
+        val (nextVideoMid, nextMediaType) = videoList[nextIndex]
+        val ctx = applicationContext ?: return
+
+        // Check if feed already has a player for this video (no need to preload)
+        if (VideoManager.isVideoPreloaded(nextVideoMid)) {
+            Timber.d("FullScreenPlayerManager - Next video $nextVideoMid already in feed, skip preload")
+            return
+        }
+
+        scope.launch {
+            try {
+                val baseUrl = videoBaseUrlMap[nextVideoMid]
+                    ?: HproseInstance.appUser.baseUrl
+                    ?: "http://${BuildConfig.BASE_URL}"
+                val videoUrl = HproseInstance.getMediaUrl(nextVideoMid, baseUrl) ?: return@launch
+
+                // Resolve HLS URL on IO thread to avoid blocking main
+                val resolvedHlsUrl = if (nextMediaType == MediaType.HLS_VIDEO) {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        HlsUrlResolver.resolve(ctx, videoUrl)
                     }
-                }
-                
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Timber.e("FullScreenPlayerManager - Player error: ${error.message}")
-                }
-            })
-            
-            // Start playing the video
-            newPlayer.playWhenReady = true
-            
+                } else null
+
+                // createExoPlayer must run on Main thread (ExoPlayer requirement)
+                Timber.d("FullScreenPlayerManager - Preloading next video index $nextIndex: $nextVideoMid")
+                val player = createExoPlayer(ctx, videoUrl, nextMediaType, resolvedHlsUrl = resolvedHlsUrl)
+                // Don't start playback — just let it buffer
+                player.playWhenReady = false
+
+                preloadedNextPlayer = player
+                preloadedNextIndex = nextIndex
+                Timber.d("FullScreenPlayerManager - Preloaded next video ready to use")
+            } catch (e: Exception) {
+                Timber.e("FullScreenPlayerManager - Failed to preload next video: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Switch to a new player, disposing the old one properly.
+     */
+    private fun switchToPlayer(newPlayer: ExoPlayer) {
+        val old = exoPlayer
+        if (old != null && old !== newPlayer) {
+            autoAdvanceListener?.let { old.removeListener(it) }
+            old.release()
+        }
+
+        exoPlayer = newPlayer
+        _playerFlow.value = newPlayer
+        isManualNavigation = false
+
+        newPlayer.volume = 1f
+        newPlayer.playWhenReady = true
+        addAutoAdvanceListener(newPlayer)
+    }
+
+    /**
+     * Load a video into the player (creates a new ExoPlayer)
+     */
+    private suspend fun loadVideo(videoUrl: String, mediaType: MediaType) {
+        val ctx = applicationContext ?: return
+
+        try {
+            // Resolve HLS URL to avoid trial-and-error (master.m3u8 → playlist.m3u8)
+            val resolvedHlsUrl = if (mediaType == MediaType.HLS_VIDEO) {
+                HlsUrlResolver.resolve(ctx, videoUrl)
+            } else null
+
+            Timber.d("FullScreenPlayerManager - Creating new ExoPlayer (resolvedHls=${resolvedHlsUrl != null})")
+            val newPlayer = createExoPlayer(ctx, videoUrl, mediaType, resolvedHlsUrl = resolvedHlsUrl)
+
+            switchToPlayer(newPlayer)
+
             Timber.d("FullScreenPlayerManager - Video player created and ready, starting playback")
         } catch (e: Exception) {
             Timber.e("FullScreenPlayerManager - Error loading video: ${e.message}")
         }
+    }
+
+    /**
+     * Add listener for auto-advance on video end.
+     * Removes any previously added auto-advance listener first to prevent accumulation.
+     */
+    private fun addAutoAdvanceListener(player: ExoPlayer) {
+        // Remove previous listener from the old player (if different) or same player
+        autoAdvanceListener?.let { oldListener ->
+            // Remove from current player in case it's the same player being re-adopted
+            player.removeListener(oldListener)
+            // Also remove from the previous exoPlayer if it was different
+            exoPlayer?.takeIf { it !== player }?.removeListener(oldListener)
+        }
+
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                Timber.d("FullScreenPlayerManager - Playback state changed: $playbackState")
+                when (playbackState) {
+                    Player.STATE_ENDED -> {
+                        Timber.d("FullScreenPlayerManager - Video ended")
+                        if (!isManualNavigation) {
+                            Timber.d("FullScreenPlayerManager - Auto-playing next video after completion")
+                            playNextVideo()
+                        } else {
+                            Timber.d("FullScreenPlayerManager - Manual navigation flag cleared after end")
+                            isManualNavigation = false
+                        }
+                    }
+                    Player.STATE_READY -> {
+                        Timber.d("FullScreenPlayerManager - Video ready to play")
+                    }
+                    Player.STATE_BUFFERING -> {
+                        Timber.d("FullScreenPlayerManager - Video buffering")
+                    }
+                }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Timber.e("FullScreenPlayerManager - Player error: ${error.message}")
+            }
+        }
+        autoAdvanceListener = listener
+        player.addListener(listener)
     }
     
     /**
@@ -309,11 +384,20 @@ object FullScreenPlayerManager {
      */
     fun cleanup() {
         Timber.d("FullScreenPlayerManager - Cleaning up resources")
-        // Stop playback before releasing
-        exoPlayer?.pause()
-        exoPlayer?.playWhenReady = false
-        exoPlayer?.release()
+        // Release preloaded player
+        preloadedNextPlayer?.release()
+        preloadedNextPlayer = null
+        preloadedNextIndex = -1
+
+        exoPlayer?.let { player ->
+            autoAdvanceListener?.let { player.removeListener(it) }
+            player.playWhenReady = false
+            player.pause()
+            player.release()
+        }
+        autoAdvanceListener = null
         exoPlayer = null
+        _playerFlow.value = null
         currentVideoList = null
         videoBaseUrlMap = emptyMap()
         currentVideoIndex = 0

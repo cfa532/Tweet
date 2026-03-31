@@ -16,8 +16,11 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
 import us.fireshare.tweet.datamodel.ChatSession
+import us.fireshare.tweet.datamodel.ChatSessionEntity
+import us.fireshare.tweet.datamodel.toEntity
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.utils.ErrorMessageUtils
@@ -156,7 +159,47 @@ class SendChatMessageWorker @AssistedInject constructor(
             }
 
             if (success) {
-                // Notify success
+                // Persist message and update chat session in database immediately,
+                // so lastMessage is updated even if the user has left the chat screen.
+                try {
+                    val db = ChatDatabase.getInstance(applicationContext)
+                    val chatMessageDao = db.chatMessageDao()
+                    val chatSessionDao = db.chatSessionDao()
+
+                    // Insert message to database
+                    val entity = message.toEntity().copy(sessionId = receiptId)
+                    chatMessageDao.insertMessage(entity)
+                    val insertedEntity = chatMessageDao.getMessageByMessageId(message.id)
+
+                    if (insertedEntity != null) {
+                        // Update or create chat session
+                        val existingSession = chatSessionDao.getSessionById(receiptId)
+                        if (existingSession == null) {
+                            chatSessionDao.insertSession(
+                                ChatSessionEntity(
+                                    id = receiptId,
+                                    timestamp = insertedEntity.timestamp,
+                                    userId = appUser.mid,
+                                    receiptId = receiptId,
+                                    hasNews = false,
+                                    lastMessageId = insertedEntity.id
+                                )
+                            )
+                        } else {
+                            chatSessionDao.updateSession(
+                                sessionId = receiptId,
+                                timestamp = insertedEntity.timestamp,
+                                lastMessageId = insertedEntity.id,
+                                hasNews = false
+                            )
+                        }
+                        Timber.tag("SendChatMessageWorker").d("Chat session updated in database for: ${message.id}")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("SendChatMessageWorker").e(e, "Failed to update chat session in database")
+                }
+
+                // Notify success (for UI update if ChatViewModel is still alive)
                 Timber.tag("SendChatMessageWorker").d("Message sent successfully: ${message.id}")
                 TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSent(message))
                 Result.success(

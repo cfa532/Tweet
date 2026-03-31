@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import java.util.Date
+import java.util.LinkedHashMap
 import java.util.Locale
 
 /**
@@ -33,6 +34,10 @@ import java.util.Locale
  * 
  * This ensures bookmarks and favorites don't pollute the main feed cache,
  * and important personal content is preserved indefinitely.
+ *
+ * In-memory caches use LRU eviction so long sessions don't grow unbounded:
+ * - Tweet memory cache: max [MAX_MEMORY_TWEETS] entries; DB remains source of truth.
+ * - User memory cache + StateFlows: max [MAX_MEMORY_USERS] entries; eviction clears memory only.
  */
 object TweetCacheManager {
 
@@ -47,16 +52,20 @@ object TweetCacheManager {
     private const val BOOKMARKS_SUFFIX = "_bookmarks"
     private const val FAVORITES_SUFFIX = "_favorites"
 
-    // In-memory cache for frequently accessed tweets
-    private val memoryCache = mutableMapOf<String, CachedTweet>()
+    // LRU limits for in-memory caches (evict least recently used when over capacity)
+    private const val MAX_MEMORY_TWEETS = 500
+    private const val MAX_MEMORY_USERS = 200
+
+    // In-memory cache for frequently accessed tweets (LRU by access order)
+    private val memoryCache = LinkedHashMap<String, CachedTweet>(32, 0.75f, true)
     private val cacheLock = Any()
 
-    // In-memory cache for users
-    private val userMemoryCache = mutableMapOf<String, User>()
+    // In-memory cache for users (LRU by access order)
+    private val userMemoryCache = LinkedHashMap<String, User>(32, 0.75f, true)
     private val userCacheTimestamps = mutableMapOf<String, Long>()
     private val userCacheLock = Any()
     
-    // StateFlows for reactive user updates - allows UI to observe user changes
+    // StateFlows for reactive user updates - allows UI to observe user changes (evicted with user cache)
     private val userStateFlows = mutableMapOf<String, MutableStateFlow<User?>>()
     private val userStateFlowsLock = Any()
 
@@ -94,8 +103,9 @@ object TweetCacheManager {
                     tweetTimestamp = tweet.timestamp  // Store tweet's actual creation timestamp for ordering
                 )
 
-                // Always update memory cache
+                // Always update memory cache (LRU: put moves entry to most recent)
                 memoryCache[tweet.mid] = cached
+                evictTweetLruIfNeeded()
                 cached
             }
             
@@ -138,8 +148,9 @@ object TweetCacheManager {
                 // Check database cache (searches across all caches by mid, not filtered by uid)
                 val dbCachedTweet = HproseInstance.dao.getCachedTweet(tweetId)
                 dbCachedTweet?.let { cachedTweet ->
-                    // Add to memory cache for faster access
+                    // Add to memory cache for faster access (LRU)
                     memoryCache[tweetId] = cachedTweet
+                    evictTweetLruIfNeeded()
                     return cachedTweet.originalTweet
                 }
 
@@ -152,10 +163,48 @@ object TweetCacheManager {
     }
 
     /**
+     * Memory-only cache lookup. Safe to call from the main thread.
+     * Does NOT fall through to the database, so it never blocks.
+     * Returns null if the tweet is not already in memory.
+     */
+    fun getCachedTweetMemoryOnly(tweetId: MimeiId): Tweet? {
+        return synchronized(cacheLock) {
+            memoryCache[tweetId]?.originalTweet
+        }
+    }
+
+    /**
      * Update an existing cached tweet
      */
     fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
         saveTweet(tweet, userId)
+    }
+
+    /**
+     * Evict least recently used tweet entries from memory cache until at or below capacity.
+     * Caller must hold [cacheLock]. Database is unchanged; only in-memory cache is trimmed.
+     */
+    private fun evictTweetLruIfNeeded() {
+        while (memoryCache.size > MAX_MEMORY_TWEETS) {
+            val eldestKey = memoryCache.keys.iterator().next()
+            memoryCache.remove(eldestKey)
+        }
+    }
+
+    /**
+     * Evict least recently used user entries from memory cache and StateFlows until at or below capacity.
+     * Caller must hold [userCacheLock]. Database is unchanged; observers of evicted users get null.
+     */
+    private fun evictUserLruIfNeeded() {
+        while (userMemoryCache.size > MAX_MEMORY_USERS) {
+            val eldestKey = userMemoryCache.keys.iterator().next()
+            userMemoryCache.remove(eldestKey)
+            userCacheTimestamps.remove(eldestKey)
+            synchronized(userStateFlowsLock) {
+                userStateFlows[eldestKey]?.value = null
+                userStateFlows.remove(eldestKey)
+            }
+        }
     }
 
     /**
@@ -206,9 +255,10 @@ object TweetCacheManager {
             val cachedUser = synchronized(userCacheLock) {
                 val currentTime = System.currentTimeMillis()
                 
-                // Update memory cache
+                // Update memory cache (LRU: put moves entry to most recent)
                 userMemoryCache[user.mid] = user
                 userCacheTimestamps[user.mid] = currentTime
+                evictUserLruIfNeeded()
                 Timber.tag("TweetCacheManager").d("💾 USER SAVED TO MEMORY CACHE: userId: ${user.mid}, timestamp: $currentTime")
 
                 CachedUser(user.mid, user, Date(currentTime))
@@ -275,6 +325,7 @@ object TweetCacheManager {
                     synchronized(userCacheLock) {
                         userMemoryCache[userId] = user
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
+                        evictUserLruIfNeeded()
                     }
                     return user
                 } else {
@@ -284,6 +335,7 @@ object TweetCacheManager {
                     synchronized(userCacheLock) {
                         userMemoryCache[userId] = user
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
+                        evictUserLruIfNeeded()
                     }
                     return user
                 }

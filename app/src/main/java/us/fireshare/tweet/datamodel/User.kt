@@ -61,6 +61,12 @@ data class User(
          */
         fun updateUserInstance(user: User, shouldUpdateBaseUrl: Boolean = false) {
             val instance = getInstance(mid = user.mid)
+
+            // Capture old values before mutation for appUser sync
+            val isAppUser = !instance.isGuest() && instance.mid == HproseInstance.appUser.mid
+            val oldBaseUrl = if (isAppUser) instance.baseUrl else null
+            val oldAvatar = if (isAppUser) instance.avatar else null
+
             instance.apply {
                 name = user.name
                 username = user.username
@@ -77,14 +83,14 @@ data class User(
                 if (shouldUpdateBaseUrl) {
                     baseUrl = user.baseUrl
                 }
-                
+
                 tweetCount = user.tweetCount
                 followingCount = user.followingCount
                 followersCount = user.followersCount
                 bookmarksCount = user.bookmarksCount
                 favoritesCount = user.favoritesCount
                 commentsCount = user.commentsCount
-                
+
                 // Update array properties
                 fansList = user.fansList
                 followingList = user.followingList
@@ -93,6 +99,11 @@ data class User(
                 repliedTweets = user.repliedTweets
                 commentsList = user.commentsList
                 topTweets = user.topTweets
+            }
+
+            // If we just mutated the appUser singleton, sync StateFlows
+            if (isAppUser) {
+                HproseInstance.notifyAppUserChanged(oldBaseUrl, oldAvatar)
             }
         }
     }
@@ -256,6 +267,11 @@ data class User(
      */
     fun from(userData: Map<String, Any>) {
         try {
+            // Capture old values before mutation for appUser sync
+            val isAppUser = !isGuest() && mid == HproseInstance.appUser.mid
+            val prevBaseUrl = if (isAppUser) baseUrl else null
+            val prevAvatar = if (isAppUser) avatar else null
+
             // Pre-process the data to handle scientific notation in numeric fields
             val processedData = userData.toMutableMap()
             
@@ -332,12 +348,22 @@ data class User(
             if (oldWritableUrl != writableUrl) {
                 clearUploadService()
             }
+
+            // Sync appUser StateFlows if this instance is appUser
+            if (isAppUser) {
+                HproseInstance.notifyAppUserChanged(prevBaseUrl, prevAvatar)
+            }
         } catch (e: Exception) {
             Timber.tag("User.from").e("Error updating user from map: $e")
         }
     }
 
     fun from(userData: User) {
+        // Capture old values before mutation for appUser sync
+        val isAppUser = !isGuest() && mid == HproseInstance.appUser.mid
+        val prevBaseUrl = if (isAppUser) baseUrl else null
+        val prevAvatar = if (isAppUser) avatar else null
+
         name = userData.name
         username = userData.username
         avatar = userData.avatar
@@ -353,6 +379,11 @@ data class User(
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
         hostIds = userData.hostIds
+
+        // Sync appUser StateFlows if this instance is appUser
+        if (isAppUser) {
+            HproseInstance.notifyAppUserChanged(prevBaseUrl, prevAvatar)
+        }
     }
 
     /**

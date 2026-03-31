@@ -75,19 +75,18 @@ fun IndependentFullScreenPlayer(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    val sharedViewModel: SharedViewModel = hiltViewModel()
-    
-    // Observe the video list from TweetListViewModel
-    val videoIndexedList by sharedViewModel.tweetListViewModel.videoIndexedList.collectAsState()
-    val actualVideoList = videoIndexedList // Use the full video list with MediaType info
+
+    // Use the video list from FullScreenPlayerManager (synced by the coordinator when video was tapped)
+    val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
+    val actualVideoList = fullScreenVideoList ?: emptyList()
     val actualStartIndex = if (tappedTweet != null) {
         // Find the video mid from the tapped tweet's attachments
         val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
             val mediaType = inferMediaTypeFromAttachment(attachment)
             mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
         }?.mid
-        if (videoMid != null) {
-            val foundIndex = sharedViewModel.tweetListViewModel.findStartIndexForVideoMid(videoMid)
+        if (videoMid != null && fullScreenVideoList != null) {
+            val foundIndex = fullScreenVideoList.indexOfFirst { it.first == videoMid }.coerceAtLeast(0)
             Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in video list")
             foundIndex
         } else {
@@ -142,22 +141,8 @@ fun IndependentFullScreenPlayer(
         totalVideos = FullScreenPlayerManager.getTotalVideos()
     }
     
-    var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
-    
-    // Update exoPlayer when FullScreenPlayerManager creates a new player
-    LaunchedEffect(Unit) {
-        // Initial check
-        exoPlayer = FullScreenPlayerManager.getCurrentPlayer()
-        
-        // Listen for player changes (this is a simple approach - in a real app you might want a more sophisticated observer)
-        while (true) {
-            kotlinx.coroutines.delay(100) // Check every 100ms
-            val currentPlayer = FullScreenPlayerManager.getCurrentPlayer()
-            if (currentPlayer != exoPlayer) {
-                exoPlayer = currentPlayer
-            }
-        }
-    }
+    // Reactively observe player changes via StateFlow instead of polling every 100ms
+    val exoPlayer by FullScreenPlayerManager.playerFlow.collectAsState()
     
     // Handle immersive mode and allow rotation during fullscreen
     LaunchedEffect(Unit) {
@@ -278,18 +263,13 @@ fun IndependentFullScreenPlayer(
                 ),
             factory = {
                 PlayerView(context).apply {
-                    useController = true // Always show native controls
+                    useController = true
+                    controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
-                    // Set shutter background to black to prevent white flash on initial load
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    // Keep last frame to avoid black flashes when resetting/pausing
                     setKeepContentOnPlayerReset(true)
-                    // Only show buffering indicator when playing and buffering
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    // Force hardware acceleration and proper clipping for Media3 1.7.1
-                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                    // Keep showControls state in sync with native controller visibility
                     setControllerVisibilityListener(
                         PlayerView.ControllerVisibilityListener { visibility ->
                             val isVisible = visibility == android.view.View.VISIBLE

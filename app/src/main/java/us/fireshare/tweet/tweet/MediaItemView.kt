@@ -58,6 +58,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.AudioPreview
 import us.fireshare.tweet.widget.ImageViewer
+import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
@@ -83,8 +84,6 @@ fun MediaItemView(
     // State for full-screen image
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
-    var fullScreenBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var currentBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
@@ -94,11 +93,12 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val videoCoordinator = LocalVideoCoordinator.current
     // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
     // If parentTweetId is provided, it represents the retweet/quote container tweet
     // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
     val playbackTweetId = if (enableCoordinator) {
-        if (parentTweetId != null && parentTweetId.isNotEmpty()) {
+        if (!parentTweetId.isNullOrEmpty()) {
             // Always use parentTweetId (retweet/quote ID) when available
             parentTweetId
         } else {
@@ -119,13 +119,15 @@ fun MediaItemView(
             MediaType.Image -> {
                 // Show full-screen image directly
                 fullScreenImageMid = mediaItems[idx].mid
-                fullScreenBitmap = currentBitmap // Pass the current bitmap to fullscreen
                 showFullScreenImage = true
             }
             MediaType.Audio -> {
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
+                // Sync the current coordinator's video list to FullScreenPlayerManager
+                // so full-screen playback uses the same list (bookmarks/favorites/profile)
+                videoCoordinator.syncToFullScreenPlayer()
                 // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
                 val params = MediaViewerParams(
                     mediaItems.map {
@@ -204,9 +206,6 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
-                        onBitmapLoaded = { bitmap ->
-                            currentBitmap = bitmap
-                        }
                     )
                 }
             }
@@ -354,7 +353,6 @@ fun MediaItemView(
                                 }
                                 val (nextMediaIndex, _) = imageAttachments[nextIndex]
                                 fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
-                                fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         },
                         onPreviousImage = {
@@ -367,7 +365,6 @@ fun MediaItemView(
                                 }
                                 val (prevMediaIndex, _) = imageAttachments[prevIndex]
                                 fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
-                                fullScreenBitmap = null // Reset bitmap to load new image
                             }
                         }
                     )

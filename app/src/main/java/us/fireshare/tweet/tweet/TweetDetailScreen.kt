@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -43,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,10 +70,13 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
+import androidx.compose.ui.draw.alpha
+import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import kotlin.math.abs
 
@@ -119,7 +124,6 @@ fun TweetDetailScreen(
     // Comment pagination and loading states (merged from CommentListView)
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
-    var currentPage by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(true) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
     
@@ -134,12 +138,13 @@ fun TweetDetailScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
-    // Track LazyColumn viewport size for VideoPlaybackCoordinator
-    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // Per-instance coordinator for comment video playback (iOS CommentsVideoPlaybackCoordinator pattern)
+    // This ensures comment videos don't interfere with the feed's coordinator state.
+    val commentsCoordinator = remember { VideoPlaybackCoordinator() }
 
     // Scroll-based top app bar visibility
-    var previousFirstVisibleItemIndex by remember { mutableStateOf(0) }
-    var previousScrollOffset by remember { mutableStateOf(0) }
+    var previousFirstVisibleItemIndex by remember { mutableIntStateOf(0) }
+    var previousScrollOffset by remember { mutableIntStateOf(0) }
     var showTopAppBar by remember { mutableStateOf(true) }
     
     // Animate top app bar visibility
@@ -147,6 +152,13 @@ fun TweetDetailScreen(
         targetValue = if (showTopAppBar) 1f else 0f,
         animationSpec = tween(durationMillis = 300),
         label = "topAppBarAlpha"
+    )
+
+    // Animate bottom navigation bar height (hide when scrolling down)
+    val bottomNavHeight by animateDpAsState(
+        targetValue = if (showTopAppBar) 72.dp else 0.dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "bottomNavHeight"
     )
 
     // Track scroll direction with improved logic
@@ -174,10 +186,10 @@ fun TweetDetailScreen(
                 showTopAppBar = true
             }
 
-            // Update VideoPlaybackCoordinator scroll direction for video autoplay
+            // Update comments coordinator scroll direction for video autoplay
             if (abs(indexDelta) >= 2 || abs(offsetDelta) > 200) {
                 val approximateOffset = currentIndex * 1000f + currentOffset
-                VideoPlaybackCoordinator.updateScrollDirection(approximateOffset)
+                commentsCoordinator.updateScrollDirection(approximateOffset)
             }
         }
     }
@@ -190,7 +202,6 @@ fun TweetDetailScreen(
                 isRefreshingAtTop = true
                 try {
                     withContext(Dispatchers.IO) {
-                        currentPage = 0 // Reset to page 0 for refresh
                         viewModel.loadComments(tweet, 0)
                         lastLoadedPage = 0
                     }
@@ -242,7 +253,6 @@ fun TweetDetailScreen(
             isInitialLoading = true
             withContext(Dispatchers.IO) {
                 val newCommentsCount = viewModel.loadComments(tweet, 0)
-                currentPage = 0
                 lastLoadedPage = 0
                 // If page 0 returned no comments, stop pagination immediately
                 if (newCommentsCount == 0) {
@@ -255,7 +265,7 @@ fun TweetDetailScreen(
     }
 
     // Track last pagination attempt to prevent rapid repeated calls
-    var lastPaginationAttempt by remember { mutableStateOf(-1L) }
+    var lastPaginationAttempt by remember { mutableLongStateOf(-1L) }
 
     // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
     LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
@@ -285,7 +295,6 @@ fun TweetDetailScreen(
                             Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
                         } else {
                             // Got new comments, continue pagination
-                            currentPage = nextPage
                             lastLoadedPage = nextPage
                             Timber.tag("TweetDetailScreen").d("Page $nextPage returned $newCommentsCount comments, continuing pagination")
                         }
@@ -324,24 +333,28 @@ fun TweetDetailScreen(
         }
     }
 
-    // Build video list from comments for VideoPlaybackCoordinator
+    // Build video list from comments on the per-instance coordinator.
+    // This doesn't touch the shared feed coordinator, so navigating back preserves the feed's state.
     LaunchedEffect(comments) {
         if (comments.isNotEmpty()) {
             withContext(Dispatchers.IO) {
-                VideoPlaybackCoordinator.buildVideoList(comments)
+                commentsCoordinator.buildVideoList(comments)
             }
-            Timber.tag("TweetDetailScreen").d("Built video list from ${comments.size} comments")
+            Timber.tag("TweetDetailScreen").d("Built comment video list with ${comments.size} comments")
         }
     }
 
-    // Clear VideoPlaybackCoordinator state when leaving the screen
+    // Clear the per-instance coordinator when leaving.
     DisposableEffect(Unit) {
         onDispose {
-            VideoPlaybackCoordinator.clear()
-            Timber.tag("TweetDetailScreen").d("Cleared VideoPlaybackCoordinator on dispose")
+            commentsCoordinator.clear()
+            Timber.tag("TweetDetailScreen").d("Cleared comments VideoPlaybackCoordinator")
         }
     }
 
+    // Provide the per-instance coordinator to all child composables (TweetItem, MediaGrid, VideoPreview)
+    // so comment videos use the comments coordinator instead of the shared feed coordinator.
+    androidx.compose.runtime.CompositionLocalProvider(LocalVideoCoordinator provides commentsCoordinator) {
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -400,19 +413,33 @@ fun TweetDetailScreen(
                         }
                     }
                 )
-                BottomNavigationBar(
-                    navController = navController,
-                    selectedIndex = 0 // Home tab
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(bottomNavHeight)
+                        .clipToBounds()
+                ) {
+                    BottomNavigationBar(
+                        modifier = Modifier.alpha(BottomBarState.opacity),
+                        navController = navController,
+                        selectedIndex = 0 // Home tab
+                    )
+                }
             }
         },
     ) { innerPadding ->
+        // Animate top padding so content doesn't jump when app bar hides/shows (prevents scroll feedback shake)
+        val animatedTopPadding by animateDpAsState(
+            targetValue = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+            animationSpec = tween(durationMillis = 300),
+            label = "topPadding"
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(
-                    top = if (showTopAppBar) innerPadding.calculateTopPadding() else 0.dp,
+                    top = animatedTopPadding,
                     bottom = innerPadding.calculateBottomPadding(),
                     start = innerPadding.calculateLeftPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateRightPadding(LocalLayoutDirection.current)
@@ -424,9 +451,8 @@ fun TweetDetailScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { size ->
-                        viewportSize = size
-                        // Update VideoPlaybackCoordinator with viewport size
-                        VideoPlaybackCoordinator.updateViewportSize(
+                        // Update comments coordinator with viewport size
+                        commentsCoordinator.updateViewportSize(
                             size.width.toFloat(),
                             size.height.toFloat()
                         )
@@ -441,7 +467,10 @@ fun TweetDetailScreen(
                         parentEntry = parentEntry,
                         parentTweetId = parentTweetId,
                         parentAuthorId = parentAuthorId,
-                        onExpandReply = { isReplyBoxExpanded = true }
+                        onExpandReply = { isReplyBoxExpanded = true },
+                        onVideoVisibilityChanged = { visible ->
+                            commentsCoordinator.isPaused = visible
+                        }
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 1.dp),
@@ -540,4 +569,5 @@ fun TweetDetailScreen(
             )
         }
     }
+    } // CompositionLocalProvider
 }
