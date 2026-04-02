@@ -236,7 +236,8 @@ fun TweetDetailBody(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 2.dp,
-                                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
+                                modifier = Modifier.padding(start = 40.dp, top = 4.dp, end = 0.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -254,7 +255,8 @@ fun TweetDetailBody(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 tonalElevation = 2.dp,
-                                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 0.dp)
+                                modifier = Modifier.padding(start = 40.dp, top = 4.dp, end = 0.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                             ) {
                                 // Use activity scope to ensure same ViewModel instance is shared
                                 val activity = LocalActivity.current as ComponentActivity
