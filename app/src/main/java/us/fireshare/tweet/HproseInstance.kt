@@ -2947,15 +2947,11 @@ object HproseInstance {
         return try {
             val authorClient = tweet.author?.hproseService
                 ?: throw Exception("Author client not available for toggleFavorite")
-            val originalTimeout = authorClient.timeout
-            authorClient.timeout = 30000
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("toggleFavorite").e(e, "Exception calling runMApp for toggleFavorite, tweetId: ${tweet.mid}")
                 throw e
-            } finally {
-                authorClient.timeout = originalTimeout
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
@@ -3018,15 +3014,11 @@ object HproseInstance {
         return try {
             val authorClient = tweet.author?.hproseService
                 ?: throw Exception("Author client not available for toggleBookmark")
-            val originalTimeout = authorClient.timeout
-            authorClient.timeout = 30000
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("toggleBookmark").e(e, "Exception calling runMApp for toggleBookmark, tweetId: ${tweet.mid}")
                 throw e
-            } finally {
-                authorClient.timeout = originalTimeout
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
