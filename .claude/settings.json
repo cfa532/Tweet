@@ -4,7 +4,8 @@
       "Bash(find /Users/cfa532/Documents/GitHub/Tweet/app/src -name *Dao*.kt)",
       "Bash(grep -r \"fun getCachedTweetsByUser\\\\|fun getCachedUser\" /Users/cfa532/Documents/GitHub/Tweet/app/src --include=*.kt)",
       "Bash(./gradlew assemblefullDebug assemblefullRelease)",
-      "Bash(./gradlew assemblefullRelease assemblefullDebug)"
+      "Bash(./gradlew assemblefullRelease assemblefullDebug)",
+      "Bash(adb install:*)"
     ]
   }
 }
