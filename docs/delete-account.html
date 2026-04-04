@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Deletion Request – ZZ</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      line-height: 1.7;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #ffffff;
+      padding: 2.5rem 2rem;
+    }
+
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: .4rem;
+    }
+
+    .header p {
+      opacity: .75;
+      font-size: .95rem;
+    }
+
+    .body {
+      padding: 2rem;
+    }
+
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 2rem 0 .75rem;
+      color: #16213e;
+      border-left: 4px solid #4f8ef7;
+      padding-left: .75rem;
+    }
+
+    h2:first-child { margin-top: 0; }
+
+    p { margin-bottom: .75rem; }
+
+    ol, ul {
+      padding-left: 1.4rem;
+      margin-bottom: .75rem;
+    }
+
+    li { margin-bottom: .4rem; }
+
+    .step-list {
+      counter-reset: steps;
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .step-list li {
+      counter-increment: steps;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: .75rem 1rem;
+      border-radius: 8px;
+      background: #f5f7fa;
+      margin-bottom: .6rem;
+    }
+
+    .step-list li::before {
+      content: counter(steps);
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: #4f8ef7;
+      color: #fff;
+      font-weight: 700;
+      font-size: .85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      margin-bottom: .75rem;
+    }
+
+    th {
+      background: #f0f4ff;
+      text-align: left;
+      padding: .6rem .9rem;
+      font-weight: 600;
+      border: 1px solid #dde3f0;
+    }
+
+    td {
+      padding: .6rem .9rem;
+      border: 1px solid #dde3f0;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td { background: #fafbff; }
+
+    .badge {
+      display: inline-block;
+      padding: .15rem .55rem;
+      border-radius: 20px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+
+    .badge-deleted { background: #ffe5e5; color: #c0392b; }
+    .badge-kept    { background: #e5ffe9; color: #1e8449; }
+
+    .email-box {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      background: #f0f4ff;
+      border: 1px solid #c7d5f8;
+      border-radius: 8px;
+      padding: .9rem 1.1rem;
+      font-weight: 500;
+    }
+
+    .email-box svg { flex-shrink: 0; }
+
+    .note {
+      background: #fff8e1;
+      border-left: 4px solid #f9a825;
+      border-radius: 0 8px 8px 0;
+      padding: .8rem 1rem;
+      font-size: .9rem;
+      margin-bottom: .75rem;
+    }
+
+    footer {
+      text-align: center;
+      font-size: .8rem;
+      color: #888;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>ZZ — Account Deletion Request</h1>
+      <p>Developer: cfa532 &nbsp;·&nbsp; App: ZZ (Decentralized Social Media)</p>
+    </div>
+
+    <div class="body">
+
+      <h2>Overview</h2>
+      <p>
+        ZZ is a decentralized social media application built on the Leither network. Because your
+        account data is <strong>self-hosted</strong> across your own node and those of your
+        followers, the deletion process differs slightly from a centralised service.
+        This page explains exactly how to request deletion and what happens to your data.
+      </p>
+
+      <h2>How to Request Account Deletion</h2>
+      <ol class="step-list">
+        <li>
+          <span>
+            <strong>Open the ZZ app</strong> and sign in to the account you wish to delete.
+          </span>
+        </li>
+        <li>
+          <span>
+            Go to <strong>Profile → Settings → Account</strong> and tap <em>"Delete Account"</em>.
+            Follow the on-screen confirmation steps.
+          </span>
+        </li>
+        <li>
+          <span>
+            If you cannot access the app, send a deletion request by email (see below) with the
+            subject line <code>Account Deletion Request</code> and include your registered
+            username or node ID.
+          </span>
+        </li>
+        <li>
+          <span>
+            You will receive a confirmation within <strong>7 business days</strong>.
+            Deletion is completed within <strong>30 days</strong> of your confirmed request.
+          </span>
+        </li>
+      </ol>
+
+      <div class="email-box">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+        Email: <strong>cfa532@gmail.com</strong>
+      </div>
+
+      <h2>What Data Is Deleted</h2>
+      <p>
+        The table below summarises each category of data, whether it is deleted, and any
+        applicable retention period.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Data Category</th>
+            <th>Status</th>
+            <th>Retention / Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Account credentials (username, password hash)</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>Removed within 30 days of confirmed request</td>
+          </tr>
+          <tr>
+            <td>Profile information (display name, avatar, bio)</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>Removed within 30 days of confirmed request</td>
+          </tr>
+          <tr>
+            <td>Posts / tweets you authored</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>
+              Removed from your node immediately. Copies cached on followers' nodes are purged
+              within 30 days as the network propagates the deletion signal.
+            </td>
+          </tr>
+          <tr>
+            <td>Media files (photos, videos, audio) you uploaded</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>Removed from your node within 30 days; cached copies purged as above</td>
+          </tr>
+          <tr>
+            <td>Direct messages</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>
+              Your copy is deleted immediately. The recipient's copy is theirs to manage and is
+              not deleted.
+            </td>
+          </tr>
+          <tr>
+            <td>Notifications and activity logs</td>
+            <td><span class="badge badge-deleted">Deleted</span></td>
+            <td>Removed within 30 days</td>
+          </tr>
+          <tr>
+            <td>Aggregated, anonymised analytics</td>
+            <td><span class="badge badge-kept">Retained</span></td>
+            <td>
+              Non-identifiable usage statistics (e.g. total active nodes) may be retained
+              indefinitely as they cannot be linked back to any individual account.
+            </td>
+          </tr>
+          <tr>
+            <td>Transaction / reward records</td>
+            <td><span class="badge badge-kept">Retained up to 1 year</span></td>
+            <td>
+              Records required for platform revenue-sharing audits are retained for up to
+              12 months after account deletion, then permanently removed.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <strong>Decentralised note:</strong> ZZ operates on a peer-to-peer network. While your
+        node and our infrastructure will delete all data within 30 days, we cannot guarantee
+        immediate removal from third-party nodes outside our network that may have cached your
+        public content before the deletion request was made.
+      </div>
+
+      <h2>Partial Deletion (Data Portability)</h2>
+      <p>
+        If you only want to delete specific content rather than your entire account, you can
+        delete individual posts, profile details, or uploaded media from within the app without
+        closing your account.
+      </p>
+
+      <h2>Contact Us</h2>
+      <p>
+        For questions about this process or to check the status of a deletion request, contact
+        the developer at <strong>cfa532@gmail.com</strong> with the subject line
+        <em>"Account Deletion Request"</em>.
+      </p>
+
+      <footer>
+        Last updated: April 2026 &nbsp;·&nbsp; ZZ by cfa532
+      </footer>
+    </div>
+  </div>
+</body>
+</html>
