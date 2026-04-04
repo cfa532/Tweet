@@ -68,7 +68,8 @@ import us.fireshare.tweet.widget.SelectableText
 fun CommentItem(
     comment: Tweet,
     parentTweetViewModel: TweetViewModel?,
-    parentEntry: NavBackStackEntry
+    parentEntry: NavBackStackEntry,
+    isLast: Boolean = false
 ) {
     val navController = LocalNavController.current
 
@@ -180,7 +181,7 @@ fun CommentItem(
         // Actions Row
         Row(
             modifier = Modifier.fillMaxWidth()
-                .padding(start = 40.dp, end = 4.dp, bottom = 0.dp),
+                .padding(start = 40.dp, end = 4.dp, bottom = if (isLast) 24.dp else 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             CommentButton(viewModel)

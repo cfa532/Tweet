@@ -890,33 +890,6 @@ fun MediaGrid(
             }
         }
 
-        // Caption for single-video grid: title or file name (without extension)
-        if (limitedMediaList.size == 1) {
-            val singleItem = limitedMediaList[0]
-            val singleItemType = inferMediaTypeFromAttachment(singleItem)
-            if (singleItemType == MediaType.Video || singleItemType == MediaType.HLS_VIDEO) {
-                // Prefer tweet title; fallback to file name only when tweet has no text content
-                val rawTitle = tweet.title?.takeIf { it.isNotBlank() }
-                val fileNameWithoutExt = if (tweet.content.isNullOrBlank()) {
-                    singleItem.fileName
-                        ?.substringBeforeLast('.', missingDelimiterValue = singleItem.fileName)
-                        ?.takeIf { it.isNotBlank() }
-                } else null
-
-                val captionText = rawTitle ?: fileNameWithoutExt
-
-                if (!captionText.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = captionText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
     }
 }
 

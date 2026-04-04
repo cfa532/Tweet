@@ -207,7 +207,7 @@ class VideoPlaybackCoordinator(
      * Build video list from tweets
      * Similar to iOS buildVideoList(from:tweets:pinnedTweets:)
      */
-    suspend fun buildVideoList(tweets: List<Tweet>, pinnedTweets: List<Tweet> = emptyList()) {
+    fun buildVideoList(tweets: List<Tweet>, pinnedTweets: List<Tweet> = emptyList()) {
         currentTweets = tweets + pinnedTweets
 
         val videos = mutableListOf<VideoPlaybackInfo>()
@@ -465,15 +465,6 @@ class VideoPlaybackCoordinator(
         }.sortedBy { videoInfo ->
             tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
         }.toMutableList()
-
-        if (visibleVideos.isNotEmpty()) {
-            Timber.d("VideoPlaybackCoordinator: Visible videos order: ${visibleVideos.joinToString(", ") { videoInfo ->
-                val bounds = tweetCellBoundsMap[videoInfo.tweetId]
-                val pos = bounds?.top ?: Float.MAX_VALUE
-                val visibility = videoVisibilityMap[videoInfo.identifier] ?: 0f
-                "${videoInfo.videoMid.substring(0, minOf(8, videoInfo.videoMid.length))}@${pos.toInt()}[${(visibility * 100).toInt()}%]"
-            }}")
-        }
 
         if (visibleVideos.isEmpty()) {
             val now = System.currentTimeMillis()

@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -498,26 +499,52 @@ fun TweetDetailScreen(
                     }
                 } else {
                     // Show comments when loading is complete
+                    if (comments.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ChatBubbleOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                                )
+                                Text(
+                                    text = stringResource(R.string.no_comments_yet),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+                            }
+                        }
+                    } else {
                     itemsIndexed(
                         items = comments,
                         key = { _, comment -> comment.mid },
                         contentType = { _, _ -> "comment" }  // Help Compose reuse compositions efficiently
                     ) { index, comment ->
+                        val isLast = index == comments.size - 1
                         CommentItem(
                             comment = comment,
                             parentTweetViewModel = viewModel,
-                            parentEntry = parentEntry
+                            parentEntry = parentEntry,
+                            isLast = isLast
                         )
 
                         // Add divider after each comment (except the last one)
                         // Use index instead of indexOf for O(1) performance
-                        if (index < comments.size - 1) {
+                        if (!isLast) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 1.dp),
                                 thickness = 1.dp,
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
                             )
                         }
+                    }
                     }
 
                     // Show top refresh spinner

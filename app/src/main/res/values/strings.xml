@@ -383,4 +383,5 @@
     <string name="request_timeout">The request took too long. Please try again.</string>
     <string name="server_unreachable">Cannot reach the server. Please try again later.</string>
     <string name="connection_error">Connection error. Please try again.</string>
+    <string name="no_comments_yet">No comments yet</string>
 </resources>

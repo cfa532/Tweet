@@ -95,81 +95,65 @@ fun TweetItemBody(
                 }
             })
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-        ) {
-            // Left column: Avatar
-            Column(
-                modifier = Modifier.padding(top = 0.dp)
-            ) {
-                IconButton(
-                    onClick = {
-                        // Only navigate if we're not already on this user's profile
-                        timber.log.Timber.tag("TweetItemBody").d("Avatar clicked: authorId=${tweet.authorId}, currentUserId=$currentUserId")
-                        if (tweet.authorId != currentUserId) {
-                            timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.authorId}")
-                            navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                        } else {
-                            timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
-                            coroutineScope.launch {
-                                onScrollToTop?.invoke()
-                            }
-                        }
-                    },
-                    modifier = Modifier.width(48.dp)
-                ) {
-                    UserAvatar(
-                        user = author ?: us.fireshare.tweet.datamodel.User(
-                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
-                            baseUrl = appUser.baseUrl
-                        ),
-                        size = 38
-                    )
-                }
-            }
-
-            // Right column: User info, content, and actions
-            Column(
-                modifier = Modifier.fillMaxWidth()
-                    .padding(end = 4.dp)
-            ) {
-                // Top row: User info and dropdown menu
+        if (isQuoted) {
+            // Quoted tweet: two-row layout
+            // Row 1: Avatar + Header
+            Column(modifier = Modifier.fillMaxWidth().padding(end = 4.dp)) {
                 Row(
-                    modifier = Modifier
-                        .padding(bottom = 4.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // User info text
-                    Row(
-                        modifier = Modifier.padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    IconButton(
+                        onClick = {
+                            if (tweet.authorId != currentUserId) {
+                                navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                            } else {
+                                coroutineScope.launch { onScrollToTop?.invoke() }
+                            }
+                        },
+                        modifier = Modifier.width(40.dp)
                     ) {
-                        Text(
-                            text = author?.name ?: "No One",
-                            modifier = Modifier.padding(start = 2.dp),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Text(
-                            text = "@${author?.username}",
-                            modifier = Modifier.padding(horizontal = 0.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(text = " • ", fontSize = 12.sp)
-                        Text(
-                            text = localizedTimeDifference(tweet.timestamp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.secondary
+                        UserAvatar(
+                            user = author ?: us.fireshare.tweet.datamodel.User(
+                                mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                                baseUrl = appUser.baseUrl
+                            ),
+                            size = 32
                         )
                     }
-
-                    // Dropdown menu
-                    TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = author?.name ?: "No One",
+                                modifier = Modifier.padding(start = 2.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                text = "@${author?.username}",
+                                modifier = Modifier.padding(horizontal = 0.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(text = " • ", fontSize = 12.sp)
+                            Text(
+                                text = localizedTimeDifference(tweet.timestamp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
+                    }
                 }
 
+                // Row 2: Tweet body (content + media)
+                Column(modifier = Modifier.padding(start = 8.dp)) {
                 // Text content of the tweet
                 if (hasContent) {
                     SelectableText(
@@ -247,12 +231,141 @@ fun TweetItemBody(
                         }
                     }
                 }
+                } // end body Column
 
-                // Action buttons (only if not quoted)
-                if (!isQuoted) {
+            }
+        } else {
+            // Normal tweet: original side-by-side layout
+            Row(modifier = Modifier.fillMaxWidth()) {
+                // Left column: Avatar
+                Column(modifier = Modifier.padding(top = 0.dp)) {
+                    IconButton(
+                        onClick = {
+                            timber.log.Timber.tag("TweetItemBody").d("Avatar clicked: authorId=${tweet.authorId}, currentUserId=$currentUserId")
+                            if (tweet.authorId != currentUserId) {
+                                timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.authorId}")
+                                navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                            } else {
+                                timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
+                                coroutineScope.launch { onScrollToTop?.invoke() }
+                            }
+                        },
+                        modifier = Modifier.width(48.dp)
+                    ) {
+                        UserAvatar(
+                            user = author ?: us.fireshare.tweet.datamodel.User(
+                                mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                                baseUrl = appUser.baseUrl
+                            ),
+                            size = 38
+                        )
+                    }
+                }
+
+                // Right column: User info, content, and actions
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(end = 4.dp)
+                ) {
+                    // Top row: User info and dropdown menu
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth(),
+                        modifier = Modifier.padding(bottom = 4.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = author?.name ?: "No One",
+                                modifier = Modifier.padding(start = 2.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                text = "@${author?.username}",
+                                modifier = Modifier.padding(horizontal = 0.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(text = " • ", fontSize = 12.sp)
+                            Text(
+                                text = localizedTimeDifference(tweet.timestamp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
+                    }
+
+                    // Text content of the tweet
+                    if (hasContent) {
+                        SelectableText(
+                            text = tweet.content!!,
+                            maxLines = 7,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 20.sp),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                            onTextClick = {
+                                navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
+                            },
+                            callback = { username ->
+                                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    HproseInstance.getUserId(username)?.let {
+                                        withContext(Dispatchers.Main) {
+                                            navController.navigate(NavTweet.UserProfile(it))
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+
+                    // Media files and documents
+                    if (hasAttachments) {
+                        val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
+                            tweet.attachments!!
+                        }
+                        val mediaAttachments = remember(stableAttachments) {
+                            stableAttachments.filter { attachment ->
+                                val type = inferMediaTypeFromAttachment(attachment)
+                                isMediaType(type)
+                            }
+                        }
+                        val documentAttachments = remember(stableAttachments) {
+                            stableAttachments.filter { attachment ->
+                                val type = inferMediaTypeFromAttachment(attachment)
+                                isDocumentType(type)
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 6.dp)
+                        ) {
+                            if (mediaAttachments.isNotEmpty()) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp, max = 400.dp),
+                                    tonalElevation = 4.dp,
+                                    shape = RoundedCornerShape(size = 8.dp)
+                                ) {
+                                    MediaGrid(
+                                        mediaAttachments,
+                                        viewModel,
+                                        parentTweetId = parentTweet?.mid?.takeIf { it.isNotEmpty() },
+                                        containerTopY = containerTopY
+                                    )
+                                }
+                            }
+                            if (documentAttachments.isNotEmpty()) {
+                                DocumentAttachmentsView(
+                                    documents = documentAttachments,
+                                    baseUrl = tweet.author?.baseUrl,
+                                    maxDocuments = 2
+                                )
+                            }
+                        }
+                    }
+
+                    // Action buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
                         CommentButton(viewModel)
