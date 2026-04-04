@@ -156,4 +156,8 @@
     <string name="request_timeout">リクエストがタイムアウトしました。もう一度お試しください。</string>
     <string name="server_unreachable">サーバーに接続できません。後でもう一度お試しください。</string>
     <string name="connection_error">接続エラー。もう一度お試しください。</string>
+    <string name="account">アカウント</string>
+    <string name="logout_confirmation">ログアウトしてもよろしいですか？この操作は元に戻せません。</string>
+    <string name="delete_account_confirmation">アカウントを削除してもよろしいですか？すべてのデータが完全に削除されます。この操作は元に戻せません。</string>
+    <string name="deleting_account">アカウントを削除中…</string>
 </resources>

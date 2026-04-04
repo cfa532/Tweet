@@ -3216,6 +3216,18 @@ object HproseInstance {
         }
     }
 
+    suspend fun deleteAccount(): Map<String, Any> {
+        val entry = "delete_account"
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "userid" to appUser.mid
+        )
+        val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+        return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
+    }
+
     /**
      * Load all comments of a tweet.
      * @param pageNumber

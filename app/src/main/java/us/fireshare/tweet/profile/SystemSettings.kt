@@ -3,6 +3,7 @@ package us.fireshare.tweet.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,11 +55,13 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
+import us.fireshare.tweet.navigation.NavTweet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
@@ -70,9 +75,11 @@ import us.fireshare.tweet.widget.VideoManager
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel) {
-    val appUser by appUserViewModel.user.collectAsState()
+    val appUser by appUserState.collectAsState()
     val context = LocalContext.current
+    var isDeletingAccount by remember { mutableStateOf(false) }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -105,7 +112,6 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             )
         },
     ) { innerPadding ->
-        // Shared state variables for save functionality
         var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
         var showDialog by remember { mutableStateOf(false) }
 
@@ -174,6 +180,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     text = { Text(stringResource(R.string.theme_system)) },
                                     onClick = {
                                         currentThemeMode = "system"
+                                        HproseInstance.preferenceHelper.setThemeMode("system")
+                                        ThemeManager.updateThemeMode("system")
                                         expanded = false
                                     }
                                 )
@@ -181,6 +189,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     text = { Text(stringResource(R.string.theme_light)) },
                                     onClick = {
                                         currentThemeMode = "light"
+                                        HproseInstance.preferenceHelper.setThemeMode("light")
+                                        ThemeManager.updateThemeMode("light")
                                         expanded = false
                                     }
                                 )
@@ -188,6 +198,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     text = { Text(stringResource(R.string.theme_dark)) },
                                     onClick = {
                                         currentThemeMode = "dark"
+                                        HproseInstance.preferenceHelper.setThemeMode("dark")
+                                        ThemeManager.updateThemeMode("dark")
                                         expanded = false
                                     }
                                 )
@@ -390,26 +402,123 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 }
 
                 item {
-                    // Save button section
-                    Button(
-                        onClick = {
-                            // Save theme mode
-                            HproseInstance.preferenceHelper.setThemeMode(currentThemeMode)
-                            ThemeManager.updateThemeMode(currentThemeMode)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                    // Account section
+                    var showLogoutDialog by remember { mutableStateOf(false) }
+                    var showDeleteDialog by remember { mutableStateOf(false) }
+
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(16.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            stringResource(R.string.save),
-                            fontWeight = FontWeight.Medium
+                            text = stringResource(R.string.account),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        if (appUser.isGuest()) {
+                            Button(
+                                onClick = { navController.navigate(NavTweet.Login) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(stringResource(R.string.login), fontWeight = FontWeight.Medium)
+                            }
+                        } else {
+                            Button(
+                                onClick = { showLogoutDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary
+                                )
+                            ) {
+                                Text(stringResource(R.string.logout), fontWeight = FontWeight.Medium)
+                            }
+                            Button(
+                                onClick = { showDeleteDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                )
+                            ) {
+                                Text(stringResource(R.string.delete_account), fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+
+                    if (showLogoutDialog) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showLogoutDialog = false },
+                            title = { Text(stringResource(R.string.logout)) },
+                            text = { Text(stringResource(R.string.logout_confirmation)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showLogoutDialog = false
+                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        appUserViewModel.logout {
+                                            appUserViewModel.viewModelScope.launch(Dispatchers.Main) {
+                                                navController.navigate(NavTweet.TweetFeed)
+                                            }
+                                        }
+                                    }
+                                }) { Text(stringResource(R.string.logout), color = MaterialTheme.colorScheme.error) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showLogoutDialog = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
+                    }
+
+                    if (showDeleteDialog) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showDeleteDialog = false },
+                            title = { Text(stringResource(R.string.delete_account)) },
+                            text = { Text(stringResource(R.string.delete_account_confirmation)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showDeleteDialog = false
+                                    isDeletingAccount = true
+                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                        appUserViewModel.deleteAccount(
+                                            onDone = {
+                                                appUserViewModel.viewModelScope.launch(Dispatchers.Main) {
+                                                    isDeletingAccount = false
+                                                    navController.navigate(NavTweet.TweetFeed)
+                                                }
+                                            },
+                                            onError = { isDeletingAccount = false }
+                                        )
+                                    }
+                                }) { Text(stringResource(R.string.delete_account), color = MaterialTheme.colorScheme.error) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDeleteDialog = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
                         )
                     }
                 }
+
+
             }
 
             // Bottom section with version, user ID, and privacy policy
@@ -512,4 +621,26 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
             }
         }
     }
+
+    // Full-screen spinner overlay while deleting account
+    if (isDeletingAccount) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .pointerInput(Unit) { /* consume all touch events */ },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Color.White)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.deleting_account),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+    } // end Box
 }

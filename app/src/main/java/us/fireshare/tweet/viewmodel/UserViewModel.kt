@@ -1365,6 +1365,25 @@ class UserViewModel @AssistedInject constructor(
         popBack()
     }
 
+    suspend fun deleteAccount(onDone: () -> Unit, onError: () -> Unit = {}) {
+        try {
+            val result = HproseInstance.deleteAccount()
+            val success = result["success"] as? Boolean ?: false
+            if (success) {
+                TweetCacheManager.clearAllCachedTweets()
+                TweetCacheManager.clearAllCachedUsers()
+                logout(onDone)
+            } else {
+                val message = result["message"] as? String ?: "Delete account failed"
+                Timber.tag("deleteAccount").e(message)
+                withContext(Dispatchers.Main) { onError() }
+            }
+        } catch (e: Exception) {
+            Timber.tag("deleteAccount").e(e, "Delete account failed")
+            withContext(Dispatchers.Main) { onError() }
+        }
+    }
+
     /**
      * Handle both register and update of user profile. Username, password are required.
      * Do NOT update appUser, wait for the new user to login.

@@ -2,26 +2,19 @@ package us.fireshare.tweet.profile
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,11 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.launch
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
@@ -66,7 +55,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                      navController: NavHostController,
                      scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val user by viewModel.user.collectAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
@@ -152,57 +140,14 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }
         },
         actions = {
-            if (! appUser.isGuest()) {
-                if (appUser.mid != user.mid) {
-                    IconButton(onClick = {
-                        // Navigate to chat screen with the user
-                        navController.navigate(NavTweet.ChatBox(user.mid))
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.MailOutline,
-                            contentDescription = stringResource(R.string.message)
-                        )
-                    }
-                }
-                Box {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        modifier = Modifier
-                            .wrapContentWidth(align = Alignment.End)
-                            .border(
-                                width = 1.dp, // Border width
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(4.dp)
-                            ),
-                    ) {
-                        if (user.mid == appUser.mid) {
-                            DropdownMenuItem(
-                                onClick = {
-                                    viewModel.viewModelScope.launch(IO) {
-                                        viewModel.logout {
-                                            viewModel.viewModelScope.launch(Main) {
-                                                navController.navigate(NavTweet.TweetFeed)
-                                            }
-                                        }
-                                    }
-                                },
-                                text = {
-                                    Text(
-                                        text = stringResource(id = R.string.logout),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                },
-                                modifier = Modifier.heightIn(max = 32.dp)
-                            )
-                        }
-                    }
+            if (!appUser.isGuest() && appUser.mid != user.mid) {
+                IconButton(onClick = {
+                    navController.navigate(NavTweet.ChatBox(user.mid))
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.MailOutline,
+                        contentDescription = stringResource(R.string.message)
+                    )
                 }
             }
         },

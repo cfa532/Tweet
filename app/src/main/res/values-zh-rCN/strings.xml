@@ -311,4 +311,8 @@
     <string name="connection_error">连接错误。请重试。</string>
     <string name="no_more_tweets">没有更多推文了</string>
     <string name="no_comments_yet">还没有评论</string>
+    <string name="account">账号</string>
+    <string name="logout_confirmation">确定要退出登录吗？此操作无法撤销。</string>
+    <string name="delete_account_confirmation">确定要注销账号吗？所有数据将被永久删除，此操作无法撤销。</string>
+    <string name="deleting_account">正在注销账号…</string>
 </resources>
