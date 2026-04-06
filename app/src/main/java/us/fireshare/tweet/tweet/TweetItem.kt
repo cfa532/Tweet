@@ -109,7 +109,12 @@ fun TweetItem(
     val density = LocalDensity.current
     // Cached height for scroll-up stability (match iOS TweetHeightCache + willDisplay)
     val cachedHeightPx = remember(tweet.mid) { TweetHeightCache.getHeightPx(tweet.mid) }
-    val cachedHeightDp: Dp? = cachedHeightPx?.let { px -> density.run { px.toDp() } }
+    // Only apply cached min height for tweets that may have loading placeholders (media/retweets).
+    // Text-only tweets render instantly; a stale large cached height causes blank space below content.
+    val hasMediaOrIsRetweet = tweet.originalTweetId != null || !tweet.attachments.isNullOrEmpty()
+    val cachedHeightDp: Dp? = if (hasMediaOrIsRetweet) {
+        cachedHeightPx?.let { px -> density.run { px.toDp() } }
+    } else null
     
     // Optimize: Pre-compute derived values to avoid recalculation
     val isRetweet by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
