@@ -173,7 +173,7 @@ object Gadget {
         return bestIp
     }
 
-    private fun isValidPublicIpAddress(fullIp: String): Boolean {
+    fun isValidPublicIpAddress(fullIp: String): Boolean {
         val ip = fullIp.substringBeforeLast(":").trim('[').trim(']')
         if (isIPv6Address(ip))
             return true
@@ -191,6 +191,7 @@ object Gadget {
                     addressBytes[0] == 10.toByte() -> false // 10.0.0.0/8
                     addressBytes[0] == 172.toByte() && addressBytes[1] in 16..31 -> false // 172.16.0.0/12
                     addressBytes[0] == 192.toByte() && addressBytes[1] == 168.toByte() -> false // 192.168.0.0/16
+                    addressBytes[0] == 100.toByte() && (addressBytes[1].toInt() and 0xFF) in 64..127 -> false // RFC 6598 Shared Address Space (Tailscale)
                     else -> true
                 }
             } catch (e: Exception) {

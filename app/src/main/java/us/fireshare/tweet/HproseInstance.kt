@@ -63,6 +63,7 @@ import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
+import us.fireshare.tweet.widget.Gadget
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
@@ -4218,9 +4219,12 @@ object HproseInstance {
         val ipArray = unwrapV2Response<List<String>>(rawResponse)
         Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
-        // If ipArray is valid, try each IP
+        // If ipArray is valid, filter private/reserved IPs then try each
         if (ipArray != null && ipArray.isNotEmpty()) {
-            return tryIpAddresses(ipArray)
+            val publicIPs = ipArray.filter { Gadget.isValidPublicIpAddress(it) }
+            Timber.tag("_getProviderIP").d("🔍 After filtering: ${publicIPs.size}/${ipArray.size} public IPs")
+            if (publicIPs.isEmpty()) return null
+            return tryIpAddresses(publicIPs)
         }
         
         // Return null means: server responded successfully but no IPs found (user not found or no IPs)
