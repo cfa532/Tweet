@@ -499,15 +499,6 @@ fun EditProfileScreen(
                         viewModel.hostIdError.value = ""
                         viewModel.cloudDrivePortError.value = ""
 
-                        // Validate cloud drive port if provided
-                        if (cloudDrivePort.isNotEmpty()) {
-                            val port = cloudDrivePort.toIntOrNull()
-                            if (port == null || port < 8000 || port > 65535) {
-                                viewModel.cloudDrivePortError.value = "Port must be between 8000 and 65535"
-                                return@launch
-                            }
-                        }
-
                         if (password.isNotEmpty() && password != confirm.value) {
                             viewModel.confirmPasswordError.value = context.getString(R.string.confirm_pwd)
                             return@launch

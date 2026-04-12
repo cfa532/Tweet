@@ -123,7 +123,7 @@ object Gadget {
 
     /**
      * Return the IP address with the smallest response time from the available nodes.
-     * Only considers public IPs with ports between 8000 and 9000.
+     * Only considers public IPs (any port).
      * Treats IPv4 and IPv6 equally.
      * */
     fun filterIpAddresses(nodeList: List<*>): String? {
@@ -147,11 +147,8 @@ object Gadget {
                     continue // Skip invalid response time
                 }
 
-                // Check if IP is valid and has correct port range
-                val ipOnly = ip.getIP() ?: continue
-                val port = ip.substringAfterLast(":", "8080").toIntOrNull() ?: continue
-
-                if (port !in 8000..9000) continue
+                ip.getIP() ?: continue
+                if (ip.substringAfterLast(":", "8080").toIntOrNull() == null) continue
 
                 // Check if it's a public IP
                 if (!isValidPublicIpAddress(ip)) continue

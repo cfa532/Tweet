@@ -3971,9 +3971,9 @@ object HproseInstance {
                                 val lastColonIndex = trimmedIP.lastIndexOf(":")
                                 val potentialPort = trimmedIP.substring(lastColonIndex + 1)
                                 
-                                // Check if the part after last colon looks like a port (8000-8999)
+                                // Check if the part after last colon looks like a port (1-65535)
                                 val portNumber = potentialPort.toIntOrNull()
-                                if (portNumber != null && portNumber in 8000..8999) {
+                                if (portNumber != null && portNumber in 1..65535) {
                                     // Has port - wrap IP part in brackets
                                     val ipPart = trimmedIP.take(lastColonIndex)
                                     "http://[$ipPart]:$portNumber"

@@ -1401,16 +1401,6 @@ class UserViewModel @AssistedInject constructor(
         hostIdError.value = ""
         cloudDrivePortError.value = ""
 
-        // Validate cloud drive port if provided
-        if (cloudDrivePort.value.isNotEmpty()) {
-            val port = cloudDrivePort.value.toIntOrNull()
-            if (port == null || port < 8000 || port > 65535) {
-                cloudDrivePortError.value = "Port must be between 8000 and 65535"
-                isLoading.value = false
-                return
-            }
-        }
-
         if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             /**
              * Register a new user. Check username and password first.
@@ -1545,18 +1535,7 @@ class UserViewModel @AssistedInject constructor(
             cloudDrivePort.value = value
             isLoading.value = false
             loginError.value = ""
-
-            // Validate port range if not empty
-            if (value.isNotEmpty()) {
-                val port = value.toIntOrNull()
-                if (port != null && (port !in 8000..65535)) {
-                    cloudDrivePortError.value = "Port must be between 8000 and 65535"
-                } else {
-                    cloudDrivePortError.value = ""
-                }
-            } else {
-                cloudDrivePortError.value = ""
-            }
+            cloudDrivePortError.value = ""
         }
     }
 

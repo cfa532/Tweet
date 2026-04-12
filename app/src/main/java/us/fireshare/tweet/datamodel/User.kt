@@ -229,10 +229,9 @@ data class User(
                     }
                 }
 
-                // Validate port is between 8000-9000
                 val portNumber = port.toIntOrNull()
-                if (portNumber == null || portNumber !in 8000..9000) {
-                    Timber.w("[resolveWritableUrl] Port $port is not in valid range 8000-9000")
+                if (portNumber == null || portNumber !in 1..65535) {
+                    Timber.w("[resolveWritableUrl] Port $port is not a valid port (1-65535)")
                     return writableUrl
                 }
 
