@@ -104,6 +104,11 @@ fun TweetNavGraph(
                 // New deep link while app is running - will be handled by LaunchedEffect
             }
         }
+    } else if (appUser.isGuest()) {
+        val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
+        if (alphaId != null) {
+            startDestination = NavTweet.UserProfile(alphaId)
+        }
     }
     
     // Handle deep link navigation when app is already running (onNewIntent)
@@ -124,15 +129,6 @@ fun TweetNavGraph(
         } else if (currentUri == null && lastProcessedUri == null) {
             // Initial load without deep link - mark as processed
             lastProcessedUri = ""
-        }
-    }
-    // Navigate guest user to alphaId profile on app start
-    LaunchedEffect(Unit) {
-        if (deepLinkDestination == null && appUser.isGuest()) {
-            val alphaIds = getAlphaIds()
-            if (alphaIds.isNotEmpty()) {
-                navController.navigate(NavTweet.UserProfile(alphaIds.first()))
-            }
         }
     }
 
