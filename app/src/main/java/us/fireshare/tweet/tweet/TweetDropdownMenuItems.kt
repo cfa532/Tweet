@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +56,8 @@ fun TweetDropdownMenuItems(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
-    contextType: String = "default" // Context to determine where this dropdown is shown
+    contextType: String = "default", // Context to determine where this dropdown is shown
+    viewModel: TweetViewModel? = null
 ) {
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
@@ -259,4 +261,30 @@ fun TweetDropdownMenuItems(
             }
         }
     )
+    if (viewModel != null) {
+        val shareContext = LocalContext.current
+        DropdownMenuItem(
+            modifier = Modifier.alpha(1f),
+            onClick = {
+                onDismissRequest()
+                applicationScope.launch(IO) {
+                    viewModel.shareTweet(shareContext, isInDetailView = true)
+                }
+            },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.share),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.share),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        )
+    }
 }

@@ -138,7 +138,7 @@ fun TweetDetailBody(
                     )
                 }
                 // the 3 dots at the right end
-                TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail")
+                TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail", viewModel = viewModel)
             }
             // Tweet detail's content
             Surface(
@@ -286,12 +286,7 @@ fun TweetDetailBody(
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
                         Spacer(modifier = Modifier.width(20.dp))
-                        ShareButton(
-                            viewModel = viewModel,
-                            parentTweetId = parentTweetId,
-                            parentAuthorId = parentAuthorId,
-                            isInDetailView = true
-                        )
+                        ShareButton(viewModel)
                     }
                 }
             }
@@ -478,7 +473,8 @@ fun TweetDropdownMenu(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     parentTweet: Tweet? = null,
-    context: String = "default"
+    context: String = "default",
+    viewModel: TweetViewModel? = null
 ) {
     // Use tweet.mid as key to ensure state is reset when tweet changes
     var expanded by remember(tweet.mid) { mutableStateOf(false) }
@@ -520,12 +516,12 @@ fun TweetDropdownMenu(
                 if (parentTweet.authorId == appUser.mid) {
                     TweetDropdownMenuItems(parentTweet, parentEntry, {
                         expanded = false
-                    }, context)
+                    }, context, viewModel = viewModel)
                 }
             } else {
                 TweetDropdownMenuItems(tweet, parentEntry, {
                     expanded = false
-                }, context)
+                }, context, viewModel = viewModel)
             }
         }
     }
