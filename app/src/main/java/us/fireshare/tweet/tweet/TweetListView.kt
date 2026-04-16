@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.ExperimentalMaterialApi
@@ -768,36 +769,31 @@ fun TweetListView(
                     )
                 }
             } else {
-                // Separate tweet and divider items for granular recycling and lighter scroll
-                visibleTweets.forEachIndexed { index, tweet ->
-                    item(
-                        key = tweet.mid,
-                        contentType = "tweet"
-                    ) {
-                        parentEntry?.let {
-                            TweetItem(
-                                tweet = tweet,
-                                parentEntry = it,
-                                onTweetUnavailable = onTweetUnavailable,
-                                context = context,
-                                currentUserId = currentUserId,
-                                onScrollToTop = scrollToTop
-                            )
-                        }
+                // Keep tweet + divider in a single lazy item to reduce slot churn on long regular feeds.
+                itemsIndexed(
+                    items = visibleTweets,
+                    key = { _, tweet -> tweet.mid },
+                    contentType = { _, _ -> "tweet_with_divider" }
+                ) { index, tweet ->
+                    parentEntry?.let {
+                        TweetItem(
+                            tweet = tweet,
+                            parentEntry = it,
+                            onTweetUnavailable = onTweetUnavailable,
+                            context = context,
+                            currentUserId = currentUserId,
+                            onScrollToTop = scrollToTop
+                        )
                     }
+
                     if (index < visibleTweets.lastIndex) {
-                        item(
-                            key = "divider_${tweet.mid}",
-                            contentType = "divider"
-                        ) {
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .padding(top = 4.dp, bottom = 8.dp)
-                                    .padding(horizontal = 1.dp),
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                            )
-                        }
+                        HorizontalDivider(
+                            modifier = Modifier
+                                .padding(top = 4.dp, bottom = 8.dp)
+                                .padding(horizontal = 1.dp),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                        )
                     }
                 }
             }

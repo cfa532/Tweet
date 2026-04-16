@@ -54,6 +54,7 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
@@ -63,6 +64,7 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
@@ -91,7 +93,7 @@ fun TweetItem(
     LaunchedEffect(tweet, tweet.author) {
         if (tweet.author == null) {
             Timber.tag("TweetItem").d("Tweet ${tweet.mid} has null author, removing from list")
-            if (tweet.mid != null) onTweetUnavailable?.invoke(tweet.mid)
+            onTweetUnavailable?.invoke(tweet.mid)
         }
     }
 
@@ -112,6 +114,25 @@ fun TweetItem(
     // Only apply cached min height for tweets that may have loading placeholders (media/retweets).
     // Text-only tweets render instantly; a stale large cached height causes blank space below content.
     val hasMediaOrIsRetweet = tweet.originalTweetId != null || !tweet.attachments.isNullOrEmpty()
+    val hasVideoAttachment by remember(tweet.attachments) {
+        derivedStateOf {
+            tweet.attachments?.any { attachment ->
+                when (inferMediaTypeFromAttachment(attachment)) {
+                    MediaType.Video,
+                    MediaType.HLS_VIDEO -> true
+                    else -> false
+                }
+            } == true
+        }
+    }
+    // Track per-row coordinates only when needed for video playback ordering.
+    val shouldTrackVideoCell by remember(tweet.originalTweetId, hasVideoAttachment) {
+        derivedStateOf { tweet.originalTweetId != null || hasVideoAttachment }
+    }
+    // Keep measuring row height for media/retweet rows only (text-only rows are stable).
+    val shouldMeasureRowHeight by remember(hasMediaOrIsRetweet) {
+        derivedStateOf { hasMediaOrIsRetweet }
+    }
     val cachedHeightDp: Dp? = if (hasMediaOrIsRetweet) {
         cachedHeightPx?.let { px -> density.run { px.toDp() } }
     } else null
@@ -146,35 +167,42 @@ fun TweetItem(
                     )
                 )
             })
-            .onGloballyPositioned { layoutCoordinates ->
-                val measuredHeightPx = layoutCoordinates.size.height.toFloat()
-                // Cache height for scroll-up stability (match iOS willDisplay); skip placeholder heights
-                if (measuredHeightPx >= 60f) {
-                    TweetHeightCache.setHeight(tweet.mid, measuredHeightPx)
-                }
-                // Skip expensive visibility/bounds calculations during rapid scroll.
-                // boundsInRoot() and isElementVisible() are costly per-frame operations.
-                val now = System.currentTimeMillis()
-                if (now - lastVisibilityUpdate > 500L) {
-                    lastVisibilityUpdate = now
-                    val newVisible = isElementVisible(layoutCoordinates, 50)
-                    // Only update state (triggering recomposition) if visibility actually changed
-                    if (newVisible != isVisible) {
-                        isVisible = newVisible
+            .then(
+                if (shouldMeasureRowHeight || shouldTrackVideoCell) {
+                    Modifier.onGloballyPositioned { layoutCoordinates ->
+                        val measuredHeightPx = layoutCoordinates.size.height.toFloat()
+
+                        // Keep height cache writes off text-only rows.
+                        if (shouldMeasureRowHeight && measuredHeightPx >= 60f) {
+                            TweetHeightCache.setHeight(tweet.mid, measuredHeightPx)
+                        }
+
+                        // Only do expensive visibility/bounds work for rows that may host playable video.
+                        if (!shouldTrackVideoCell) return@onGloballyPositioned
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastVisibilityUpdate > 500L) {
+                            lastVisibilityUpdate = now
+                            val newVisible = isElementVisible(layoutCoordinates, 50)
+                            if (newVisible != isVisible) {
+                                isVisible = newVisible
+                            }
+
+                            val bounds = layoutCoordinates.boundsInRoot()
+                            tweetTopY = bounds.top
+
+                            coordinator.updateTweetCellPosition(
+                                tweetId = tweet.mid,
+                                cellTopY = bounds.top,
+                                cellHeight = measuredHeightPx,
+                                isVisible = newVisible
+                            )
+                        }
                     }
-
-                    val bounds = layoutCoordinates.boundsInRoot()
-                    tweetTopY = bounds.top
-
-                    // Update VideoPlaybackCoordinator with cell position and visibility
-                    coordinator.updateTweetCellPosition(
-                        tweetId = tweet.mid,
-                        cellTopY = bounds.top,
-                        cellHeight = measuredHeightPx,
-                        isVisible = newVisible
-                    )
+                } else {
+                    Modifier
                 }
-            }
+            )
     ) {
         when {
             isRetweet -> {
