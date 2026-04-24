@@ -970,9 +970,9 @@ override fun onTrimMemory(level: Int) {
 
 ```kotlin
 android {
-    compileSdk = 36
+    compileSdk = 37
     minSdk = 29
-    targetSdk = 36
+    targetSdk = 37
     
     defaultConfig {
         applicationId = "us.fireshare.tweet"

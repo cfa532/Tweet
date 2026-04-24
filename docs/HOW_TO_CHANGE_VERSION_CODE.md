@@ -12,7 +12,7 @@ Find **line 33** and change the number:
 defaultConfig {
     applicationId = "us.fireshare.tweet"
     minSdk = 29
-    targetSdk = 36
+    targetSdk = 37
     versionCode = 69    // ← Change this number (line 33)
     versionName = "38"
 }

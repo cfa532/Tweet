@@ -23,17 +23,17 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "us.fireshare.tweet"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "28.0.12433566"
 
     defaultConfig {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
-        targetSdk = 36
-        versionCode = 115    // Full release version code. Must be increased each time,
+        targetSdk = 37
+        versionCode = 116    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "55"  // compared with App Mimei version to check for upgrade.
+        versionName = "56"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 115  // Play version code increased for release
+            versionCode = 116  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
