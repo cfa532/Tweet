@@ -120,19 +120,20 @@ fun MediaBrowser(
         mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
     }?.mid
 
-    val startIndex = if (currentVideoMid != null && fullScreenVideoList != null) {
+    // Index within FullScreenPlayerManager's cross-feed video list (used only for IndependentFullScreenPlayer)
+    val fullScreenPlayerStartIndex = if (currentVideoMid != null && fullScreenVideoList != null) {
         fullScreenVideoList.indexOfFirst { it.first == currentVideoMid }.coerceAtLeast(0)
     } else {
         0
     }
 
-    Timber.d("MediaBrowser - Using video list from FullScreenPlayerManager: ${videoList.size} videos, start index: $startIndex")
+    Timber.d("MediaBrowser - Using video list from FullScreenPlayerManager: ${videoList.size} videos, start index: $fullScreenPlayerStartIndex")
     
     // Get attachments from the current tweet
     val tweetAttachments = tweet.attachments
     Timber.d("MediaBrowser - tweetAttachments: $tweetAttachments")
     Timber.d("MediaBrowser - tweetAttachments size: ${tweetAttachments?.size}")
-    Timber.d("MediaBrowser - Video list size: ${videoList.size}, start index: $startIndex")
+    Timber.d("MediaBrowser - Video list size: ${videoList.size}, start index: $fullScreenPlayerStartIndex")
     Timber.d("MediaBrowser - Tweet list IDs: ${videoList.map { it }}")
     
     val mediaItems = tweetAttachments?.map {
@@ -328,7 +329,7 @@ fun MediaBrowser(
                     
                     IndependentFullScreenPlayer(
                         // Always use full tweet list
-                        startIndex = startIndex,
+                        startIndex = fullScreenPlayerStartIndex,
                         tappedTweet = tweet, // Pass the current tweet for reference
                         parentEntry = parentEntry,
                         onClose = {
