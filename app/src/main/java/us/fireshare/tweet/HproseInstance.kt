@@ -733,6 +733,7 @@ object HproseInstance {
             Timber.tag("initAppEntry").d("🔍 Guest user alphaIds: $alphaIds")
             Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${appUser.baseUrl}")
             Timber.tag("initAppEntry").d("🔍 Guest user mid: ${appUser.mid}")
+            _isAppUserInitialized.value = true
             // For guest users, also call the callback to show UI
             onBaseUrlReady?.invoke()
         }
