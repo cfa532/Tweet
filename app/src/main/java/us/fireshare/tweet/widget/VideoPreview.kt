@@ -243,7 +243,10 @@ fun VideoPreview(
                 }
                 // Tap handling
                 if (enableTapToShowControls) {
-                    playerView.setOnClickListener { state.showControls = !state.showControls }
+                    playerView.useController = true
+                    playerView.controllerAutoShow = false
+                    playerView.controllerShowTimeoutMs = 3000
+                    // PlayerView handles taps natively to show/hide controller
                 } else {
                     playerView.setOnClickListener { callback(index) }
                 }
@@ -269,7 +272,8 @@ fun VideoPreview(
                 }
             }
             // Play button (show when not playing, not loading, not error)
-            val showPlayButton = !state.isPlaying && !state.isLoading && !state.hasError
+            // Hidden when native controls are enabled — they provide their own play/pause
+            val showPlayButton = !enableTapToShowControls && !state.isPlaying && !state.isLoading && !state.hasError
             if (showPlayButton && playBtn.visibility != View.VISIBLE) {
                 playBtn.alpha = 1f
                 playBtn.visibility = View.VISIBLE
