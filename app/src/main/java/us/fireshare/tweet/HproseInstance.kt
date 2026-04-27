@@ -4220,12 +4220,10 @@ object HproseInstance {
         val ipArray = unwrapV2Response<List<String>>(rawResponse)
         Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
-        // If ipArray is valid, filter private/reserved IPs then try each
+        // Health check all returned IPs - no pre-filtering needed
         if (ipArray != null && ipArray.isNotEmpty()) {
-            val publicIPs = ipArray.filter { Gadget.isValidPublicIpAddress(it) }
-            Timber.tag("_getProviderIP").d("🔍 After filtering: ${publicIPs.size}/${ipArray.size} public IPs")
-            if (publicIPs.isEmpty()) return null
-            return tryIpAddresses(publicIPs)
+            Timber.tag("_getProviderIP").d("🔍 Testing ${ipArray.size} IPs via health check")
+            return tryIpAddresses(ipArray)
         }
         
         // Return null means: server responded successfully but no IPs found (user not found or no IPs)

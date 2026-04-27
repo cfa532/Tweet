@@ -175,23 +175,23 @@ fun ImageModalDialog(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize() // Make the dialog fill the entire screen
-                .background(Color.Black) // Set background color to black
+                .fillMaxSize()
+                .background(Color.Black)
         ) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.Center)
+                    .fillMaxWidth()
                     .verticalScroll(scrollState)
             ) {
-                getMediaUrl(user.avatar, user.baseUrl)?.let {
-                    AdvancedImageViewer(it)
-                }
                 SelectableText(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+                    modifier = Modifier.padding(start = 8.dp, end = 56.dp, top = 8.dp, bottom = 8.dp),
                     text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
+                getMediaUrl(user.avatar, user.baseUrl)?.let {
+                    AdvancedImageViewer(it)
+                }
             }
 
             IconButton(
