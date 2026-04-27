@@ -1,57 +1,191 @@
-> Task :app:preBuild UP-TO-DATE
-> Task :app:preFullDebugBuild UP-TO-DATE
-> Task :app:mergeFullDebugJniLibFolders UP-TO-DATE
-> Task :app:mergeFullDebugNativeLibs UP-TO-DATE
-> Task :app:stripFullDebugDebugSymbols UP-TO-DATE
-> Task :app:extractFullDebugNativeDebugMetadata UP-TO-DATE
-> Task :app:mergeFullDebugNativeDebugMetadata NO-SOURCE
-> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :app:generateFullDebugBuildConfig UP-TO-DATE
-> Task :app:checkFullDebugAarMetadata UP-TO-DATE
-> Task :app:processFullDebugNavigationResources UP-TO-DATE
-> Task :app:compileFullDebugNavigationResources UP-TO-DATE
-> Task :app:generateFullDebugResValues UP-TO-DATE
-> Task :app:injectCrashlyticsMappingFileIdFullDebug UP-TO-DATE
-> Task :app:injectCrashlyticsVersionControlInfoFullDebug UP-TO-DATE
-> Task :app:processFullDebugGoogleServices UP-TO-DATE
-> Task :app:mapFullDebugSourceSetPaths UP-TO-DATE
-> Task :app:generateFullDebugResources UP-TO-DATE
-> Task :app:mergeFullDebugResources UP-TO-DATE
-> Task :app:packageFullDebugResources UP-TO-DATE
-> Task :app:parseFullDebugLocalResources UP-TO-DATE
-> Task :app:createFullDebugCompatibleScreenManifests UP-TO-DATE
-> Task :app:extractDeepLinksFullDebug UP-TO-DATE
-> Task :app:processFullDebugMainManifest UP-TO-DATE
-> Task :app:processFullDebugManifest UP-TO-DATE
-> Task :app:processFullDebugManifestForPackage UP-TO-DATE
-> Task :app:processFullDebugResources UP-TO-DATE
-> Task :app:kspFullDebugKotlin UP-TO-DATE
-> Task :app:compileFullDebugKotlin UP-TO-DATE
-> Task :app:javaPreCompileFullDebug UP-TO-DATE
-> Task :app:compileFullDebugJavaWithJavac UP-TO-DATE
-> Task :app:mergeFullDebugShaders UP-TO-DATE
-> Task :app:compileFullDebugShaders NO-SOURCE
-> Task :app:generateFullDebugAssets UP-TO-DATE
-> Task :app:mergeFullDebugAssets UP-TO-DATE
-> Task :app:compressFullDebugAssets UP-TO-DATE
-> Task :app:checkFullDebugDuplicateClasses UP-TO-DATE
-> Task :app:desugarFullDebugFileDependencies UP-TO-DATE
-> Task :app:mergeExtDexFullDebug UP-TO-DATE
-> Task :app:hiltAggregateDepsFullDebug UP-TO-DATE
-> Task :app:hiltJavaCompileFullDebug UP-TO-DATE
-> Task :app:transformFullDebugClassesWithAsm UP-TO-DATE
-> Task :app:dexBuilderFullDebug UP-TO-DATE
-> Task :app:mergeFullDebugGlobalSynthetics UP-TO-DATE
-> Task :app:processFullDebugJavaRes UP-TO-DATE
-> Task :app:mergeFullDebugJavaResource UP-TO-DATE
-> Task :app:mergeLibDexFullDebug UP-TO-DATE
-> Task :app:mergeProjectDexFullDebug UP-TO-DATE
-> Task :app:validateSigningFullDebug UP-TO-DATE
-> Task :app:writeFullDebugAppMetadata UP-TO-DATE
-> Task :app:writeFullDebugSigningConfigVersions UP-TO-DATE
-> Task :app:packageFullDebug UP-TO-DATE
-> Task :app:createFullDebugApkListingFileRedirect UP-TO-DATE
-> Task :app:assembleFullDebug UP-TO-DATE
+Calculating task graph as no cached configuration is available for tasks: assembleFullRelease assembleMiniRelease
 
-BUILD SUCCESSFUL in 824ms
-47 actionable tasks: 47 up-to-date
+> Configure project :app
+WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
+The current default is 'true'.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:generateMiniReleaseAssets UP-TO-DATE
+> Task :app:generateFullReleaseAssets UP-TO-DATE
+> Task :app:preMiniReleaseBuild UP-TO-DATE
+> Task :app:preFullReleaseBuild UP-TO-DATE
+> Task :app:generateFullReleaseBuildConfig UP-TO-DATE
+> Task :app:processFullReleaseGoogleServices UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:generateFullReleaseResources UP-TO-DATE
+> Task :app:extractFullReleaseVersionControlInfo UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoFullRelease UP-TO-DATE
+> Task :app:mergeFullReleaseJniLibFolders UP-TO-DATE
+> Task :app:createFullReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:mergeFullReleaseStartupProfile UP-TO-DATE
+> Task :app:processMiniReleaseGoogleServices
+> Task :app:javaPreCompileFullRelease UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdFullRelease
+> Task :app:validateSigningFullRelease UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdMiniRelease
+> Task :app:mapFullReleaseSourceSetPaths UP-TO-DATE
+> Task :app:extractDeepLinksFullRelease UP-TO-DATE
+> Task :app:collectFullReleaseDependencies UP-TO-DATE
+> Task :app:sdkFullReleaseDependencyData UP-TO-DATE
+> Task :app:writeFullReleaseAppMetadata UP-TO-DATE
+> Task :app:writeFullReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:packageFullReleaseResources
+> Task :app:checkMiniReleaseDuplicateClasses
+> Task :app:checkFullReleaseAarMetadata UP-TO-DATE
+> Task :app:mergeFullReleaseAssets UP-TO-DATE
+> Task :app:compressFullReleaseAssets UP-TO-DATE
+> Task :app:generateMiniReleaseResources
+> Task :app:generateMiniReleaseBuildConfig
+> Task :app:processMiniReleaseNavigationResources
+> Task :app:processFullReleaseNavigationResources UP-TO-DATE
+> Task :app:extractMiniReleaseVersionControlInfo
+> Task :app:compileFullReleaseNavigationResources UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoMiniRelease
+> Task :app:mergeMiniReleaseJniLibFolders
+> Task :app:mergeFullReleaseArtProfile UP-TO-DATE
+> Task :app:processFullReleaseMainManifest UP-TO-DATE
+> Task :app:javaPreCompileMiniRelease
+> Task :app:processFullReleaseManifest UP-TO-DATE
+> Task :app:processFullReleaseManifestForPackage UP-TO-DATE
+> Task :app:mapMiniReleaseSourceSetPaths
+> Task :app:checkFullReleaseDuplicateClasses UP-TO-DATE
+> Task :app:mergeFullReleaseNativeLibs UP-TO-DATE
+> Task :app:mergeMiniReleaseArtProfile
+> Task :app:compileMiniReleaseNavigationResources
+> Task :app:stripFullReleaseDebugSymbols UP-TO-DATE
+> Task :app:mergeMiniReleaseStartupProfile
+> Task :app:extractDeepLinksMiniRelease
+> Task :app:extractFullReleaseNativeDebugMetadata UP-TO-DATE
+> Task :app:mergeFullReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:createMiniReleaseCompatibleScreenManifests
+> Task :app:validateSigningMiniRelease
+> Task :app:writeMiniReleaseAppMetadata
+> Task :app:mergeMiniReleaseAssets
+> Task :app:checkMiniReleaseAarMetadata
+> Task :app:mergeMiniReleaseNativeLibs
+> Task :app:writeMiniReleaseSigningConfigVersions
+> Task :app:compressMiniReleaseAssets
+
+> Task :app:stripMiniReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libdatastore_shared_counter.so, libimage_processing_util_jni.so, libsurface_util_jni.so. Run with --info option to learn more.
+
+> Task :app:extractMiniReleaseNativeDebugMetadata
+> Task :app:mergeMiniReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:packageMiniReleaseResources
+> Task :app:parseFullReleaseLocalResources
+> Task :app:generateFullReleaseRFile UP-TO-DATE
+> Task :app:parseMiniReleaseLocalResources
+> Task :app:generateMiniReleaseRFile
+> Task :app:processMiniReleaseMainManifest
+> Task :app:kspFullReleaseKotlin UP-TO-DATE
+> Task :app:collectMiniReleaseDependencies
+> Task :app:sdkMiniReleaseDependencyData
+> Task :app:compileFullReleaseKotlin UP-TO-DATE
+> Task :app:processFullReleaseJavaRes UP-TO-DATE
+> Task :app:compileFullReleaseJavaWithJavac UP-TO-DATE
+> Task :app:processMiniReleaseManifest
+> Task :app:hiltSyncFullRelease UP-TO-DATE
+> Task :app:processMiniReleaseManifestForPackage
+> Task :app:mergeFullReleaseJavaResource UP-TO-DATE
+> Task :app:hiltAggregateDepsFullRelease UP-TO-DATE
+> Task :app:hiltJavaCompileFullRelease UP-TO-DATE
+> Task :app:generateFullReleaseLintVitalReportModel
+> Task :app:mergeFullReleaseResources
+> Task :app:mergeMiniReleaseResources
+> Task :app:processMiniReleaseResources
+> Task :app:processFullReleaseResources
+> Task :app:transformFullReleaseClassesWithAsm UP-TO-DATE
+> Task :app:mergeFullReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :app:expandFullReleaseArtProfileWildcards UP-TO-DATE
+> Task :app:produceFullReleaseComposeMapping
+> Task :app:reportFullReleaseComposeMappingErrors
+
+> Task :app:kspMiniReleaseKotlin
+w: [ksp] /Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/datamodel/ChatMessage.kt:483: Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
+w: [ksp] /Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/datamodel/TweetDAO.kt:192: Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
+
+> Task :app:lintVitalAnalyzeFullRelease
+> Task :app:minifyFullReleaseWithR8
+> Task :app:compileMiniReleaseKotlin
+> Task :app:lintVitalReportFullRelease
+> Task :app:lintVitalFullRelease
+
+> Task :app:compileMiniReleaseKotlin
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:539:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:629:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:129:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:197:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:249:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:842:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:857:137 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:939:59 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1005:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1096:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1281:57 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1538:49 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1928:53 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1929:69 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2084:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2085:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2353:41 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2828:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2839:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2962:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2963:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3029:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3030:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3617:28 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:4313:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:4323:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetDetailScreen.kt:252:13 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:83:26 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:83:52 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:110:77 'static field HIDE_NOT_ALWAYS: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:114:81 'static field HIDE_IMPLICIT_ONLY: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:160:77 'static field HIDE_NOT_ALWAYS: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:164:81 'static field HIDE_IMPLICIT_ONLY: Int' is deprecated. Deprecated in Java.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/UserViewModel.kt:1145:57 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/MediaGrid.kt:901:9 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:138:41 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:138:61 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:265:45 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:265:65 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:357:45 Condition is always 'true'.
+w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:357:65 Condition is always 'true'.
+
+> Task :app:processMiniReleaseJavaRes
+> Task :app:mergeMiniReleaseJavaResource
+> Task :app:compileMiniReleaseJavaWithJavac
+> Task :app:generateMiniReleaseLintVitalReportModel
+> Task :app:hiltSyncMiniRelease
+> Task :app:hiltAggregateDepsMiniRelease
+> Task :app:hiltJavaCompileMiniRelease
+> Task :app:transformMiniReleaseClassesWithAsm
+> Task :app:mergeMiniReleaseGeneratedProguardFiles
+> Task :app:expandMiniReleaseArtProfileWildcards
+> Task :app:produceMiniReleaseComposeMapping
+> Task :app:reportMiniReleaseComposeMappingErrors
+> Task :app:convertShrunkResourcesToBinaryFullRelease
+> Task :app:optimizeFullReleaseResources
+> Task :app:mergeFullReleaseComposeMapping
+> Task :app:compileFullReleaseArtProfile
+> Task :app:packageFullRelease
+> Task :app:assembleFullRelease
+> Task :app:createFullReleaseApkListingFileRedirect
+> Task :app:uploadCrashlyticsMappingFileFullRelease
+> Task :app:lintVitalAnalyzeMiniRelease
+> Task :app:lintVitalReportMiniRelease
+> Task :app:lintVitalMiniRelease
+> Task :app:minifyMiniReleaseWithR8
+> Task :app:convertShrunkResourcesToBinaryMiniRelease
+> Task :app:optimizeMiniReleaseResources
+> Task :app:mergeMiniReleaseComposeMapping
+> Task :app:compileMiniReleaseArtProfile
+> Task :app:packageMiniRelease
+> Task :app:assembleMiniRelease
+> Task :app:createMiniReleaseApkListingFileRedirect
+> Task :app:uploadCrashlyticsMappingFileMiniRelease
+
+BUILD SUCCESSFUL in 2m 7s
+121 actionable tasks: 79 executed, 42 up-to-date
+Configuration cache entry stored.

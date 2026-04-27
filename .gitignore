@@ -39,3 +39,4 @@ app/full/release/baselineProfiles/1/app-full-release.dm
 /app/full/release
 app/full/release/baselineProfiles/0/app-full-release.dm
 app/full/release/baselineProfiles/1/app-full-release.dm
+build.log
