@@ -38,7 +38,8 @@ sealed class VideoPlaybackCommand {
 data class VideoPlaybackInfo(
     val tweetId: String,
     val videoMid: MimeiId,
-    val index: Int
+    val index: Int,
+    val mediaType: MediaType = MediaType.Video
 ) {
     val identifier: String get() = "${tweetId}_$videoMid"
 
@@ -168,7 +169,8 @@ class VideoPlaybackCoordinator(
                     VideoPlaybackInfo(
                         tweetId = parentTweetId,
                         videoMid = attachment.mid,
-                        index = index
+                        index = index,
+                        mediaType = attachment.type
                     )
                 )
             }
@@ -219,7 +221,8 @@ class VideoPlaybackCoordinator(
                     val videoInfo = VideoPlaybackInfo(
                         tweetId = tweet.mid,
                         videoMid = attachment.mid,
-                        index = index
+                        index = index,
+                        mediaType = attachment.type
                     )
                     videos.add(videoInfo)
                 }
@@ -247,7 +250,8 @@ class VideoPlaybackCoordinator(
                             val videoInfo = VideoPlaybackInfo(
                                 tweetId = tweet.mid,
                                 videoMid = attachment.mid,
-                                index = index
+                                index = index,
+                                mediaType = attachment.type
                             )
                             videos.add(videoInfo)
                         }
@@ -263,7 +267,8 @@ class VideoPlaybackCoordinator(
                         val videoInfo = VideoPlaybackInfo(
                             tweetId = tweet.mid,
                             videoMid = attachment.mid,
-                            index = index
+                            index = index,
+                            mediaType = attachment.type
                         )
                         videos.add(videoInfo)
                     }
@@ -278,7 +283,8 @@ class VideoPlaybackCoordinator(
                             val videoInfo = VideoPlaybackInfo(
                                 tweetId = tweet.mid,
                                 videoMid = attachment.mid,
-                                index = index
+                                index = index,
+                                mediaType = attachment.type
                             )
                             videos.add(videoInfo)
                         }
@@ -293,12 +299,7 @@ class VideoPlaybackCoordinator(
         }
 
         if (syncWithFullScreenPlayer) {
-            val videoListForFullScreen = videos.map { videoInfo ->
-                val tweet = (pinnedTweets + tweets).find { it.mid == videoInfo.tweetId }
-                val attachment = tweet?.attachments?.getOrNull(videoInfo.index)
-                val mediaType = attachment?.type ?: MediaType.Video
-                Pair(videoInfo.videoMid, mediaType)
-            }
+            val videoListForFullScreen = videos.map { Pair(it.videoMid, it.mediaType) }
             FullScreenPlayerManager.updateVideoList(videoListForFullScreen, tweets)
         }
 
@@ -710,12 +711,7 @@ class VideoPlaybackCoordinator(
      * uses the same video list as the current screen's coordinator (not the main feed's list).
      */
     fun syncToFullScreenPlayer() {
-        val videoListForFullScreen = allVideos.map { videoInfo ->
-            val tweet = currentTweets.find { it.mid == videoInfo.tweetId }
-            val attachment = tweet?.attachments?.getOrNull(videoInfo.index)
-            val mediaType = attachment?.type ?: MediaType.Video
-            Pair(videoInfo.videoMid, mediaType)
-        }
+        val videoListForFullScreen = allVideos.map { Pair(it.videoMid, it.mediaType) }
         FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
         Timber.d("VideoPlaybackCoordinator: Synced ${videoListForFullScreen.size} videos to FullScreenPlayerManager")
     }
