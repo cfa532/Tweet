@@ -209,24 +209,34 @@ fun TweetDetailBody(
 
                     // This is a retweet. Display the original tweet in quote box.
                     if (tweet.originalTweetId != null) {
-                        // Load original tweet dynamically
-                        var originalTweet by remember { mutableStateOf<Tweet?>(null) }
-                        var isLoadingOriginal by remember { mutableStateOf(true) }
-                        
-                        val currentTweet by viewModel.tweetState.collectAsState()
-                        
-                        LaunchedEffect(tweet.originalTweetId, currentTweet) {
+                        // Show cached version immediately, then refresh in background
+                        val cachedOriginal = remember(tweet.originalTweetId) {
+                            tweet.originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
+                        }
+                        var originalTweet by remember { mutableStateOf<Tweet?>(cachedOriginal) }
+                        var isLoadingOriginal by remember { mutableStateOf(cachedOriginal == null) }
+
+                        LaunchedEffect(tweet.originalTweetId) {
                             if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                                // Store IDs in local variables to avoid smart cast issues
                                 val originalTweetId = tweet.originalTweetId ?: ""
                                 val originalAuthorId = tweet.originalAuthorId ?: ""
-                                
-                                // Force refresh of original tweet by using refreshTweet directly
-                                // This ensures we get the latest version from backend
-                                originalTweet = HproseInstance.refreshTweet(
-                                    originalTweetId,
-                                    originalAuthorId
-                                )
+                                // If no memory-cached version, fall back to DB cache before hitting network
+                                if (originalTweet == null) {
+                                    val dbCached = withContext(Dispatchers.IO) {
+                                        TweetCacheManager.getCachedTweet(originalTweetId)
+                                    }
+                                    if (dbCached != null) {
+                                        originalTweet = dbCached
+                                        isLoadingOriginal = false
+                                    }
+                                }
+                                // Refresh from network in the background, update silently
+                                val refreshed = withContext(Dispatchers.IO) {
+                                    HproseInstance.refreshTweet(originalTweetId, originalAuthorId)
+                                }
+                                if (refreshed != null) {
+                                    originalTweet = refreshed
+                                }
                                 isLoadingOriginal = false
                             }
                         }

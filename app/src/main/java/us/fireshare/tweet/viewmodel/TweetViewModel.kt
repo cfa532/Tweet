@@ -229,15 +229,6 @@ class TweetViewModel @AssistedInject constructor(
                                 _tweetState.value = refreshedTweet
                             }
                         }
-
-                    // Also refresh the original tweet that's displayed as a quote
-                    HproseInstance.refreshTweet(
-                        currentTweet.originalTweetId!!,
-                        currentTweet.originalAuthorId!!
-                    )?.let { originalTweet ->
-                        Timber.tag("TweetViewModel")
-                            .d("Refreshed original tweet for quoted tweet: ${originalTweet.mid}")
-                    }
                 }
             } else {
                 // This is an original tweet - refresh it directly
