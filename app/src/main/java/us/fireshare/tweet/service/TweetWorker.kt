@@ -423,60 +423,37 @@ class FollowUserWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
+    // toggle_following is NOT idempotent — single attempt only. A timed-out
+    // request may still have been processed server-side; a retry would flip the
+    // state back. Matches iOS HproseInstance.toggleFollowing.
     override suspend fun doWork(): Result {
-        val runAttemptCount = runAttemptCount
         return try {
             val followedId = inputData.getString("followedId") ?: return Result.failure()
             val followingId = inputData.getString("followingId") ?: return Result.failure()
             val isFollowing = inputData.getBoolean("isFollowing", true) // true = follow, false = unfollow
-            
+
             Timber.tag("FollowUserWorker").d("Starting follow operation: followedId=$followedId, followingId=$followingId, isFollowing=$isFollowing")
-            
-            // Force baseUrl refresh on retries (matching iOS behavior)
-            if (runAttemptCount > 1) {
-                Timber.tag("FollowUserWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
-                try {
-                    val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
-                    if (refreshedUser != null && !refreshedUser.isGuest() && !refreshedUser.baseUrl.isNullOrBlank()) {
-                        User.updateUserInstance(refreshedUser, true)
-                        HproseInstance.appUser = User.getInstance(refreshedUser.mid)
-                        Timber.tag("FollowUserWorker").d("Successfully refreshed baseUrl for appUser during follow retry: ${refreshedUser.baseUrl}")
-                    } else {
-                        Timber.tag("FollowUserWorker").w("Failed to refresh baseUrl for appUser during follow retry (invalid baseUrl: ${refreshedUser?.baseUrl})")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("FollowUserWorker").e(e, "Error refreshing baseUrl for appUser during follow retry")
-                }
-            }
-            
+
             val result = HproseInstance.toggleFollowing(followedId, followingId)
-            
+
             if (result != null) {
-                // Check if the result matches the expected state
-                if (result == isFollowing) {
-                    Timber.tag("FollowUserWorker").d("Follow operation succeeded: result=$result")
-                    return Result.success()
-                } else {
-                    Timber.tag("FollowUserWorker").w("Follow operation returned unexpected result: expected=$isFollowing, got=$result")
-                    // Still consider it success if the operation completed, even if state is different
-                    return Result.success()
+                if (result != isFollowing) {
+                    Timber.tag("FollowUserWorker").w("Follow op completed but server returned isFollowing=$result, expected=$isFollowing")
                 }
+                Timber.tag("FollowUserWorker").d("Follow operation succeeded: result=$result")
+                // Pipe the server-returned isFollowing back to UserViewModel so it
+                // can reconcile UI state to server truth (matches iOS behavior).
+                Result.success(workDataOf("serverIsFollowing" to result))
             } else {
                 Timber.tag("FollowUserWorker").e("Follow operation returned null")
-                // Only show notification on final attempt
-                if (runAttemptCount >= 3) {
-                    SystemNotificationManager.showFollowOperationFailedNotification(applicationContext, followedId)
-                }
-                return Result.failure()
+                SystemNotificationManager.showFollowOperationFailedNotification(applicationContext, followedId)
+                Result.failure()
             }
         } catch (e: Exception) {
             Timber.tag("FollowUserWorker").e(e, "Error in doWork: ${e.message}")
-            // Only show notification on final attempt
-            if (runAttemptCount >= 3) {
-                val followedId = inputData.getString("followedId") ?: ""
-                SystemNotificationManager.showFollowOperationFailedNotification(applicationContext, followedId)
-            }
-            return Result.failure()
+            val followedId = inputData.getString("followedId") ?: ""
+            SystemNotificationManager.showFollowOperationFailedNotification(applicationContext, followedId)
+            Result.failure()
         }
     }
 }

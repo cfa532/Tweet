@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -383,41 +382,50 @@ class UserViewModel @AssistedInject constructor(
         
         val currentlyFollowing = _followings.value.contains(subjectUserId)
         val newFollowingState = !currentlyFollowing
-        
-        // Store previous state for rollback
+
+        // Snapshots used by both the FAILED rollback and the SUCCEEDED-with-
+        // unexpected-state reconciliation paths.
         val previousCount = _followingsCount.value
-        
-        // Mark operation as pending
+        val targetUser = User.getInstance(subjectUserId)
+        val previousAppUserFollowingList = appUser.followingList
+        val previousAppUserFollowingCount = appUser.followingCount
+        val previousTargetFansList = targetUser.fansList
+        val previousTargetFollowersCount = targetUser.followersCount
+
         pendingOperations.add(subjectUserId)
-        
-        // Optimistically update the following list immediately
+
+        // ---- optimistic local mutations ----
         _followings.update { list ->
-            if (newFollowingState)
-                (listOf(subjectUserId) + list).toSet().toList()
-            else
-                list.filterNot { it == subjectUserId }
+            if (newFollowingState) (listOf(subjectUserId) + list).toSet().toList()
+            else list.filterNot { it == subjectUserId }
         }
-        
-        // Update the count manually - increment/decrement based on the action
-        val newCount = if (newFollowingState) {
-            _followingsCount.value + 1
-        } else {
-            _followingsCount.value - 1
-        }
+        val newCount = if (newFollowingState) previousCount + 1 else previousCount - 1
         _followingsCount.value = newCount
-        
-        // Update the user object with the correct count
         _user.value = user.value.copy(followingCount = newCount)
-        
-        // Also update appUser.followingCount so refreshUserData uses the correct value
+
+        // Mirror iOS: maintain appUser.followingList and target user's fansList /
+        // followersCount in sync. These are the source of truth other screens
+        // (UserRow, TweetItem header) read for follower counts and Follow buttons.
         if (userId == appUser.mid) {
-            appUser.followingCount = newCount
+            appUser.followingList = if (newFollowingState) {
+                ((appUser.followingList ?: emptyList()) + subjectUserId).distinct()
+            } else {
+                appUser.followingList?.filterNot { it == subjectUserId }
+            }
+            appUser.followingCount = maxOf(0, newCount)
+
+            targetUser.fansList = if (newFollowingState) {
+                ((targetUser.fansList ?: emptyList()) + appUser.mid).distinct()
+            } else {
+                targetUser.fansList?.filterNot { it == appUser.mid }
+            }
+            targetUser.followersCount = maxOf(
+                0,
+                previousTargetFollowersCount + if (newFollowingState) 1 else -1
+            )
         }
-        
-        // Update tweet feed optimistically
-        viewModelScope.launch(IO) {
-            updateTweetFeed(newFollowingState)
-        }
+
+        viewModelScope.launch(IO) { updateTweetFeed(newFollowingState) }
         
         // Enqueue background worker to handle the actual operation
         val data = workDataOf(
@@ -425,58 +433,90 @@ class UserViewModel @AssistedInject constructor(
             "followingId" to userId,
             "isFollowing" to newFollowingState
         )
+        // toggle_following is NOT idempotent — never retry. A timed-out request
+        // may still have been processed server-side; a retry would flip it back.
+        // (Matches iOS HproseInstance.toggleFollowing.) No setBackoffCriteria —
+        // FollowUserWorker only returns success/failure, never Result.retry().
         val followRequest = OneTimeWorkRequest.Builder(FollowUserWorker::class.java)
             .setInputData(data)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                10_000L, // 10 seconds
-                java.util.concurrent.TimeUnit.MILLISECONDS
-            )
             .build()
         
         WorkManager.getInstance(context).enqueue(followRequest)
         
-        // Observe work status to rollback on failure
+        // Observe work status to rollback on failure / reconcile on success.
         viewModelScope.launch {
             val observer = androidx.lifecycle.Observer<WorkInfo?> { workInfo ->
                 when (workInfo?.state) {
                     WorkInfo.State.FAILED -> {
-                        // Rollback the optimistic update
                         Timber.tag("UserViewModel").d("Follow operation failed, rolling back for: $subjectUserId")
-                        
-                        // Rollback following list
+
                         _followings.update { list ->
-                            if (newFollowingState)
-                                list.filterNot { it == subjectUserId }
-                            else
-                                (listOf(subjectUserId) + list).toSet().toList()
+                            if (newFollowingState) list.filterNot { it == subjectUserId }
+                            else (listOf(subjectUserId) + list).toSet().toList()
                         }
-                        
-                        // Rollback count
                         _followingsCount.value = previousCount
-                        
-                        // Rollback user object count
                         _user.value = user.value.copy(followingCount = previousCount)
-                        
-                        // Rollback appUser.followingCount
+
                         if (userId == appUser.mid) {
-                            appUser.followingCount = previousCount
+                            // Restore exactly from snapshots — covers the cases where
+                            // the optimistic mutation added a duplicate-protected entry
+                            // or removed the only entry.
+                            appUser.followingList = previousAppUserFollowingList
+                            appUser.followingCount = previousAppUserFollowingCount
+                            targetUser.fansList = previousTargetFansList
+                            targetUser.followersCount = previousTargetFollowersCount
                         }
-                        
-                        // Rollback tweet feed
-                        viewModelScope.launch(IO) {
-                            rollbackTweetFeed(newFollowingState)
-                        }
-                        
-                        // Signal failure to UI for toast notification
+
+                        viewModelScope.launch(IO) { rollbackTweetFeed(newFollowingState) }
                         _followOperationFailed.value = subjectUserId
-                        
-                        // Clean up
                         cleanupObserver(context, followRequest.id, subjectUserId)
                     }
                     WorkInfo.State.SUCCEEDED -> {
-                        Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
-                        // Clean up
+                        // FollowUserWorker emits the server-returned isFollowing as
+                        // output data. If it differs from our optimistic guess (rare
+                        // race), reconcile every state to match the server. If the
+                        // key is missing for some reason, fall back to the optimistic
+                        // value so we don't accidentally undo the user's intent.
+                        val serverIsFollowing =
+                            workInfo.outputData.getBoolean("serverIsFollowing", newFollowingState)
+
+                        if (serverIsFollowing != newFollowingState) {
+                            Timber.tag("UserViewModel").w(
+                                "Server returned isFollowing=$serverIsFollowing, optimistic was $newFollowingState — reconciling"
+                            )
+                            _followings.update { list ->
+                                if (serverIsFollowing) (listOf(subjectUserId) + list).toSet().toList()
+                                else list.filterNot { it == subjectUserId }
+                            }
+                            val reconciledCount =
+                                if (serverIsFollowing) previousCount + 1 else previousCount - 1
+                            _followingsCount.value = reconciledCount
+                            _user.value = user.value.copy(followingCount = reconciledCount)
+
+                            if (userId == appUser.mid) {
+                                // Apply the server-truth diff against the snapshot,
+                                // not the optimistic state, to avoid double-toggling.
+                                appUser.followingList = if (serverIsFollowing) {
+                                    ((previousAppUserFollowingList ?: emptyList()) + subjectUserId).distinct()
+                                } else {
+                                    previousAppUserFollowingList?.filterNot { it == subjectUserId }
+                                }
+                                appUser.followingCount = maxOf(0, reconciledCount)
+                                targetUser.fansList = if (serverIsFollowing) {
+                                    ((previousTargetFansList ?: emptyList()) + appUser.mid).distinct()
+                                } else {
+                                    previousTargetFansList?.filterNot { it == appUser.mid }
+                                }
+                                targetUser.followersCount = maxOf(
+                                    0,
+                                    previousTargetFollowersCount + if (serverIsFollowing) 1 else -1
+                                )
+                            }
+
+                            viewModelScope.launch(IO) { updateTweetFeed(serverIsFollowing) }
+                        } else {
+                            Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
+                        }
                         cleanupObserver(context, followRequest.id, subjectUserId)
                     }
                     else -> {
@@ -484,10 +524,9 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
             }
-            
-            // Store observer for cleanup
+
             activeWorkObservers[followRequest.id] = observer
-            
+
             WorkManager.getInstance(context)
                 .getWorkInfoByIdLiveData(followRequest.id)
                 .observeForever(observer)

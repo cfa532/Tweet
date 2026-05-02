@@ -2789,12 +2789,16 @@ object HproseInstance {
             throw Exception("No network connection")
         }
         val entry = "toggle_following"
+        // followingid_hostid hints the target's primary host so the call routes
+        // to the right shard (matches iOS cachedFollowing.hostIds?.first).
+        val cachedFollowing = User.getInstance(followedId)
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "followingid" to followedId,
-            "userid" to followingId
+            "userid" to followingId,
+            "followingid_hostid" to (cachedFollowing.hostIds?.firstOrNull() ?: "")
         )
         return try {
             Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}")
