@@ -2801,17 +2801,33 @@ object HproseInstance {
             "followingid_hostid" to (cachedFollowing.hostIds?.firstOrNull() ?: "")
         )
         return try {
-            Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}")
-            if (appUser.hproseService == null) {
+            // Route the call directly to appUser's primary host (hostIds[0]) so
+            // toggle_following.js's `userHostId === nodeId` check fires and the
+            // local handler runs. The cross-node delegation path
+            // (lines 101-126) drops the response payload (cross-node bridge
+            // returns a Java-Map-backed object that wrapResponse mishandles),
+            // making a clearly successful operation look like failure on the
+            // client. By calling the home node directly we never hit it.
+            //
+            // Falls back to appUser.hproseService if hostId resolution fails,
+            // so the call still goes out (just risks the stale-payload bug).
+            val homeService = appUser.hostIds?.firstOrNull()?.let { hostId ->
+                getHostIP(hostId)?.let { ip ->
+                    HproseClientPool.getRegularClient("http://$ip")
+                }
+            } ?: appUser.hproseService
+
+            if (homeService == null) {
                 Timber.tag("toggleFollowing").e("hproseService is null! Cannot call toggle_following")
                 return null
             }
+            Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}, homeHostId=${appUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
-            
+
             // Wrap in try-catch to catch any exceptions from hprose client
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Any>(entry, params)
+                homeService.runMApp<Any>(entry, params)
             } catch (e: Throwable) {
                 Timber.tag("toggleFollowing").e(e, "Exception thrown by runMApp: ${e.javaClass.simpleName}, message: ${e.message}")
                 Timber.tag("toggleFollowing").e(e, "Full exception: $e")
