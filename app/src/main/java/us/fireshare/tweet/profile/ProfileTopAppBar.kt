@@ -40,13 +40,16 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import androidx.compose.ui.platform.LocalContext
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
+import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.SelectableText
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -173,21 +176,38 @@ fun ImageModalDialog(
     // mutable field — Compose can't observe direct mutations.
     var currentBaseUrl by remember(user.mid) { mutableStateOf(user.baseUrl) }
 
+    val context = LocalContext.current
+
     // On open, force a fresh IP resolution. Stale IPs keep handing out an
     // unreachable node, and fetchUser/forceRefresh won't re-resolve when the
     // user already has a cached baseUrl. getProviderIP health-checks every
     // returned IP and picks a live one.
+    //
+    // Skip the swap if the avatar bitmap is already cached (the original URL
+    // worked or wasn't needed) — swapping would change the imageUrl key in
+    // AdvancedImageViewer, tearing down the SubsamplingScaleImageView and
+    // momentarily blanking the image.
     LaunchedEffect(user.mid) {
         try {
             val freshIp = HproseInstance.getProviderIP(user.mid)
-            if (!freshIp.isNullOrEmpty()) {
-                val newBaseUrl = if (freshIp.startsWith("http://")) freshIp else "http://$freshIp"
-                if (newBaseUrl != currentBaseUrl) {
-                    user.baseUrl = newBaseUrl
-                    user.clearHproseService()
-                    currentBaseUrl = newBaseUrl
-                    Timber.tag("ImageModalDialog").d("Refreshed baseUrl for ${user.mid}: $newBaseUrl")
-                }
+            if (freshIp.isNullOrEmpty()) return@LaunchedEffect
+            val newBaseUrl = if (freshIp.startsWith("http://")) freshIp else "http://$freshIp"
+            if (newBaseUrl == currentBaseUrl) return@LaunchedEffect
+
+            // If the bitmap is already cached, don't disrupt the running viewer.
+            // Still update user.baseUrl so other callers benefit from the fresh IP.
+            val avatarMid = getMediaUrl(user.avatar, currentBaseUrl)?.getMimeiKeyFromUrl()
+            val alreadyCached = avatarMid != null && (
+                ImageCacheManager.getCachedBitmapSync(context, "${avatarMid}_original") != null ||
+                ImageCacheManager.getCachedBitmapSync(context, avatarMid) != null
+            )
+            user.baseUrl = newBaseUrl
+            user.clearHproseService()
+            if (!alreadyCached) {
+                currentBaseUrl = newBaseUrl
+                Timber.tag("ImageModalDialog").d("Refreshed baseUrl for ${user.mid}: $newBaseUrl (re-targeting viewer)")
+            } else {
+                Timber.tag("ImageModalDialog").d("Refreshed baseUrl for ${user.mid}: $newBaseUrl (bitmap cached, viewer untouched)")
             }
         } catch (e: Exception) {
             Timber.tag("ImageModalDialog").w(e, "Failed to refresh baseUrl for ${user.mid}")
