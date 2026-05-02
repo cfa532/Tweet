@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -37,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
+import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
@@ -165,6 +168,32 @@ fun ImageModalDialog(
 ) {
     val scrollState = rememberScrollState()
 
+    // Track baseUrl in Compose state so the URL passed to AdvancedImageViewer
+    // re-keys (and re-loads) once the fresh IP arrives. user.baseUrl is a plain
+    // mutable field — Compose can't observe direct mutations.
+    var currentBaseUrl by remember(user.mid) { mutableStateOf(user.baseUrl) }
+
+    // On open, force a fresh IP resolution. Stale IPs keep handing out an
+    // unreachable node, and fetchUser/forceRefresh won't re-resolve when the
+    // user already has a cached baseUrl. getProviderIP health-checks every
+    // returned IP and picks a live one.
+    LaunchedEffect(user.mid) {
+        try {
+            val freshIp = HproseInstance.getProviderIP(user.mid)
+            if (!freshIp.isNullOrEmpty()) {
+                val newBaseUrl = if (freshIp.startsWith("http://")) freshIp else "http://$freshIp"
+                if (newBaseUrl != currentBaseUrl) {
+                    user.baseUrl = newBaseUrl
+                    user.clearHproseService()
+                    currentBaseUrl = newBaseUrl
+                    Timber.tag("ImageModalDialog").d("Refreshed baseUrl for ${user.mid}: $newBaseUrl")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("ImageModalDialog").w(e, "Failed to refresh baseUrl for ${user.mid}")
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -185,11 +214,11 @@ fun ImageModalDialog(
             ) {
                 SelectableText(
                     modifier = Modifier.padding(start = 8.dp, end = 56.dp, top = 8.dp, bottom = 8.dp),
-                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + user.baseUrl,
+                    text = user.mid + "\n" + user.hostIds?.first() + "\n" + currentBaseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
-                getMediaUrl(user.avatar, user.baseUrl)?.let {
+                getMediaUrl(user.avatar, currentBaseUrl)?.let {
                     AdvancedImageViewer(it)
                 }
             }
