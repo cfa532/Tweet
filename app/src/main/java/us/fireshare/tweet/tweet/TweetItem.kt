@@ -39,6 +39,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -458,14 +459,14 @@ private fun RetweetWithContent(
                             }
                         }
                     },
-                    modifier = Modifier.width(48.dp)
+                    modifier = Modifier.width(56.dp)
                 ) {
                     UserAvatar(
                         user = author ?: us.fireshare.tweet.datamodel.User(
                             mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                             baseUrl = appUser.baseUrl
                         ),
-                        size = 38
+                        size = 48
                     )
                 }
             }
@@ -491,17 +492,19 @@ private fun RetweetWithContent(
                         Text(
                             text = author?.name ?: "No One",
                             modifier = Modifier.padding(start = 2.dp),
-                            style = MaterialTheme.typography.labelLarge
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "@${author?.username}",
-                            modifier = Modifier.padding(horizontal = 0.dp),
-                            style = MaterialTheme.typography.labelMedium
+                            text = " @${author?.username}",
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
-                        Text(text = " • ", fontSize = 12.sp)
                         Text(
-                            text = localizedTimeDifference(tweet.timestamp),
-                            style = MaterialTheme.typography.labelMedium
+                            text = " · ${localizedTimeDifference(tweet.timestamp)}",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
                     }
 
