@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -128,17 +129,19 @@ fun CommentItem(
                         Text(
                             text = author?.name ?: "No One",
                             modifier = Modifier.padding(horizontal = 0.dp),
-                            style = MaterialTheme.typography.labelMedium
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "@${author?.username ?: "unknown"}",
-                            modifier = Modifier.padding(horizontal = 2.dp),
-                            style = MaterialTheme.typography.labelSmall
+                            text = " @${author?.username ?: "unknown"}",
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(text = " • ", fontSize = 12.sp)
                         Text(
-                            text = localizedTimeDifference(comment.timestamp),
-                            style = MaterialTheme.typography.labelSmall
+                            text = " · ${localizedTimeDifference(comment.timestamp)}",
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     CommentDropdownMenu(comment, parentTweetViewModel)
@@ -148,7 +151,17 @@ fun CommentItem(
                     SelectableText(
                         text = comment.content!!,
                         maxLines = 7,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp)
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                        onTextClick = {
+                            navController.navigate(
+                                NavTweet.TweetDetail(
+                                    authorId = comment.authorId,
+                                    tweetId = comment.mid,
+                                    parentTweetId = parentTweetViewModel?.tweetState?.value?.mid,
+                                    parentAuthorId = parentTweetViewModel?.tweetState?.value?.authorId
+                                )
+                            )
+                        }
                     ) { username ->
                         viewModel.viewModelScope.launch(Dispatchers.IO) {
                             HproseInstance.getUserId(username)?.let {

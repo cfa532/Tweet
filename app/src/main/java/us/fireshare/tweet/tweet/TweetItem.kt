@@ -367,7 +367,7 @@ private fun RetweetContent(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = forwardBy,
-                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.tertiary,
                             )
                         }
@@ -499,12 +499,12 @@ private fun RetweetWithContent(
                         Text(
                             text = " @${author?.username}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 

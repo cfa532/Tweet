@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
@@ -133,19 +134,19 @@ fun TweetItemBody(
                             Text(
                                 text = author?.name ?: "No One",
                                 modifier = Modifier.padding(start = 2.dp),
-                                style = MaterialTheme.typography.labelLarge
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "@${author?.username}",
-                                modifier = Modifier.padding(horizontal = 0.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = " @${author?.username}",
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(text = " • ", fontSize = 12.sp)
                             Text(
-                                text = localizedTimeDifference(tweet.timestamp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = " · ${localizedTimeDifference(tweet.timestamp)}",
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
@@ -279,19 +280,19 @@ fun TweetItemBody(
                             Text(
                                 text = author?.name ?: "No One",
                                 modifier = Modifier.padding(start = 2.dp),
-                                style = MaterialTheme.typography.labelLarge
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "@${author?.username}",
-                                modifier = Modifier.padding(horizontal = 0.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = " @${author?.username}",
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(text = " • ", fontSize = 12.sp)
                             Text(
-                                text = localizedTimeDifference(tweet.timestamp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = " · ${localizedTimeDifference(tweet.timestamp)}",
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)

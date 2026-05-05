@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -124,17 +125,19 @@ fun TweetDetailBody(
                     Text(
                         text = author?.name ?: "No One",
                         modifier = Modifier.padding(start = 2.dp),
-                        style = MaterialTheme.typography.labelLarge
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "@${author?.username ?: "unknown"}",
-                        modifier = Modifier.padding(horizontal = 0.dp),
-                        style = MaterialTheme.typography.labelMedium
+                        text = " @${author?.username ?: "unknown"}",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(text = " • ", fontSize = 12.sp)
                     Text(
-                        text = localizedTimeDifference(tweet.timestamp),
-                        style = MaterialTheme.typography.labelMedium
+                        text = " · ${localizedTimeDifference(tweet.timestamp)}",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 // the 3 dots at the right end
