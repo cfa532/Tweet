@@ -11,12 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -362,43 +364,43 @@ fun TweetDetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .height(56.dp)
                     .clipToBounds()
                     .background(Color.Transparent)
             ) {
+                // Animated TopAppBar – title + background only; insets handled by Box above
                 TopAppBar(
+                    windowInsets = WindowInsets(0),
                     modifier = Modifier
                         .offset(y = (-56 * (1 - topAppBarAlpha)).dp)
                         .graphicsLayer(alpha = if (topAppBarAlpha < 0.01f) 0f else topAppBarAlpha),
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (topAppBarAlpha < 0.01f) Color.Transparent else MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
+                        containerColor = if (topAppBarAlpha < 0.01f) Color.Transparent
+                                         else MaterialTheme.colorScheme.primaryContainer.copy(alpha = topAppBarAlpha),
                         titleContentColor = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha),
                     ),
-                title = {
-                    Text(
-                        text = "Tweet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha)
+                    title = {},
+                    // Placeholder so the title stays centred (same width as the real back button)
+                    navigationIcon = { Box(Modifier.size(48.dp)) },
+                )
+                // Always-visible back button – independent of scroll-driven alpha
+                IconButton(
+                    onClick = {
+                        if (!isNavigatingBack) {
+                            isNavigatingBack = true
+                            navController.popBackStack()
+                        }
+                    },
+                    enabled = !isNavigatingBack,
+                    modifier = Modifier.align(Alignment.CenterStart)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = { 
-                            if (!isNavigatingBack) {
-                                isNavigatingBack = true
-                                navController.popBackStack()
-                            }
-                        },
-                        enabled = topAppBarAlpha > 0.5f && !isNavigatingBack
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = topAppBarAlpha)
-                        )
-                    }
-                },
-            )
+                }
             }
         },
         bottomBar = {
