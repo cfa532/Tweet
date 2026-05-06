@@ -270,7 +270,7 @@ fun TweetItemBody(
                 ) {
                     // Top row: User info and dropdown menu
                     Row(
-                        modifier = Modifier.padding(bottom = 4.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(bottom = 1.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
                     ) {
@@ -305,7 +305,7 @@ fun TweetItemBody(
                             text = tweet.content!!,
                             maxLines = 7,
                             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 20.sp),
-                            modifier = Modifier.padding(bottom = 4.dp),
+                            modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
                             onTextClick = {
                                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
                             },
