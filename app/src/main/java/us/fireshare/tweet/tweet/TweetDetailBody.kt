@@ -110,38 +110,44 @@ fun TweetDetailBody(
             // Tweet detail Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                ) {
-                    IconButton(onClick = {
-                        navController.navigate(NavTweet.UserProfile(tweet.authorId))
-                    }) {
-                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 44)
-                    }
-                    Text(
-                        text = author?.name ?: "No One",
-                        modifier = Modifier.padding(start = 2.dp),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = " @${author?.username ?: "unknown"}",
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                IconButton(onClick = {
+                    navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                }) {
+                    UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 44)
                 }
-                // the 3 dots at the right end
-                TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail", viewModel = viewModel)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = author?.name ?: "No One",
+                            modifier = Modifier.padding(start = 2.dp),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = " @${author?.username ?: "unknown"}",
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = " · ${localizedTimeDifference(tweet.timestamp)}",
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // the 3 dots at the right end
+                    TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail", viewModel = viewModel)
+                }
             }
             // Tweet detail's content
             Surface(
