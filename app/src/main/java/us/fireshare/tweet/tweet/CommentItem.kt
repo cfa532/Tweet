@@ -111,7 +111,7 @@ fun CommentItem(
             IconButton(onClick = {
                 navController.navigate(NavTweet.UserProfile(comment.authorId)) }
             ) {
-                UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 32)
+                UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 44)
             }
             Column(
                 modifier = Modifier.fillMaxWidth()

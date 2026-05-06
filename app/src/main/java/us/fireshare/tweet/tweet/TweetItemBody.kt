@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
@@ -112,14 +113,14 @@ fun TweetItemBody(
                                 coroutineScope.launch { onScrollToTop?.invoke() }
                             }
                         },
-                        modifier = Modifier.width(40.dp)
+                        modifier = Modifier.width(44.dp)
                     ) {
                         UserAvatar(
                             user = author ?: us.fireshare.tweet.datamodel.User(
                                 mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                                 baseUrl = appUser.baseUrl
                             ),
-                            size = 32
+                            size = 36
                         )
                     }
                     Row(
@@ -251,14 +252,14 @@ fun TweetItemBody(
                                 coroutineScope.launch { onScrollToTop?.invoke() }
                             }
                         },
-                        modifier = Modifier.width(48.dp)
+                        modifier = Modifier.size(52.dp)
                     ) {
                         UserAvatar(
                             user = author ?: us.fireshare.tweet.datamodel.User(
                                 mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                                 baseUrl = appUser.baseUrl
                             ),
-                            size = 38
+                            size = 44
                         )
                     }
                 }

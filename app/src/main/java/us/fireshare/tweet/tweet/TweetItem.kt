@@ -459,14 +459,14 @@ private fun RetweetWithContent(
                             }
                         }
                     },
-                    modifier = Modifier.width(56.dp)
+                    modifier = Modifier.size(52.dp)
                 ) {
                     UserAvatar(
                         user = author ?: us.fireshare.tweet.datamodel.User(
                             mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
                             baseUrl = appUser.baseUrl
                         ),
-                        size = 48
+                        size = 44
                     )
                 }
             }

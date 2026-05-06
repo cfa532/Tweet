@@ -120,7 +120,7 @@ fun TweetDetailBody(
                     IconButton(onClick = {
                         navController.navigate(NavTweet.UserProfile(tweet.authorId))
                     }) {
-                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 40)
+                        UserAvatar(user = author ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl), size = 44)
                     }
                     Text(
                         text = author?.name ?: "No One",
