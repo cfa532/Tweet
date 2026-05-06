@@ -399,7 +399,7 @@ class MediaUploadService(
         referenceId: MimeiId?,
         mediaType: MediaType
     ): MimeiFileType? {
-        // Resolve writableUrl before using uploadService (with retry)
+        // Resolve writableUrl before using writableClient (with retry)
         var resolvedUrl: String? = null
         var lastError: String?
         for (attempt in 1..3) {
@@ -438,7 +438,7 @@ class MediaUploadService(
                     if (chunkCount % 10 == 0) {
                         Timber.tag(TAG).d("Upload progress: $chunkCount chunks, ${offset / 1024}KB uploaded")
                     }
-                    request["fsid"] = appUser.uploadService?.runMApp(
+                    request["fsid"] = appUser.writableClient?.runMApp(
                         "upload_ipfs",
                         request.toMap(), listOf(buffer)
                     )
@@ -457,7 +457,7 @@ class MediaUploadService(
             referenceId?.let { request["referenceid"] = it }
 
             Timber.tag(TAG).d("Calling final upload_ipfs to complete upload...")
-            val cid = appUser.uploadService?.runMApp<String?>("upload_ipfs", request.toMap())
+            val cid = appUser.writableClient?.runMApp<String?>("upload_ipfs", request.toMap())
             Timber.tag(TAG).d("Final upload_ipfs returned: ${cid ?: "null"}")
             if (cid == null) {
                 Timber.tag(TAG).e("Final upload_ipfs returned null")

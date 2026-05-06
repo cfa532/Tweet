@@ -26,7 +26,7 @@ object HproseClientPool {
     
     // Pool configuration
     private const val DEFAULT_CLIENT_TIMEOUT = 30_000 // 30 seconds for regular operations
-    private const val UPLOAD_CLIENT_TIMEOUT = 3_000_000 // 50 minutes for upload operations
+    private const val WRITABLE_CLIENT_TIMEOUT = 3_000_000 // 50 minutes for write operations (uploads, long-running mutations)
     private const val CLIENTS_PER_URL = 8 // Number of clients per URL (matches iOS)
     private const val MAX_URLS = 50 // Maximum number of different URLs to track
     private const val CLIENT_CLEANUP_INTERVAL_MS = 300_000L // 5 minutes
@@ -50,14 +50,15 @@ object HproseClientPool {
         var nextClientIndex: Int = 0 // Round-robin index
     )
     
-    // Separate pools for regular and upload clients (upload clients have longer timeouts)
-    // Each URL has a pool of up to CLIENTS_PER_URL clients
+    // Separate pools for read and write clients (write clients have longer timeouts
+    // for long-running mutations like file uploads). Each URL has a pool of up to
+    // CLIENTS_PER_URL clients.
     private val regularClients = ConcurrentHashMap<String, ClientPool>()
-    private val uploadClients = ConcurrentHashMap<String, ClientPool>()
+    private val writableClients = ConcurrentHashMap<String, ClientPool>()
     
     // Locks for safe cleanup operations
     private val regularLock = ReentrantReadWriteLock()
-    private val uploadLock = ReentrantReadWriteLock()
+    private val writableLock = ReentrantReadWriteLock()
     
     // Track last cleanup time
     private var lastCleanupTime = System.currentTimeMillis()
@@ -156,113 +157,114 @@ object HproseClientPool {
     }
     
     /**
-     * Get or create an upload HproseService client for the given baseUrl (node)
-     * Upload clients have extended timeouts for long-running upload operations
-     * Uses round-robin to distribute requests across up to CLIENTS_PER_URL clients
-     * 
-     * @param baseUrl The base URL of the node/server
-     * @return HproseService client for uploads, or null if creation fails
+     * Get or create a writable HproseService client for the given baseUrl (node).
+     * Writable clients target the user's writable host (hostIds[0]) and have
+     * extended timeouts for long-running mutations like file uploads. Uses
+     * round-robin to distribute requests across up to CLIENTS_PER_URL clients.
+     *
+     * @param baseUrl The base URL of the writable node/server
+     * @return HproseService client for writes, or null if creation fails
      */
-    fun getUploadClient(baseUrl: String): HproseService? {
+    fun getWritableClient(baseUrl: String): HproseService? {
         if (baseUrl.isBlank()) {
-            Timber.tag(TAG).w("Cannot create upload client for blank baseUrl")
+            Timber.tag(TAG).w("Cannot create writable client for blank baseUrl")
             return null
         }
-        
+
         val normalizedUrl = normalizeUrl(baseUrl)
-        
+
         // Try to get existing client first (read lock)
-        uploadLock.read {
-            uploadClients[normalizedUrl]?.let { pool ->
+        writableLock.read {
+            writableClients[normalizedUrl]?.let { pool ->
                 if (pool.clients.isNotEmpty()) {
                     // Round-robin selection
                     val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
                     pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
-                    
+
                     clientInfo.lastAccessTime = System.currentTimeMillis()
                     clientInfo.referenceCount++
-                    Timber.tag(TAG).d("Reusing upload client for node: $normalizedUrl (client ${pool.nextClientIndex}/${pool.clients.size}, refs: ${clientInfo.referenceCount})")
+                    Timber.tag(TAG).d("Reusing writable client for node: $normalizedUrl (client ${pool.nextClientIndex}/${pool.clients.size}, refs: ${clientInfo.referenceCount})")
                     return clientInfo.service
                 }
             }
         }
-        
+
         // Create new client if pool doesn't exist or isn't full (write lock)
-        return uploadLock.write {
-            val pool = uploadClients.getOrPut(normalizedUrl) { ClientPool() }
-            
+        return writableLock.write {
+            val pool = writableClients.getOrPut(normalizedUrl) { ClientPool() }
+
             // If pool already has clients, use round-robin
             if (pool.clients.isNotEmpty()) {
                 val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
                 pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
-                
+
                 clientInfo.lastAccessTime = System.currentTimeMillis()
                 clientInfo.referenceCount++
-                Timber.tag(TAG).d("Reusing upload client (double-check) for node: $normalizedUrl")
+                Timber.tag(TAG).d("Reusing writable client (double-check) for node: $normalizedUrl")
                 return@write clientInfo.service
             }
-            
+
             // Check URL limit
-            if (uploadClients.size >= MAX_URLS) {
-                Timber.tag(TAG).w("Upload client pool at max URLs ($MAX_URLS), cleaning up...")
-                cleanupIdleClients(uploadClients, uploadLock, "upload")
+            if (writableClients.size >= MAX_URLS) {
+                Timber.tag(TAG).w("Writable client pool at max URLs ($MAX_URLS), cleaning up...")
+                cleanupIdleClients(writableClients, writableLock, "writable")
             }
-            
+
             // Create new client (up to CLIENTS_PER_URL per URL)
             if (pool.clients.size < CLIENTS_PER_URL) {
                 try {
                     val client = HproseClient.create("$normalizedUrl/webapi/")
-                    client.timeout = UPLOAD_CLIENT_TIMEOUT
+                    client.timeout = WRITABLE_CLIENT_TIMEOUT
                     val service = client.useService(HproseService::class.java)
-                    
+
                     val clientInfo = ClientInfo(
                         client = client,
                         service = service,
                         referenceCount = 1
                     )
-                    
+
                     pool.clients.add(clientInfo)
-                    Timber.tag(TAG).d("Created new upload client for node: $normalizedUrl (${pool.clients.size}/$CLIENTS_PER_URL clients)")
-                    
+                    Timber.tag(TAG).d("Created new writable client for node: $normalizedUrl (${pool.clients.size}/$CLIENTS_PER_URL clients)")
+
                     // Periodic cleanup check
                     maybeCleanup()
-                    
+
                     service
                 } catch (e: Exception) {
-                    Timber.tag(TAG).e(e, "Failed to create upload Hprose client for node: $normalizedUrl")
+                    Timber.tag(TAG).e(e, "Failed to create writable Hprose client for node: $normalizedUrl")
                     null
                 }
             } else {
                 // Pool is full, use round-robin
                 val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
                 pool.nextClientIndex = (pool.nextClientIndex + 1) % pool.clients.size
-                
+
                 clientInfo.lastAccessTime = System.currentTimeMillis()
                 clientInfo.referenceCount++
-                Timber.tag(TAG).d("Pool full, reusing upload client for node: $normalizedUrl")
+                Timber.tag(TAG).d("Pool full, reusing writable client for node: $normalizedUrl")
                 clientInfo.service
             }
         }
     }
     
     /**
-     * Release a client reference (decrement reference count)
-     * Clients with zero references are candidates for cleanup
-     * 
+     * Release a client reference (decrement reference count).
+     * Clients with zero references are candidates for cleanup.
+     *
      * @param baseUrl The base URL of the node/server
-     * @param isUploadClient Whether this is an upload client (default: false)
+     * @param isWritableClient Whether this is a writable-pool client (default: false → regular pool)
      */
-    fun releaseClient(baseUrl: String, isUploadClient: Boolean = false) {
+    fun releaseClient(baseUrl: String, isWritableClient: Boolean = false) {
         val normalizedUrl = normalizeUrl(baseUrl)
-        
-        if (isUploadClient) {
-            uploadLock.write {
-                uploadClients[normalizedUrl]?.let { pool ->
+
+        if (isWritableClient) {
+            writableLock.write {
+                writableClients[normalizedUrl]?.let { pool ->
                     // Decrement reference count for all clients in pool
                     pool.clients.forEach { clientInfo ->
                         clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
                     }
-                    Timber.tag(TAG).d("Released upload client pool for node: $normalizedUrl")
+                    Timber.tag(TAG).d("Released writable client pool for node: $normalizedUrl")
                 }
             }
         } else {
@@ -292,9 +294,9 @@ object HproseClientPool {
             }
         }
         
-        uploadLock.write {
-            uploadClients.remove(normalizedUrl)?.let { pool ->
-                Timber.tag(TAG).d("Cleared upload client pool for node: $normalizedUrl (${pool.clients.size} clients)")
+        writableLock.write {
+            writableClients.remove(normalizedUrl)?.let { pool ->
+                Timber.tag(TAG).d("Cleared writable client pool for node: $normalizedUrl (${pool.clients.size} clients)")
             }
         }
     }
@@ -317,7 +319,7 @@ object HproseClientPool {
             
             // Clean both pools
             cleanupIdleClients(regularClients, regularLock, "regular")
-            cleanupIdleClients(uploadClients, uploadLock, "upload")
+            cleanupIdleClients(writableClients, writableLock, "writable")
         }
     }
     

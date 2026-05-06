@@ -1659,7 +1659,10 @@ object HproseInstance {
         )
 
         try {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            // Mutation: route through appUser's writable host (hostIds[0]).
+            appUser.resolveWritableUrl()
+            val response = (appUser.writableClient ?: appUser.hproseService)
+                ?.runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -1711,7 +1714,9 @@ object HproseInstance {
         val gson = Gson()
         val request = gson.fromJson(json, Map::class.java)
         return try {
-            val response = appUser.uploadService?.runMApp<MimeiId>(entry, request)
+            // Mutation: route through appUser's writable host (hostIds[0]).
+            appUser.resolveWritableUrl()
+            val response = appUser.writableClient?.runMApp<MimeiId>(entry, request)
             response
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e)
@@ -2680,8 +2685,11 @@ object HproseInstance {
             "tweet" to Json.encodeToString(tweet)
         )
         return try {
+            // Mutation: route through appUser's writable host (hostIds[0]).
+            appUser.resolveWritableUrl()
+            val client = appUser.writableClient ?: appUser.hproseService
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                client?.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
                 throw e
@@ -3190,8 +3198,11 @@ object HproseInstance {
             "tweetid" to tweetId
         )
         return try {
+            // Mutation: route through appUser's writable host (hostIds[0]).
+            appUser.resolveWritableUrl()
+            val client = appUser.writableClient ?: appUser.hproseService
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                client?.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
                 throw e
@@ -3246,7 +3257,10 @@ object HproseInstance {
             "version" to "v2",
             "userid" to appUser.mid
         )
-        val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+        // Mutation: route through appUser's writable host (hostIds[0]).
+        appUser.resolveWritableUrl()
+        val client = appUser.writableClient ?: appUser.hproseService
+        val rawResponse = client?.runMApp<Any>(entry, params)
         return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
     }
 
@@ -4320,9 +4334,12 @@ object HproseInstance {
             "tweetid" to tweetId
         )
         return try {
+            // Mutation: route through appUser's writable host (hostIds[0]).
+            appUser.resolveWritableUrl()
+            val pinClient = appUser.writableClient ?: appUser.hproseService
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            when (val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)) {
+            when (val rawResponse = pinClient?.runMApp<Any>(entry, params)) {
                 is Boolean -> {
                     // Legacy format: direct boolean response
                     rawResponse

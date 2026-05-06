@@ -130,7 +130,7 @@ data class User(
         val baseUrl = baseUrl ?: return
         if (_lastBaseUrl != null && _lastBaseUrl != baseUrl) {
             // Release old client if URL changed
-            HproseClientPool.releaseClient(_lastBaseUrl!!, isUploadClient = false)
+            HproseClientPool.releaseClient(_lastBaseUrl!!, isWritableClient = false)
         }
         HproseClientPool.clearClient(baseUrl)
         _lastBaseUrl = null
@@ -139,26 +139,34 @@ data class User(
     @IgnoredOnParcel
     private var _lastWritableUrl: String? = null
     
-    val uploadService: HproseService?
-        get() {
-            // Note: We can't call suspend function from property getter
-            // The calling code should call resolveWritableUrl() before accessing uploadService
-            val currentWritableUrl = writableUrl ?: return null
-            
-            // Use HproseClientPool for shared upload client management
-            // Upload clients have extended timeouts for long-running operations
-            return HproseClientPool.getUploadClient(currentWritableUrl)
-        }
-    
     /**
-     * Clear cached upload service from pool
-     * This will remove the upload client from the pool for this node
+     * Hprose client targeting the user's writable node. Use for any RPC that
+     * mutates server-side data (uploads, toggles, edits, deletes) so the
+     * request lands directly on the writable host instead of being delegated.
+     * Returns null when writableUrl hasn't been resolved yet — callers should
+     * call resolveWritableUrl() (a suspend function) before reading this
+     * property and treat null as an error.
+     *
+     * Mirrors iOS User.writableClient.
      */
-    fun clearUploadService() {
+    val writableClient: HproseService?
+        get() {
+            val currentWritableUrl = writableUrl ?: return null
+
+            // Pooled, shared writable client targeting hostIds[0] (extended timeout
+            // for long-running mutations like file uploads).
+            return HproseClientPool.getWritableClient(currentWritableUrl)
+        }
+
+    /**
+     * Clear cached writable client from pool. Removes the pooled client for
+     * the writable host so the next access will re-fetch / re-create.
+     */
+    fun clearWritableClient() {
         val currentWritableUrl = writableUrl ?: return
         if (_lastWritableUrl != null && _lastWritableUrl != currentWritableUrl) {
             // Release old client if URL changed
-            HproseClientPool.releaseClient(_lastWritableUrl!!, isUploadClient = true)
+            HproseClientPool.releaseClient(_lastWritableUrl!!, isWritableClient = true)
         }
         HproseClientPool.clearClient(currentWritableUrl)
         _lastWritableUrl = null
@@ -172,7 +180,7 @@ data class User(
     }
 
     /**
-     * Resolve writable URL from hostIds and reset uploadService if needed
+     * Resolve writable URL from hostIds and reset writableClient if needed
      */
     suspend fun resolveWritableUrl(): String? {
         // If writableUrl is already valid, return it immediately
@@ -180,8 +188,8 @@ data class User(
             return writableUrl
         }
         
-        // If writableUrl is null or empty, clear uploadService and resolve
-        clearUploadService()
+        // If writableUrl is null or empty, clear writableClient and resolve
+        clearWritableClient()
 
         suspend fun tryResolve(): String? {
             if (hostIds.isNullOrEmpty()) {
@@ -345,7 +353,7 @@ data class User(
                 clearHproseService()
             }
             if (oldWritableUrl != writableUrl) {
-                clearUploadService()
+                clearWritableClient()
             }
 
             // Sync appUser StateFlows if this instance is appUser
