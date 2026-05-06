@@ -80,7 +80,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.Top) {
                     if (showDialog) {
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
@@ -91,7 +91,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onClick = { showDialog = true }
                     )
                     Column(
-                        modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+                        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
                     ) {
                         Text(
                             text = user.name ?: "No one",
