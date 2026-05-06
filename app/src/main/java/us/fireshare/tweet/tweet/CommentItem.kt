@@ -115,16 +115,17 @@ fun CommentItem(
             }
             Column(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 0.dp, top = 8.dp, end = 4.dp, bottom = 0.dp),
+                    .padding(end = 4.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
-                        .padding(end = 12.dp),
+                        .padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier.padding(bottom = 0.dp, top = 2.dp),
+                        modifier = Modifier.padding(top = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = author?.name ?: "No One",

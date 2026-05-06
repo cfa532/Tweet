@@ -46,7 +46,7 @@ fun AppIcon() {
         painter = painterResource(R.drawable.ic_splash),
                         contentDescription = stringResource(R.string.app_icon),
         modifier = Modifier
-            .size(36.dp)
+            .size(44.dp)
             .clip(CircleShape),
         contentScale = ContentScale.Crop
     )

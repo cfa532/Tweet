@@ -73,7 +73,7 @@ fun MainTopAppBar(
             }) {
                 // key() forces recomposition when avatar changes
                 key(avatarMid) {
-                    UserAvatar(user = appUser, size = 32, useOriginalColors = true)
+                    UserAvatar(user = appUser, size = 44, useOriginalColors = true)
                 }
             }
         },
