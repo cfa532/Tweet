@@ -81,7 +81,7 @@ fun FollowingScreen(
                 ),
                 title = {
                     Column {
-                        UserAvatar(user = userOfProfile, size = 36)
+                        UserAvatar(user = userOfProfile, size = 44)
                         Text(
                             text = if (userId == appUser.mid) {
                                 stringResource(R.string.your_followings_title)
@@ -231,22 +231,26 @@ fun FollowingItem(
     )
     Row(
         modifier = Modifier
-            .padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .fillMaxWidth()
     ) {
-        IconButton(onClick = {
-            if (!user.isGuest()) {
-                navController.navigate(NavTweet.UserProfile(user.mid))
-            }
-        }) {
-            UserAvatar(user = user, size = 40)
+        IconButton(
+            onClick = {
+                if (!user.isGuest()) {
+                    navController.navigate(NavTweet.UserProfile(user.mid))
+                }
+            },
+            modifier = Modifier.size(52.dp)
+        ) {
+            UserAvatar(user = user, size = 48)
         }
+        Spacer(modifier = Modifier.width(4.dp))
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
                     modifier = Modifier.weight(1f)

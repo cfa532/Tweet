@@ -125,6 +125,6 @@ fun ToggleFollowingButton(
                 color = MaterialTheme.colorScheme.outline,
                 shape = RoundedCornerShape(12.dp)
             )
-            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     )
 }

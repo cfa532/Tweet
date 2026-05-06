@@ -7,14 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.ButtonDefaults.IconSize
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -76,74 +73,38 @@ fun ProfileDetail(
         ) {
             Text(
                 text = profile ?: "Profile",
-                style = MaterialTheme.typography.titleSmall,
+                fontSize = 15.sp,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis
             )
+            // Stats row: Followers, Followings, Bookmarks (appUser only)
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(
-                        start = 0.dp, top = 8.dp,
-                        end = if (displayUser.mid == appUser.mid) 20.dp else 120.dp
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Text(
-                    text = "${stringResource(R.string.fans)} $followersCount",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable(
-                        onClick = {
-                            navController.navigate((NavTweet.Follower(displayUser.mid)))
-                        }
-                    ))
-                Text(
-                    text = "${stringResource(R.string.followings)} $followingsCount",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .clickable(onClick = {
-                            navController.navigate(NavTweet.Following(displayUser.mid))
-                        }),
+                    text = "$followersCount ${stringResource(R.string.fans)}",
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable {
+                        navController.navigate(NavTweet.Follower(displayUser.mid))
+                    }
                 )
                 Text(
-                    text = "${stringResource(R.string.posts)} $tweetCount",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "$followingsCount ${stringResource(R.string.followings)}",
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable {
+                        navController.navigate(NavTweet.Following(displayUser.mid))
+                    }
                 )
-                // show the following buttons only on appUser's profile
                 if (displayUser.mid == appUser.mid) {
-                    Row(
-                        modifier = Modifier.clickable(
-                            onClick = {
-                                navController.navigate((NavTweet.Bookmarks(displayUser.mid)))
-                            }
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Bookmarks,
-                            contentDescription = stringResource(R.string.user_bookmarks),
-                            modifier = Modifier.size(IconSize)
-                        )
-                        Text(
-                            text = "${if (bookmarksCount > 0) bookmarksCount else ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.clickable(
-                            onClick = {
-                                navController.navigate((NavTweet.Favorites(displayUser.mid)))
-                            }
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FavoriteBorder,
-                            contentDescription = stringResource(R.string.user_favorites),
-                            modifier = Modifier.size(IconSize)
-                        )
-                        Text(
-                            text = "${if (favoritesCount > 0) favoritesCount else ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
+                    Text(
+                        text = "$bookmarksCount ${stringResource(R.string.user_bookmarks)}",
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable {
+                            navController.navigate(NavTweet.Bookmarks(displayUser.mid))
+                        }
+                    )
                 }
             }
         }
