@@ -6,6 +6,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
@@ -49,17 +50,28 @@ object Gadget {
     // on light backgrounds. Material Blue 700.
     private val DEFAULT_LINK_COLOR = Color(0xFF1976D2)
 
-    // Span size used to render the placeholder for collapsed blank lines.
-    // Just enough to keep paragraph separation visible without wasting space.
-    private val BLANK_LINE_SIZE: TextUnit = 1.sp
+    // Default line-height applied to the placeholder paragraph that stands in
+    // for one or more blank lines in the source text. Roughly half of a
+    // typical body lineHeight (~20.sp), giving visible-but-tight paragraph
+    // separation. Callers can override per-style via [buildAnnotatedText].
+    private val DEFAULT_BLANK_LINE_HEIGHT: TextUnit = 10.sp
 
-    private fun AnnotatedString.Builder.appendWithBlankLineStyle(segment: String) {
-        val blankLineStyle = SpanStyle(fontSize = BLANK_LINE_SIZE)
+    private fun AnnotatedString.Builder.appendWithBlankLineStyle(
+        segment: String,
+        blankLineHeight: TextUnit,
+    ) {
+        // The blank-line placeholder is a zero-width space wrapped in its own
+        // ParagraphStyle so the paragraph's lineHeight overrides the parent
+        // Text's lineHeight for that single line. SpanStyle.fontSize alone
+        // does NOT shrink the line — the surrounding TextStyle's lineHeight
+        // pins every line to the same height.
         val parts = segment.split("\u200B")
         parts.forEachIndexed { index, part ->
             append(part)
             if (index < parts.size - 1) {
-                withStyle(blankLineStyle) { append("\u200B") }
+                withStyle(ParagraphStyle(lineHeight = blankLineHeight)) {
+                    append("\u200B")
+                }
             }
         }
     }
@@ -67,9 +79,13 @@ object Gadget {
     fun buildAnnotatedText(
         text: String,
         linkColor: Color = DEFAULT_LINK_COLOR,
+        blankLineHeight: TextUnit = DEFAULT_BLANK_LINE_HEIGHT,
     ): AnnotatedString = buildAnnotatedString {
-        // Collapse consecutive blank lines: replace \n\n with \n + small-height line
-        val processed = text.replace(Regex("\n{2,}")) { "\n\u200B\n" }
+        // Collapse runs of blank lines to a single ZWSP marker. No surrounding
+        // \n is needed because the ParagraphStyle around the marker already
+        // produces its own paragraph break before and after; adding \n on top
+        // of that would render as multiple line breaks.
+        val processed = text.replace(Regex("\n{2,}"), "\u200B")
 
         val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
         val mentionRegex = "@([\\w_]+)".toRegex()
@@ -80,7 +96,7 @@ object Gadget {
             val start = matchResult.range.first
 
             if (start > lastIndex) {
-                appendWithBlankLineStyle(processed.substring(lastIndex, start))
+                appendWithBlankLineStyle(processed.substring(lastIndex, start), blankLineHeight)
             }
 
             pushStringAnnotation(tag = "URL", annotation = url)
@@ -107,7 +123,7 @@ object Gadget {
                     val username = mentionMatch.groupValues[1]
 
                     if (start > lastIndex) {
-                        appendWithBlankLineStyle(processed.substring(lastIndex, start))
+                        appendWithBlankLineStyle(processed.substring(lastIndex, start), blankLineHeight)
                     }
 
                     pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
@@ -128,7 +144,7 @@ object Gadget {
                     lastIndex = start + originalMentionText.length // or mentionMatch.range.last + 1
                 }
             } else {
-                appendWithBlankLineStyle(processed.substring(lastIndex))
+                appendWithBlankLineStyle(processed.substring(lastIndex), blankLineHeight)
                 lastIndex = processed.length
             }
         }

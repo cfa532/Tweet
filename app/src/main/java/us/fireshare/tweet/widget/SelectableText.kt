@@ -18,6 +18,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.sp
 import us.fireshare.tweet.R
 import us.fireshare.tweet.tweet.TweetExpansionCache
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
@@ -60,7 +63,20 @@ fun SelectableText(
     // light and dark backgrounds (the previous Color.Cyan was harsh on
     // light surfaces).
     val linkColor = MaterialTheme.colorScheme.primary
-    val annotatedText = buildAnnotatedText(text, linkColor = linkColor)
+    // Render blank lines at half the surrounding line height — collapsing
+    // multiple newlines to a tight visible gap rather than full-line blanks.
+    val styleLineHeight = style.lineHeight
+    val blankLineHeight =
+        if (styleLineHeight != TextUnit.Unspecified && styleLineHeight.type == TextUnitType.Sp) {
+            (styleLineHeight.value / 2f).sp
+        } else {
+            10.sp
+        }
+    val annotatedText = buildAnnotatedText(
+        text,
+        linkColor = linkColor,
+        blankLineHeight = blankLineHeight,
+    )
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     SelectionContainer {
         Text(
