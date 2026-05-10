@@ -175,7 +175,8 @@ fun TweetItemBody(
                                     }
                                 }
                             }
-                        }
+                        },
+                        expansionKey = tweet.mid,
                     )
                 }
 
@@ -317,7 +318,8 @@ fun TweetItemBody(
                                         }
                                     }
                                 }
-                            }
+                            },
+                            expansionKey = tweet.mid,
                         )
                     }
 

@@ -173,8 +173,15 @@ fun TweetItem(
                     Modifier.onGloballyPositioned { layoutCoordinates ->
                         val measuredHeightPx = layoutCoordinates.size.height.toFloat()
 
-                        // Keep height cache writes off text-only rows.
-                        if (shouldMeasureRowHeight && measuredHeightPx >= 60f) {
+                        // Keep height cache writes off text-only rows. Also skip
+                        // while the user has the tweet text "Show more"-expanded:
+                        // otherwise the (transient) expanded height becomes the
+                        // cached `min` height, and after scroll/nav the row would
+                        // come back collapsed but still occupy the expanded space.
+                        if (shouldMeasureRowHeight
+                            && measuredHeightPx >= 60f
+                            && !TweetExpansionCache.isExpanded(tweet.mid)
+                        ) {
                             TweetHeightCache.setHeight(tweet.mid, measuredHeightPx)
                         }
 
@@ -547,7 +554,8 @@ private fun RetweetWithContent(
                                             )
                                         }
                                     }
-                                }
+                                },
+                                expansionKey = tweet.mid,
                             )
                         }
 
