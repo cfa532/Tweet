@@ -77,7 +77,7 @@ fun ProfileDetail(
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis
             )
-            // Stats row: Followers, Followings, Bookmarks (appUser only)
+            // Stats row: Followers, Followings, Tweets (all users), Bookmarks (appUser only)
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .padding(top = 8.dp),
@@ -96,6 +96,10 @@ fun ProfileDetail(
                     modifier = Modifier.clickable {
                         navController.navigate(NavTweet.Following(displayUser.mid))
                     }
+                )
+                Text(
+                    text = "$tweetCount ${stringResource(R.string.posts)}",
+                    fontSize = 14.sp
                 )
                 if (displayUser.mid == appUser.mid) {
                     Text(
