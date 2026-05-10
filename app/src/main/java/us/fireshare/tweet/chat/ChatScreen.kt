@@ -644,7 +644,10 @@ fun ChatItem(
                     ) {
                         SelectionContainer {
                             BasicText(
-                                text = buildAnnotatedText(message.content),
+                                text = buildAnnotatedText(
+                                    message.content,
+                                    linkColor = MaterialTheme.colorScheme.primary,
+                                ),
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.padding(8.dp)
                             )

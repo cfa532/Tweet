@@ -55,7 +55,12 @@ fun SelectableText(
         }
     }
 
-    val annotatedText = buildAnnotatedText(text)
+    // Use the theme's primary color for links / @mentions so they follow
+    // the user's dynamic Material You palette and stay readable on both
+    // light and dark backgrounds (the previous Color.Cyan was harsh on
+    // light surfaces).
+    val linkColor = MaterialTheme.colorScheme.primary
+    val annotatedText = buildAnnotatedText(text, linkColor = linkColor)
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     SelectionContainer {
         Text(

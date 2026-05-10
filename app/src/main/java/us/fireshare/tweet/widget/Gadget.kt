@@ -10,6 +10,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import timber.log.Timber
 import java.net.Inet4Address
@@ -41,9 +42,19 @@ object Gadget {
 
     /**
      * Annotate HTTP URL and @username in a text. Make both clickable.
-     * */
+     */
+
+    // Default color for links / @mentions when no explicit color is supplied.
+    // Calmer than the previous `Color.Cyan` (#00FFFF), which was over-saturated
+    // on light backgrounds. Material Blue 700.
+    private val DEFAULT_LINK_COLOR = Color(0xFF1976D2)
+
+    // Span size used to render the placeholder for collapsed blank lines.
+    // Just enough to keep paragraph separation visible without wasting space.
+    private val BLANK_LINE_SIZE: TextUnit = 1.sp
+
     private fun AnnotatedString.Builder.appendWithBlankLineStyle(segment: String) {
-        val blankLineStyle = SpanStyle(fontSize = 2.sp)
+        val blankLineStyle = SpanStyle(fontSize = BLANK_LINE_SIZE)
         val parts = segment.split("\u200B")
         parts.forEachIndexed { index, part ->
             append(part)
@@ -53,7 +64,10 @@ object Gadget {
         }
     }
 
-    fun buildAnnotatedText(text: String): AnnotatedString = buildAnnotatedString {
+    fun buildAnnotatedText(
+        text: String,
+        linkColor: Color = DEFAULT_LINK_COLOR,
+    ): AnnotatedString = buildAnnotatedString {
         // Collapse consecutive blank lines: replace \n\n with \n + small-height line
         val processed = text.replace(Regex("\n{2,}")) { "\n\u200B\n" }
 
@@ -72,7 +86,7 @@ object Gadget {
             pushStringAnnotation(tag = "URL", annotation = url)
             withStyle(
                 style = SpanStyle(
-                    color = Color.Cyan,
+                    color = linkColor,
                     textDecoration = TextDecoration.Underline
                 )
             ) {
@@ -99,7 +113,7 @@ object Gadget {
                     pushStringAnnotation(tag = "USERNAME_CLICK", annotation = username)
                     withStyle(
                         style = SpanStyle(
-                            color = Color.Cyan,
+                            color = linkColor,
                             textDecoration = TextDecoration.None
                         )
                     ) {
