@@ -1078,9 +1078,15 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            // Always load cached tweets FIRST (immediately, before any network calls)
-            Timber.tag("getTweets").d("Loading cached tweets for user: ${user.value.mid}")
-            val cachedTweets = loadCachedTweetsByAuthor(user.value.mid, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
+            // Always load cached tweets FIRST (immediately, before any network calls).
+            // Use the assisted-injected `userId` (always correct) rather than
+            // `user.value.mid`, which may still be GUEST_ID if the `init` block
+            // race hasn't populated _user yet, or if no cached User was found.
+            // Without this, a stale/missing cached User would skip cached-tweet
+            // loading entirely and the UI would just sit on a spinner while the
+            // network call to a stale baseUrl times out.
+            Timber.tag("getTweets").d("Loading cached tweets for user: $userId")
+            val cachedTweets = loadCachedTweetsByAuthor(userId, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
             val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
             
             // Update _tweets with cached tweets IMMEDIATELY (shows tweets to user right away)
@@ -1098,8 +1104,17 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
             
-            Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: ${user.value.mid}")
-            
+            Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: $userId")
+
+            // Clear the initial-load spinner as soon as we have something cached
+            // to show. Otherwise, when the user's baseUrl is stale, the network
+            // calls below (loadPinnedTweets + getTweetsByUser) can hang for many
+            // seconds and the UI would keep showing the spinner instead of the
+            // already-loaded cached tweets.
+            if (pageNumber == 0 && (cachedTweets.isNotEmpty() || _tweets.value.isNotEmpty())) {
+                initState.value = false
+            }
+
             // Load pinned tweets AFTER cached tweets are shown (only for page 0)
             if (pageNumber == 0) {
                 loadPinnedTweets()
