@@ -687,6 +687,8 @@ fun TweetListView(
             inFlightPages.add(nextPage)
             
             val preloadJob = coroutineScope.launch {
+                isRefreshingAtBottom = true
+                val spinnerShowTime = System.currentTimeMillis()
                 try {
                     withContext(Dispatchers.IO) {
                         Timber.tag("TweetListView").d("Preloading page: $nextPage")
@@ -707,8 +709,15 @@ fun TweetListView(
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Preload error")
                 } finally {
-                    pendingLoadMorePage = -1
-                    inFlightPages.remove(nextPage)
+                    withContext(NonCancellable + Dispatchers.Main) {
+                        val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
+                        if (spinnerDuration < 500L) {
+                            delay(500L - spinnerDuration)
+                        }
+                        isRefreshingAtBottom = false
+                        pendingLoadMorePage = -1
+                        inFlightPages.remove(nextPage)
+                    }
                 }
             }
             addJob("preload-$nextPage", preloadJob)
