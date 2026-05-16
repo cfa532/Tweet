@@ -228,13 +228,13 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                 contentDescription = stringResource(R.string.like),
                 modifier = Modifier.size(ButtonDefaults.IconSize)
                     .padding(bottom = 1.dp),
-                tint = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color ?: MaterialTheme.colorScheme.secondary
+                tint = if (hasBookmarked) color ?: Color(0xFF007AFF) else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                color = if (hasBookmarked) color ?: MaterialTheme.colorScheme.primary else color
+                color = if (hasBookmarked) color ?: Color(0xFF007AFF) else color
                     ?: MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.width(28.dp)
             )
