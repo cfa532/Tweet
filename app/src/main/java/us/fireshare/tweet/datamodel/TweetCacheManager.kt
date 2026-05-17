@@ -82,6 +82,34 @@ object TweetCacheManager {
     fun getFavoritesCacheId(userId: MimeiId): MimeiId {
         return userId + FAVORITES_SUFFIX
     }
+
+    /**
+     * Load cached comments keyed by parent tweet ID.
+     * The parent tweet ID is used directly as the cache index bucket.
+     */
+    suspend fun getCachedCommentsByParent(parentTweetId: MimeiId, limit: Int = 200): List<Tweet> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                HproseInstance.dao
+                    .getCachedTweetsByUser(parentTweetId, 0, limit)
+                    .map { it.originalTweet }
+                    .sortedByDescending { it.timestamp }
+            }.getOrElse {
+                Timber.tag("TweetCacheManager")
+                    .e(it, "Failed to load cached comments for parent $parentTweetId")
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Save comments into a bucket indexed by parent tweet ID.
+     */
+    fun saveCommentsByParent(parentTweetId: MimeiId, comments: List<Tweet>) {
+        comments.forEach { comment ->
+            saveTweet(comment, parentTweetId)
+        }
+    }
     
     /**
      * Save or update a tweet in cache

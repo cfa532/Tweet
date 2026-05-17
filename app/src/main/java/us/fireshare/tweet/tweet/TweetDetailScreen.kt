@@ -253,6 +253,10 @@ fun TweetDetailScreen(
     // PERFORMANCE FIX: Consolidated initialization effects
     // Set context for notifications and start listening - run once when screen opens
     LaunchedEffect(Unit) {
+        viewModel.setCommentsCacheParentTweetId(parentTweetId ?: tweetId)
+        withContext(Dispatchers.IO) {
+            viewModel.loadCachedCommentsForDetailOpen()
+        }
         viewModel.setNotificationContext(context)
         viewModel.startListeningToNotifications()
     }

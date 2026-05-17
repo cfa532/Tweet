@@ -73,6 +73,7 @@ class TweetViewModel @AssistedInject constructor(
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
+    private var commentsCacheParentTweetId: MimeiId = tweet.mid
 
     // Comment IDs whose payload failed to parse on the read node. Mirrors iOS
     // `failedCommentIds` — populated by `loadComments` / `refreshCommentsPaginated`
@@ -225,6 +226,26 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     /**
+     * Configure the parent tweet ID used as the cache index for comments.
+     */
+    fun setCommentsCacheParentTweetId(parentTweetId: MimeiId?) {
+        commentsCacheParentTweetId = parentTweetId ?: tweetState.value.mid
+    }
+
+    /**
+     * Hydrate comments from cache before network refresh.
+     */
+    suspend fun loadCachedCommentsForDetailOpen() {
+        val cacheKey = commentsCacheParentTweetId
+        val cachedComments = TweetCacheManager.getCachedCommentsByParent(cacheKey)
+        if (cachedComments.isNotEmpty()) {
+            _comments.value = cachedComments
+            Timber.tag("TweetViewModel")
+                .d("Loaded ${cachedComments.size} cached comments for parent $cacheKey")
+        }
+    }
+
+    /**
      * Fetch one page of comments. Tracks failed parses in `_failedCommentIds`
      * (drained later by `syncMissingComments`) and merges successful comments
      * into `_comments`. Mirrors iOS `CommentListView` page-load semantics.
@@ -248,6 +269,7 @@ class TweetViewModel @AssistedInject constructor(
             val newCommentIds = newComments.map { it.mid }.toSet()
             val mergedComments = newComments + currentComments.filterNot { it.mid in newCommentIds }
             val finalComments = mergedComments.sortedByDescending { it.timestamp }
+            TweetCacheManager.saveCommentsByParent(commentsCacheParentTweetId, finalComments)
             if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
                 Timber.tag("TweetViewModel").d(
                     "Merged to ${finalComments.size} total comments (${newComments.size} new, ${failedIds.size} failed)"
@@ -394,8 +416,10 @@ class TweetViewModel @AssistedInject constructor(
             if (all.isNotEmpty()) {
                 _comments.update { current ->
                     val newIds = all.map { it.mid }.toSet()
-                    (all + current.filterNot { it.mid in newIds })
+                    val merged = (all + current.filterNot { it.mid in newIds })
                         .sortedByDescending { it.timestamp }
+                    TweetCacheManager.saveCommentsByParent(commentsCacheParentTweetId, merged)
+                    merged
                 }
             }
         } catch (e: Exception) {
