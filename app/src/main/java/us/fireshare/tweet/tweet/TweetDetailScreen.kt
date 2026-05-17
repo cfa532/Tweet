@@ -302,22 +302,48 @@ fun TweetDetailScreen(
     // because the entire short comment list is already visible) comes back
     // empty.
     var showNoMoreComments by remember { mutableStateOf(false) }
-    var hasUserScrolled by remember { mutableStateOf(false) }
+    var hasUserScrolledForPagination by remember { mutableStateOf(false) }
+    var paginationScrollArmed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .collect { inProgress -> if (inProgress) hasUserScrolled = true }
+    // Arm pagination only after a meaningful downward scroll gesture.
+    // This avoids accidental auto-loadmore when the last comment is already near the viewport bottom.
+    LaunchedEffect(listState, shouldStopPagination) {
+        var prevIndex = listState.firstVisibleItemIndex
+        var prevOffset = listState.firstVisibleItemScrollOffset
+        snapshotFlow {
+            Triple(
+                listState.firstVisibleItemIndex,
+                listState.firstVisibleItemScrollOffset,
+                listState.isScrollInProgress
+            )
+        }.collect { (currentIndex, currentOffset, isScrollInProgress) ->
+            val indexDelta = currentIndex - prevIndex
+            val offsetDelta = currentOffset - prevOffset
+            val isScrollingDown = indexDelta > 0 || (indexDelta == 0 && offsetDelta > 12)
+            val isScrollingUp = indexDelta < 0 || (indexDelta == 0 && offsetDelta < -12)
+            val movedEnough = abs(indexDelta) > 0 || abs(offsetDelta) > 24
+
+            // Ignore layout-driven shifts (e.g., label insertion/removal). Only arm on real user drag.
+            if (isScrollInProgress && isScrollingDown && movedEnough) {
+                paginationScrollArmed = true
+                hasUserScrolledForPagination = true
+            }
+
+            // Re-enable pagination only after user intentionally scrolls up again.
+            if (isScrollInProgress && isScrollingUp && movedEnough && shouldStopPagination) {
+                shouldStopPagination = false
+                paginationScrollArmed = false
+            }
+
+            prevIndex = currentIndex
+            prevOffset = currentOffset
+        }
     }
 
     LaunchedEffect(showNoMoreComments) {
         if (showNoMoreComments) {
             delay(2000)
             showNoMoreComments = false
-            // Allow the user to retry: other users may post new comments at any
-            // time, so "no more" is not a permanent state. Clearing the flag
-            // here means the next bottom-reach (after scrolling up and back)
-            // will fire another load-more, throttled to once per second.
-            shouldStopPagination = false
         }
     }
 
@@ -326,17 +352,18 @@ fun TweetDetailScreen(
     // comment list (where the bottom is already in view) would silently
     // exhaust pagination before the user ever interacts, leaving subsequent
     // real scrolls with no spinner / no "no more" feedback.
-    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty(), hasUserScrolled) {
+    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty(), hasUserScrolledForPagination) {
         if (shouldStopPagination || (comments.isEmpty() && hasLoadedPage0)) {
             return@LaunchedEffect
         }
 
         val now = System.currentTimeMillis()
-        if (isAtBottom && hasUserScrolled && !isRefreshingAtBottom && !isInitialLoading &&
+        if (isAtBottom && hasUserScrolledForPagination && paginationScrollArmed && !isRefreshingAtBottom && !isInitialLoading &&
             hasLoadedPage0 && !shouldStopPagination && comments.isNotEmpty() &&
             (now - lastPaginationAttempt) > 1000L) {
 
             lastPaginationAttempt = now
+            paginationScrollArmed = false
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 val started = System.currentTimeMillis()
@@ -369,7 +396,7 @@ fun TweetDetailScreen(
                 }
                 if (newCommentsCount == 0) {
                     shouldStopPagination = true
-                    if (hasUserScrolled) {
+                    if (hasUserScrolledForPagination) {
                         showNoMoreComments = true
                     }
                 }

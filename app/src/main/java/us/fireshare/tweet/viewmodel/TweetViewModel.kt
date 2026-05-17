@@ -423,7 +423,7 @@ class TweetViewModel @AssistedInject constructor(
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("TweetViewModel").e(e, "refreshCommentsPaginated failed")
+            Timber.tag("TweetViewModel").d("refreshCommentsPaginated skipped: ${e.message}")
         }
         return all.size
     }
@@ -456,6 +456,10 @@ class TweetViewModel @AssistedInject constructor(
                         TweetEvent.CommentSynced(recovered, parent.mid)
                     )
                 }
+            } else {
+                // Avoid tight retry loops for unrecoverable IDs during this session.
+                // If the backend later returns a valid payload, fetchComments will re-add it.
+                _failedCommentIds.update { it - commentId }
             }
         }
     }

@@ -241,7 +241,7 @@ object HproseInstance {
      * v2 responses are wrapped as: {success: true, data: result} or {success: false, message: "..."}
      * @return The unwrapped data if success is true, null otherwise
      */
-    private fun <T> unwrapV2Response(response: Any?): T? {
+    private fun <T> unwrapV2Response(response: Any?, logErrors: Boolean = true): T? {
         if (response == null) return null
         
         return when (response) {
@@ -255,7 +255,9 @@ object HproseInstance {
                 } else {
                     // Error response
                     val message = responseMap?.get("message") as? String
-                    Timber.tag("unwrapV2Response").w("API returned error: $message")
+                    if (logErrors) {
+                        Timber.tag("unwrapV2Response").w("API returned error: $message")
+                    }
                     null
                 }
             }
@@ -3404,14 +3406,26 @@ object HproseInstance {
                     comments.add(null)
                     continue
                 }
+                val commentId = entry["mid"] as? String
+                val commentAuthorId = entry["authorId"] as? String
+                if (commentId.isNullOrBlank() || commentAuthorId.isNullOrBlank()) {
+                    commentId?.let { failedIds.add(it) }
+                    Timber.tag("fetchComments").w(
+                        "Skipping malformed comment payload in tweet ${tweet.mid}: mid=$commentId, authorId=$commentAuthorId"
+                    )
+                    comments.add(null)
+                    continue
+                }
                 try {
                     val comment = Tweet.from(entry)
                     val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
                     comment.author = cachedAuthor ?: fetchUser(comment.authorId)
                     comments.add(comment)
                 } catch (e: Exception) {
-                    Timber.tag("fetchComments").w(e, "Failed to parse comment in tweet ${tweet.mid}")
-                    (entry["mid"] as? String)?.let { failedIds.add(it) }
+                    commentId.let { failedIds.add(it) }
+                    Timber.tag("fetchComments").w(
+                        "Failed to parse comment in tweet ${tweet.mid}: mid=$commentId, error=${e.message}"
+                    )
                     comments.add(null)
                 }
             }
@@ -3467,8 +3481,25 @@ object HproseInstance {
                     )
                 )
             }.getOrNull()
+            val retryPayload = unwrapV2Response<Map<String, Any>>(rawRetry, logErrors = false)
+            if (retryPayload == null) {
+                val retryMessage = (rawRetry as? Map<*, *>)?.get("message") as? String
+                when (retryMessage) {
+                    "Tweet not found", "User not found" -> {
+                        Timber.tag("syncComment").d(
+                            "Retry get_tweet returned expected miss for $commentId: $retryMessage"
+                        )
+                    }
+                    null -> Unit
+                    else -> {
+                        Timber.tag("syncComment").w(
+                            "Retry get_tweet failed for $commentId: $retryMessage"
+                        )
+                    }
+                }
+            }
             val retried = runCatching {
-                unwrapV2Response<Map<String, Any>>(rawRetry)?.let { Tweet.from(it) }
+                retryPayload?.let { Tweet.from(it) }
             }.getOrNull()
             if (retried != null) {
                 BlackList.recordSuccess(commentId)
@@ -3482,7 +3513,7 @@ object HproseInstance {
                 null
             }
         } catch (e: Exception) {
-            Timber.tag("syncComment").w(e, "Failed to sync comment $commentId")
+            Timber.tag("syncComment").w("Failed to sync comment $commentId: ${e.message}")
             BlackList.recordFailure(commentId)
             null
         }
