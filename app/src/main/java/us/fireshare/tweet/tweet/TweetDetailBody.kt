@@ -137,12 +137,12 @@ fun TweetDetailBody(
                         Text(
                             text = " @${author?.username ?: "unknown"}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                         Text(
                             text = " · ${localizedTimeDifference(tweet.timestamp)}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                     }
                     // the 3 dots at the right end

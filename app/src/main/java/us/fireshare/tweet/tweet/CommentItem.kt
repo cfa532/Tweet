@@ -101,7 +101,7 @@ fun CommentItem(
                     )
                 )
             }
-            .padding(horizontal = 4.dp)
+            .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 2.dp)
             .heightIn(max = 80000.dp) // Limit individual comment height
     ) {
         Row(
@@ -137,12 +137,12 @@ fun CommentItem(
                         Text(
                             text = " @${author?.username ?: "unknown"}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                         Text(
                             text = " · ${localizedTimeDifference(comment.timestamp)}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                     }
                     CommentDropdownMenu(comment, parentTweetViewModel)

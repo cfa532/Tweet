@@ -478,7 +478,7 @@ fun TweetDetailScreen(
                         }
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 1.dp),
+                        modifier = Modifier.padding(top = 1.dp, bottom = 8.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outline
                     )

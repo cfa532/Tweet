@@ -142,12 +142,12 @@ fun TweetItemBody(
                             Text(
                                 text = " @${author?.username}",
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                             )
                             Text(
                                 text = " · ${localizedTimeDifference(tweet.timestamp)}",
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                             )
                         }
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
@@ -289,12 +289,12 @@ fun TweetItemBody(
                             Text(
                                 text = " @${author?.username}",
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                             )
                             Text(
                                 text = " · ${localizedTimeDifference(tweet.timestamp)}",
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                             )
                         }
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
