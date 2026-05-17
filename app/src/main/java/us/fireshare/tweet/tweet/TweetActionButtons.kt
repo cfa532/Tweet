@@ -3,6 +3,7 @@ package us.fireshare.tweet.tweet
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -87,7 +89,7 @@ fun CommentButton(
             navController.navigate(ComposeComment(tweet.mid))
         }
     }) {
-        Row(horizontalArrangement = Arrangement.Start) {
+        Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
                 painter = painterResource(id = R.drawable.bubble_right),
                 contentDescription = stringResource(R.string.comments),
@@ -97,7 +99,7 @@ fun CommentButton(
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
-                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
                 color = color ?: MaterialTheme.colorScheme.primary,
                 modifier = Modifier.width(28.dp)
             )
@@ -138,17 +140,17 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         }
     }) {
-        Row(horizontalArrangement = Arrangement.Start) {
+        Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
                 painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
                 contentDescription = stringResource(R.string.forward),
-                modifier = Modifier.size(ButtonDefaults.IconSize),
+                modifier = Modifier.size(ButtonDefaults.IconSize * 1.15f),
                 tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
-                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
                 color = color ?: if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.width(28.dp)
             )
@@ -179,7 +181,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 }
             }
     } ) {
-        Row(horizontalArrangement = Arrangement.Start) {
+        Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
                 painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
                 contentDescription = stringResource(R.string.like),
@@ -189,7 +191,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
-                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
                 color = if (isFavorite) Color(0xFFBB5555) else color
                     ?: MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.width(28.dp)
@@ -222,7 +224,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             }
     } )
     {
-        Row(horizontalArrangement = Arrangement.Start) {
+        Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
                 painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
                 contentDescription = stringResource(R.string.like),
@@ -233,7 +235,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
-                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
                 color = if (hasBookmarked) color ?: Color(0xFF4477BB) else color
                     ?: MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.width(28.dp)
