@@ -3376,7 +3376,7 @@ object HproseInstance {
             "entry" to entry,
             "tweetid" to tweet.mid,
             "comment" to Json.encodeToString(comment),
-            "userid" to appUser.mid,
+            "tweetauthorid" to tweet.authorId,
             "hostid" to (tweet.author?.hostIds?.first() ?: "")
         )
         return try {
