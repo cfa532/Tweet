@@ -522,8 +522,10 @@ fun TweetListView(
                     lastScrollingState = isScrolling
                 }
 
-                // Detect when list arrives at the top
-                val isAtTop = firstVisibleItem == 0 && !isScrolling
+                // Detect when list arrives at the absolute top.
+                // Index 0 alone is not enough when headerContent is tall (e.g. profile + pinned tweets),
+                // because we can still be scrolled within that first item.
+                val isAtTop = firstVisibleItem == 0 && scrollOffset == 0 && !isScrolling
                 if (isAtTop && !wasAtTop) {
                     onScrolledToTop?.invoke()
                 }
