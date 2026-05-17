@@ -57,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -204,9 +205,11 @@ fun TweetDetailScreen(
         }
     }
 
-    // Pull-to-refresh: READ tweet + paginated comment read concurrently. If the
-    // author's read node differs from their write node, also fire background
-    // sync for any failed comments. Mirrors iOS `refreshTweetAndComments`.
+    // Pull-to-refresh: the spinner is bound to `doReadTweet()` only — that's
+    // the fast READ of the tweet body itself. The paginated comment refresh
+    // (and any follow-up `syncMissingComments`) runs in an independent
+    // coroutine that may keep working after the spinner is gone; new
+    // comments appear at the top via `_comments` updates.
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
@@ -214,28 +217,25 @@ fun TweetDetailScreen(
                 isRefreshingAtTop = true
                 val started = System.currentTimeMillis()
                 try {
-                    withContext(Dispatchers.IO) {
-                        val tweetJob = launch { viewModel.doReadTweet() }
-                        val commentsJob = launch {
-                            viewModel.refreshCommentsPaginated()
-                            lastLoadedPage = 0
-                            shouldStopPagination = false
-                        }
-                        tweetJob.join()
-                        commentsJob.join()
-
-                        val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
-                        if (hostIds.size >= 2 && hostIds[0] != hostIds[1] &&
-                            viewModel.failedCommentIds.value.isNotEmpty()
-                        ) {
-                            launch { viewModel.syncMissingComments() }
-                        }
-                    }
-                    // Keep the spinner on screen for at least 0.5s (matches iOS).
+                    withContext(Dispatchers.IO) { viewModel.doReadTweet() }
                     val elapsed = System.currentTimeMillis() - started
                     if (elapsed < 500) delay(500 - elapsed)
                 } finally {
                     isRefreshingAtTop = false
+                }
+            }
+            // Background comment refresh + optional sync — outlives the spinner.
+            coroutineScope.launch {
+                withContext(Dispatchers.IO) {
+                    viewModel.refreshCommentsPaginated()
+                    lastLoadedPage = 0
+                    shouldStopPagination = false
+                    val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
+                    if (hostIds.size >= 2 && hostIds[0] != hostIds[1] &&
+                        viewModel.failedCommentIds.value.isNotEmpty()
+                    ) {
+                        viewModel.syncMissingComments()
+                    }
                 }
             }
         }
@@ -291,52 +291,83 @@ fun TweetDetailScreen(
     // Track last pagination attempt to prevent rapid repeated calls
     var lastPaginationAttempt by remember { mutableLongStateOf(-1L) }
 
-    // Brief "No more comments" label, mirrors iOS CommentListView.showNoMoreComments.
-    // Flashes for ~2s when the user reaches the bottom with nothing more to load.
+    // Brief "No more comments" label. Driven from inside the load-more
+    // pagination effect below — only flashes after a user-driven fetch
+    // returned zero new comments. The hasUserScrolled gate keeps the label
+    // from appearing on open when the auto-pagination probe (triggered
+    // because the entire short comment list is already visible) comes back
+    // empty.
     var showNoMoreComments by remember { mutableStateOf(false) }
+    var hasUserScrolled by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
-        if (isAtBottom && shouldStopPagination && comments.isNotEmpty() && !showNoMoreComments) {
-            showNoMoreComments = true
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { inProgress -> if (inProgress) hasUserScrolled = true }
+    }
+
+    LaunchedEffect(showNoMoreComments) {
+        if (showNoMoreComments) {
             delay(2000)
             showNoMoreComments = false
+            // Allow the user to retry: other users may post new comments at any
+            // time, so "no more" is not a permanent state. Clearing the flag
+            // here means the next bottom-reach (after scrolling up and back)
+            // will fire another load-more, throttled to once per second.
+            shouldStopPagination = false
         }
     }
 
-    // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
-    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
-        // CRITICAL: Don't attempt pagination if we've confirmed there are no comments
+    // Infinite scroll for comments. Gated on `hasUserScrolled` so the auto
+    // load-more probe never fires on detail-view open — otherwise a short
+    // comment list (where the bottom is already in view) would silently
+    // exhaust pagination before the user ever interacts, leaving subsequent
+    // real scrolls with no spinner / no "no more" feedback.
+    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty(), hasUserScrolled) {
         if (shouldStopPagination || (comments.isEmpty() && hasLoadedPage0)) {
             return@LaunchedEffect
         }
-        
+
         val now = System.currentTimeMillis()
-        // Add throttling: don't attempt pagination more than once per second
-        // Only load if we're at bottom, have comments, and haven't stopped pagination
-        if (isAtBottom && !isRefreshingAtBottom && !isInitialLoading && hasLoadedPage0 && 
-            !shouldStopPagination && comments.isNotEmpty() && 
+        if (isAtBottom && hasUserScrolled && !isRefreshingAtBottom && !isInitialLoading &&
+            hasLoadedPage0 && !shouldStopPagination && comments.isNotEmpty() &&
             (now - lastPaginationAttempt) > 1000L) {
-            
+
             lastPaginationAttempt = now
             coroutineScope.launch {
                 isRefreshingAtBottom = true
-                try {
+                val started = System.currentTimeMillis()
+                val newCommentsCount = try {
+                    // Yield one frame so the spinner item is composed into the
+                    // LazyColumn before we scroll to it — otherwise the layout
+                    // hasn't seen the new item yet.
+                    withFrameNanos { }
+                    val targetIndex = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                    runCatching { listState.animateScrollToItem(targetIndex) }
+
                     withContext(Dispatchers.IO) {
                         val nextPage = lastLoadedPage + 1
-                        val newCommentsCount = viewModel.loadComments(tweet, nextPage)
-                        
-                        if (newCommentsCount == 0) {
-                            // No new comments from this page, stop pagination
-                            shouldStopPagination = true
-                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
-                        } else {
-                            // Got new comments, continue pagination
+                        val count = viewModel.loadComments(tweet, nextPage)
+                        if (count > 0) {
                             lastLoadedPage = nextPage
-                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned $newCommentsCount comments, continuing pagination")
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned $count comments, continuing pagination")
+                        } else {
+                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
                         }
+                        count
                     }
                 } finally {
+                    // Keep the spinner on screen for at least 500ms so a fast
+                    // network doesn't render it as a one-frame flash. Then drop
+                    // it before deciding whether to surface the "no more" label.
+                    val elapsed = System.currentTimeMillis() - started
+                    if (elapsed < 500) delay(500 - elapsed)
                     isRefreshingAtBottom = false
+                }
+                if (newCommentsCount == 0) {
+                    shouldStopPagination = true
+                    if (hasUserScrolled) {
+                        showNoMoreComments = true
+                    }
                 }
             }
         }
@@ -609,26 +640,19 @@ fun TweetDetailScreen(
                         }
                     }
 
-                    // Show bottom pagination spinner with inline label (mirrors iOS).
+                    // Show bottom pagination spinner.
                     if (isRefreshingAtBottom) {
                         item {
-                            Row(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
+                                contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     color = MaterialTheme.colorScheme.primary,
                                     strokeWidth = 2.5.dp
-                                )
-                                Text(
-                                    text = stringResource(R.string.loading_more_comments),
-                                    modifier = Modifier.padding(start = 10.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
