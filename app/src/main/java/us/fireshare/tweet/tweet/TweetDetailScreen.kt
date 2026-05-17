@@ -317,6 +317,7 @@ fun TweetDetailScreen(
             // Refresh immediately when screen is opened
             withContext(Dispatchers.IO) {
                 viewModel.refreshTweetAndOriginal()
+                viewModel.loadComments(tweet, 0)
                 Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
             }
             // Then refresh periodically every 5 minutes
