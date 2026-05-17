@@ -3326,7 +3326,33 @@ object HproseInstance {
             }
             val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
 
-            response?.mapNotNull { tweetJson -> tweetJson?.let { Tweet.from(it) } }
+            val result = mutableListOf<Tweet>()
+            response?.forEach { tweetJson ->
+                if (tweetJson == null) return@forEach
+                try {
+                    result.add(Tweet.from(tweetJson))
+                } catch (e: Exception) {
+                    val commentId = tweetJson["mid"] as? String ?: return@forEach
+                    val authorHostId = tweet.author?.hostIds?.firstOrNull() ?: return@forEach
+                    runCatching {
+                        authorService.runMApp<Any>("node_update_mid_by_score", mapOf(
+                            "aid" to appId,
+                            "ver" to "last",
+                            "version" to "v2",
+                            "hostid" to authorHostId,
+                            "userid" to tweet.authorId,
+                            "mid" to commentId
+                        ))
+                    }
+                    val retried = fetchTweet(commentId, tweet.authorId)
+                    if (retried != null) {
+                        result.add(retried)
+                    } else {
+                        BlackList.recordFailure(commentId)
+                    }
+                }
+            }
+            result
         } catch (e: Exception) {
             Timber.tag("getComments()").e(e)
             null
