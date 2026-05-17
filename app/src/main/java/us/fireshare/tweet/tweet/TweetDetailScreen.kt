@@ -8,8 +8,10 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -130,6 +132,10 @@ fun TweetDetailScreen(
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var isInitialLoading by remember { mutableStateOf(true) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
+    // Track if we've loaded page 0 to prevent infinite reloads
+    var hasLoadedPage0 by remember { mutableStateOf(false) }
+    // Track if we should stop pagination (when empty page is returned)
+    var shouldStopPagination by remember { mutableStateOf(false) }
     
     // Prevent double-exit when back button is tapped multiple times
     var isNavigatingBack by remember { mutableStateOf(false) }
@@ -198,17 +204,36 @@ fun TweetDetailScreen(
         }
     }
 
-    // Pull-to-refresh state
+    // Pull-to-refresh: READ tweet + paginated comment read concurrently. If the
+    // author's read node differs from their write node, also fire background
+    // sync for any failed comments. Mirrors iOS `refreshTweetAndComments`.
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
             coroutineScope.launch {
                 isRefreshingAtTop = true
+                val started = System.currentTimeMillis()
                 try {
                     withContext(Dispatchers.IO) {
-                        viewModel.loadComments(tweet, 0)
-                        lastLoadedPage = 0
+                        val tweetJob = launch { viewModel.doReadTweet() }
+                        val commentsJob = launch {
+                            viewModel.refreshCommentsPaginated()
+                            lastLoadedPage = 0
+                            shouldStopPagination = false
+                        }
+                        tweetJob.join()
+                        commentsJob.join()
+
+                        val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
+                        if (hostIds.size >= 2 && hostIds[0] != hostIds[1] &&
+                            viewModel.failedCommentIds.value.isNotEmpty()
+                        ) {
+                            launch { viewModel.syncMissingComments() }
+                        }
                     }
+                    // Keep the spinner on screen for at least 0.5s (matches iOS).
+                    val elapsed = System.currentTimeMillis() - started
+                    if (elapsed < 500) delay(500 - elapsed)
                 } finally {
                     isRefreshingAtTop = false
                 }
@@ -245,11 +270,6 @@ fun TweetDetailScreen(
             }
     }
 
-    // Track if we've loaded page 0 to prevent infinite reloads
-    var hasLoadedPage0 by remember { mutableStateOf(false) }
-    // Track if we should stop pagination (when empty page is returned)
-    var shouldStopPagination by remember { mutableStateOf(false) }
-
     // Initial comment load when tweet is available - only load once per tweet
     LaunchedEffect(tweet.mid) {
         if (tweet.mid != null && !hasLoadedPage0) {
@@ -270,6 +290,18 @@ fun TweetDetailScreen(
 
     // Track last pagination attempt to prevent rapid repeated calls
     var lastPaginationAttempt by remember { mutableLongStateOf(-1L) }
+
+    // Brief "No more comments" label, mirrors iOS CommentListView.showNoMoreComments.
+    // Flashes for ~2s when the user reaches the bottom with nothing more to load.
+    var showNoMoreComments by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
+        if (isAtBottom && shouldStopPagination && comments.isNotEmpty() && !showNoMoreComments) {
+            showNoMoreComments = true
+            delay(2000)
+            showNoMoreComments = false
+        }
+    }
 
     // Infinite scroll for comments - only trigger if we have comments and haven't stopped pagination
     LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty()) {
@@ -310,31 +342,37 @@ fun TweetDetailScreen(
         }
     }
 
-    // Refresh handler: refresh immediately when opened, then every 5 minutes
-    // This LaunchedEffect will be automatically cancelled when the screen is disposed
+    // On open: READ tweet (always). When the author's read node differs from
+    // their write node, also fire SYNC (refresh_tweet) and drain any failed
+    // comment ids. Repeat the SYNC step every 5 minutes (gated by the same
+    // hostIds check, matching iOS). Comments are loaded once by the
+    // LaunchedEffect(tweet.mid) block above — no duplicate page-0 fetch.
     LaunchedEffect(Unit) {
         try {
-            // Refresh immediately when screen is opened
             withContext(Dispatchers.IO) {
-                viewModel.refreshTweetAndOriginal()
-                viewModel.loadComments(tweet, 0)
-                Timber.tag("TweetDetailScreen").d("Initial refresh completed on screen open")
+                viewModel.doReadTweet()
+                val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
+                if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
+                    launch { viewModel.doResyncTweet() }
+                    launch { viewModel.syncMissingComments() }
+                }
+                Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
             }
-            // Then refresh periodically every 5 minutes
-            // The delay() function will throw CancellationException when the coroutine is cancelled
             while (isActive) {
                 delay(5 * 60 * 1000)
-                if (isActive) {
-                    withContext(Dispatchers.IO) {
-                        viewModel.refreshTweetAndOriginal()
-                        Timber.tag("TweetDetailScreen").d("Periodic refresh completed")
+                if (!isActive) break
+                withContext(Dispatchers.IO) {
+                    val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
+                    if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
+                        viewModel.doResyncTweet()
+                        viewModel.syncMissingComments()
+                        Timber.tag("TweetDetailScreen").d("Periodic SYNC completed")
                     }
                 }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
-            // Expected when the screen is disposed - cleanup is automatic
             Timber.tag("TweetDetailScreen").d("Periodic refresh cancelled (screen disposed)")
-            throw e // Re-throw to properly complete cancellation
+            throw e
         }
     }
 
@@ -571,19 +609,45 @@ fun TweetDetailScreen(
                         }
                     }
 
-                    // Show bottom pagination spinner
-                    // Use fixed-height container to prevent layout shifts
+                    // Show bottom pagination spinner with inline label (mirrors iOS).
                     if (isRefreshingAtBottom) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.5.dp
+                                )
+                                Text(
+                                    text = stringResource(R.string.loading_more_comments),
+                                    modifier = Modifier.padding(start = 10.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // "No more comments" flash — shown briefly when at the bottom with
+                    // nothing more to load (mirrors iOS CommentListView.showNoMoreComments).
+                    if (showNoMoreComments && !isRefreshingAtBottom) {
                         item {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(vertical = 24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 4.dp
+                                Text(
+                                    text = stringResource(R.string.no_more_comments),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }

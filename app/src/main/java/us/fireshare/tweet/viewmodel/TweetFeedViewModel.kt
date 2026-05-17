@@ -931,6 +931,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             }
                         }
 
+                        // Feed list doesn't surface recovered comments — TweetViewModel
+                        // (detail screen) handles them. No-op here for exhaustiveness.
+                        is TweetEvent.CommentSynced -> Unit
+
                         is TweetEvent.TweetLiked -> {
                             // Update like status and count (for other users' actions)
                             withContext(Main) {

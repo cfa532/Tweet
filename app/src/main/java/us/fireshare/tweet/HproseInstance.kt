@@ -2298,6 +2298,79 @@ object HproseInstance {
      * @return The refreshed tweet object, or null if not found
      */
     @Suppress("SENSELESS_COMPARISON")
+    /**
+     * READ a tweet from the author's read node (hostIds[1]).
+     *
+     * Mirrors iOS `HproseInstance.getTweet(bypassCache:)`. Used by the detail-view
+     * READ path on screen-open and pull-to-refresh. Does NOT trigger cross-node
+     * `refresh_tweet` / `node_update_mid_by_score` work — use `refreshTweet()`
+     * for that (the SYNC path).
+     *
+     * - When `bypassCache` is false and a cached tweet exists, the cached value
+     *   is returned immediately.
+     * - When `bypassCache` is true (the detail-view case), always hits the
+     *   server. Failures are recorded to BlackList, successes saved to the cache.
+     */
+    suspend fun getTweet(
+        tweetId: MimeiId?,
+        authorId: MimeiId?,
+        bypassCache: Boolean = false
+    ): Tweet? {
+        if (!isOnline.value) {
+            Timber.tag("getTweet").d("Offline: skipping")
+            return null
+        }
+        if (tweetId == null || authorId == null) return null
+
+        if (BlackList.isBlacklisted(tweetId)) {
+            Timber.tag("getTweet").d("Tweet $tweetId blacklisted, returning cached")
+            return TweetCacheManager.getCachedTweet(tweetId)
+        }
+
+        if (!bypassCache) {
+            TweetCacheManager.getCachedTweet(tweetId)?.let { cached ->
+                if (cached.author == null) {
+                    cached.author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
+                }
+                return cached
+            }
+        }
+
+        return try {
+            val author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
+            val authorService = author?.hproseService
+            if (authorService == null) {
+                Timber.tag("getTweet").w("No author service for tweetId=$tweetId, authorId=$authorId")
+                return null
+            }
+
+            val params = mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "tweetid" to tweetId,
+                "appuserid" to appUser.mid
+            )
+            val raw = authorService.runMApp<Any>("get_tweet", params)
+            val data = unwrapV2Response<Map<String, Any>>(raw)
+            if (data != null) {
+                BlackList.recordSuccess(tweetId)
+                val tweet = Tweet.from(data)
+                tweet.author = author
+                TweetCacheManager.saveTweet(tweet, authorId)
+                tweet
+            } else {
+                Timber.tag("getTweet").d("Tweet not found: $tweetId")
+                BlackList.recordFailure(tweetId)
+                null
+            }
+        } catch (e: Exception) {
+            BlackList.recordFailure(tweetId)
+            Timber.tag("getTweet").e(e, "Error fetching tweet $tweetId")
+            null
+        }
+    }
+
     suspend fun refreshTweet(
         tweetId: MimeiId?,
         authorId: MimeiId?
@@ -3268,38 +3341,50 @@ object HproseInstance {
      * Load all comments of a tweet.
      * @param pageNumber
      * */
-    suspend fun getComments(tweet: Tweet, pageNumber: Int = 0, pageSize: Int = 5): List<Tweet>? {
+    /**
+     * Page-by-page comment fetch that mirrors iOS `fetchComments`.
+     *
+     * Returns `Pair(comments, failedIds)`:
+     * - `comments` preserves nil positions for failed parses (so callers can show
+     *   placeholders if they want); each successful entry has its author resolved.
+     * - `failedIds` lists the comment IDs whose payload failed to parse. The
+     *   caller is responsible for triggering `syncComment()` on those, ideally
+     *   batched via `syncMissingComments()` only when the read node differs from
+     *   the write node (matches iOS gating).
+     *
+     * Unlike the previous `getComments`, this does NOT fire an inline
+     * `node_update_mid_by_score` coroutine per failure — that lives in
+     * `syncComment()` so callers can decide when (and whether) to invoke it.
+     */
+    suspend fun fetchComments(
+        tweet: Tweet,
+        pageNumber: Int = 0,
+        pageSize: Int = 20
+    ): Pair<List<Tweet?>, List<String>> {
         if (!isOnline.value) {
-            Timber.tag("getComments").d("Offline: skipping")
-            return null
+            Timber.tag("fetchComments").d("Offline: skipping")
+            return Pair(emptyList(), emptyList())
         }
         return try {
-            // CRITICAL: Use the tweet's author's baseUrl to fetch comments
-            // Comments are stored on the tweet author's node, not the appUser's node
-            // Fetch author if not already loaded
             if (tweet.author == null) {
-                // For appUser's tweets, use appUser directly
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
                 } else {
-                    // Check cache first before fetching from server
                     tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: fetchUser(tweet.authorId)
                 }
             }
-            
-            // Ensure author has a baseUrl (hproseService requires baseUrl)
             val author = tweet.author
             if (author == null || author.baseUrl.isNullOrEmpty()) {
-                // Fetch author to ensure we have their baseUrl
-                val fetchedAuthor = fetchUser(tweet.authorId)
-                if (fetchedAuthor == null || fetchedAuthor.baseUrl.isNullOrEmpty()) {
-                    Timber.tag("getComments()").e("Cannot fetch author or author has no baseUrl for tweet ${tweet.mid}")
-                    return null
+                val fetched = fetchUser(tweet.authorId)
+                if (fetched == null || fetched.baseUrl.isNullOrEmpty()) {
+                    Timber.tag("fetchComments").e("Cannot resolve author for tweet ${tweet.mid}")
+                    return Pair(emptyList(), emptyList())
                 }
-                tweet.author = fetchedAuthor
+                tweet.author = fetched
             }
-            
-            val entry = "get_comments"
+            val authorService = tweet.author?.hproseService
+                ?: return Pair(emptyList(), emptyList())
+
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
@@ -3309,52 +3394,96 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize
             )
-            
-            // Use author's hproseService - comments are on author's node
-            val authorService = tweet.author?.hproseService
-            if (authorService == null) {
-                Timber.tag("getComments()").e("Author's hproseService is null. baseUrl: ${tweet.author?.baseUrl} for tweet ${tweet.mid}")
-                return null
-            }
-            
-            Timber.tag("getComments()").d("Using author's baseUrl (${tweet.author?.baseUrl}) for tweet ${tweet.mid}")
-            val rawResponse = try {
-                authorService.runMApp<Any>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("getComments").e(e, "Exception calling runMApp for getComments, tweetId: ${tweet.mid}")
-                throw e
-            }
-            val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
+            val raw = authorService.runMApp<Any>("get_comments", params)
+            val response = unwrapV2Response<List<Map<String, Any>?>>(raw) ?: emptyList()
 
-            val result = mutableListOf<Tweet>()
-            response?.forEach { tweetJson ->
-                if (tweetJson == null) return@forEach
+            val comments = mutableListOf<Tweet?>()
+            val failedIds = mutableListOf<String>()
+            for (entry in response) {
+                if (entry == null) {
+                    comments.add(null)
+                    continue
+                }
                 try {
-                    result.add(Tweet.from(tweetJson))
+                    val comment = Tweet.from(entry)
+                    val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
+                    comment.author = cachedAuthor ?: fetchUser(comment.authorId)
+                    comments.add(comment)
                 } catch (e: Exception) {
-                    val commentId = tweetJson["mid"] as? String ?: return@forEach
-                    val authorHostId = tweet.author?.hostIds?.firstOrNull() ?: return@forEach
-                    runCatching {
-                        authorService.runMApp<Any>("node_update_mid_by_score", mapOf(
-                            "aid" to appId,
-                            "ver" to "last",
-                            "version" to "v2",
-                            "hostid" to authorHostId,
-                            "userid" to tweet.authorId,
-                            "mid" to commentId
-                        ))
-                    }
-                    val retried = fetchTweet(commentId, tweet.authorId)
-                    if (retried != null) {
-                        result.add(retried)
-                    } else {
-                        BlackList.recordFailure(commentId)
-                    }
+                    Timber.tag("fetchComments").w(e, "Failed to parse comment in tweet ${tweet.mid}")
+                    (entry["mid"] as? String)?.let { failedIds.add(it) }
+                    comments.add(null)
                 }
             }
-            result
+            Pair(comments, failedIds)
         } catch (e: Exception) {
-            Timber.tag("getComments()").e(e)
+            Timber.tag("fetchComments").e(e, "Error fetching comments for tweet ${tweet.mid}")
+            Pair(emptyList(), emptyList())
+        }
+    }
+
+    /**
+     * SYNC a single comment from the author's home node (hostIds[0]) to the
+     * read node (hostIds[1]), then retry fetching it. Mirrors iOS
+     * `HproseInstance.syncComment`.
+     *
+     * Returns the comment if the retry succeeds. On failure, records the
+     * comment ID in BlackList (eventually blacklisted after repeated failures
+     * across sessions). Callers typically post a `TweetEvent.CommentSynced`
+     * event on success so detail views can append the recovered comment.
+     */
+    suspend fun syncComment(commentId: String, parentTweet: Tweet): Tweet? {
+        if (!isOnline.value) return null
+        val author = parentTweet.author
+            ?: TweetCacheManager.getCachedUser(parentTweet.authorId)
+            ?: fetchUser(parentTweet.authorId)
+            ?: return null
+        val authorService = author.hproseService ?: return null
+        val authorHostId = author.hostIds?.firstOrNull() ?: return null
+
+        return try {
+            runCatching {
+                authorService.runMApp<Any>(
+                    "node_update_mid_by_score",
+                    mapOf(
+                        "aid" to appId,
+                        "ver" to "last",
+                        "version" to "v2",
+                        "hostid" to authorHostId,
+                        "userid" to parentTweet.authorId,
+                        "mid" to commentId
+                    )
+                )
+            }
+            val rawRetry = runCatching {
+                authorService.runMApp<Any>(
+                    "get_tweet",
+                    mapOf(
+                        "aid" to appId,
+                        "ver" to "last",
+                        "version" to "v2",
+                        "tweetid" to commentId,
+                        "appuserid" to appUser.mid
+                    )
+                )
+            }.getOrNull()
+            val retried = runCatching {
+                unwrapV2Response<Map<String, Any>>(rawRetry)?.let { Tweet.from(it) }
+            }.getOrNull()
+            if (retried != null) {
+                BlackList.recordSuccess(commentId)
+                if (retried.author == null) {
+                    retried.author = TweetCacheManager.getCachedUser(retried.authorId)
+                        ?: fetchUser(retried.authorId)
+                }
+                retried
+            } else {
+                BlackList.recordFailure(commentId)
+                null
+            }
+        } catch (e: Exception) {
+            Timber.tag("syncComment").w(e, "Failed to sync comment $commentId")
+            BlackList.recordFailure(commentId)
             null
         }
     }

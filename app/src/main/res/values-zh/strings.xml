@@ -109,6 +109,8 @@
     <string name="server_unreachable">無法連接到伺服器。請稍後重試。</string>
     <string name="connection_error">連接錯誤。請重試。</string>
     <string name="no_more_tweets">沒有更多推文了</string>
+    <string name="no_more_comments">沒有更多評論</string>
+    <string name="loading_more_comments">正在載入更多評論…</string>
     <string name="no_comments_yet">還沒有評論</string>
     <string name="account">帳號</string>
     <string name="logout_confirmation">確定要登出嗎？此操作無法撤銷。</string>

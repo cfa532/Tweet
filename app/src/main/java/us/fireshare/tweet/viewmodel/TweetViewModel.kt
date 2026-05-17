@@ -23,6 +23,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +36,7 @@ import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -70,6 +73,13 @@ class TweetViewModel @AssistedInject constructor(
 
     private val _comments = MutableStateFlow<List<Tweet>>(emptyList())
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
+
+    // Comment IDs whose payload failed to parse on the read node. Mirrors iOS
+    // `failedCommentIds` — populated by `loadComments` / `refreshCommentsPaginated`
+    // and drained by `syncMissingComments`. Only relevant when the author's
+    // hostIds[0] != hostIds[1]; otherwise sync would be a no-op.
+    private val _failedCommentIds = MutableStateFlow<Set<String>>(emptySet())
+    val failedCommentIds: StateFlow<Set<String>> get() = _failedCommentIds.asStateFlow()
 
     private val _mediaGridVideoIndex = MutableStateFlow(-1)
     val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
@@ -182,67 +192,27 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
                 
-                // Step 4: Refresh tweet from server (now that we have author with baseUrl)
+                // Step 4: Read tweet from server (now that we have author with baseUrl).
+                // Deeplinks land here without a populated wrapper — READ via get_tweet
+                // is enough; cross-node sync is handled by the detail screen on appear.
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
-                    HproseInstance.refreshTweet(tweet.mid, tweet.authorId)?.let { refreshedTweet ->
-                        _tweetState.value = refreshedTweet
-                        _attachments.value = refreshedTweet.attachments
+                    HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)?.let { fetched ->
+                        _tweetState.value = fetched
+                        _attachments.value = fetched.attachments
                     } ?: run {
-                        // If refresh failed but we have author, at least show tweet with author
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
                             _tweetState.value = tweet.copy(author = currentAuthor)
                         }
                     }
                 } else {
-                    // Optionally populate with author if available
                     val currentAuthor = author ?: cachedUser
                     if (currentAuthor != null && tweetState.value.author == null) {
                         _tweetState.value = tweet.copy(author = currentAuthor)
                     }
                 }
             }
-        }
-    }
-
-    /**
-     * Refresh the appropriate tweet based on whether this is a retweet or not
-     */
-    suspend fun refreshTweetAndOriginal() {
-        val currentTweet = tweetState.value
-
-        try {
-            if (currentTweet.originalTweetId != null && currentTweet.originalAuthorId != null) {
-                // Check if this is a pure retweet (no content/attachments) or a quoted tweet (has content/attachments)
-                if (currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()) {
-                    // Pure retweet - refresh the original tweet that the user actually sees
-                    // Since we don't store the original tweet in the ViewModel, we trigger a reload
-                    // by updating the tweet state, which will cause the UI to reload the original tweet
-                    _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
-                } else {
-                    // Quoted tweet - refresh both the quoting tweet and the original tweet
-                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
-                        ?.let { refreshedTweet ->
-                            // Only update if the refreshed tweet has valid content
-                            if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
-                                _tweetState.value = refreshedTweet
-                            }
-                        }
-                }
-            } else {
-                // This is an original tweet - refresh it directly
-                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
-                    ?.let { refreshedTweet ->
-                        // Only update if the refreshed tweet has valid content
-                        if (refreshedTweet.content != null || !refreshedTweet.attachments.isNullOrEmpty()) {
-                            _tweetState.value = refreshedTweet
-                        }
-                    }
-            }
-        } catch (e: Exception) {
-            // Log error but don't update state to prevent content from disappearing
-            Timber.tag("TweetViewModel").e(e, "Error refreshing tweet ${currentTweet.mid}")
         }
     }
 
@@ -254,35 +224,216 @@ class TweetViewModel @AssistedInject constructor(
         isCheckedToTweet.value = value
     }
 
-    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0): Int {
-        val newComments = HproseInstance.getComments(tweet, pageNumber.toInt())?.map {
-            // Check for cached author first (expired or not) and use it if available
-            // This prevents unnecessary server updates when TweetDetailScreen opens
-            val cachedAuthor = TweetCacheManager.getCachedUser(it.authorId)
-            if (cachedAuthor != null) {
-                it.author = cachedAuthor
-            } else {
-                // Only fetch from server if no cached author exists
-                it.author = HproseInstance.fetchUser(it.authorId)
-            }
-            it
-        } ?: emptyList()
+    /**
+     * Fetch one page of comments. Tracks failed parses in `_failedCommentIds`
+     * (drained later by `syncMissingComments`) and merges successful comments
+     * into `_comments`. Mirrors iOS `CommentListView` page-load semantics.
+     *
+     * Returns the count of successfully parsed comments on this page.
+     * The existing screen logic uses `== 0` as "no more comments", matching
+     * the previous `getComments` return contract.
+     */
+    suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0, pageSize: Int = 20): Int {
+        val (fetched, failedIds) = HproseInstance.fetchComments(
+            tweet,
+            pageNumber.toInt(),
+            pageSize
+        )
+        if (failedIds.isNotEmpty()) {
+            _failedCommentIds.update { it + failedIds }
+        }
+        val newComments = fetched.filterNotNull()
 
-        // Always merge new comments with existing ones, keeping newly fetched ones over existing duplicates
         _comments.update { currentComments ->
-            // PERFORMANCE FIX: Use Set for O(n) lookup instead of O(n²)
             val newCommentIds = newComments.map { it.mid }.toSet()
             val mergedComments = newComments + currentComments.filterNot { it.mid in newCommentIds }
             val finalComments = mergedComments.sortedByDescending { it.timestamp }
-            // Only log when there are actually new comments or when comments count changes significantly
             if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
-                Timber.tag("TweetViewModel").d("Merged to ${finalComments.size} total comments (${newComments.size} new)")
+                Timber.tag("TweetViewModel").d(
+                    "Merged to ${finalComments.size} total comments (${newComments.size} new, ${failedIds.size} failed)"
+                )
             }
             finalComments
         }
-        
-        // Return the number of new comments fetched from this page
+
         return newComments.size
+    }
+
+    /**
+     * READ path for the detail view (mirrors iOS `doReadTweet`).
+     *
+     * Uses `get_tweet` with `bypassCache=true` on the author's read node.
+     * Never triggers cross-node `refresh_tweet`. Safe to call on screen-open
+     * and pull-to-refresh; pair with `doResyncTweet` only when
+     * `hostIds[0] != hostIds[1]`.
+     *
+     * For a pure retweet (no content + no attachments) refreshes the original
+     * tweet's cache so the embedded original sub-view picks it up. For a quoted
+     * retweet refreshes both the wrapper and the original in parallel.
+     */
+    suspend fun doReadTweet() {
+        val currentTweet = tweetState.value
+        val originalId = currentTweet.originalTweetId
+        val originalAuthor = currentTweet.originalAuthorId
+
+        try {
+            if (originalId != null && originalAuthor != null) {
+                val isPureRetweet =
+                    currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()
+                if (isPureRetweet) {
+                    HproseInstance.getTweet(originalId, originalAuthor, bypassCache = true)
+                    // Bump timestamp so observers re-resolve the original via cache.
+                    _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
+                } else {
+                    coroutineScope {
+                        val wrapperJob = async {
+                            HproseInstance.getTweet(
+                                currentTweet.mid,
+                                currentTweet.authorId,
+                                bypassCache = true
+                            )
+                        }
+                        val originalJob = async {
+                            HproseInstance.getTweet(originalId, originalAuthor, bypassCache = true)
+                        }
+                        wrapperJob.await()?.let { _tweetState.value = it }
+                        originalJob.await()
+                    }
+                }
+            } else {
+                HproseInstance.getTweet(
+                    currentTweet.mid,
+                    currentTweet.authorId,
+                    bypassCache = true
+                )?.let { _tweetState.value = it }
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetViewModel").e(e, "doReadTweet failed for ${currentTweet.mid}")
+        }
+    }
+
+    /**
+     * SYNC path for the detail view (mirrors iOS `doResyncTweet`).
+     *
+     * Calls `refresh_tweet` which the server uses to pull the latest version
+     * across nodes via `node_update_mid_by_score`. Heavier than `doReadTweet`,
+     * so only call when the author's `hostIds[0] != hostIds[1]` (on screen
+     * appear and the 5-minute tick).
+     */
+    suspend fun doResyncTweet() {
+        val currentTweet = tweetState.value
+        val originalId = currentTweet.originalTweetId
+        val originalAuthor = currentTweet.originalAuthorId
+
+        try {
+            if (originalId != null && originalAuthor != null) {
+                val isPureRetweet =
+                    currentTweet.content.isNullOrEmpty() && currentTweet.attachments.isNullOrEmpty()
+                if (isPureRetweet) {
+                    HproseInstance.refreshTweet(originalId, originalAuthor)
+                    _tweetState.value = currentTweet.copy(timestamp = currentTweet.timestamp)
+                } else {
+                    coroutineScope {
+                        val wrapperJob = async {
+                            HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
+                        }
+                        val originalJob = async {
+                            HproseInstance.refreshTweet(originalId, originalAuthor)
+                        }
+                        wrapperJob.await()?.let { refreshed ->
+                            if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
+                                _tweetState.value = refreshed
+                            }
+                        }
+                        originalJob.await()
+                    }
+                }
+            } else {
+                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
+                    if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
+                        _tweetState.value = refreshed
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetViewModel").e(e, "doResyncTweet failed for ${currentTweet.mid}")
+        }
+    }
+
+    /**
+     * Pull-to-refresh comment read (mirrors iOS `refreshComments`).
+     *
+     * Loops page-by-page on the read node until a page contains a comment we
+     * already have, or until the page is short/empty. New comments are inserted
+     * at the top. This catches the case where more than one page of new
+     * comments accrued since the last load — the previous Android
+     * implementation only re-fetched page 0 and would silently drop the
+     * remainder.
+     *
+     * Returns the number of new comments inserted.
+     */
+    suspend fun refreshCommentsPaginated(pageSize: Int = 20): Int {
+        val parent = tweetState.value
+        val all = mutableListOf<Tweet>()
+        var page = 0
+        var overlap = false
+        try {
+            while (!overlap) {
+                val (fetched, failedIds) = HproseInstance.fetchComments(parent, page, pageSize)
+                if (failedIds.isNotEmpty()) _failedCommentIds.update { it + failedIds }
+                val valid = fetched.filterNotNull()
+                if (valid.isEmpty()) break
+
+                val existingIds = _comments.value.map { it.mid }.toSet()
+                val newHere = valid.filter { it.mid !in existingIds }
+                if (newHere.size < valid.size) overlap = true
+                all += newHere
+                if (fetched.size < pageSize) break
+                page++
+            }
+            if (all.isNotEmpty()) {
+                _comments.update { current ->
+                    val newIds = all.map { it.mid }.toSet()
+                    (all + current.filterNot { it.mid in newIds })
+                        .sortedByDescending { it.timestamp }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("TweetViewModel").e(e, "refreshCommentsPaginated failed")
+        }
+        return all.size
+    }
+
+    /**
+     * Drain `failedCommentIds` by syncing each via the author's home node
+     * (mirrors iOS `syncMissingComments`). Posts `TweetEvent.CommentSynced`
+     * for each recovered comment so observing views can append it.
+     *
+     * Skips entries already blacklisted (avoids hammering known-bad mids).
+     * Safe to call concurrently with other reads — `syncComment` is
+     * idempotent on the server side.
+     */
+    suspend fun syncMissingComments() {
+        val parent = tweetState.value
+        val pending = _failedCommentIds.value.toList()
+        if (pending.isEmpty()) return
+
+        for (commentId in pending) {
+            if (BlackList.isBlacklisted(commentId)) {
+                _failedCommentIds.update { it - commentId }
+                continue
+            }
+            val recovered = HproseInstance.syncComment(commentId, parent)
+            if (recovered != null) {
+                _failedCommentIds.update { it - commentId }
+                // Avoid posting if the comment already arrived via another path.
+                if (_comments.value.none { it.mid == recovered.mid }) {
+                    TweetNotificationCenter.post(
+                        TweetEvent.CommentSynced(recovered, parent.mid)
+                    )
+                }
+            }
+        }
     }
 
     suspend fun delComment(commentId: MimeiId) {
@@ -974,6 +1125,16 @@ class TweetViewModel @AssistedInject constructor(
                                 }
                             }
                             Timber.tag("TweetViewModel").e("Comment upload failed: ${event.error}")
+                        }
+
+                        is TweetEvent.CommentSynced -> {
+                            if (event.parentTweetId == tweetState.value.mid) {
+                                _comments.update { currentComments ->
+                                    (listOf(event.comment) + currentComments)
+                                        .distinctBy { it.mid }
+                                        .sortedByDescending { it.timestamp }
+                                }
+                            }
                         }
 
                         is TweetEvent.CommentDeleted -> {

@@ -23,6 +23,7 @@ sealed class TweetEvent {
     data class CommentUploaded(val comment: Tweet, val parentTweet: Tweet) : TweetEvent()
     data class CommentUploadFailed(val error: String) : TweetEvent()
     data class CommentDeleted(val commentId: String, val parentTweetId: String) : TweetEvent()
+    data class CommentSynced(val comment: Tweet, val parentTweetId: String) : TweetEvent()
     data class TweetUpdated(val tweet: Tweet) : TweetEvent()
     data class TweetLiked(val tweet: Tweet, val isLiked: Boolean) : TweetEvent()
     data class TweetBookmarked(val tweet: Tweet, val isBookmarked: Boolean) : TweetEvent()
