@@ -3049,9 +3049,11 @@ object HproseInstance {
             "authorid" to tweet.authorId,
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
+        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
+        tweet.author?.resolveWritableUrl()
         return try {
-            val authorClient = tweet.author?.hproseService
-                ?: throw Exception("Author client not available for toggleFavorite")
+            val authorClient = tweet.author?.writableClient
+                ?: throw Exception("Author writable client not available for toggleFavorite")
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
@@ -3116,9 +3118,11 @@ object HproseInstance {
             "authorid" to tweet.authorId,
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
+        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
+        tweet.author?.resolveWritableUrl()
         return try {
-            val authorClient = tweet.author?.hproseService
-                ?: throw Exception("Author client not available for toggleBookmark")
+            val authorClient = tweet.author?.writableClient
+                ?: throw Exception("Author writable client not available for toggleBookmark")
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
