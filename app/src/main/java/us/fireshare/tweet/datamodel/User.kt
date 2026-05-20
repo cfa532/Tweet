@@ -14,6 +14,8 @@ import us.fireshare.tweet.network.HproseClientPool
 data class User(
     @Expose var baseUrl: String? = null,
     @Expose var writableUrl: String? = null,
+    // Not @Expose — not persisted; used for 5-minute TTL on the resolved writable URL.
+    var writableUrlResolvedAt: Long? = null,
     @Expose val mid: MimeiId,
     @Expose var name: String? = null,
     @Expose var username: String? = null,
@@ -183,12 +185,13 @@ data class User(
      * Resolve writable URL from hostIds and reset writableClient if needed
      */
     suspend fun resolveWritableUrl(): String? {
-        // If writableUrl is already valid, return it immediately
-        if (!writableUrl.isNullOrEmpty()) {
+        // Return cached URL if it was resolved within the last 5 minutes.
+        val ttlMs = 5 * 60 * 1000L
+        val resolvedAt = writableUrlResolvedAt
+        if (!writableUrl.isNullOrEmpty() && resolvedAt != null &&
+            System.currentTimeMillis() - resolvedAt < ttlMs) {
             return writableUrl
         }
-        
-        // If writableUrl is null or empty, clear writableClient and resolve
         clearWritableClient()
 
         suspend fun tryResolve(): String? {
@@ -251,6 +254,7 @@ data class User(
                 }
 
                 writableUrl = urlString
+                writableUrlResolvedAt = System.currentTimeMillis()
                 return urlString
             } else {
                 Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")

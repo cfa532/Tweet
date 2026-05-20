@@ -4482,12 +4482,11 @@ object HproseInstance {
         
         // Not in cache, perform actual health check
         return try {
-            val response = healthCheckHttpClient.head(url)
-            // Consider 2xx and 3xx responses as healthy
-            val isHealthy = response.status.value in 200..399
-            // Cache the result
-            cacheIPHealth(url, isHealthy)
-            isHealthy
+            healthCheckHttpClient.head(url)
+            // Any HTTP response means the server is reachable — only a network-level
+            // exception (refused, timeout) means it is not. Mirrors TweetWeb probe.
+            cacheIPHealth(url, true)
+            true
         } catch (e: Exception) {
             // Only log at debug level for expected network failures (timeout, unreachable)
             val message = e.message ?: e.toString()

@@ -411,7 +411,8 @@ class MediaUploadService(
                 lastError = "Failed to resolve writableUrl (attempt $attempt/3)"
                 Timber.tag(TAG).w(lastError)
                 if (attempt < 3) {
-                    // Wait a bit before retrying (exponential backoff)
+                    // Invalidate cache so next attempt re-resolves a fresh IP.
+                    appUser.writableUrlResolvedAt = null
                     delay(1000L * attempt)
                 }
             }

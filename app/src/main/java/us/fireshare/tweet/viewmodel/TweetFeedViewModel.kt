@@ -519,7 +519,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * If following failed: Remove tweets that were added.
      * If unfollowing failed: We can't restore removed tweets, so this is a no-op.
      * */
-    suspend fun rollbackFollowingsTweets(userId: MimeiId, attemptedIsFollowing: Boolean) {
+    fun rollbackFollowingsTweets(userId: MimeiId, attemptedIsFollowing: Boolean) {
         if (attemptedIsFollowing) {
             // Following failed - remove tweets that were optimistically added
             _tweets.update { currentTweets ->
