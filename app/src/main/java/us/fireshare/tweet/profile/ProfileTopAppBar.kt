@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
@@ -80,7 +81,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Row(verticalAlignment = Alignment.Top) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     if (showDialog) {
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
@@ -91,15 +92,19 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onClick = { showDialog = true }
                     )
                     Column(
-                        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+                        modifier = Modifier.padding(start = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = user.name ?: "No one",
-                            style = MaterialTheme.typography.titleMedium
+                            fontSize = 15.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "@" + (user.username ?: "NoOne"),
-                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 15.sp,
+                            lineHeight = 16.sp,
                             color = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.padding(start = 0.dp)
                         )
@@ -108,9 +113,10 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
                         Text(
                             text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
-                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 0.dp, top = 2.dp)
+                            modifier = Modifier.padding(start = 0.dp)
                         )
                     }
                 }
