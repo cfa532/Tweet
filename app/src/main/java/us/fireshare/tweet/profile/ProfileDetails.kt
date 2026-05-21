@@ -101,8 +101,8 @@ fun ProfileDetail(
                     .padding(
                         start = 24.dp,
                         end = 20.dp,
-                        top = if (hasProfile) 8.dp else 2.dp,
-                        bottom = 8.dp
+                        top = if (hasProfile) 10.dp else 4.dp,
+                        bottom = 6.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
