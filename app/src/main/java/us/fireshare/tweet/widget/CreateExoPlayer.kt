@@ -12,7 +12,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
@@ -45,15 +44,6 @@ fun createExoPlayer(
     resolvedHlsUrl: String? = null
 ): ExoPlayer {
     val reliabilityMediaId = extractMediaMidFromUrl(url)
-    if ((mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) && reliabilityMediaId != null) {
-        val isBlacklisted = runBlocking(Dispatchers.IO) {
-            HproseInstance.isReliabilityBlacklistedMedia(reliabilityMediaId)
-        }
-        if (isBlacklisted) {
-            Timber.tag("createExoPlayer").d("Skip blacklisted media player creation for $reliabilityMediaId")
-            return ExoPlayer.Builder(context).build()
-        }
-    }
 
     // Create HTTP data source with extended timeouts for network congestion
     val httpDataSourceFactory = DefaultHttpDataSource.Factory()
