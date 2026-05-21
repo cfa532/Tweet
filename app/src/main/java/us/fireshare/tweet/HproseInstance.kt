@@ -2182,7 +2182,7 @@ object HproseInstance {
             return null
         }
         // Check if tweet is blacklisted
-        if (BlackList.isBlacklisted(tweetId)) {
+        if (isReliabilityBlacklistedTweet(tweetId)) {
             Timber.tag("fetchTweet").d("Tweet $tweetId is blacklisted, returning null")
             return null
         }
@@ -2235,7 +2235,7 @@ object HproseInstance {
             val tweetData = unwrapV2Response<Map<String, Any>>(rawResponse)
             tweetData?.let {
                 // Record successful access
-                BlackList.recordSuccess(tweetId)
+                recordReliabilitySuccessTweet(tweetId)
 
                 Tweet.from(it).apply {
                     // Set cached author immediately
@@ -2265,7 +2265,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             // Record failed access
-            BlackList.recordFailure(tweetId)
+            recordReliabilityFailureTweet(tweetId)
 
             Timber.tag("fetchTweet").e("Error fetching tweet: $tweetId, author: $authorId")
             Timber.tag("fetchTweet").e("Exception: $e")
@@ -2324,7 +2324,7 @@ object HproseInstance {
         }
         if (tweetId == null || authorId == null) return null
 
-        if (BlackList.isBlacklisted(tweetId)) {
+        if (isReliabilityBlacklistedTweet(tweetId)) {
             Timber.tag("getTweet").d("Tweet $tweetId blacklisted, returning cached")
             return TweetCacheManager.getCachedTweet(tweetId)
         }
@@ -2356,18 +2356,18 @@ object HproseInstance {
             val raw = authorService.runMApp<Any>("get_tweet", params)
             val data = unwrapV2Response<Map<String, Any>>(raw)
             if (data != null) {
-                BlackList.recordSuccess(tweetId)
+                recordReliabilitySuccessTweet(tweetId)
                 val tweet = Tweet.from(data)
                 tweet.author = author
                 TweetCacheManager.saveTweet(tweet, authorId)
                 tweet
             } else {
                 Timber.tag("getTweet").d("Tweet not found: $tweetId")
-                BlackList.recordFailure(tweetId)
+                recordReliabilityFailureTweet(tweetId)
                 null
             }
         } catch (e: Exception) {
-            BlackList.recordFailure(tweetId)
+            recordReliabilityFailureTweet(tweetId)
             Timber.tag("getTweet").e(e, "Error fetching tweet $tweetId")
             null
         }
@@ -2387,7 +2387,7 @@ object HproseInstance {
         }
 
         // Check if tweet is blacklisted
-        if (BlackList.isBlacklisted(tweetId)) {
+        if (isReliabilityBlacklistedTweet(tweetId)) {
             Timber.tag("refreshTweet").d("Tweet $tweetId is blacklisted, returning null")
             return null
         }
@@ -2440,7 +2440,7 @@ object HproseInstance {
             
             tweetData?.let {
                 // Record successful access
-                BlackList.recordSuccess(tweetId)
+                recordReliabilitySuccessTweet(tweetId)
 
                 val tweet = Tweet.from(it)
                 // Set cached author immediately
@@ -2465,7 +2465,7 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             // Record failed access
-            BlackList.recordFailure(tweetId)
+            recordReliabilityFailureTweet(tweetId)
 
             Timber.tag("refreshTweet").e("Error refreshing tweet: $tweetId, author: $authorId")
             Timber.tag("refreshTweet").e("Exception: $e")
@@ -3593,6 +3593,43 @@ object HproseInstance {
         return null
     }
 
+    // Reliability blacklist typed wrappers (avoid accidental cross-domain usage).
+    suspend fun isReliabilityBlacklistedTweet(tweetId: MimeiId): Boolean {
+        return BlackList.isBlacklisted(tweetId)
+    }
+
+    suspend fun isReliabilityBlacklistedUser(userId: MimeiId): Boolean {
+        return BlackList.isBlacklisted(userId)
+    }
+
+    suspend fun isReliabilityBlacklistedMedia(mediaId: MimeiId): Boolean {
+        return BlackList.isBlacklisted(mediaId)
+    }
+
+    suspend fun recordReliabilityFailureTweet(tweetId: MimeiId) {
+        BlackList.recordFailure(tweetId)
+    }
+
+    suspend fun recordReliabilityFailureUser(userId: MimeiId) {
+        BlackList.recordFailure(userId)
+    }
+
+    suspend fun recordReliabilityFailureMedia(mediaId: MimeiId) {
+        BlackList.recordFailure(mediaId)
+    }
+
+    suspend fun recordReliabilitySuccessTweet(tweetId: MimeiId) {
+        BlackList.recordSuccess(tweetId)
+    }
+
+    suspend fun recordReliabilitySuccessUser(userId: MimeiId) {
+        BlackList.recordSuccess(userId)
+    }
+
+    suspend fun recordReliabilitySuccessMedia(mediaId: MimeiId) {
+        BlackList.recordSuccess(mediaId)
+    }
+
     // Track ongoing user updates to prevent concurrent calls for the same user
     private val ongoingUserUpdates = mutableSetOf<String>()
     private val userUpdateMutex = Mutex()
@@ -3726,7 +3763,7 @@ object HproseInstance {
             return null
         }
 
-        if (!skipRetryAndBlacklist && BlackList.isBlacklisted(userId)) {
+        if (!skipRetryAndBlacklist && isReliabilityBlacklistedUser(userId)) {
             Timber.tag("getUser").d("User $userId is blacklisted, returning null")
             return null
         }
@@ -3836,7 +3873,7 @@ object HproseInstance {
      */
     private suspend fun processUserDataResponse(user: User, response: Map<*, *>, skipRetryAndBlacklist: Boolean): Boolean {
         if (!skipRetryAndBlacklist) {
-            BlackList.recordSuccess(user.mid)
+            recordReliabilitySuccessUser(user.mid)
         }
         user.from(response as Map<String, Any>)
         
@@ -4010,7 +4047,7 @@ object HproseInstance {
                     if (attempt >= maxRetries) {
                         Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
                         if (!skipRetryAndBlacklist) {
-                            BlackList.recordFailure(user.mid)
+                            recordReliabilityFailureUser(user.mid)
                         }
                     } else {
                         Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
@@ -4074,7 +4111,7 @@ object HproseInstance {
         user.baseUrl = null
 
         if (!skipRetryAndBlacklist && lastError != null) {
-            BlackList.recordFailure(user.mid)
+            recordReliabilityFailureUser(user.mid)
         }
         return false
     }

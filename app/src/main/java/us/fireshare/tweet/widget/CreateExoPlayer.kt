@@ -9,8 +9,14 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.MimeiId
 
 /**
  * Creates an ExoPlayer instance with type-specific video handling:
@@ -38,6 +44,17 @@ fun createExoPlayer(
     forceSoftwareDecoder: Boolean = false,
     resolvedHlsUrl: String? = null
 ): ExoPlayer {
+    val reliabilityMediaId = extractMediaMidFromUrl(url)
+    if ((mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) && reliabilityMediaId != null) {
+        val isBlacklisted = runBlocking(Dispatchers.IO) {
+            HproseInstance.isReliabilityBlacklistedMedia(reliabilityMediaId)
+        }
+        if (isBlacklisted) {
+            Timber.tag("createExoPlayer").d("Skip blacklisted media player creation for $reliabilityMediaId")
+            return ExoPlayer.Builder(context).build()
+        }
+    }
+
     // Create HTTP data source with extended timeouts for network congestion
     val httpDataSourceFactory = DefaultHttpDataSource.Factory()
         .setConnectTimeoutMs(30000) // 30 seconds connection timeout
@@ -92,8 +109,14 @@ fun createExoPlayer(
             // fallback logic is a no-op (onPlayerError just logs and returns).
             addListener(object : androidx.media3.common.Player.Listener {
                 private var hasTriedPlaylist = false
+                private var hasRecordedSuccess = false
 
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    reliabilityMediaId?.let { mediaId ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            HproseInstance.recordReliabilityFailureMedia(mediaId)
+                        }
+                    }
                     // Only handle HLS fallback for HLS_VIDEO type
                     if (mediaType != MediaType.HLS_VIDEO) {
                         Timber.tag("createExoPlayer").d("Progressive video error (no fallback): ${error.message}")
@@ -132,6 +155,12 @@ fun createExoPlayer(
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     when (playbackState) {
                         androidx.media3.common.Player.STATE_READY -> {
+                            if (!hasRecordedSuccess && reliabilityMediaId != null) {
+                                hasRecordedSuccess = true
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    HproseInstance.recordReliabilitySuccessMedia(reliabilityMediaId)
+                                }
+                            }
                             Timber.tag("createExoPlayer").d("Player ready for URL: $url (type: $mediaType, software: $forceSoftwareDecoder)")
                         }
                         androidx.media3.common.Player.STATE_BUFFERING -> {
@@ -181,4 +210,23 @@ fun createExoPlayer(
     player.setMediaSource(mediaSource)
     player.prepare()
     return player
+}
+
+private fun extractMediaMidFromUrl(url: String): MimeiId? {
+    if (url.isBlank()) return null
+    val normalized = url.substringBefore("?").trimEnd('/')
+    val segments = normalized.split('/').filter { it.isNotBlank() }
+    if (segments.isEmpty()) return null
+
+    val mmIndex = segments.indexOfLast { it == "mm" }
+    if (mmIndex >= 0 && mmIndex + 1 < segments.size) {
+        return segments[mmIndex + 1]
+    }
+
+    val ipfsIndex = segments.indexOfLast { it == "ipfs" }
+    if (ipfsIndex >= 0 && ipfsIndex + 1 < segments.size) {
+        return segments[ipfsIndex + 1]
+    }
+
+    return null
 }

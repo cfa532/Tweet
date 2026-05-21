@@ -530,6 +530,12 @@ object VideoManager {
 
             val job = videoLoadingScope.launch {
                 try {
+                    if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(videoMid)) {
+                        Timber.tag("preloadVideo").d("Skip blacklisted media preload: $videoMid")
+                        preloadQueue.remove(videoMid)
+                        return@launch
+                    }
+
                     preloadSemaphore.acquire()
                     if (!isActive) return@launch
 

@@ -353,6 +353,11 @@ object ImageCacheManager {
                 // Check if already cached first
                 getCachedImage(context, mid)?.let { return@withContext it }
 
+                if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
+                    Timber.tag("ImageCacheManager").d("Skip blacklisted media image: $mid")
+                    return@withContext null
+                }
+
                 // Deduplication: Check if already downloading this image
                 val shouldProceed = synchronized(downloadQueueMutex) {
                     if (ongoingDownloads.contains(mid)) {
@@ -393,6 +398,7 @@ object ImageCacheManager {
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
+                                us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
                                 return@withContext bitmap
                             }
                         } catch (e: Exception) {
@@ -402,6 +408,7 @@ object ImageCacheManager {
                         }
                     }
 
+                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
                     return@withContext null
 
                 } finally {
@@ -451,6 +458,7 @@ object ImageCacheManager {
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
                     }
+                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
                 }
                 null
             }
@@ -756,6 +764,11 @@ object ImageCacheManager {
                 // Check if original image is already cached first
                 getCachedImage(context, originalMid)?.let { return@withContext it }
 
+                if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
+                    Timber.tag("ImageCacheManager").d("Skip blacklisted original image: $mid")
+                    return@withContext null
+                }
+
                 // Atomically check if downloading and mark as downloading to prevent race conditions
                 val shouldDownload = synchronized(downloadQueueMutex) {
                     if (downloadQueue.containsKey(originalMid)) {
@@ -824,6 +837,7 @@ object ImageCacheManager {
                                 addToMemoryCache(originalMid, bitmap)
                                 // FIX P1-4: Store result with size limit enforcement
                                 storeDownloadResult(originalMid, bitmap)
+                                us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
                                 
                                 return@withContext bitmap
                             }
@@ -841,6 +855,7 @@ object ImageCacheManager {
 
                     // All attempts failed
                     Timber.tag("ImageCacheManager").w("All download attempts failed for $mid")
+                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
                     return@withContext null
 
                 } finally {
@@ -919,6 +934,7 @@ object ImageCacheManager {
                     }
                 } else {
                     Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
+                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
                 }
                 null
             }
