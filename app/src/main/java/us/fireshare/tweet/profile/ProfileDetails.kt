@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -84,6 +83,7 @@ fun ProfileDetail(
                 Text(
                     text = profile ?: "",
                     fontSize = 15.sp,
+                    lineHeight = 17.sp,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -109,41 +109,46 @@ fun ProfileDetail(
                 ProfileTextStatItem(
                     label = stringResource(R.string.fans),
                     count = followersCount.toString(),
-                    modifier = Modifier.clickable {
-                        navController.navigate(NavTweet.Follower(displayUser.mid))
-                    }
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            navController.navigate(NavTweet.Follower(displayUser.mid))
+                        }
                 )
-                Spacer(modifier = Modifier.weight(1f))
                 ProfileTextStatItem(
                     label = stringResource(R.string.followings),
                     count = followingsCount.toString(),
-                    modifier = Modifier.clickable {
-                        navController.navigate(NavTweet.Following(displayUser.mid))
-                    }
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            navController.navigate(NavTweet.Following(displayUser.mid))
+                        }
                 )
-                Spacer(modifier = Modifier.weight(1f))
                 ProfileTextStatItem(
                     label = stringResource(R.string.posts),
-                    count = tweetCount.toString()
+                    count = tweetCount.toString(),
+                    modifier = Modifier.weight(1f)
                 )
                 if (displayUser.mid == appUser.mid) {
-                    Spacer(modifier = Modifier.weight(1f))
                     ProfileIconStatItem(
                         icon = Icons.Default.BookmarkBorder,
                         contentDescription = stringResource(R.string.user_bookmarks),
                         count = bookmarksCount.toString(),
-                        modifier = Modifier.clickable {
-                            navController.navigate(NavTweet.Bookmarks(displayUser.mid))
-                        }
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                navController.navigate(NavTweet.Bookmarks(displayUser.mid))
+                            }
                     )
-                    Spacer(modifier = Modifier.weight(1f))
                     ProfileIconStatItem(
                         icon = Icons.Default.FavoriteBorder,
                         contentDescription = stringResource(R.string.your_favorites),
                         count = favoritesCount.toString(),
-                        modifier = Modifier.clickable {
-                            navController.navigate(NavTweet.Favorites(displayUser.mid))
-                        }
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                navController.navigate(NavTweet.Favorites(displayUser.mid))
+                            }
                     )
                 }
             }
@@ -159,21 +164,18 @@ private fun ProfileTextStatItem(
 ) {
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Box(
-            modifier = Modifier.height(18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = Color.Gray,
+            maxLines = 1
+        )
         Text(
             text = count,
-            fontSize = 17.sp
+            fontSize = 15.sp
         )
     }
 }
@@ -187,22 +189,18 @@ private fun ProfileIconStatItem(
 ) {
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Box(
-            modifier = Modifier.height(18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.Gray,
+            modifier = Modifier.size(20.dp)
+        )
         Text(
             text = count,
-            fontSize = 17.sp
+            fontSize = 15.sp
         )
     }
 }
