@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
@@ -167,12 +168,17 @@ private fun ProfileTextStatItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = Color.Gray,
-            maxLines = 1
-        )
+        Box(
+            modifier = Modifier.height(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                color = Color.Gray,
+                maxLines = 1
+            )
+        }
         Text(
             text = count,
             fontSize = 15.sp
