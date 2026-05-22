@@ -50,6 +50,7 @@ fun ProfileDetail(
     // The ViewModel's user state is updated when profile changes
     val displayUser = user
     val profile by remember { derivedStateOf { displayUser.profile } }
+    val isCurrentUserProfile = displayUser.mid == appUser.mid
 
     // Use ViewModel's public count variables - collect them efficiently
     val bookmarksCount by viewModel.bookmarksCount.collectAsState()
@@ -111,7 +112,7 @@ fun ProfileDetail(
                     label = stringResource(R.string.fans),
                     count = followersCount.toString(),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(if (isCurrentUserProfile) 1.2f else 1f)
                         .clickable {
                             navController.navigate(NavTweet.Follower(displayUser.mid))
                         }
@@ -120,7 +121,7 @@ fun ProfileDetail(
                     label = stringResource(R.string.followings),
                     count = followingsCount.toString(),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(if (isCurrentUserProfile) 1.2f else 1f)
                         .clickable {
                             navController.navigate(NavTweet.Following(displayUser.mid))
                         }
@@ -128,15 +129,15 @@ fun ProfileDetail(
                 ProfileTextStatItem(
                     label = stringResource(R.string.posts),
                     count = tweetCount.toString(),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(if (isCurrentUserProfile) 1.2f else 1f)
                 )
-                if (displayUser.mid == appUser.mid) {
+                if (isCurrentUserProfile) {
                     ProfileIconStatItem(
                         icon = Icons.Default.BookmarkBorder,
                         contentDescription = stringResource(R.string.user_bookmarks),
                         count = bookmarksCount.toString(),
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.7f)
                             .clickable {
                                 navController.navigate(NavTweet.Bookmarks(displayUser.mid))
                             }
@@ -146,7 +147,7 @@ fun ProfileDetail(
                         contentDescription = stringResource(R.string.your_favorites),
                         count = favoritesCount.toString(),
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.7f)
                             .clickable {
                                 navController.navigate(NavTweet.Favorites(displayUser.mid))
                             }
@@ -169,12 +170,13 @@ private fun ProfileTextStatItem(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Box(
-            modifier = Modifier.height(20.dp),
+            modifier = Modifier.height(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
                 fontSize = 14.sp,
+                lineHeight = 16.sp,
                 color = Color.Gray,
                 maxLines = 1
             )
