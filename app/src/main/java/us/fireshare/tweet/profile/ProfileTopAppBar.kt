@@ -120,7 +120,9 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         )
                     }
                 }
-                ProfileTopBarButton(viewModel, navController, scrollBehavior)
+                Box(modifier = Modifier.align(Alignment.CenterVertically)) {
+                    ProfileTopBarButton(viewModel, navController, scrollBehavior)
+                }
             }
         },
         navigationIcon = {
