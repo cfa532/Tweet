@@ -101,7 +101,7 @@ fun ProfileDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = 24.dp,
+                        start = if (isCurrentUserProfile) 12.dp else 20.dp,
                         end = 20.dp,
                         top = if (hasProfile) 10.dp else 4.dp,
                         bottom = 6.dp
@@ -167,7 +167,7 @@ private fun ProfileTextStatItem(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Box(
             modifier = Modifier.height(24.dp),
@@ -198,7 +198,7 @@ private fun ProfileIconStatItem(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Icon(
             imageVector = icon,
