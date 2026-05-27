@@ -242,10 +242,13 @@ fun AdvancedImageViewer(
                     val downloadedBitmap = try {
                         deferred.await()
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        // Debounce cancellation: let download continue 3s then pause so scroll-back gets result
                         loadState = loadState.copy(isLoading = false)
-                        ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
-                        Timber.tag("ImageViewer").d("Image loading cancelled, scheduled pause in 3s: $imageUrl")
+                        if (ImageCacheManager.isImageProtected(originalMid)) {
+                            ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
+                        } else {
+                            ImageCacheManager.cancelImageLoad(originalMid)
+                        }
+                        Timber.tag("ImageViewer").d("Image loading cancelled: $imageUrl")
                         return@LaunchedEffect
                     }
                     
@@ -315,8 +318,11 @@ fun AdvancedImageViewer(
                 Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
                 // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
                 loadState = loadState.copy(isLoading = false)
-                // Debounce cancellation: schedule pause in 3s so scroll-back can still get result
-                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+                if (ImageCacheManager.isImageProtected(mid)) {
+                    ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+                } else {
+                    ImageCacheManager.cancelImageLoad(mid)
+                }
                 return@LaunchedEffect
             }
             
@@ -341,6 +347,7 @@ fun AdvancedImageViewer(
         loadState = loadState.copy(isVisible = isVisible)
         
         if (isVisible) {
+            ImageCacheManager.markImageVisible(mid)
             // If image becomes visible again, resume any paused download
             ImageCacheManager.resumeDownload(mid)
             
@@ -350,9 +357,7 @@ fun AdvancedImageViewer(
                 retryCount++
             }
         } else {
-            // Debounce 3s before pausing so quick scroll-back still gets the result
-            delay(3000L)
-            ImageCacheManager.pauseDownload(mid)
+            ImageCacheManager.markImageNotVisible(mid)
             Timber.tag("ImageViewer").d("AdvancedImageViewer became invisible, paused download: $imageUrl")
         }
     }
@@ -805,6 +810,7 @@ fun ImageViewer(
 
         if (mid != null) {
             if (isVisible) {
+                ImageCacheManager.markImageVisible(mid)
                 // If image becomes visible again, resume any paused download
                 ImageCacheManager.resumeDownload(mid)
 
@@ -814,9 +820,7 @@ fun ImageViewer(
                     retryCount++
                 }
             } else {
-                // Debounce 3s before pausing so quick scroll-back still gets the result
-                delay(3000L)
-                ImageCacheManager.pauseDownload(mid)
+                ImageCacheManager.markImageNotVisible(mid)
                 Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
             }
         }
@@ -895,10 +899,13 @@ fun ImageViewer(
                     val downloadedBitmap = try {
                         deferred.await()
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        // Debounce cancellation: let download continue 3s then pause so scroll-back gets result
                         loadState = loadState.copy(isLoading = false)
-                        ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
-                        Timber.tag("ImageViewer").d("Image loading cancelled, scheduled pause in 3s: $imageUrl")
+                        if (ImageCacheManager.isImageProtected(originalMid)) {
+                            ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
+                        } else {
+                            ImageCacheManager.cancelImageLoad(originalMid)
+                        }
+                        Timber.tag("ImageViewer").d("Image loading cancelled: $imageUrl")
                         return@LaunchedEffect
                     }
                     
@@ -1006,9 +1013,12 @@ fun ImageViewer(
                 Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
                 // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
                 loadState = loadState.copy(isLoading = false)
-                // Debounce cancellation: schedule pause in 3s so scroll-back can still get result (both keys for original/compressed)
-                ImageCacheManager.schedulePauseDownload(mid, 3000L)
-                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+                if (ImageCacheManager.isImageProtected(mid)) {
+                    ImageCacheManager.schedulePauseDownload(mid, 3000L)
+                    ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+                } else {
+                    ImageCacheManager.cancelImageLoad(mid)
+                }
                 return@LaunchedEffect
             }
             

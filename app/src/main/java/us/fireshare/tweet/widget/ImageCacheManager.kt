@@ -19,6 +19,7 @@ import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -27,6 +28,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import okhttp3.Protocol
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.Tweet
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -66,6 +69,8 @@ object ImageCacheManager {
     
     // Separate timeout for avatar images (smaller, should be faster)
     private const val AVATAR_READ_TIMEOUT = 15000 // 15 seconds for avatars
+    private const val DIRECTIONAL_IMAGE_PRELOAD_TWEETS = 2
+    private const val OPPOSITE_STOP_IMAGE_PRELOAD_TWEETS = 1
 
     // Coroutine scope for image loading that can be cancelled when screen is disposed
     private val imageLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -122,6 +127,9 @@ object ImageCacheManager {
     private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
     private val pausedDownloadMutex = Any()
     private var resumerJob: kotlinx.coroutines.Job? = null
+    private val visibleImageMids = ConcurrentHashMap.newKeySet<String>()
+    private val directionalPreloadImageMids = ConcurrentHashMap.newKeySet<String>()
+    private val imagePreloadJobs = ConcurrentHashMap<String, Job>()
 
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
@@ -1433,6 +1441,177 @@ object ImageCacheManager {
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error preloading image: $e")
         }
+    }
+
+    fun markImageVisible(mid: String) {
+        visibleImageMids.add(baseImageMid(mid))
+        resumeDownload(mid)
+        resumeDownload("${baseImageMid(mid)}_original")
+    }
+
+    fun markImageNotVisible(mid: String) {
+        visibleImageMids.remove(baseImageMid(mid))
+        if (!isImageProtected(mid)) {
+            cancelImageLoad(mid)
+        }
+    }
+
+    fun isImageProtected(mid: String): Boolean {
+        val baseMid = baseImageMid(mid)
+        return visibleImageMids.contains(baseMid) ||
+            directionalPreloadImageMids.contains(baseMid) ||
+            hasMemoryCachedImage(mid) ||
+            hasMemoryCachedImage(baseMid) ||
+            hasMemoryCachedImage("${baseMid}_original")
+    }
+
+    fun cancelImageLoad(mid: String) {
+        val baseMid = baseImageMid(mid)
+        val keys = listOf(baseMid, "${baseMid}_original")
+        keys.forEach { key ->
+            if (hasMemoryCachedImage(key)) return@forEach
+            imagePreloadJobs.remove(key)?.cancel()
+            synchronized(downloadQueueMutex) {
+                downloadQueue.remove(key)
+                downloadResults.remove(key)
+                downloadPriorityQueue.remove(key)
+                resultTimestamps.remove(key)
+                ongoingDownloads.remove(key)
+            }
+            synchronized(pausedDownloadMutex) {
+                pausedDownloads.remove(key)
+            }
+        }
+    }
+
+    fun updateDirectionalImagePreloads(
+        context: Context,
+        visibleTweetIndexes: Set<Int>,
+        direction: PreloadDirection,
+        tweets: List<Tweet>,
+        includeOppositeOnStop: Boolean = false
+    ) {
+        val visibleImageIds = visibleTweetIndexes
+            .mapNotNull { tweets.getOrNull(it) }
+            .flatMap { tweet ->
+                tweet.attachments.orEmpty()
+                    .filter { it.type == MediaType.Image }
+                    .map { it.mid }
+            }
+            .toSet()
+
+        val directionalTargets = collectDirectionalImageTargets(
+            visibleTweetIndexes = visibleTweetIndexes,
+            direction = direction,
+            tweets = tweets,
+            maxTweets = DIRECTIONAL_IMAGE_PRELOAD_TWEETS
+        )
+        val oppositeTargets = if (includeOppositeOnStop) {
+            collectDirectionalImageTargets(
+                visibleTweetIndexes = visibleTweetIndexes,
+                direction = oppositeDirection(direction),
+                tweets = tweets,
+                maxTweets = OPPOSITE_STOP_IMAGE_PRELOAD_TWEETS
+            )
+        } else {
+            emptyList()
+        }
+        val preloadTargets = (directionalTargets + oppositeTargets).distinctBy { it.mid }
+        val preloadIds = preloadTargets.map { it.mid }.toSet()
+
+        visibleImageMids.clear()
+        visibleImageMids.addAll(visibleImageIds)
+        directionalPreloadImageMids.clear()
+        directionalPreloadImageMids.addAll(preloadIds)
+
+        imagePreloadJobs.keys
+            .filterNot { key ->
+                val baseMid = baseImageMid(key)
+                visibleImageMids.contains(baseMid) ||
+                    directionalPreloadImageMids.contains(baseMid) ||
+                    hasMemoryCachedImage(key)
+            }
+            .forEach { staleMid -> cancelImageLoad(staleMid) }
+
+        preloadTargets.forEach { target ->
+            if (getMemoryCachedBitmap(target.mid) != null ||
+                imagePreloadJobs[target.mid]?.isActive == true
+            ) {
+                return@forEach
+            }
+            imagePreloadJobs[target.mid] = imageLoadingScope.launch {
+                try {
+                    preloadImages(context, target.mid, target.url)
+                } finally {
+                    imagePreloadJobs.remove(target.mid)
+                }
+            }
+        }
+    }
+
+    fun clearDirectionalImagePreloads() {
+        directionalPreloadImageMids.clear()
+        visibleImageMids.clear()
+        imagePreloadJobs.keys.forEach { cancelImageLoad(it) }
+    }
+
+    private data class DirectionalImageTarget(
+        val mid: String,
+        val url: String
+    )
+
+    private fun collectDirectionalImageTargets(
+        visibleTweetIndexes: Set<Int>,
+        direction: PreloadDirection,
+        tweets: List<Tweet>,
+        maxTweets: Int
+    ): List<DirectionalImageTarget> {
+        if (tweets.isEmpty() || visibleTweetIndexes.isEmpty() || direction == PreloadDirection.NONE) {
+            return emptyList()
+        }
+
+        val anchor = when (direction) {
+            PreloadDirection.UP -> visibleTweetIndexes.minOrNull() ?: return emptyList()
+            PreloadDirection.DOWN -> visibleTweetIndexes.maxOrNull() ?: return emptyList()
+            PreloadDirection.NONE -> return emptyList()
+        }.coerceIn(0, tweets.lastIndex)
+
+        val indices: Iterable<Int> = when (direction) {
+            PreloadDirection.UP -> (anchor - 1 downTo 0).asIterable()
+            PreloadDirection.DOWN -> (anchor + 1 until tweets.size).asIterable()
+            PreloadDirection.NONE -> emptyList()
+        }
+
+        val result = mutableListOf<DirectionalImageTarget>()
+        val seen = mutableSetOf<String>()
+        var tweetsVisited = 0
+        for (index in indices) {
+            val tweet = tweets.getOrNull(index) ?: continue
+            tweetsVisited++
+            val baseUrl = tweet.author?.baseUrl.orEmpty()
+            tweet.attachments.orEmpty()
+                .filter { it.type == MediaType.Image }
+                .forEach { attachment ->
+                    if (seen.add(attachment.mid)) {
+                        val url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, baseUrl)
+                        if (url != null) result.add(DirectionalImageTarget(attachment.mid, url))
+                    }
+                }
+            if (tweetsVisited >= maxTweets) break
+        }
+        return result
+    }
+
+    private fun oppositeDirection(direction: PreloadDirection): PreloadDirection = when (direction) {
+        PreloadDirection.UP -> PreloadDirection.DOWN
+        PreloadDirection.DOWN -> PreloadDirection.UP
+        PreloadDirection.NONE -> PreloadDirection.NONE
+    }
+
+    private fun baseImageMid(mid: String): String = mid.removeSuffix("_original")
+
+    private fun hasMemoryCachedImage(mid: String): Boolean {
+        return memoryCache[mid]?.let { !it.isRecycled && it.width > 0 && it.height > 0 } == true
     }
 
     // Note: clearMinimalCachedImages() removed as modern Android (API 34+) 

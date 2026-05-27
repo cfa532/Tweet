@@ -1,6 +1,7 @@
 package us.fireshare.tweet.widget
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.annotation.OptIn
@@ -20,9 +21,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import androidx.compose.runtime.mutableStateMapOf
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.Tweet
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -94,12 +97,10 @@ object VideoManager {
     // ===== PRELOAD MANAGEMENT =====
     private val preloadedVideos = mutableSetOf<MimeiId>()
     private val preloadQueue = mutableListOf<MimeiId>()
+    private val currentDirectionalPreloadVideos = mutableSetOf<MimeiId>()
 
     // ===== CONFIGURATION =====
-    private const val PRELOAD_AHEAD_COUNT = 3 // Number of upcoming tweets to preload videos from
-    private const val PRELOAD_DELAY_MS =
-        500L // Delay before starting preload to avoid excessive loading
-    private const val MAX_NEW_PRELOADS_PER_CYCLE = 2 // Cap how many new preloads per cycle
+    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
     private const val MAX_CONCURRENT_PRELOADS = 3 // Allow up to 3 concurrent player creations
 
     // ===== MEMORY MONITORING =====
@@ -110,6 +111,8 @@ object VideoManager {
 
     // Track active preload jobs by video mid for cancellation
     private val preloadJobs = ConcurrentHashMap<MimeiId, Job>()
+    private val posterJobs = ConcurrentHashMap<MimeiId, Job>()
+    val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
 
     // ===== CACHE MANAGEMENT =====
 
@@ -267,55 +270,131 @@ object VideoManager {
         tweets: List<us.fireshare.tweet.datamodel.Tweet>,
         baseUrl: String
     ) {
-        val coroutineScope = CoroutineScope(Dispatchers.IO)
+        updateDirectionalVideoPreloads(
+            context = context,
+            visibleTweetIndexes = setOf(currentTweetIndex),
+            direction = PreloadDirection.DOWN,
+            tweets = tweets,
+            startPreloading = true,
+            fallbackBaseUrl = baseUrl
+        )
+    }
 
-        coroutineScope.launch {
-            // Add delay to avoid excessive preloading during rapid scrolling
-            delay(PRELOAD_DELAY_MS)
+    fun updateDirectionalVideoPreloads(
+        context: Context,
+        visibleTweetIndexes: Set<Int>,
+        direction: PreloadDirection,
+        tweets: List<Tweet>,
+        startPreloading: Boolean,
+        fallbackBaseUrl: String = ""
+    ) {
+        val directionalVideos = collectDirectionalVideos(
+            visibleTweetIndexes = visibleTweetIndexes,
+            direction = direction,
+            tweets = tweets,
+            maxVideos = DIRECTIONAL_VIDEO_PRELOAD_COUNT
+        )
+        val protectedIds = directionalVideos.map { it.mid }.toSet()
 
-            // Calculate range of tweets to preload from
-            val startIndex = currentTweetIndex + 1
-            val endIndex = kotlin.math.min(startIndex + PRELOAD_AHEAD_COUNT, tweets.size)
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.clear()
+            currentDirectionalPreloadVideos.addAll(protectedIds)
+        }
 
-            var addedThisCycle = 0
+        cancelStaleVideoPreloads()
 
-            for (i in startIndex until endIndex) {
-                val tweet = tweets[i]
-                val videoAttachments = tweet.attachments?.filter {
-                    it.type == MediaType.Video ||
-                            it.type == MediaType.HLS_VIDEO
-                } ?: emptyList()
+        if (!startPreloading || direction == PreloadDirection.NONE) return
 
-                for (attachment in videoAttachments) {
-                    if (addedThisCycle >= MAX_NEW_PRELOADS_PER_CYCLE) {
-                        // Reached per-cycle limit; stop adding more in this cycle
-                        continue
-                    }
-                    // Only preload if not already cached, not visible, and not being preloaded
-                    if (!isVideoPreloaded(attachment.mid) &&
-                        !isVideoVisible(attachment.mid) &&
-                        !preloadingVideos.contains(attachment.mid)
-                    ) {
-
-                        preloadingVideos.add(attachment.mid)
-
-                        try {
-                            val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(
-                                attachment.mid,
-                                baseUrl
-                            ).toString()
-
-                            preloadVideo(context, attachment.mid, mediaUrl, attachment.type)
-                            addedThisCycle++
-                        } catch (e: Exception) {
-                            Timber.e("VideoManager - Failed to preload video: ${e.message}")
-                        } finally {
-                            preloadingVideos.remove(attachment.mid)
-                        }
-                    }
-                }
+        directionalVideos.forEach { video ->
+            if (!isVideoPreloaded(video.mid) &&
+                !isVideoVisible(video.mid) &&
+                !preloadingVideos.contains(video.mid)
+            ) {
+                val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(
+                    video.mid,
+                    video.baseUrl.ifBlank { fallbackBaseUrl }
+                ) ?: return@forEach
+                preloadVideo(context, video.mid, mediaUrl, video.type)
+            } else if (videoPlayers.containsKey(video.mid)) {
+                ensureVideoPoster(context, video.mid, video.url, video.type, null)
             }
         }
+    }
+
+    private data class DirectionalVideo(
+        val mid: MimeiId,
+        val type: MediaType,
+        val baseUrl: String,
+        val url: String
+    )
+
+    private fun collectDirectionalVideos(
+        visibleTweetIndexes: Set<Int>,
+        direction: PreloadDirection,
+        tweets: List<Tweet>,
+        maxVideos: Int
+    ): List<DirectionalVideo> {
+        if (tweets.isEmpty() || visibleTweetIndexes.isEmpty() || direction == PreloadDirection.NONE) {
+            return emptyList()
+        }
+
+        val anchor = when (direction) {
+            PreloadDirection.UP -> visibleTweetIndexes.minOrNull() ?: return emptyList()
+            PreloadDirection.DOWN -> visibleTweetIndexes.maxOrNull() ?: return emptyList()
+            PreloadDirection.NONE -> return emptyList()
+        }.coerceIn(0, tweets.lastIndex)
+
+        val indices: Iterable<Int> = when (direction) {
+            PreloadDirection.UP -> (anchor - 1 downTo 0).asIterable()
+            PreloadDirection.DOWN -> (anchor + 1 until tweets.size).asIterable()
+            PreloadDirection.NONE -> emptyList()
+        }
+
+        val seen = mutableSetOf<MimeiId>()
+        val result = mutableListOf<DirectionalVideo>()
+        for (index in indices) {
+            val tweet = tweets.getOrNull(index) ?: continue
+            val baseUrl = tweet.author?.baseUrl.orEmpty()
+            val attachments = tweet.attachments.orEmpty()
+            for (attachment in attachments) {
+                if (attachment.type != MediaType.Video && attachment.type != MediaType.HLS_VIDEO) continue
+                if (!seen.add(attachment.mid)) continue
+                val url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, baseUrl) ?: continue
+                result.add(DirectionalVideo(attachment.mid, attachment.type, baseUrl, url))
+                if (result.size >= maxVideos) return result
+            }
+        }
+        return result
+    }
+
+    private fun cancelStaleVideoPreloads() {
+        val protectedPreloads = synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.toSet()
+        }
+
+        preloadJobs.keys
+            .filterNot { isVideoCancellationProtected(it, protectedPreloads) }
+            .forEach { cancelPreload(it) }
+
+        val stalePreloadedPlayers = videoPlayers.keys.filter { videoMid ->
+            preloadedVideos.contains(videoMid) &&
+                !isVideoCancellationProtected(videoMid, protectedPreloads)
+        }
+
+        stalePreloadedPlayers.forEach { videoMid ->
+            releasePlayer(videoMid)
+        }
+    }
+
+    private fun isVideoCancellationProtected(
+        videoMid: MimeiId,
+        directionalPreloads: Set<MimeiId>
+    ): Boolean {
+        if (visibleVideos.contains(videoMid)) return true
+        if (directionalPreloads.contains(videoMid)) return true
+        if (currentFullScreenVideoMid == videoMid) return true
+        val player = videoPlayers[videoMid]
+        return player?.isPlaying == true || player?.playWhenReady == true
     }
 
     /**
@@ -330,6 +409,9 @@ object VideoManager {
         }
         preloadJobs.clear()
         preloadingVideos.clear()
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.clear()
+        }
         Timber.d("VideoManager - Stopped all preloading")
     }
 
@@ -348,9 +430,12 @@ object VideoManager {
         videoType: MediaType? = null,
         resolvedHlsUrl: String? = null
     ): ExoPlayer {
-        // Mark as preloaded if it was in the preload queue
-        preloadedVideos.add(videoMid)
-        preloadQueue.remove(videoMid)
+        if (preloadQueue.remove(videoMid) || synchronized(currentDirectionalPreloadVideos) {
+                currentDirectionalPreloadVideos.contains(videoMid)
+            }
+        ) {
+            preloadedVideos.add(videoMid)
+        }
 
         val isReusing = videoPlayers.containsKey(videoMid)
 
@@ -501,6 +586,16 @@ object VideoManager {
         activeVideos.clear()
         visibleVideos.clear()
         preloadedVideos.clear()
+        preloadJobs.values.forEach { it.cancel() }
+        preloadJobs.clear()
+        preloadingVideos.clear()
+        preloadQueue.clear()
+        posterJobs.values.forEach { it.cancel() }
+        posterJobs.clear()
+        posterBitmaps.clear()
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.clear()
+        }
         Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED: Cleared all video collections")
     }
 
@@ -529,6 +624,7 @@ object VideoManager {
             preloadQueue.add(videoMid)
 
             val job = videoLoadingScope.launch {
+                var semaphoreAcquired = false
                 try {
                     if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(videoMid)) {
                         Timber.tag("preloadVideo").d("Skip blacklisted media preload: $videoMid")
@@ -536,7 +632,9 @@ object VideoManager {
                         return@launch
                     }
 
+                    preloadingVideos.add(videoMid)
                     preloadSemaphore.acquire()
+                    semaphoreAcquired = true
                     if (!isActive) return@launch
 
                     // Resolve the correct HLS URL before player creation.
@@ -562,12 +660,21 @@ object VideoManager {
                     videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
                     preloadQueue.remove(videoMid)
+                    attachPosterGenerationOnReady(
+                        context = context,
+                        videoMid = videoMid,
+                        videoUrl = videoUrl,
+                        videoType = videoType,
+                        resolvedHlsUrl = resolvedHlsUrl,
+                        player = player
+                    )
                     Timber.tag("preloadVideo").d("Successfully preloaded $videoMid (resolvedHls=${resolvedHlsUrl != null})")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
                 } finally {
-                    preloadSemaphore.release()
+                    if (semaphoreAcquired) preloadSemaphore.release()
+                    preloadingVideos.remove(videoMid)
                     preloadJobs.remove(videoMid)
                 }
             }
@@ -586,6 +693,104 @@ object VideoManager {
         }
         preloadingVideos.remove(videoMid)
         preloadQueue.remove(videoMid)
+    }
+
+    private fun attachPosterGenerationOnReady(
+        context: Context,
+        videoMid: MimeiId,
+        videoUrl: String,
+        videoType: MediaType?,
+        resolvedHlsUrl: String?,
+        player: ExoPlayer
+    ) {
+        if (posterBitmaps.containsKey(videoMid)) return
+
+        if (player.playbackState == Player.STATE_READY) {
+            ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
+            return
+        }
+
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    player.removeListener(this)
+                    ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
+                }
+            }
+        }
+        player.addListener(listener)
+    }
+
+    fun ensureVideoPoster(
+        context: Context,
+        videoMid: MimeiId,
+        videoUrl: String?,
+        videoType: MediaType?,
+        resolvedHlsUrl: String?
+    ) {
+        if (videoUrl.isNullOrBlank()) return
+        if (posterBitmaps.containsKey(videoMid)) return
+        if (posterJobs[videoMid]?.isActive == true) return
+
+        posterJobs[videoMid] = videoLoadingScope.launch {
+            val poster = withContext(Dispatchers.IO) {
+                createPosterBitmap(context, videoUrl, videoType, resolvedHlsUrl)
+            }
+            if (poster != null && !poster.isRecycled) {
+                posterBitmaps[videoMid] = poster
+            }
+            posterJobs.remove(videoMid)
+        }
+    }
+
+    private fun createPosterBitmap(
+        context: Context,
+        videoUrl: String,
+        videoType: MediaType?,
+        resolvedHlsUrl: String?
+    ): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            val sourceUrl = when {
+                !resolvedHlsUrl.isNullOrBlank() -> resolvedHlsUrl
+                videoType == MediaType.HLS_VIDEO -> {
+                    val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                    "${baseUrl}master.m3u8"
+                }
+                else -> videoUrl
+            }
+
+            if (sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://")) {
+                retriever.setDataSource(sourceUrl, emptyMap())
+            } else {
+                retriever.setDataSource(context, Uri.parse(sourceUrl))
+            }
+
+            val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: return null
+            val maxDimension = 640
+            val largerDimension = maxOf(frame.width, frame.height)
+            if (largerDimension <= maxDimension) {
+                frame
+            } else {
+                val scale = maxDimension.toFloat() / largerDimension.toFloat()
+                Bitmap.createScaledBitmap(
+                    frame,
+                    (frame.width * scale).toInt().coerceAtLeast(1),
+                    (frame.height * scale).toInt().coerceAtLeast(1),
+                    true
+                ).also {
+                    if (it !== frame) frame.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").d("Poster generation failed for $videoUrl: ${e.message}")
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) { }
+        }
     }
 
     /**
@@ -954,6 +1159,13 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         preloadedVideos.remove(videoMid)
         preloadQueue.remove(videoMid)
+        preloadingVideos.remove(videoMid)
+        preloadJobs.remove(videoMid)?.cancel()
+        posterJobs.remove(videoMid)?.cancel()
+        posterBitmaps.remove(videoMid)
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.remove(videoMid)
+        }
     }
     
     /**
@@ -982,6 +1194,13 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             preloadedVideos.remove(videoMid)
             preloadQueue.remove(videoMid)
+            preloadingVideos.remove(videoMid)
+            preloadJobs.remove(videoMid)?.cancel()
+            posterJobs.remove(videoMid)?.cancel()
+            posterBitmaps.remove(videoMid)
+            synchronized(currentDirectionalPreloadVideos) {
+                currentDirectionalPreloadVideos.remove(videoMid)
+            }
             
             // Create a completely new player with software decoder to avoid MediaCodec failures
             val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
@@ -999,6 +1218,13 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             preloadedVideos.remove(videoMid)
             preloadQueue.remove(videoMid)
+            preloadingVideos.remove(videoMid)
+            preloadJobs.remove(videoMid)?.cancel()
+            posterJobs.remove(videoMid)?.cancel()
+            posterBitmaps.remove(videoMid)
+            synchronized(currentDirectionalPreloadVideos) {
+                currentDirectionalPreloadVideos.remove(videoMid)
+            }
             return false
         }
     }
@@ -1120,6 +1346,13 @@ object VideoManager {
         preloadingVideos.clear()
         preloadedVideos.clear()
         preloadQueue.clear()
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.clear()
+        }
+        preloadJobs.values.forEach { it.cancel() }
+        preloadJobs.clear()
+        posterJobs.values.forEach { it.cancel() }
+        posterJobs.clear()
         Timber.d("VideoManager - Cleared all tracking data")
     }
 

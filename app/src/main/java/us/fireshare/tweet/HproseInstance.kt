@@ -72,7 +72,7 @@ import java.util.regex.Pattern
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 /**
- * NodePool: Persistent authoritative source for node IP management
+ * NodePool: performance cache for node IP management
  * 
  * Key Principles:
  * - Tracks access nodes (hostIds[1]) for READ operations only
@@ -82,9 +82,9 @@ import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstanc
  * - Thread-safe operations with mutex protection
  * 
  * Usage Flow:
- * 1. Validate user's IP against pool before access
- * 2. Get IP from user's access node if not in pool
- * 3. On failure: re-resolve and update/replace node's IP list
+ * 1. Try the user's access node once for a fast first read.
+ * 2. On a miss or failure, resolve through getProviderIP(), the source of truth.
+ * 3. After a successful read, update/replace the node's IP list.
  */
 object NodePool {
     data class NodeInfo(
@@ -784,7 +784,7 @@ object HproseInstance {
         // Both steps succeeded
         return Pair(true, null)
     }
-    
+
     /**
      * Helper function to send message_outgoing to sender's own node with retry and baseUrl refresh
      */
@@ -1726,12 +1726,42 @@ object HproseInstance {
         }
     }
 
+    private suspend fun refreshRelationshipListBaseUrl(user: User, tag: String, reason: String): Boolean {
+        if (user.isGuest()) return false
+
+        return try {
+            Timber.tag(tag).d("Refreshing user's baseUrl before relationship-list call for userId: ${user.mid}, reason: $reason")
+            val refreshedUser = fetchUser(
+                user.mid,
+                baseUrl = "",
+                maxRetries = 1,
+                forceRefresh = true
+            )
+            val refreshedBaseUrl = refreshedUser?.baseUrl
+            if (refreshedBaseUrl.isNullOrBlank()) {
+                Timber.tag(tag).w("Could not refresh baseUrl before relationship-list call for userId: ${user.mid}")
+                false
+            } else {
+                user.baseUrl = refreshedBaseUrl
+                // Drop any pooled client for this URL so the list call does not reuse
+                // the same connection state that just failed or timed out.
+                user.clearHproseService()
+                Timber.tag(tag).d("Using refreshed baseUrl for relationship-list call: ${user.baseUrl}")
+                true
+            }
+        } catch (e: Exception) {
+            Timber.tag(tag).w(e, "Failed to refresh baseUrl before relationship-list call for userId: ${user.mid}")
+            false
+        }
+    }
+
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
-     * Includes retry logic with exponential backoff for network-related failures.
+     * Refreshes the route before the first list call so stale clients do not block
+     * the profile list while waiting for an Hprose timeout.
      * */
-    suspend fun getFollowings(user: User, maxRetries: Int = 5): List<MimeiId> {
+    suspend fun getFollowings(user: User, maxRetries: Int = 1): List<MimeiId> {
         if (!isOnline.value) {
             Timber.tag("getFollowings").d("Offline: skipping")
             return emptyList()
@@ -1748,14 +1778,18 @@ object HproseInstance {
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                val forceRefresh = attempt > 0
-                if (forceRefresh) {
-                    Timber.tag("getFollowings").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
-                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
-                    if (refreshedUser != null) {
-                        user.baseUrl = refreshedUser.baseUrl
-                        Timber.tag("getFollowings").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                val routeReady = refreshRelationshipListBaseUrl(
+                    user,
+                    tag = "getFollowings",
+                    reason = if (attempt == 0) "initial list load" else "retry after failure"
+                )
+                if (!routeReady) {
+                    if (attempt < maxRetries) {
+                        Timber.tag("getFollowings").d("Route refresh failed, retrying provider lookup immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                        continue
                     }
+                    Timber.tag("getFollowings").w("Route refresh failed; skipping stale get_followings call for userId: ${user.mid}")
+                    break
                 }
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
@@ -1772,9 +1806,7 @@ object HproseInstance {
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    val delayMs = minOf(5000L, 1000L * (1 shl attempt))
-                    Timber.tag("getFollowings").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
-                    delay(delayMs)
+                    Timber.tag("getFollowings").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
                     continue
                 }
                 
@@ -1791,9 +1823,10 @@ object HproseInstance {
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the follower is added.
-     * Includes retry logic with exponential backoff for network-related failures.
+     * Refreshes the route before the first list call so stale clients do not block
+     * the profile list while waiting for an Hprose timeout.
      * */
-    suspend fun getFans(user: User, maxRetries: Int = 5): List<MimeiId>? {
+    suspend fun getFans(user: User, maxRetries: Int = 1): List<MimeiId>? {
         if (!isOnline.value) {
             Timber.tag("getFans").d("Offline: skipping")
             return null
@@ -1810,14 +1843,18 @@ object HproseInstance {
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                val forceRefresh = attempt > 0
-                if (forceRefresh) {
-                    Timber.tag("getFans").d("🔄 Retry attempt $attempt: Refreshing user's baseUrl for userId: ${user.mid}")
-                    val refreshedUser = fetchUser(user.mid, baseUrl = "")
-                    if (refreshedUser != null) {
-                        user.baseUrl = refreshedUser.baseUrl
-                        Timber.tag("getFans").d("✅ Refreshed baseUrl: ${user.baseUrl}")
+                val routeReady = refreshRelationshipListBaseUrl(
+                    user,
+                    tag = "getFans",
+                    reason = if (attempt == 0) "initial list load" else "retry after failure"
+                )
+                if (!routeReady) {
+                    if (attempt < maxRetries) {
+                        Timber.tag("getFans").d("Route refresh failed, retrying provider lookup immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                        continue
                     }
+                    Timber.tag("getFans").w("Route refresh failed; skipping stale get_followers call for userId: ${user.mid}")
+                    break
                 }
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
@@ -1834,9 +1871,7 @@ object HproseInstance {
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    val delayMs = minOf(5000L, 1000L * (1 shl attempt))
-                    Timber.tag("getFans").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
-                    delay(delayMs)
+                    Timber.tag("getFans").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
                     continue
                 }
                 
@@ -3717,7 +3752,8 @@ object HproseInstance {
 
     /**
      * Waits for concurrent update to complete with timeout
-     * @return Cached user if found, or retries fetchUser if not
+     * @return Cached user if allowed, retries fetchUser after the competing update finishes,
+     * or null for timed-out forceRefresh calls so callers do not reuse stale routing.
      */
     private suspend fun waitForConcurrentUpdate(userId: MimeiId, baseUrl: String?, maxRetries: Int, forceRefresh: Boolean): User? {
         val maxWaitTime = 10000L // 10 seconds
@@ -3728,6 +3764,10 @@ object HproseInstance {
             
             if (System.currentTimeMillis() - startTime > maxWaitTime) {
                 Timber.tag("getUser").w("Timeout waiting for concurrent update to complete for userId: $userId")
+                if (forceRefresh) {
+                    Timber.tag("getUser").w("forceRefresh=true; returning null instead of stale cached user for userId: $userId")
+                    return null
+                }
                 return TweetCacheManager.getCachedUser(userId)
             }
             
@@ -3736,7 +3776,10 @@ object HproseInstance {
             }
             
             if (!isStillUpdating) {
-                return TweetCacheManager.getCachedUser(userId) ?: 
+                if (forceRefresh) {
+                    return fetchUser(userId, baseUrl, maxRetries, forceRefresh)
+                }
+                return TweetCacheManager.getCachedUser(userId) ?:
                     fetchUser(userId, baseUrl, maxRetries, forceRefresh)
             }
         }
@@ -3826,8 +3869,9 @@ object HproseInstance {
         try {
             val user = getUserInstance(userId)
 
-            // CRITICAL: Load cached baseUrl into singleton if not already present
-            // This ensures the first fetch attempt uses the cached baseUrl before trying getProviderIP
+            // Keep the cached baseUrl on the singleton for compatibility and to allow
+            // the one-shot NodePool fast path. If NodePool misses, resolution still
+            // goes through getProviderIP() rather than trusting this stale URL.
             if (user.baseUrl.isNullOrEmpty()) {
                 val cachedUser = TweetCacheManager.getCachedUser(userId)
                 if (cachedUser != null && !cachedUser.baseUrl.isNullOrEmpty()) {
@@ -3887,12 +3931,13 @@ object HproseInstance {
 
 
     /**
-     * Resolves and updates user's baseUrl (for first attempt or retries)
+     * Resolves and updates user's baseUrl (for first attempt or retries).
      * 
      * NodePool Integration:
-     * - First attempt: validate user IP against pool, get IP from pool if not in pool
-     * - Retry attempts: always resolve fresh IP via getProviderIP
-     * - After resolution: update NodePool with new IP
+     * - First attempt: try NodePool once as a performance hint.
+     * - NodePool miss, forced refresh, and retry attempts: resolve through getProviderIP().
+     * - Cached baseUrl is never used as a source of truth after NodePool misses.
+     * - After successful resolution: update NodePool with the fresh IP.
      */
     private suspend fun resolveAndUpdateBaseUrl(
         user: User, 
@@ -3903,22 +3948,18 @@ object HproseInstance {
         hasExpired: Boolean,
         originalBaseUrl: String?
     ) {
-        // First attempt logic with NodePool integration
-        if (attempt == 1 && !forceFreshIP && userHasBaseUrl && !user.baseUrl.isNullOrEmpty()) {
-            // Try to get IP from user's node in pool (indexed by nodeId) - trust it
+        if (attempt == 1 && !forceFreshIP && userHasBaseUrl) {
+            // NodePool is trusted only once for performance. A miss falls through to
+            // getProviderIP(), which is the source of truth for provider addresses.
             val poolIP = NodePool.getIPFromNode(user)
             if (poolIP != null) {
                 user.baseUrl = "http://$poolIP"
                 user.clearHproseService()
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using IP from NodePool: $poolIP for userId: ${user.mid} (trusted)")
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP once: $poolIP for userId: ${user.mid}")
                 return
             }
-            
-            // User's node not in pool - use user's cached baseUrl
-            if (!user.baseUrl.isNullOrEmpty()) {
-                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using cached baseUrl: ${user.baseUrl} for userId: ${user.mid}")
-                return
-            }
+
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - NodePool miss for userId: ${user.mid}; resolving provider IP")
         }
         
         // Resolve fresh IP (retry attempts or forced refresh)
@@ -3958,14 +3999,14 @@ object HproseInstance {
                     Timber.tag("updateUserFromServer").e("hproseService is null after setting baseUrl: ${user.baseUrl} for userId: ${user.mid}")
                 }
             } else {
-                // getProviderIP returned null (not exception) - user not found or servers genuinely down
-                // This is NOT a retryable error - just log and continue with null baseUrl
-                Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid} - user not found or no IPs available")
-                // Continue - the calling code will handle null baseUrl appropriately
+                Timber.tag("updateUserFromServer").w("⚠️ getProviderIP returned null for userId: ${user.mid} - user not found or no healthy IPs available")
+                user.baseUrl = null
+                user.clearHproseService()
+                throw Exception("No healthy provider IP found for userId: ${user.mid}")
             }
         } catch (e: Exception) {
-            // getProviderIP threw exception - network error, should trigger retry
-            Timber.tag("updateUserFromServer").w(e, "🔴 Network error calling getProviderIP for userId: ${user.mid}, attempt: $attempt/$maxRetries")
+            // Resolution failed or returned no healthy IP; retry will ask getProviderIP again.
+            Timber.tag("updateUserFromServer").w(e, "🔴 Failed to resolve provider IP for userId: ${user.mid}, attempt: $attempt/$maxRetries")
             throw e  // Re-throw to trigger retry logic
         }
     }
@@ -5048,4 +5089,3 @@ object HproseInstance {
         }
     }
 }
-

@@ -8,6 +8,9 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.widget.Button
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -583,14 +586,92 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
      */
     private fun showUpdateDialog(context: Context, downloadUrl: String) {
         (context as Activity).runOnUiThread {
-            AlertDialog.Builder(context)
+            val dialog = AlertDialog.Builder(context)
                 .setTitle(getString(context, R.string.update_available))
                 .setMessage(getString(context, R.string.update_message))
-                .setPositiveButton(getString(context, R.string.update)) { _, _ ->
-                    downloadAndInstall(context, downloadUrl)
-                }
+                // Wire click handlers in onShow so we can customize button UX
+                // and ensure the dialog only closes after explicit decision.
+                .setPositiveButton(getString(context, R.string.update), null)
                 .setNegativeButton(getString(context, R.string.cancel), null)
-                .show()
+                .setCancelable(false)
+                .create()
+
+            dialog.setCanceledOnTouchOutside(false)
+            dialog.setOnKeyListener { _, keyCode, event ->
+                keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP
+            }
+
+            dialog.setOnShowListener {
+                val updateButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                val cancelButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+                val updateLabel = updateButton.text
+                val cancelLabel = cancelButton.text
+
+                applyDecisionButtonUX(updateButton)
+                applyDecisionButtonUX(cancelButton)
+
+                updateButton.setOnClickListener {
+                    // Show clear initiated state before leaving the dialog.
+                    updateButton.isEnabled = false
+                    cancelButton.isEnabled = false
+                    updateButton.text = "Starting..."
+                    cancelButton.text = ""
+                    updateButton.animate().alpha(1f).setDuration(80L).start()
+                    downloadAndInstall(context, downloadUrl)
+                    updateButton.postDelayed({
+                        if (dialog.isShowing) {
+                            dialog.dismiss()
+                        }
+                        // Restore labels for potential future dialog instances.
+                        updateButton.text = updateLabel
+                        cancelButton.text = cancelLabel
+                    }, 220L)
+                }
+                cancelButton.setOnClickListener {
+                    // Show explicit confirmation visual on cancel decision.
+                    updateButton.isEnabled = false
+                    cancelButton.isEnabled = false
+                    updateButton.text = ""
+                    cancelButton.text = "Cancelling..."
+                    cancelButton.animate().alpha(1f).setDuration(80L).start()
+                    dialog.dismiss()
+                }
+            }
+
+            dialog.show()
+        }
+    }
+
+    private fun applyDecisionButtonUX(button: Button) {
+        val verticalPaddingPx = (12 * button.resources.displayMetrics.density).toInt()
+        val horizontalPaddingPx = (18 * button.resources.displayMetrics.density).toInt()
+        val minHeightPx = (48 * button.resources.displayMetrics.density).toInt()
+
+        // Increase tappable area for easier decision taps.
+        button.minHeight = minHeightPx
+        button.setPadding(horizontalPaddingPx, verticalPaddingPx, horizontalPaddingPx, verticalPaddingPx)
+
+        // Add press animation for clear tactile feedback.
+        button.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.animate()
+                        .scaleX(0.95f)
+                        .scaleY(0.95f)
+                        .alpha(0.85f)
+                        .setDuration(90L)
+                        .start()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .alpha(1f)
+                        .setDuration(110L)
+                        .start()
+                }
+            }
+            false
         }
     }
 

@@ -101,10 +101,14 @@ fun UserListView(
             displayedUserCount = 0
             serverDepleted = false
             
-            // Load initial batch
+            // Keep the potentially blocking Hprose call off the UI dispatcher during
+            // the first profile-list load. Pull-to-refresh and paging use the same
+            // pattern below so Compose state is only updated back on the main side.
             try {
                 Timber.tag("UserListView").d("Calling fetchUserIds(0)")
-                val initialUserIds = fetchUserIds(0)
+                val initialUserIds = withContext(Dispatchers.IO) {
+                    fetchUserIds(0)
+                }
                 Timber.tag("UserListView").d("fetchUserIds(0) returned: ${initialUserIds.size} user IDs")
                 if (initialUserIds.isNotEmpty()) {
                     // Filter out invalid user IDs (null, empty, or guest IDs)
@@ -163,18 +167,18 @@ fun UserListView(
             coroutineScope.launch {
                 isRefreshingAtTop = true
                 try {
-                    withContext(Dispatchers.IO) {
-                        // Reset and reload initial batch
-                        allUserIds = emptyList()
-                        displayedUserCount = 0
-                        serverDepleted = false
-                        val initialUserIds = fetchUserIds(0)
-                        if (initialUserIds.isNotEmpty()) {
-                            allUserIds = initialUserIds
-                            displayedUserCount = minOf(initialUserIds.size, TW_CONST.USER_BATCH_SIZE)
-                        } else {
-                            serverDepleted = true
-                        }
+                    // Reset and reload initial batch
+                    allUserIds = emptyList()
+                    displayedUserCount = 0
+                    serverDepleted = false
+                    val initialUserIds = withContext(Dispatchers.IO) {
+                        fetchUserIds(0)
+                    }
+                    if (initialUserIds.isNotEmpty()) {
+                        allUserIds = initialUserIds
+                        displayedUserCount = minOf(initialUserIds.size, TW_CONST.USER_BATCH_SIZE)
+                    } else {
+                        serverDepleted = true
                     }
                 } finally {
                     isRefreshingAtTop = false
@@ -200,31 +204,31 @@ fun UserListView(
             coroutineScope.launch {
                 isRefreshingAtBottom = true
                 try {
-                    withContext(Dispatchers.IO) {
-                        val nextBatchNumber = (allUserIds.size / TW_CONST.USER_BATCH_SIZE)
-                        Timber.tag("UserListView").d("Loading more user IDs, next batch: $nextBatchNumber")
-                        val newUserIds = fetchUserIds(nextBatchNumber)
-                        
-                        if (newUserIds.isEmpty()) {
-                            // No more user IDs available
-                            serverDepleted = true
-                            Timber.tag("UserListView").d("No more user IDs available, server depleted")
+                    val nextBatchNumber = (allUserIds.size / TW_CONST.USER_BATCH_SIZE)
+                    Timber.tag("UserListView").d("Loading more user IDs, next batch: $nextBatchNumber")
+                    val newUserIds = withContext(Dispatchers.IO) {
+                        fetchUserIds(nextBatchNumber)
+                    }
+
+                    if (newUserIds.isEmpty()) {
+                        // No more user IDs available
+                        serverDepleted = true
+                        Timber.tag("UserListView").d("No more user IDs available, server depleted")
+                    } else {
+                        // Filter out invalid user IDs (null, empty, or guest IDs)
+                        val validNewUserIds = newUserIds.filter { userId ->
+                            userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
+                        }
+                        // Add new user IDs to the list, ensuring no duplicates
+                        val uniqueNewUserIds = validNewUserIds.filter { newId -> !allUserIds.contains(newId) }
+                        if (uniqueNewUserIds.isNotEmpty()) {
+                            allUserIds = allUserIds + uniqueNewUserIds
+                            displayedUserCount = minOf(displayedUserCount + TW_CONST.USER_BATCH_SIZE, allUserIds.size)
+                            Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs (from ${newUserIds.size} fetched, ${validNewUserIds.size} valid), total: ${allUserIds.size}, displayed: $displayedUserCount")
                         } else {
-                            // Filter out invalid user IDs (null, empty, or guest IDs)
-                            val validNewUserIds = newUserIds.filter { userId ->
-                                userId.isNotEmpty() && userId != TW_CONST.GUEST_ID
-                            }
-                            // Add new user IDs to the list, ensuring no duplicates
-                            val uniqueNewUserIds = validNewUserIds.filter { newId -> !allUserIds.contains(newId) }
-                            if (uniqueNewUserIds.isNotEmpty()) {
-                                allUserIds = allUserIds + uniqueNewUserIds
-                                displayedUserCount = minOf(displayedUserCount + TW_CONST.USER_BATCH_SIZE, allUserIds.size)
-                                Timber.tag("UserListView").d("Added ${uniqueNewUserIds.size} new unique user IDs (from ${newUserIds.size} fetched, ${validNewUserIds.size} valid), total: ${allUserIds.size}, displayed: $displayedUserCount")
-                            } else {
-                                // All new IDs were duplicates, mark as depleted
-                                serverDepleted = true
-                                Timber.tag("UserListView").d("All new user IDs were duplicates, server depleted")
-                            }
+                            // All new IDs were duplicates, mark as depleted
+                            serverDepleted = true
+                            Timber.tag("UserListView").d("All new user IDs were duplicates, server depleted")
                         }
                     }
                 } catch (e: Exception) {

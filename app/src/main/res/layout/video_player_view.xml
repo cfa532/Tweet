@@ -13,6 +13,14 @@
         app:surface_type="texture_view"
         app:resize_mode="zoom" />
 
+    <ImageView
+        android:id="@+id/video_poster"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/video_preview"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
     <!-- Play button (centered, shown when video is paused) -->
     <ImageView
         android:id="@+id/play_button"

@@ -39,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameMillis
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -52,6 +51,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,10 +76,12 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.PreloadDirection
+import us.fireshare.tweet.widget.VideoLoadingManager
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
-import us.fireshare.tweet.widget.rememberTweetVideoPreloader
 import java.util.Collections
 import kotlin.math.abs
 
@@ -221,6 +223,7 @@ fun TweetListView(
     // Create our own TweetListViewModel instance
     // Use activity scope if parentEntry is null, otherwise use parentEntry for proper lifecycle
     val activity = LocalActivity.current as ComponentActivity
+    val androidContext = LocalContext.current
     val tweetListViewModel = if (parentEntry != null) {
         hiltViewModel<TweetListViewModel>(viewModelStoreOwner = parentEntry, key = context)
     } else {
@@ -343,6 +346,7 @@ fun TweetListView(
             // players as active/visible. Synchronous cleanup here races with navigation
             // and releases players that the next screen just created but hasn't registered yet.
             VideoManager.cleanupInactivePlayersDeferred()
+            ImageCacheManager.clearDirectionalImagePreloads()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
             isRefreshingAtBottom = false
             isRefreshingAtTop = false
@@ -434,40 +438,25 @@ fun TweetListView(
         }
     }
 
-    // Use VideoLoadingManager to preload videos from upcoming tweets
-    // Throttle to only trigger every 3 items to reduce overhead
-    val throttledVisibleIndex by remember {
-        derivedStateOf {
-            val index = listState.firstVisibleItemIndex
-            // Round down to nearest multiple of 3 to throttle preloader
-            if (index >= 0) (index / 3) * 3 else 0
-        }
-    }
-
-    // PERF FIX: Memoize baseUrl to avoid recalculation on every composition
-    val baseUrl = remember(throttledVisibleIndex, tweets.size) {
-        if (tweets.isNotEmpty() && throttledVisibleIndex < tweets.size) {
-            tweets.getOrNull(throttledVisibleIndex)?.author?.baseUrl ?: ""
-        } else {
-            ""
-        }
-    }
-    rememberTweetVideoPreloader(
-        tweets = tweets,
-        currentVisibleIndex = throttledVisibleIndex,
-        baseUrl = baseUrl
-    )
-
     // Derived states for pagination - optimized with throttling
     var isAtLastTweet by remember { mutableStateOf(false) }
     var isNearBottom by remember { mutableStateOf(false) }
 
+    // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
+    val visibleTweets = remember(tweets, showPrivateTweets) {
+        if (showPrivateTweets) tweets else tweets.filter { !it.isPrivate }
+    }
+    val visibleTweetIndexById = remember(visibleTweets) {
+        visibleTweets.mapIndexed { index, tweet -> tweet.mid to index }.toMap()
+    }
+
     // EFFECT 3: Unified scroll tracking + pagination in a single snapshotFlow collector
-    LaunchedEffect(listState, tweets.size) {
+    LaunchedEffect(listState, visibleTweets) {
         var previousFirstVisibleItem = listState.firstVisibleItemIndex
         var previousScrollOffset = listState.firstVisibleItemScrollOffset
         var lastSaveTime = 0L
         var lastDirection = ScrollDirection.NONE
+        var lastNonIdleDirection = ScrollDirection.DOWN
         var lastScrollingState = false
         // Direction stability tracking to prevent flickering
         var pendingDirection = ScrollDirection.NONE
@@ -520,6 +509,34 @@ fun TweetListView(
                     onScrollStateChange?.invoke(ScrollState(isScrolling, confirmedDirection))
                     lastDirection = confirmedDirection
                     lastScrollingState = isScrolling
+                }
+                if (confirmedDirection != ScrollDirection.NONE) {
+                    lastNonIdleDirection = confirmedDirection
+                }
+
+                val mediaPreloadDirection = when (if (confirmedDirection == ScrollDirection.NONE) lastNonIdleDirection else confirmedDirection) {
+                    ScrollDirection.UP -> PreloadDirection.UP
+                    ScrollDirection.DOWN -> PreloadDirection.DOWN
+                    ScrollDirection.NONE -> PreloadDirection.NONE
+                }
+                val visibleTweetIndexes = listState.layoutInfo.visibleItemsInfo
+                    .mapNotNull { item -> visibleTweetIndexById[item.key as? String] }
+                    .toSet()
+                if (visibleTweetIndexes.isNotEmpty()) {
+                    ImageCacheManager.updateDirectionalImagePreloads(
+                        context = androidContext,
+                        visibleTweetIndexes = visibleTweetIndexes,
+                        direction = mediaPreloadDirection,
+                        tweets = visibleTweets,
+                        includeOppositeOnStop = !isScrolling
+                    )
+                    VideoLoadingManager.updateDirectionalVideoPreloads(
+                        context = androidContext,
+                        visibleTweetIndexes = visibleTweetIndexes,
+                        direction = mediaPreloadDirection,
+                        tweets = visibleTweets,
+                        startPreloading = !isScrolling
+                    )
                 }
 
                 // Detect when list arrives at the absolute top.
@@ -724,11 +741,6 @@ fun TweetListView(
             }
             addJob("preload-$nextPage", preloadJob)
         }
-    }
-
-    // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
-    val visibleTweets = remember(tweets, showPrivateTweets) {
-        if (showPrivateTweets) tweets else tweets.filter { !it.isPrivate }
     }
 
     Box(

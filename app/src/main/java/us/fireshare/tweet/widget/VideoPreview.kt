@@ -100,6 +100,7 @@ fun VideoPreview(
 
     // --- ExoPlayer (regenerated on force-recreate) ---
     val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
+    val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
     val exoPlayer = remember(videoMid, playerGeneration) {
         val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO && url != null) {
             HlsUrlResolver.getCached(context, url)
@@ -145,6 +146,9 @@ fun VideoPreview(
     val playerListener = remember {
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY && videoMid != null) {
+                    VideoManager.ensureVideoPoster(context, videoMid, url, videoType, null)
+                }
                 state.onPlaybackStateChanged(
                     playbackState, currentExoPlayer, shouldUseCoordinator, autoPlay,
                     state.isVideoVisible, coordinator, playbackTweetId, onLoadComplete, onVideoCompleted
@@ -257,6 +261,17 @@ fun VideoPreview(
             // Rebind player on generation change
             if (playerView.player !== exoPlayer) {
                 playerView.player = exoPlayer
+            }
+            val posterView = view.findViewById<ImageView>(R.id.video_poster)
+            val showPoster = cachedPoster != null &&
+                !state.isPlaying &&
+                !state.hasError &&
+                (state.isLoading || !shouldPlay)
+            if (showPoster) {
+                posterView.setImageBitmap(cachedPoster)
+                posterView.visibility = View.VISIBLE
+            } else {
+                posterView.visibility = View.GONE
             }
             // Re-wire play button on every update so it always references the current
             // exoPlayer and coordinator (factory closures go stale after player recreation).

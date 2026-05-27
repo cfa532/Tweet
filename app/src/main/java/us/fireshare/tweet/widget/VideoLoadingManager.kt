@@ -11,6 +11,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import us.fireshare.tweet.datamodel.MimeiId
 
+enum class PreloadDirection {
+    UP, DOWN, NONE
+}
+
 /**
  * VideoLoadingManager provides Compose hooks for video loading management.
  * All actual functionality is delegated to the unified VideoManager.
@@ -55,6 +59,24 @@ object VideoLoadingManager {
      */
     fun stopAllPreloading() {
         VideoManager.stopAllPreloading()
+    }
+
+    fun updateDirectionalVideoPreloads(
+        context: Context,
+        visibleTweetIndexes: Set<Int>,
+        direction: PreloadDirection,
+        tweets: List<us.fireshare.tweet.datamodel.Tweet>,
+        startPreloading: Boolean,
+        fallbackBaseUrl: String = ""
+    ) {
+        VideoManager.updateDirectionalVideoPreloads(
+            context = context,
+            visibleTweetIndexes = visibleTweetIndexes,
+            direction = direction,
+            tweets = tweets,
+            startPreloading = startPreloading,
+            fallbackBaseUrl = fallbackBaseUrl
+        )
     }
 
     /**
@@ -111,7 +133,8 @@ fun rememberVideoLoadingManager(
 fun rememberTweetVideoPreloader(
     tweets: List<us.fireshare.tweet.datamodel.Tweet>,
     currentVisibleIndex: Int,
-    baseUrl: String
+    baseUrl: String,
+    direction: PreloadDirection = PreloadDirection.DOWN
 ) {
     val context = LocalContext.current
 
@@ -119,11 +142,13 @@ fun rememberTweetVideoPreloader(
         if (tweets.isNotEmpty() && currentVisibleIndex >= 0) {
             // Delay so rapid scrolling cancels before triggering preload work
             kotlinx.coroutines.delay(400L)
-            VideoLoadingManager.preloadUpcomingVideos(
+            VideoLoadingManager.updateDirectionalVideoPreloads(
                 context = context,
-                currentTweetIndex = currentVisibleIndex,
+                visibleTweetIndexes = setOf(currentVisibleIndex),
+                direction = direction,
                 tweets = tweets,
-                baseUrl = baseUrl
+                startPreloading = true,
+                fallbackBaseUrl = baseUrl
             )
         }
     }

@@ -33,7 +33,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -93,6 +95,7 @@ fun MediaItemView(
     val attachment = attachments[index]
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val rootView = LocalView.current
     val videoCoordinator = LocalVideoCoordinator.current
     // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
     // If parentTweetId is provided, it represents the retweet/quote container tweet
@@ -191,9 +194,20 @@ fun MediaItemView(
                         .fillMaxSize()
                         .clipToBounds()
                         .onGloballyPositioned { layoutCoordinates ->
-                            // Update visibility based on actual layout - if item has size, it's visible
-                            val hasSize = layoutCoordinates.size.width > 0 && layoutCoordinates.size.height > 0
-                            isVisible = hasSize
+                            val totalHeight = layoutCoordinates.size.height.toFloat()
+                            isVisible = if (layoutCoordinates.size.width > 0 && totalHeight > 0f) {
+                                val windowPos = layoutCoordinates.positionInWindow()
+                                val top = windowPos.y
+                                val bottom = top + totalHeight
+                                val displayFrame = android.graphics.Rect()
+                                rootView.getWindowVisibleDisplayFrame(displayFrame)
+                                val visibleTop = kotlin.math.max(displayFrame.top.toFloat(), top)
+                                val visibleBottom = kotlin.math.min(displayFrame.bottom.toFloat(), bottom)
+                                val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
+                                (visibleHeight / totalHeight).coerceIn(0f, 1f) > 0f
+                            } else {
+                                false
+                            }
                         }
                         .clickable {
                             goto(index)
@@ -423,4 +437,3 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     val downloadingMessage = context.getString(R.string.downloading_file)
     Toast.makeText(context, downloadingMessage, Toast.LENGTH_SHORT).show()
 }
-
