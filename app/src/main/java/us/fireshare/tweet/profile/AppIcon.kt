@@ -67,17 +67,16 @@ fun UserAvatar(
 ) {
     val context = LocalContext.current
     val avatarMid = user.avatar
+    val avatarBaseUrl = user.baseUrl
 
     // Watch both avatar and user object - state resets only when avatar ID changes,
     // but we recompose when user object changes to ensure toolbar updates
     var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
 
-    // React to avatar changes AND user object changes
+    // React to avatar changes and route changes. If baseUrl was unavailable during
+    // the first render, this reruns as soon as profile refresh resolves the route.
     // State reset only happens when avatarMid changes, but effect reruns to update URLs
-    LaunchedEffect(avatarMid, user) {
-        // Capture baseUrl inside LaunchedEffect to always use current value
-        val currentBaseUrl = user.baseUrl
-        
+    LaunchedEffect(avatarMid, avatarBaseUrl) {
         // Only reset state if avatarMid changed from the current loaded state
         if (loadState.bitmap != null && !avatarMid.isNullOrEmpty()) {
             // We have a cached bitmap, check if it matches the current avatar ID
@@ -108,13 +107,17 @@ fun UserAvatar(
                 loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
             } else {
                 // Not cached, need to load it
-                val avatarUrl = getMediaUrl(avatarMid, currentBaseUrl)
+                val avatarUrl = getMediaUrl(avatarMid, avatarBaseUrl)
+                if (avatarUrl.isNullOrBlank()) {
+                    loadState = AvatarLoadState()
+                    return@LaunchedEffect
+                }
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
                 try {
                     ImageCacheManager.loadOriginalImageWithScope(
                         context = context,
-                        imageUrl = avatarUrl ?: "",
+                        imageUrl = avatarUrl,
                         mid = avatarMid
                     ) { bitmap ->
                         loadState = if (bitmap != null && !bitmap.isRecycled) {
@@ -198,4 +201,3 @@ fun UserAvatar(
         }
     }
 }
-

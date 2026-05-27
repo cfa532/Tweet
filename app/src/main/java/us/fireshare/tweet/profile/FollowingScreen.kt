@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -147,6 +148,11 @@ fun FollowingItem(
             kotlinx.coroutines.delay(loadingTimeoutMs)
             if (user.username.isNullOrEmpty()) {
                 Timber.tag("FollowingItem").w("User load timed out for userId: $userId")
+                try {
+                    HproseInstance.recordReliabilityFailureUser(userId)
+                } catch (e: Exception) {
+                    Timber.tag("FollowingItem").e(e, "Failed to record user load failure for $userId")
+                }
                 hasTimedOut = true
             }
         }
@@ -284,4 +290,3 @@ private fun formatUserCreationDate(timestamp: Long): String {
     val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
     return dateFormat.format(date)
 }
-
