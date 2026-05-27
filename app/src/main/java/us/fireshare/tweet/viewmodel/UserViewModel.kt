@@ -186,12 +186,15 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(IO) {
             try {
                 Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
+                val previousBaseUrl = _user.value.baseUrl
                 
-                // Fetch fresh data from server (fetchUser handles retries internally)
-                // Pass empty baseUrl to force fresh IP resolution and skip cache (matches iOS)
-                val refreshedUser = fetchUser(userId, baseUrl = "", maxRetries = 2, forceRefresh = true)
+                // Try the route we already have first. If that IP is stale,
+                // fetchUser will retry through getProviderIP and update NodePool.
+                val refreshedUser = fetchUser(userId, baseUrl = previousBaseUrl, maxRetries = 2, forceRefresh = true)
                 
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    val routeChanged = previousBaseUrl != refreshedUser.baseUrl
+
                     // Update user state
                     _user.value = refreshedUser
                     
@@ -208,6 +211,11 @@ class UserViewModel @AssistedInject constructor(
                     _followersCount.value = refreshedUser.followersCount
                     _followingsCount.value = refreshedUser.followingCount
                     _tweetCount.value = refreshedUser.tweetCount
+
+                    if (routeChanged || _tweets.value.isEmpty()) {
+                        Timber.tag("refreshUserData").d("Route changed or tweets empty; refreshing profile tweets without clearing existing list")
+                        getTweets(0)
+                    }
                     
                     Timber.tag("refreshUserData").d("✅ Refreshed user data for: ${refreshedUser.name}")
                 } else {
