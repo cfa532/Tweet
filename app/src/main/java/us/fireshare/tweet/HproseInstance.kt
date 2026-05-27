@@ -3804,6 +3804,7 @@ object HproseInstance {
                     return null
                 }
                 return TweetCacheManager.getCachedUser(userId)
+                    ?.takeIf { it.username != null }
             }
             
             val isStillUpdating = userUpdateMutex.withLock {
@@ -3814,7 +3815,8 @@ object HproseInstance {
                 if (forceRefresh) {
                     return fetchUser(userId, baseUrl, maxRetries, forceRefresh)
                 }
-                return TweetCacheManager.getCachedUser(userId) ?:
+                return TweetCacheManager.getCachedUser(userId)
+                    ?.takeIf { it.username != null } ?:
                     fetchUser(userId, baseUrl, maxRetries, forceRefresh)
             }
         }
@@ -3831,7 +3833,7 @@ object HproseInstance {
      */
     suspend fun fetchUser(
         userId: MimeiId?, 
-        baseUrl: String? = appUser.baseUrl, 
+        baseUrl: String? = null,
         maxRetries: Int = 2, 
         forceRefresh: Boolean = false, 
         skipRetryAndBlacklist: Boolean = false
@@ -3857,7 +3859,8 @@ object HproseInstance {
         if (!forceRefresh) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null && cachedUser.username != null) {
-                if (cachedUser.hasExpired) {
+                val needsRouteRefresh = cachedUser.baseUrl.isNullOrEmpty()
+                if (cachedUser.hasExpired || needsRouteRefresh) {
                     // Start background refresh if not already running
                     val shouldStartBackgroundRefresh = userUpdateMutex.withLock {
                         if (!ongoingUserUpdates.contains(userId)) {
@@ -3874,11 +3877,12 @@ object HproseInstance {
                             cachedUser,
                             maxRetries,
                             skipRetryAndBlacklist,
-                            baseUrl
+                            if (needsRouteRefresh) "" else baseUrl
                         )
                     }
                 }
-                // Always return cached user immediately so UI can render avatar
+                // Always return cached user immediately so UI can render profile
+                // details, even if the route is missing and being resolved.
                 return cachedUser
             }
         } else {
@@ -4137,9 +4141,18 @@ object HproseInstance {
                     false
                 }
                 
-                // On success, update NodePool with discovered IPs
+                // On success, replace the access-node fast path with the route
+                // that actually served this read, matching the iOS behavior.
                 if (success) {
-                    NodePool.updateFromUser(user)
+                    val accessNodeMid = user.hostIds?.getOrNull(1)
+                    val workingIP = user.baseUrl
+                        ?.trim()
+                        ?.removePrefix("http://")
+                        ?.removePrefix("https://")
+                        ?.substringBefore("/")
+                    if (accessNodeMid != null && !workingIP.isNullOrBlank()) {
+                        NodePool.updateNodeIP(accessNodeMid, workingIP)
+                    }
                 }
                 
                 return success
@@ -4175,8 +4188,7 @@ object HproseInstance {
                 }
 
                 if (attempt < maxRetries) {
-                    val delayMs = attempt * 1000L
-                    delay(delayMs)
+                    Timber.tag("updateUserFromServer").d("Discarded failed route; resolving fresh provider IP immediately")
                 }
             }
         }
@@ -4206,18 +4218,43 @@ object HproseInstance {
     private val ipCacheMutex = Mutex()
     private const val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
 
+    private fun normalizeIPHealthCacheKey(ipAddress: String): String {
+        val trimmed = ipAddress.trim()
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .substringBefore("/")
+
+        if (trimmed.startsWith("[") && trimmed.contains("]")) {
+            return trimmed
+        }
+
+        val colonCount = trimmed.count { it == ':' }
+        if (colonCount > 1) {
+            val lastColonIndex = trimmed.lastIndexOf(":")
+            val potentialPort = trimmed.substring(lastColonIndex + 1)
+            val portNumber = potentialPort.toIntOrNull()
+            if (portNumber != null && portNumber in 1..65535) {
+                val ipPart = trimmed.take(lastColonIndex)
+                return "[$ipPart]:$portNumber"
+            }
+        }
+
+        return trimmed
+    }
+
     /**
      * Check if an IP is in cache and still valid
      * @return true if healthy, false if unhealthy or not in cache, null if cache expired
      */
     private suspend fun getCachedHealth(ipAddress: String): Boolean? = ipCacheMutex.withLock {
-        val cached = ipHealthCache[ipAddress] ?: return@withLock null
+        val cacheKey = normalizeIPHealthCacheKey(ipAddress)
+        val cached = ipHealthCache[cacheKey] ?: return@withLock null
         val (isHealthy, timestamp) = cached
         val now = System.currentTimeMillis()
         
         if (now - timestamp > IP_CACHE_DURATION_MS) {
             // Cache expired, remove it
-            ipHealthCache.remove(ipAddress)
+            ipHealthCache.remove(cacheKey)
             return@withLock null
         }
         
@@ -4228,7 +4265,7 @@ object HproseInstance {
      * Store IP health check result in cache
      */
     private suspend fun cacheIPHealth(ipAddress: String, isHealthy: Boolean) = ipCacheMutex.withLock {
-        ipHealthCache[ipAddress] = Pair(isHealthy, System.currentTimeMillis())
+        ipHealthCache[normalizeIPHealthCacheKey(ipAddress)] = Pair(isHealthy, System.currentTimeMillis())
     }
 
     /**
@@ -4237,10 +4274,7 @@ object HproseInstance {
      */
     private suspend fun invalidateIPCache(baseUrl: String?) {
         if (baseUrl.isNullOrEmpty()) return
-        val cacheKey = baseUrl
-            .removePrefix("http://")
-            .removePrefix("https://")
-            .substringBefore("/")
+        val cacheKey = normalizeIPHealthCacheKey(baseUrl)
         ipCacheMutex.withLock {
             ipHealthCache.remove(cacheKey)
         }
@@ -4250,7 +4284,7 @@ object HproseInstance {
      * Try each IP address in the list in pairs until a healthy one is found
      * Returns the first healthy IP immediately without waiting for others
      * Checks IPs in pairs (2 at a time) to avoid overwhelming the network
-     * Uses a 30-minute cache to avoid repeated checks
+     * Uses a short cache to avoid repeated checks
      * @param ipAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
      * @return First healthy IP address, or null if none found
@@ -4345,6 +4379,8 @@ object HproseInstance {
                         } else {
                             null
                         }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // Health check failed for this IP, cache as unhealthy
                         cacheIPHealth(ipAddress, false)
@@ -4420,10 +4456,11 @@ object HproseInstance {
             // Get the user instance to access their baseUrl
             val user = getUserInstance(userId)
             
-            // If user doesn't have a baseUrl, fetch it first
+            // If user doesn't have a baseUrl, fetch it first. Do not fall back to
+            // appUser here: dTweet users may live on different provider nodes.
             if (user.baseUrl.isNullOrBlank()) {
                 Timber.tag("resyncUser").d("User $userId has no baseUrl, fetching user first")
-                fetchUser(userId, baseUrl = "")
+                fetchUser(userId, baseUrl = "") ?: return null
             }
             
             val entry = "resync_user"
@@ -4434,14 +4471,11 @@ object HproseInstance {
                 "userid" to userId
             )
             
-            // Use the target user's hproseService (with their baseUrl)
-            val service = user.hproseService ?: run {
-                Timber.tag("resyncUser").w("User $userId has no hproseService, using appUser's client")
-                appUser.hproseService
-            }
-            
+            // Use only the target user's hproseService. If its route cannot be
+            // resolved, surface the failure instead of querying another node.
+            val service = user.hproseService
             if (service == null) {
-                Timber.tag("resyncUser").e("No hproseService available for resync")
+                Timber.tag("resyncUser").e("No target hproseService available for resync")
                 return null
             }
             
@@ -4511,17 +4545,10 @@ object HproseInstance {
 
     /**
      * Get provider IP for a user using "get_provider_ips" entry
-     * 
-     * Fallback Strategy:
-     * 1. Try lookup using appUser's client
-     * 2. If user IS appUser -> use entry IP to lookup
-     * 3. If user is NOT appUser and appUser UNHEALTHY -> refresh appUser via entry IP, retry lookup
-     * 4. If user is NOT appUser and appUser HEALTHY -> return null (user's servers are genuinely down)
-     * 
-     * Key Insight: When appUser is healthy, don't try entry IP fallback for other users.
-     * This is because appUser successfully responded with the user's IP list, but all those IPs
-     * failed health checks (they are genuinely unhealthy). Entry IP would return the same
-     * unhealthy list - no point in redundant lookup.
+     *
+     * getProviderIP is the source of truth after the one allowed cached route
+     * attempt. Always query it through the entry node so another user's stale or
+     * healthy provider node is never used as a fallback route.
      */
     suspend fun getProviderIP(mid: MimeiId): String? {
         if (!isOnline.value) {
@@ -4547,7 +4574,7 @@ object HproseInstance {
         }
     }
 
-    private suspend fun _getProviderIP(mid: MimeiId, hproseService: HproseService? = appUser.hproseService): String? {
+    private suspend fun _getProviderIP(mid: MimeiId, hproseService: HproseService?): String? {
         val entry = "get_provider_ips"
         val params = mapOf(
             "aid" to appId,
@@ -4611,6 +4638,9 @@ object HproseInstance {
             cacheIPHealth(url, true)
             true
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                throw e
+            }
             // Only log at debug level for expected network failures (timeout, unreachable)
             val message = e.message ?: e.toString()
             if (message.contains("timeout", ignoreCase = true) || 
