@@ -1000,7 +1000,7 @@ object HproseInstance {
             // Get raw response and unwrap v2 format (matching iOS implementation)
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             Timber.tag("fetchMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
-            
+
             // Handle v2 response format: {success: true, data: [...]} or {success: false, error: ...} or direct array
             val messageArray = when (rawResponse) {
                 is Map<*, *> -> {
@@ -1017,8 +1017,8 @@ object HproseInstance {
                         }
                     } else {
                         // Error response
-                        val errorMessage = responseMap?.get("error") as? String 
-                            ?: responseMap?.get("message") as? String 
+                        val errorMessage = responseMap?.get("error") as? String
+                            ?: responseMap?.get("message") as? String
                             ?: "Unknown error"
                         Timber.tag("fetchMessages").e("Server returned error: $errorMessage")
                         return null
@@ -1033,7 +1033,7 @@ object HproseInstance {
                     emptyList()
                 }
             }
-            
+
             Timber.tag("fetchMessages").d("Received ${messageArray.size} messages from server (before filtering)")
             
             val gson = GsonBuilder()
@@ -1091,7 +1091,7 @@ object HproseInstance {
             // Get raw response and unwrap v2 format (matching iOS implementation)
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             Timber.tag("checkNewMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
-            
+
             // Handle v2 response format: {success: true, data: [...]} or direct array
             val response = when (rawResponse) {
                 is Map<*, *> -> {
