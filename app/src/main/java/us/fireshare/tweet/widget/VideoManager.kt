@@ -79,6 +79,7 @@ object VideoManager {
     private var autoReplayListener: Player.Listener? = null
     private var hlsFallbackListener: HLSFallbackListener? = null
     private var currentFullScreenVideoMid: MimeiId? = null
+    private val fullScreenProtectedVideos = mutableSetOf<MimeiId>()
     
     // ===== HLS FALLBACK LISTENER TRACKING =====
     // Track HLS fallback listeners per player to allow proper cleanup
@@ -401,6 +402,7 @@ object VideoManager {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
+        if (isVideoProtectedForFullScreen(videoMid)) return true
         if (currentFullScreenVideoMid == videoMid) return true
         val player = videoPlayers[videoMid]
         return player?.isPlaying == true || player?.playWhenReady == true
@@ -604,6 +606,9 @@ object VideoManager {
         posterBitmaps.clear()
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
+        }
+        synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.clear()
         }
         Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED: Cleared all video collections")
     }
@@ -1109,7 +1114,8 @@ object VideoManager {
         val inactivePlayers = videoPlayers.keys.filter { videoMid ->
             !activeVideos.containsKey(videoMid) &&
                 !visibleVideos.contains(videoMid) &&
-                !isVideoInFullScreen(videoMid)
+                !isVideoInFullScreen(videoMid) &&
+                !isVideoProtectedForFullScreen(videoMid)
         }
 
         if (inactivePlayers.isNotEmpty()) {
@@ -1176,6 +1182,9 @@ object VideoManager {
         posterBitmaps.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.remove(videoMid)
+        }
+        synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.remove(videoMid)
         }
     }
     
@@ -1333,10 +1342,56 @@ object VideoManager {
     }
 
     /**
+     * Move a prepared feed/preload player into the independent full-screen manager.
+     *
+     * The player is removed from feed ownership without releasing it, preserving its
+     * prepared HLS playlist, buffered media, and decoder state for fullscreen playback.
+     */
+    fun takePlayerForFullScreen(videoMid: MimeiId): ExoPlayer? {
+        val player = videoPlayers.remove(videoMid) ?: return null
+        cancelPreload(videoMid)
+        activeVideos.remove(videoMid)
+        visibleVideos.remove(videoMid)
+        preloadedVideos.remove(videoMid)
+        synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.remove(videoMid)
+        }
+        playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+        currentFullScreenVideoMid = videoMid
+        try {
+            player.clearVideoSurface()
+            player.playWhenReady = false
+        } catch (e: Exception) {
+            Timber.tag("takePlayerForFullScreen").w("Error detaching player for $videoMid: ${e.message}")
+        }
+        Timber.tag("takePlayerForFullScreen").d("Handed off prepared player for $videoMid to full-screen")
+        return player
+    }
+
+    /**
      * Mark a video as owned by an independent full-screen player.
      */
     fun markVideoInFullScreen(videoMid: MimeiId) {
         currentFullScreenVideoMid = videoMid
+    }
+
+    fun protectVideosForFullScreen(videoMids: Collection<MimeiId>) {
+        synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.clear()
+            fullScreenProtectedVideos.addAll(videoMids)
+        }
+    }
+
+    fun clearFullScreenProtectedVideos() {
+        synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.clear()
+        }
+    }
+
+    private fun isVideoProtectedForFullScreen(videoMid: MimeiId): Boolean {
+        return synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.contains(videoMid)
+        }
     }
 
     /**
@@ -1375,6 +1430,9 @@ object VideoManager {
         preloadQueue.clear()
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
+        }
+        synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.clear()
         }
         preloadJobs.values.forEach { it.cancel() }
         preloadJobs.clear()

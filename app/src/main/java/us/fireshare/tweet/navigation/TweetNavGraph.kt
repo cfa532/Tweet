@@ -229,9 +229,7 @@ fun TweetNavGraph(
                 MediaBrowser(
                     parentEntry,
                     navController,
-                    md.params.index,
-                    md.params.tweetId,
-                    md.params.authorId
+                    md.params
                 )
             }
 

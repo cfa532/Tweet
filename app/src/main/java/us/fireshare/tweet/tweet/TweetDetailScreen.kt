@@ -442,9 +442,7 @@ fun TweetDetailScreen(
     // This doesn't touch the shared feed coordinator, so navigating back preserves the feed's state.
     LaunchedEffect(comments) {
         if (comments.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                commentsCoordinator.buildVideoList(comments)
-            }
+            commentsCoordinator.buildVideoList(comments)
             Timber.tag("TweetDetailScreen").d("Built comment video list with ${comments.size} comments")
         }
     }

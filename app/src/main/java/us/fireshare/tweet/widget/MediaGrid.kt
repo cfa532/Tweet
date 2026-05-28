@@ -103,6 +103,7 @@ fun MediaGrid(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
+    val videoCoordinator = LocalVideoCoordinator.current
     val audioMediaList by remember(mediaItems) {
         derivedStateOf {
             mediaItems.filter { inferMediaTypeFromAttachment(it) == MediaType.Audio }
@@ -265,6 +266,15 @@ fun MediaGrid(
                                     )
                                 }, 0, tweet.mid, tweet.authorId
                             )
+                            if (params.mediaItems.getOrNull(0)?.type == MediaType.Video ||
+                                params.mediaItems.getOrNull(0)?.type == MediaType.HLS_VIDEO
+                            ) {
+                                if (enableCoordinator) {
+                                    videoCoordinator.syncToFullScreenPlayer()
+                                } else {
+                                    FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+                                }
+                            }
                             navController.navigate(NavTweet.MediaViewer(params))
                         },
                     index = 0,
@@ -838,6 +848,15 @@ fun MediaGrid(
                                             )
                                         }, index, tweet.mid, tweet.authorId
                                     )
+                                    if (params.mediaItems.getOrNull(index)?.type == MediaType.Video ||
+                                        params.mediaItems.getOrNull(index)?.type == MediaType.HLS_VIDEO
+                                    ) {
+                                        if (enableCoordinator) {
+                                            videoCoordinator.syncToFullScreenPlayer()
+                                        } else {
+                                            FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+                                        }
+                                    }
                                     navController.navigate(NavTweet.MediaViewer(params))
                                 },
                             index = index,

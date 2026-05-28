@@ -59,6 +59,7 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.AudioPreview
+import us.fireshare.tweet.widget.FullScreenPlayerManager
 import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPreview
@@ -128,18 +129,31 @@ fun MediaItemView(
                 navController.navigate(NavTweet.TweetDetail(tweet.authorId, tweet.mid))
             }
             MediaType.Video, MediaType.HLS_VIDEO -> {
-                // Sync the current coordinator's video list to FullScreenPlayerManager
-                // so full-screen playback uses the same list (bookmarks/favorites/profile)
-                videoCoordinator.syncToFullScreenPlayer()
-                // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
+                val fullScreenMediaItems = allMediaItems ?: mediaItems
+                val fullScreenIndex = fullScreenMediaItems.indexOfFirst { it.mid == mediaItems[idx].mid }
+                    .takeIf { it >= 0 } ?: idx
                 val params = MediaViewerParams(
-                    mediaItems.map {
+                    fullScreenMediaItems.map {
                         MediaItem(
                             getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                             it.type
                         )
-                    }, idx, tweet.mid, tweet.authorId
+                    },
+                    fullScreenIndex,
+                    tweet.mid,
+                    tweet.authorId
                 )
+
+                if (enableCoordinator) {
+                    // Sync the current coordinator's video list to FullScreenPlayerManager
+                    // so full-screen playback uses the same list (bookmarks/favorites/profile).
+                    videoCoordinator.syncToFullScreenPlayer()
+                } else {
+                    // Detail main-tweet videos are intentionally outside the comments coordinator;
+                    // seed fullscreen from the exact media payload instead.
+                    FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+                }
+                // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
                 navController.navigate(NavTweet.MediaViewer(params))
             }
             else -> {

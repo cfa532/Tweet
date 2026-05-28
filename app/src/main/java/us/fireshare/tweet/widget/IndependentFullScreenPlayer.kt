@@ -48,8 +48,11 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import timber.log.Timber
+import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
@@ -71,6 +74,9 @@ import kotlin.math.abs
 fun IndependentFullScreenPlayer(
     startIndex: Int,
     modifier: Modifier = Modifier,
+    tappedMediaIndex: Int = startIndex,
+    tappedVideoMid: MimeiId? = null,
+    fallbackMediaItems: List<MediaItem> = emptyList(),
     tappedTweet: Tweet? = null, // The tweet that was actually tapped
     parentEntry: NavBackStackEntry,
     onClose: () -> Unit
@@ -79,24 +85,34 @@ fun IndependentFullScreenPlayer(
 
     // Use the video list from FullScreenPlayerManager (synced by the coordinator when video was tapped)
     val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
-    val actualVideoList = fullScreenVideoList ?: emptyList()
-    val actualStartIndex = if (tappedTweet != null) {
+    val requestedVideoMid = tappedVideoMid ?: if (tappedTweet != null) {
         // Find the video mid from the tapped tweet's attachments
-        val videoMid = tappedTweet.attachments?.firstOrNull { attachment ->
+        tappedTweet.attachments?.firstOrNull { attachment ->
             val mediaType = inferMediaTypeFromAttachment(attachment)
             mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
         }?.mid
-        if (videoMid != null && fullScreenVideoList != null) {
-            val foundIndex = fullScreenVideoList.indexOfFirst { it.first == videoMid }.coerceAtLeast(0)
-            Timber.d("IndependentFullScreenPlayer - Found video $videoMid at index $foundIndex in video list")
-            foundIndex
-        } else {
-            Timber.d("IndependentFullScreenPlayer - No video found in tapped tweet, using startIndex: $startIndex")
-            startIndex
-        }
     } else {
-        Timber.d("IndependentFullScreenPlayer - No tapped tweet, using startIndex: $startIndex")
-        startIndex
+        null
+    }
+    val fallbackVideoList = remember(fallbackMediaItems) {
+        fallbackMediaItems
+            .filter { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
+            .map { it.url.getMimeiKeyFromUrl() to (it.type ?: MediaType.Video) }
+    }
+    val managerHasRequestedVideo = requestedVideoMid != null &&
+        fullScreenVideoList?.any { it.first == requestedVideoMid } == true
+    val actualVideoList = if (managerHasRequestedVideo) {
+        fullScreenVideoList.orEmpty()
+    } else {
+        fallbackVideoList
+    }
+    val actualStartIndex = requestedVideoMid?.let { videoMid ->
+        actualVideoList.indexOfFirst { it.first == videoMid }
+    }?.takeIf { it >= 0 } ?: startIndex.coerceIn(0, actualVideoList.lastIndex.coerceAtLeast(0))
+    if (requestedVideoMid != null) {
+        Timber.d("IndependentFullScreenPlayer - Requested video $requestedVideoMid resolved to index $actualStartIndex")
+    } else {
+        Timber.d("IndependentFullScreenPlayer - No requested video, using startIndex: $actualStartIndex")
     }
     val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -117,7 +133,7 @@ fun IndependentFullScreenPlayer(
     }
     
     // Initialize the singleton player
-    LaunchedEffect(Unit) {
+    LaunchedEffect(actualVideoList, actualStartIndex, managerHasRequestedVideo, fallbackMediaItems, tappedMediaIndex) {
         Timber.d("IndependentFullScreenPlayer - Initializing with ${actualVideoList.size} videos, start index: $actualStartIndex")
         Timber.d("IndependentFullScreenPlayer - Tapped tweet: ${tappedTweet?.mid}")
         
@@ -125,7 +141,15 @@ fun IndependentFullScreenPlayer(
         
         // Set the video list
         Timber.d("IndependentFullScreenPlayer - Setting video list with ${actualVideoList.size} videos")
-        FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
+        if (!managerHasRequestedVideo && fallbackMediaItems.isNotEmpty()) {
+            FullScreenPlayerManager.setVideoListFromMediaItems(
+                mediaItems = fallbackMediaItems,
+                startMediaIndex = tappedMediaIndex,
+                startPlayback = true
+            )
+        } else {
+            FullScreenPlayerManager.setVideoList(actualVideoList, actualStartIndex)
+        }
         
         // Set up callbacks
         FullScreenPlayerManager.setOnVideoChanged { videoMid, index ->

@@ -14,20 +14,24 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
  * Singleton manager for the independent fullscreen video player.
  * Handles automatic video progression and maintains tweet list context.
  */
 object FullScreenPlayerManager {
+    private const val FULLSCREEN_PROTECTED_NEIGHBOR_COUNT = 2
     private var exoPlayer: ExoPlayer? = null
     private val _playerFlow = MutableStateFlow<ExoPlayer?>(null)
     /** Observe this instead of polling getCurrentPlayer() every 100ms. */
     val playerFlow: StateFlow<ExoPlayer?> = _playerFlow.asStateFlow()
     private var currentVideoList: List<Pair<MimeiId, MediaType>>? = null
+    private var explicitVideoUrlMap: Map<MimeiId, String> = emptyMap()
     private var videoBaseUrlMap: Map<MimeiId, String> = emptyMap() // Map videoMid to author's baseUrl
     private var currentVideoIndex: Int = 0
     private var onVideoChanged: ((MimeiId, Int) -> Unit)? = null
@@ -63,7 +67,43 @@ object FullScreenPlayerManager {
         }
         currentVideoList = videoList
         currentVideoIndex = startIndex.coerceIn(0, videoList.size - 1)
+        protectCurrentWindow()
         scope.launch { playCurrentVideo() }
+    }
+
+    fun setVideoListFromMediaItems(mediaItems: List<MediaItem>, startMediaIndex: Int, startPlayback: Boolean = false) {
+        val videoItems = mutableListOf<Pair<MimeiId, MediaType>>()
+        val urlMap = mutableMapOf<MimeiId, String>()
+        val tappedVideoMid = mediaItems.getOrNull(startMediaIndex)?.takeIf { isVideoType(it.type) }
+            ?.url
+            ?.getMimeiKeyFromUrl()
+
+        mediaItems.forEach { mediaItem ->
+            val mediaType = mediaItem.type ?: MediaType.Unknown
+            if (isVideoType(mediaType)) {
+                val videoMid = mediaItem.url.getMimeiKeyFromUrl()
+                videoItems.add(videoMid to mediaType)
+                urlMap[videoMid] = mediaItem.url
+            }
+        }
+
+        if (videoItems.isEmpty()) return
+
+        currentVideoList = videoItems
+        explicitVideoUrlMap = urlMap
+        videoBaseUrlMap = emptyMap()
+        currentVideoIndex = tappedVideoMid?.let { mid ->
+            videoItems.indexOfFirst { it.first == mid }
+        }?.takeIf { it >= 0 } ?: startMediaIndex.coerceIn(0, videoItems.lastIndex)
+        protectCurrentWindow()
+
+        if (startPlayback) {
+            scope.launch { playCurrentVideo() }
+        }
+    }
+
+    fun hasVideo(videoMid: MimeiId): Boolean {
+        return currentVideoList?.any { it.first == videoMid } == true
     }
     
     /**
@@ -76,10 +116,12 @@ object FullScreenPlayerManager {
         
         // Build map from videoMid to author's baseUrl
         videoBaseUrlMap = buildBaseUrlMap(videoList, tweets)
+        explicitVideoUrlMap = emptyMap()
         
         // Only update the list if we don't have a current list or if the current video is no longer in the new list
-        if (currentVideoList == null || getCurrentVideoMid()?.let { currentMid ->
-            !videoList.any { it.first == currentMid }
+        val currentMid = getCurrentVideoMid()
+        if (currentVideoList == null || currentMid?.let { currentVideoMid ->
+            !videoList.any { it.first == currentVideoMid }
         } == true) {
             // Current video not in new list, update but don't auto-play
             currentVideoList = videoList
@@ -89,7 +131,14 @@ object FullScreenPlayerManager {
         } else {
             // Current video still in list, just update the list reference
             currentVideoList = videoList
+            currentMid?.let { currentVideoMid ->
+                val updatedIndex = videoList.indexOfFirst { it.first == currentVideoMid }
+                if (updatedIndex >= 0) {
+                    currentVideoIndex = updatedIndex
+                }
+            }
         }
+        protectCurrentWindow()
     }
     
     /**
@@ -144,6 +193,7 @@ object FullScreenPlayerManager {
             val (nextVideoMid, nextMediaType) = videoList[nextIndex]
             Timber.d("FullScreenPlayerManager - Moving from index $currentVideoIndex to $nextIndex, next video: $nextVideoMid, type: $nextMediaType")
             currentVideoIndex = nextIndex
+            protectCurrentWindow()
             scope.launch { playCurrentVideo() }
         } else {
             // End of list - stop playing
@@ -169,6 +219,7 @@ object FullScreenPlayerManager {
             Timber.d("FullScreenPlayerManager - Beginning of list, looping to end")
             currentVideoIndex = videoList.size - 1
         }
+        protectCurrentWindow()
         scope.launch { playCurrentVideo() }
     }
 
@@ -180,6 +231,7 @@ object FullScreenPlayerManager {
         val (videoMid, mediaType) = videoList[currentVideoIndex]
 
         Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
+        protectCurrentWindow()
         VideoManager.markVideoInFullScreen(videoMid)
         VideoManager.stopAllPreloading()
         VideoManager.pauseVideo(videoMid)
@@ -196,14 +248,25 @@ object FullScreenPlayerManager {
             val preloaded = preloadedNextPlayer!!
             preloadedNextPlayer = null
             preloadedNextIndex = -1
+            prepareClaimedPlayer(preloaded)
             switchToPlayer(videoMid, preloaded)
             onVideoChanged?.invoke(videoMid, currentVideoIndex)
             return
         }
 
-        // 2. Create a new player with resolved HLS URL
+        // 2. Claim a feed/preload player if one is already prepared for this video.
+        VideoManager.takePlayerForFullScreen(videoMid)?.let { claimedPlayer ->
+            Timber.d("FullScreenPlayerManager - Using prepared feed/preload player for $videoMid")
+            prepareClaimedPlayer(claimedPlayer)
+            switchToPlayer(videoMid, claimedPlayer)
+            onVideoChanged?.invoke(videoMid, currentVideoIndex)
+            return
+        }
+
+        // 3. Create a new player with resolved HLS URL
+        val explicitUrl = explicitVideoUrlMap[videoMid]
         val baseUrl = videoBaseUrlMap[videoMid] ?: HproseInstance.appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
-        val videoUrl = HproseInstance.getMediaUrl(videoMid, baseUrl)
+        val videoUrl = explicitUrl ?: HproseInstance.getMediaUrl(videoMid, baseUrl)
         if (videoUrl != null) {
             Timber.d("FullScreenPlayerManager - Loading video: $videoUrl, type: $mediaType")
             loadVideo(videoMid, videoUrl, mediaType)
@@ -378,6 +441,36 @@ object FullScreenPlayerManager {
         autoAdvanceListener = listener
         player.addListener(listener)
     }
+
+    private fun protectCurrentWindow() {
+        val videoList = currentVideoList ?: return
+        if (videoList.isEmpty()) return
+
+        val start = (currentVideoIndex - FULLSCREEN_PROTECTED_NEIGHBOR_COUNT).coerceAtLeast(0)
+        val end = (currentVideoIndex + FULLSCREEN_PROTECTED_NEIGHBOR_COUNT).coerceAtMost(videoList.lastIndex)
+        val protectedMids = (start..end).map { videoList[it].first }
+        VideoManager.protectVideosForFullScreen(protectedMids)
+    }
+
+    private fun isVideoType(mediaType: MediaType?): Boolean {
+        return mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+    }
+
+    private fun prepareClaimedPlayer(player: ExoPlayer) {
+        try {
+            when (player.playbackState) {
+                Player.STATE_IDLE -> player.prepare()
+                Player.STATE_ENDED -> {
+                    player.seekTo(0)
+                    player.prepare()
+                }
+            }
+            player.volume = 1f
+            player.playWhenReady = false
+        } catch (e: Exception) {
+            Timber.w("FullScreenPlayerManager - Error preparing claimed player: ${e.message}")
+        }
+    }
     
     /**
      * Get the current ExoPlayer instance
@@ -438,8 +531,10 @@ object FullScreenPlayerManager {
         exoPlayer = null
         _playerFlow.value = null
         ownedFullScreenVideoMid?.let { VideoManager.clearVideoInFullScreen(it) }
+        VideoManager.clearFullScreenProtectedVideos()
         ownedFullScreenVideoMid = null
         currentVideoList = null
+        explicitVideoUrlMap = emptyMap()
         videoBaseUrlMap = emptyMap()
         currentVideoIndex = 0
         loadGeneration += 1

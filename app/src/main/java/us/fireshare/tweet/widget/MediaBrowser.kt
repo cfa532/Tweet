@@ -77,6 +77,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
+import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
 import us.fireshare.tweet.tweet.CommentButton
@@ -92,10 +93,11 @@ import kotlin.math.roundToInt
 fun MediaBrowser(
     parentEntry: NavBackStackEntry,
     navController: NavController,
-    startIndex: Int,
-    tweetId: MimeiId,
-    authorId: MimeiId
+    params: MediaViewerParams
 ) {
+    val startIndex = params.index
+    val tweetId = params.tweetId
+    val authorId = params.authorId
     Timber.d("MediaBrowser - Composable called with startIndex: $startIndex, tweetId: $tweetId, authorId: $authorId")
     /**
      *  Create a tweetViewModel with given tweetId to remember the position of this tweet
@@ -110,42 +112,50 @@ fun MediaBrowser(
     }
     val tweet by viewModel.tweetState.collectAsState()
     
-    // Use the video list from FullScreenPlayerManager (synced by the coordinator when video was tapped)
-    val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
-    val videoList = fullScreenVideoList?.map { it.first } ?: emptyList()
+    val routeMediaItems = params.mediaItems
 
-    // Find the video mid from the current tweet's attachments
-    val currentVideoMid = tweet.attachments?.firstOrNull { attachment ->
-        val mediaType = inferMediaTypeFromAttachment(attachment)
-        mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-    }?.mid
+    val tweetMediaItems = tweet.attachments?.map {
+        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
+        val inferredType = inferMediaTypeFromAttachment(it)
+        Timber.d("MediaBrowser - Creating MediaItem from tweet: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
+        MediaItem(mediaUrl, inferredType)
+    }
+
+    val mediaItems = if (routeMediaItems.isNotEmpty()) routeMediaItems else tweetMediaItems
+    val tappedVideoMid = mediaItems?.getOrNull(startIndex)?.takeIf {
+        it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO
+    }?.url?.getMimeiKeyFromUrl()
+
+    // Use the video list from FullScreenPlayerManager when it matches the tapped media.
+    // Otherwise fall back to the explicit media payload carried by navigation.
+    val fullScreenVideoList = FullScreenPlayerManager.getVideoList()
+    val managerHasTappedVideo = tappedVideoMid != null && FullScreenPlayerManager.hasVideo(tappedVideoMid)
+    val fallbackVideoList = mediaItems.orEmpty()
+        .filter { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
+        .map { it.url.getMimeiKeyFromUrl() }
+    val videoList = if (managerHasTappedVideo) {
+        fullScreenVideoList?.map { it.first } ?: emptyList()
+    } else {
+        fallbackVideoList
+    }
 
     // Index within FullScreenPlayerManager's cross-feed video list (used only for IndependentFullScreenPlayer)
-    val fullScreenPlayerStartIndex = if (currentVideoMid != null && fullScreenVideoList != null) {
-        fullScreenVideoList.indexOfFirst { it.first == currentVideoMid }.coerceAtLeast(0)
+    val fullScreenPlayerStartIndex = if (tappedVideoMid != null && fullScreenVideoList != null && managerHasTappedVideo) {
+        fullScreenVideoList.indexOfFirst { it.first == tappedVideoMid }.coerceAtLeast(0)
     } else {
         0
     }
 
     Timber.d("MediaBrowser - Using video list from FullScreenPlayerManager: ${videoList.size} videos, start index: $fullScreenPlayerStartIndex")
     
-    // Get attachments from the current tweet
-    val tweetAttachments = tweet.attachments
-    Timber.d("MediaBrowser - tweetAttachments: $tweetAttachments")
-    Timber.d("MediaBrowser - tweetAttachments size: ${tweetAttachments?.size}")
+    Timber.d("MediaBrowser - route mediaItems size: ${routeMediaItems.size}")
+    Timber.d("MediaBrowser - resolved mediaItems size: ${mediaItems?.size}")
     Timber.d("MediaBrowser - Video list size: ${videoList.size}, start index: $fullScreenPlayerStartIndex")
     Timber.d("MediaBrowser - Tweet list IDs: ${videoList.map { it }}")
-    
-    val mediaItems = tweetAttachments?.map {
-        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
-        val inferredType = inferMediaTypeFromAttachment(it)
-        Timber.d("MediaBrowser - Creating MediaItem: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
-        MediaItem(mediaUrl, inferredType)
-    }
 
     // Show loading state if tweetAttachments is null
-    if (tweetAttachments == null) {
-        Timber.d("MediaBrowser - Showing loading state because tweetAttachments is null")
+    if (mediaItems == null) {
+        Timber.d("MediaBrowser - Showing loading state because mediaItems is null")
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -169,9 +179,9 @@ fun MediaBrowser(
         return
     }
     
-    Timber.d("MediaBrowser - tweetAttachments loaded, size: ${tweetAttachments.size}")
+    Timber.d("MediaBrowser - mediaItems loaded, size: ${mediaItems.size}")
 
-    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems?.size ?: 0 })
+    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { mediaItems.size })
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
 
@@ -179,7 +189,7 @@ fun MediaBrowser(
     // do not compete for codecs/network behind the full-screen player.
     LaunchedEffect(pagerState.currentPage) {
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
-        mediaItems?.forEachIndexed { index, mediaItem ->
+        mediaItems.forEachIndexed { index, mediaItem ->
             if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
                 val videoMid = mediaItem.url.getMimeiKeyFromUrl()
                 VideoManager.pauseVideo(videoMid)
@@ -311,7 +321,7 @@ fun MediaBrowser(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
         ) { page ->
-            val mediaItem = mediaItems?.get(page) ?: return@HorizontalPager
+            val mediaItem = mediaItems[page]
             when (mediaItem.type) {
                 // video preview - use independent fullscreen player
                 MediaType.Video, MediaType.HLS_VIDEO -> {
@@ -324,6 +334,9 @@ fun MediaBrowser(
                     IndependentFullScreenPlayer(
                         // Always use full tweet list
                         startIndex = fullScreenPlayerStartIndex,
+                        tappedMediaIndex = startIndex,
+                        tappedVideoMid = tappedVideoMid,
+                        fallbackMediaItems = mediaItems,
                         tappedTweet = tweet, // Pass the current tweet for reference
                         parentEntry = parentEntry,
                         onClose = {
