@@ -30,10 +30,10 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 122    // Full release version code. Must be increased each time,
+        versionCode = 124    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "59"  // compared with App Mimei version to check for upgrade.
+        versionName = "61"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 122  // Play version code increased for release
+            versionCode = 123  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
