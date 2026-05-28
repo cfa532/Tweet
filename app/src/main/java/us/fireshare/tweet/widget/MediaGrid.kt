@@ -878,7 +878,7 @@ fun MediaGrid(
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun SimpleMp3PlaylistPlayer(
+fun SimpleMp3PlaylistPlayer(
     attachments: List<MimeiFileType>,
     baseUrl: String,
     modifier: Modifier = Modifier

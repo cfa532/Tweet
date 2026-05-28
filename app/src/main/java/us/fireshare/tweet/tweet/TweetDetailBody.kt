@@ -73,9 +73,9 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import us.fireshare.tweet.widget.AudioPlayer
 import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.SelectableText
+import us.fireshare.tweet.widget.SimpleMp3PlaylistPlayer
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -171,39 +171,43 @@ fun TweetDetailBody(
                             }
                         }
                     }
-                    // if all attachments are audio files
-
                     if (! tweet.attachments.isNullOrEmpty()) {
                         val attachments = tweet.attachments!!
                         
-                        // Separate media (visual) from documents (like iOS)
-                        val mediaAttachments = attachments.filter { attachment ->
+                        // Separate audio, visual media, and documents so each gets its own surface.
+                        val audioAttachments = attachments.filter { attachment ->
                             val type = inferMediaTypeFromAttachment(attachment)
-                            isMediaType(type)
+                            type == MediaType.Audio
+                        }
+                        val visualMediaAttachments = attachments.filter { attachment ->
+                            when (inferMediaTypeFromAttachment(attachment)) {
+                                MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO -> true
+                                else -> false
+                            }
                         }
                         val documentAttachments = attachments.filter { attachment ->
                             val type = inferMediaTypeFromAttachment(attachment)
                             isDocumentType(type)
                         }
                         
-                        // Handle media attachments
-                        if (mediaAttachments.isNotEmpty()) {
-                            val isAllAudio = mediaAttachments.all { 
-                                val type = inferMediaTypeFromAttachment(it)
-                                type == MediaType.Audio 
-                            }
-                            if (isAllAudio) {
-                                mediaAttachments.forEach {
-                                    it.url = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())
-                                }
-                                AudioPlayer(mediaAttachments)
-                            } else {
-                                AttachmentBrowser(
-                                    mediaItems = mediaAttachments,
-                                    viewModel = viewModel,
-                                    onVideoVisibilityChanged = onVideoVisibilityChanged
-                                )
-                            }
+                        // Audio appears above the visual media browser.
+                        if (audioAttachments.isNotEmpty()) {
+                            SimpleMp3PlaylistPlayer(
+                                attachments = audioAttachments,
+                                baseUrl = tweet.author?.baseUrl.orEmpty(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = if (visualMediaAttachments.isNotEmpty()) 8.dp else 0.dp)
+                            )
+                        }
+
+                        // Handle visual media attachments
+                        if (visualMediaAttachments.isNotEmpty()) {
+                            AttachmentBrowser(
+                                mediaItems = visualMediaAttachments,
+                                viewModel = viewModel,
+                                onVideoVisibilityChanged = onVideoVisibilityChanged
+                            )
                         }
                         
                         // Handle document attachments (below media)
