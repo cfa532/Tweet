@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -44,6 +45,7 @@ fun SelectableText(
     callback: (String) -> Unit = {} // Callback for when username is clicked
 )
 {
+    val uriHandler = LocalUriHandler.current
     // Plain `remember`: when the row is disposed (scroll-away or nav-away)
     // and remounted, isExpanded resets to false — the user "moved on" and
     // the tweet should fold back to its collapsed state.
@@ -93,13 +95,20 @@ fun SelectableText(
                     detectTapGestures { offset ->
                         layoutResult?.let { textLayoutResult ->
                             val position = textLayoutResult.getOffsetForPosition(offset)
-                            val annotations = annotatedText.getStringAnnotations(
+                            val urlAnnotations = annotatedText.getStringAnnotations(
+                                tag = "URL",
+                                start = position,
+                                end = position
+                            )
+                            val usernameAnnotations = annotatedText.getStringAnnotations(
                                 tag = "USERNAME_CLICK",
                                 start = position,
                                 end = position
                             )
-                            if (annotations.isNotEmpty()) {
-                                val username = annotations[0].item
+                            if (urlAnnotations.isNotEmpty()) {
+                                uriHandler.openUri(urlAnnotations[0].item)
+                            } else if (usernameAnnotations.isNotEmpty()) {
+                                val username = usernameAnnotations[0].item
                                 callback(username)  // navigate to the user account
                             } else {
                                 // Not clicking on a username, trigger text click callback if provided
