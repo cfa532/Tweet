@@ -26,6 +26,10 @@ import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
  */
 object FullScreenPlayerManager {
     private const val FULLSCREEN_PROTECTED_NEIGHBOR_COUNT = 2
+    private const val FULLSCREEN_MIN_BUFFER_MS = 30_000
+    private const val FULLSCREEN_MAX_BUFFER_MS = 90_000
+    private const val FULLSCREEN_BUFFER_FOR_PLAYBACK_MS = 1_500
+    private const val FULLSCREEN_BUFFER_AFTER_REBUFFER_MS = 8_000
     private var exoPlayer: ExoPlayer? = null
     private val _playerFlow = MutableStateFlow<ExoPlayer?>(null)
     /** Observe this instead of polling getCurrentPlayer() every 100ms. */
@@ -42,6 +46,7 @@ object FullScreenPlayerManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var preloadedNextPlayer: ExoPlayer? = null // Pre-buffered player for next video
     private var preloadedNextIndex: Int = -1 // Index of the preloaded video
+    private var preloadedNextVideoMid: MimeiId? = null
     private var loadGeneration: Int = 0
     private var loadingVideoMid: MimeiId? = null
     private var ownedFullScreenVideoMid: MimeiId? = null
@@ -243,15 +248,25 @@ object FullScreenPlayerManager {
         }
 
         // 1. Check if we already preloaded this video
-        if (preloadedNextPlayer != null && preloadedNextIndex == currentVideoIndex) {
+        if (preloadedNextPlayer != null &&
+            preloadedNextIndex == currentVideoIndex &&
+            preloadedNextVideoMid == videoMid
+        ) {
             Timber.d("FullScreenPlayerManager - Using preloaded player for index $currentVideoIndex")
             val preloaded = preloadedNextPlayer!!
             preloadedNextPlayer = null
             preloadedNextIndex = -1
+            preloadedNextVideoMid = null
             prepareClaimedPlayer(preloaded)
             switchToPlayer(videoMid, preloaded)
             onVideoChanged?.invoke(videoMid, currentVideoIndex)
             return
+        }
+        if (preloadedNextPlayer != null && preloadedNextIndex <= currentVideoIndex) {
+            preloadedNextPlayer?.release()
+            preloadedNextPlayer = null
+            preloadedNextIndex = -1
+            preloadedNextVideoMid = null
         }
 
         // 2. Claim a feed/preload player if one is already prepared for this video.
@@ -284,12 +299,16 @@ object FullScreenPlayerManager {
         if (nextIndex >= videoList.size) return
 
         // Don't re-preload if already preloaded for this index
-        if (preloadedNextIndex == nextIndex && preloadedNextPlayer != null) return
+        if (preloadedNextIndex == nextIndex &&
+            preloadedNextVideoMid == videoList[nextIndex].first &&
+            preloadedNextPlayer != null
+        ) return
 
         // Release any stale preloaded player
         preloadedNextPlayer?.release()
         preloadedNextPlayer = null
         preloadedNextIndex = -1
+        preloadedNextVideoMid = null
 
         val (nextVideoMid, nextMediaType) = videoList[nextIndex]
         val ctx = applicationContext ?: return
@@ -302,10 +321,13 @@ object FullScreenPlayerManager {
 
         scope.launch {
             try {
+                val expectedCurrentIndex = currentVideoIndex
                 val baseUrl = videoBaseUrlMap[nextVideoMid]
                     ?: HproseInstance.appUser.baseUrl
                     ?: "http://${BuildConfig.BASE_URL}"
-                val videoUrl = HproseInstance.getMediaUrl(nextVideoMid, baseUrl) ?: return@launch
+                val videoUrl = explicitVideoUrlMap[nextVideoMid]
+                    ?: HproseInstance.getMediaUrl(nextVideoMid, baseUrl)
+                    ?: return@launch
 
                 // Resolve HLS URL on IO thread to avoid blocking main
                 val resolvedHlsUrl = if (nextMediaType == MediaType.HLS_VIDEO) {
@@ -316,12 +338,30 @@ object FullScreenPlayerManager {
 
                 // createExoPlayer must run on Main thread (ExoPlayer requirement)
                 Timber.d("FullScreenPlayerManager - Preloading next video index $nextIndex: $nextVideoMid")
-                val player = createExoPlayer(ctx, videoUrl, nextMediaType, resolvedHlsUrl = resolvedHlsUrl)
+                val player = createExoPlayer(
+                    ctx,
+                    videoUrl,
+                    nextMediaType,
+                    resolvedHlsUrl = resolvedHlsUrl,
+                    minBufferMs = FULLSCREEN_MIN_BUFFER_MS,
+                    maxBufferMs = FULLSCREEN_MAX_BUFFER_MS,
+                    bufferForPlaybackMs = FULLSCREEN_BUFFER_FOR_PLAYBACK_MS,
+                    bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS
+                )
                 // Don't start playback — just let it buffer
                 player.playWhenReady = false
 
+                val stillNext = currentVideoIndex == expectedCurrentIndex &&
+                    currentVideoList?.getOrNull(nextIndex)?.first == nextVideoMid
+                if (!stillNext) {
+                    player.release()
+                    Timber.d("FullScreenPlayerManager - Released stale next preload for $nextVideoMid")
+                    return@launch
+                }
+
                 preloadedNextPlayer = player
                 preloadedNextIndex = nextIndex
+                preloadedNextVideoMid = nextVideoMid
                 Timber.d("FullScreenPlayerManager - Preloaded next video ready to use")
             } catch (e: Exception) {
                 Timber.e("FullScreenPlayerManager - Failed to preload next video: ${e.message}")
@@ -349,6 +389,7 @@ object FullScreenPlayerManager {
         newPlayer.volume = 1f
         newPlayer.playWhenReady = true
         addAutoAdvanceListener(newPlayer)
+        preloadNextVideo()
     }
 
     /**
@@ -379,8 +420,10 @@ object FullScreenPlayerManager {
                 videoUrl,
                 mediaType,
                 resolvedHlsUrl = resolvedHlsUrl,
-                bufferForPlaybackMs = 1_500,
-                bufferForPlaybackAfterRebufferMs = 4_000
+                minBufferMs = FULLSCREEN_MIN_BUFFER_MS,
+                maxBufferMs = FULLSCREEN_MAX_BUFFER_MS,
+                bufferForPlaybackMs = FULLSCREEN_BUFFER_FOR_PLAYBACK_MS,
+                bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS
             )
 
             if (generation != loadGeneration || loadingVideoMid != videoMid) {
@@ -520,6 +563,7 @@ object FullScreenPlayerManager {
         preloadedNextPlayer?.release()
         preloadedNextPlayer = null
         preloadedNextIndex = -1
+        preloadedNextVideoMid = null
 
         exoPlayer?.let { player ->
             autoAdvanceListener?.let { player.removeListener(it) }
