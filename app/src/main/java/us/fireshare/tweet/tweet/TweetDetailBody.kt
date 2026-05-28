@@ -49,7 +49,6 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -122,29 +121,16 @@ fun TweetDetailBody(
                         .weight(1f)
                         .padding(top = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = author?.name ?: "No One",
-                            modifier = Modifier.padding(start = 2.dp),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = " @${author?.username ?: "unknown"}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                        )
-                        Text(
-                            text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                        )
-                    }
+                    TweetHeaderText(
+                        authorName = author?.name,
+                        username = author?.username,
+                        timestamp = tweet.timestamp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 2.dp, end = 4.dp)
+                    )
                     // the 3 dots at the right end
                     TweetDropdownMenu(tweet, parentEntry, context = "tweetDetail", viewModel = viewModel)
                 }

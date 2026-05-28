@@ -39,7 +39,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -493,27 +492,14 @@ private fun RetweetWithContent(
                     verticalAlignment = Alignment.Top
                 ) {
                     // User info text
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = author?.name ?: "No One",
-                            modifier = Modifier.padding(start = 2.dp),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = " @${author?.username}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    TweetHeaderText(
+                        authorName = author?.name,
+                        username = author?.username,
+                        timestamp = tweet.timestamp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 2.dp, end = 4.dp)
+                    )
 
                     // Dropdown menu
                     TweetDropdownMenu(tweet, parentEntry, null, context)

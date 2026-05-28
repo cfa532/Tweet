@@ -25,7 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
@@ -126,30 +130,16 @@ fun TweetItemBody(
                     Row(
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Row(
-                            modifier = Modifier.padding(top = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = author?.name ?: "No One",
-                                modifier = Modifier.padding(start = 2.dp),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = " @${author?.username}",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            )
-                            Text(
-                                text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            )
-                        }
+                        TweetHeaderText(
+                            authorName = author?.name,
+                            username = author?.username,
+                            timestamp = tweet.timestamp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 2.dp, top = 2.dp, end = 4.dp)
+                        )
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
                     }
                 }
@@ -274,28 +264,14 @@ fun TweetItemBody(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
                     ) {
-                        Row(
-                            modifier = Modifier.padding(top = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = author?.name ?: "No One",
-                                modifier = Modifier.padding(start = 2.dp),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = " @${author?.username}",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            )
-                            Text(
-                                text = " · ${localizedTimeDifference(tweet.timestamp)}",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                            )
-                        }
+                        TweetHeaderText(
+                            authorName = author?.name,
+                            username = author?.username,
+                            timestamp = tweet.timestamp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 2.dp, top = 2.dp, end = 4.dp)
+                        )
                         TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
                     }
 
@@ -382,6 +358,40 @@ fun TweetItemBody(
             }
         }
     }
+}
+
+@Composable
+fun TweetHeaderText(
+    authorName: String?,
+    username: String?,
+    timestamp: Long,
+    modifier: Modifier = Modifier
+) {
+    val primaryColor = MaterialTheme.colorScheme.onSurface
+    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val safeUsername = username?.takeIf { it.isNotBlank() } ?: "unknown"
+
+    Text(
+        text = buildAnnotatedString {
+            withStyle(
+                SpanStyle(
+                    color = primaryColor,
+                    fontWeight = FontWeight.Bold
+                )
+            ) {
+                append(authorName?.takeIf { it.isNotBlank() } ?: "No One")
+            }
+            withStyle(SpanStyle(color = secondaryColor)) {
+                append(" @$safeUsername")
+                append(" · ${localizedTimeDifference(timestamp)}")
+            }
+        },
+        modifier = modifier,
+        fontSize = 15.sp,
+        lineHeight = 18.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 /**
