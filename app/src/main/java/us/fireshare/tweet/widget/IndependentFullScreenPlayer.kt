@@ -109,11 +109,8 @@ fun IndependentFullScreenPlayer(
     val actualStartIndex = requestedVideoMid?.let { videoMid ->
         actualVideoList.indexOfFirst { it.first == videoMid }
     }?.takeIf { it >= 0 } ?: startIndex.coerceIn(0, actualVideoList.lastIndex.coerceAtLeast(0))
-    if (requestedVideoMid != null) {
-        Timber.d("IndependentFullScreenPlayer - Requested video $requestedVideoMid resolved to index $actualStartIndex")
-    } else {
-        Timber.d("IndependentFullScreenPlayer - No requested video, using startIndex: $actualStartIndex")
-    }
+    val initializationKey = requestedVideoMid
+        ?: "${fallbackVideoList.joinToString("|") { it.first }}:$tappedMediaIndex:$startIndex"
     val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
     
@@ -126,6 +123,7 @@ fun IndependentFullScreenPlayer(
     var videoOffset by remember { mutableFloatStateOf(0f) }
     var isClosing by remember { mutableStateOf(false) }
     var shouldResumeAfterLifecyclePause by remember { mutableStateOf(false) }
+    var initializedKey by remember { mutableStateOf<String?>(null) }
 
     // Show controls (and thus action buttons) briefly when entering fullscreen
     LaunchedEffect(Unit) {
@@ -133,7 +131,16 @@ fun IndependentFullScreenPlayer(
     }
     
     // Initialize the singleton player
-    LaunchedEffect(actualVideoList, actualStartIndex, managerHasRequestedVideo, fallbackMediaItems, tappedMediaIndex) {
+    LaunchedEffect(actualVideoList, actualStartIndex, managerHasRequestedVideo, fallbackMediaItems, tappedMediaIndex, initializationKey) {
+        if (actualVideoList.isEmpty()) return@LaunchedEffect
+        if (initializedKey == initializationKey) return@LaunchedEffect
+        initializedKey = initializationKey
+
+        if (requestedVideoMid != null) {
+            Timber.d("IndependentFullScreenPlayer - Requested video $requestedVideoMid resolved to index $actualStartIndex")
+        } else {
+            Timber.d("IndependentFullScreenPlayer - No requested video, using startIndex: $actualStartIndex")
+        }
         Timber.d("IndependentFullScreenPlayer - Initializing with ${actualVideoList.size} videos, start index: $actualStartIndex")
         Timber.d("IndependentFullScreenPlayer - Tapped tweet: ${tappedTweet?.mid}")
         

@@ -544,15 +544,13 @@ fun TweetListView(
                         tweets = visibleTweets,
                         includeOppositeOnStop = !isScrolling
                     )
-                    if (!isScrolling) {
-                        VideoLoadingManager.updateDirectionalVideoPreloads(
-                            context = androidContext,
-                            visibleTweetIndexes = visibleTweetIndexes,
-                            direction = mediaPreloadDirection,
-                            tweets = visibleTweets,
-                            startPreloading = true
-                        )
-                    }
+                    VideoLoadingManager.updateDirectionalVideoPreloads(
+                        context = androidContext,
+                        visibleTweetIndexes = visibleTweetIndexes,
+                        direction = mediaPreloadDirection,
+                        tweets = visibleTweets,
+                        startPreloading = true
+                    )
                     lastMediaPreloadIndexes = visibleTweetIndexes
                     lastMediaPreloadDirection = mediaPreloadDirection
                     lastMediaPreloadScrolling = isScrolling

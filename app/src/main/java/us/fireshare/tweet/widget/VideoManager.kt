@@ -58,6 +58,7 @@ object VideoManager {
     // Compose-observable generation counter: incremented whenever a player is force-recreated.
     // VideoPreview uses this as a remember() key so it picks up the new player instance.
     val playerGenerations = mutableStateMapOf<MimeiId, Int>()
+    val preloadGenerations = mutableStateMapOf<MimeiId, Int>()
 
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
@@ -290,13 +291,21 @@ object VideoManager {
         startPreloading: Boolean,
         fallbackBaseUrl: String = ""
     ) {
+        val loadVisibleVideos = collectVideosAtIndexes(
+            tweetIndexes = visibleTweetIndexes,
+            tweets = tweets,
+            fallbackBaseUrl = fallbackBaseUrl
+        )
         val directionalVideos = collectDirectionalVideos(
             visibleTweetIndexes = visibleTweetIndexes,
             direction = direction,
             tweets = tweets,
             maxVideos = DIRECTIONAL_VIDEO_PRELOAD_COUNT
         )
-        val protectedIds = directionalVideos.map { it.mid }.toSet()
+        val preloadTargets = (loadVisibleVideos + directionalVideos)
+            .distinctBy { it.mid }
+            .take(DIRECTIONAL_VIDEO_PRELOAD_COUNT + loadVisibleVideos.size)
+        val protectedIds = preloadTargets.map { it.mid }.toSet()
 
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
@@ -307,7 +316,7 @@ object VideoManager {
 
         if (!startPreloading || direction == PreloadDirection.NONE) return
 
-        directionalVideos.forEach { video ->
+        preloadTargets.forEach { video ->
             if (!isVideoPreloaded(video.mid) &&
                 !isVideoVisible(video.mid) &&
                 !preloadingVideos.contains(video.mid)
@@ -333,6 +342,35 @@ object VideoManager {
         val baseUrl: String,
         val url: String
     )
+
+    private fun collectVideosAtIndexes(
+        tweetIndexes: Set<Int>,
+        tweets: List<Tweet>,
+        fallbackBaseUrl: String
+    ): List<DirectionalVideo> {
+        if (tweets.isEmpty() || tweetIndexes.isEmpty()) return emptyList()
+
+        val seen = mutableSetOf<MimeiId>()
+        val result = mutableListOf<DirectionalVideo>()
+        tweetIndexes.sorted().forEach { index ->
+            val tweet = tweets.getOrNull(index) ?: return@forEach
+            val baseUrl = tweet.author?.baseUrl.orEmpty()
+            tweet.attachments.orEmpty().forEach { attachment ->
+                if (attachment.type != MediaType.Video && attachment.type != MediaType.HLS_VIDEO) return@forEach
+                if (!seen.add(attachment.mid)) return@forEach
+                val url = if (!attachment.url.isNullOrBlank()) {
+                    attachment.url!!
+                } else {
+                    us.fireshare.tweet.HproseInstance.getMediaUrl(
+                        attachment.mid,
+                        baseUrl.ifBlank { fallbackBaseUrl }
+                    ) ?: return@forEach
+                }
+                result.add(DirectionalVideo(attachment.mid, attachment.type, baseUrl, url))
+            }
+        }
+        return result
+    }
 
     private fun collectDirectionalVideos(
         visibleTweetIndexes: Set<Int>,
@@ -424,6 +462,43 @@ object VideoManager {
             currentDirectionalPreloadVideos.clear()
         }
         Timber.d("VideoManager - Stopped all preloading")
+    }
+
+    /**
+     * Fullscreen is the user's active playback target. Drop background preload work and
+     * release stale preloaded players so weak IPFS links are not shared with off-screen videos.
+     */
+    fun suspendFeedActivityForFullScreen(protecting: MimeiId) {
+        stopAllPreloading()
+
+        val protectedForFullScreen = synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.toSet()
+        } + protecting
+
+        val stalePreloadedPlayers = videoPlayers.keys.filter { videoMid ->
+            preloadedVideos.contains(videoMid) &&
+                videoMid !in protectedForFullScreen &&
+                activeVideos.getOrDefault(videoMid, 0) == 0
+        }
+
+        stalePreloadedPlayers.forEach { videoMid ->
+            releasePlayer(videoMid)
+        }
+
+        videoPlayers.forEach { (videoMid, player) ->
+            if (videoMid != protecting && videoMid !in protectedForFullScreen) {
+                try {
+                    player.playWhenReady = false
+                    player.pause()
+                } catch (e: Exception) {
+                    Timber.tag("VideoManager").w("Error pausing feed player for fullscreen: ${e.message}")
+                }
+            }
+        }
+
+        Timber.tag("VideoManager").d(
+            "Suspended feed activity for fullscreen $protecting; released ${stalePreloadedPlayers.size} preloaded players"
+        )
     }
 
     // ===== PLAYER MANAGEMENT =====
@@ -597,6 +672,7 @@ object VideoManager {
         activeVideos.clear()
         visibleVideos.clear()
         preloadedVideos.clear()
+        preloadGenerations.clear()
         preloadJobs.values.forEach { it.cancel() }
         preloadJobs.clear()
         preloadingVideos.clear()
@@ -660,6 +736,14 @@ object VideoManager {
 
                     if (!isActive) return@launch
 
+                    ensureVideoPoster(
+                        context = context,
+                        videoMid = videoMid,
+                        videoUrl = videoUrl,
+                        videoType = videoType,
+                        resolvedHlsUrl = resolvedHlsUrl
+                    )
+
                     val player = createExoPlayer(
                         context,
                         videoUrl,
@@ -673,6 +757,7 @@ object VideoManager {
                     }
                     videoPlayers[videoMid] = player
                     preloadedVideos.add(videoMid)
+                    preloadGenerations[videoMid] = (preloadGenerations[videoMid] ?: 0) + 1
                     preloadQueue.remove(videoMid)
                     attachPosterGenerationOnReady(
                         context = context,
@@ -1175,6 +1260,7 @@ object VideoManager {
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        preloadGenerations.remove(videoMid)
         preloadQueue.remove(videoMid)
         preloadingVideos.remove(videoMid)
         preloadJobs.remove(videoMid)?.cancel()
@@ -1213,6 +1299,7 @@ object VideoManager {
             videoPlayers.remove(videoMid)
             visibleVideos.remove(videoMid)
             preloadedVideos.remove(videoMid)
+            preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
             preloadJobs.remove(videoMid)?.cancel()
@@ -1237,6 +1324,7 @@ object VideoManager {
             videoPlayers.remove(videoMid)
             visibleVideos.remove(videoMid)
             preloadedVideos.remove(videoMid)
+            preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
             preloadJobs.remove(videoMid)?.cancel()
@@ -1353,6 +1441,7 @@ object VideoManager {
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        preloadGenerations.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.remove(videoMid)
         }
@@ -1427,6 +1516,7 @@ object VideoManager {
         visibleVideos.clear()
         preloadingVideos.clear()
         preloadedVideos.clear()
+        preloadGenerations.clear()
         preloadQueue.clear()
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()

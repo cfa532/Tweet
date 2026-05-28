@@ -5,6 +5,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,8 @@ object FullScreenPlayerManager {
     private const val FULLSCREEN_MAX_BUFFER_MS = 90_000
     private const val FULLSCREEN_BUFFER_FOR_PLAYBACK_MS = 1_500
     private const val FULLSCREEN_BUFFER_AFTER_REBUFFER_MS = 8_000
+    private const val FULLSCREEN_PROGRESS_MONITOR_INTERVAL_MS = 2_000L
+    private const val FULLSCREEN_NO_PROGRESS_GRACE_MS = 15_000L
     private var exoPlayer: ExoPlayer? = null
     private val _playerFlow = MutableStateFlow<ExoPlayer?>(null)
     /** Observe this instead of polling getCurrentPlayer() every 100ms. */
@@ -50,6 +54,7 @@ object FullScreenPlayerManager {
     private var loadGeneration: Int = 0
     private var loadingVideoMid: MimeiId? = null
     private var ownedFullScreenVideoMid: MimeiId? = null
+    private var progressMonitorJob: Job? = null
     
     /**
      * Initialize the singleton player instance
@@ -238,7 +243,7 @@ object FullScreenPlayerManager {
         Timber.d("FullScreenPlayerManager - Playing video at index $currentVideoIndex: $videoMid, type: $mediaType")
         protectCurrentWindow()
         VideoManager.markVideoInFullScreen(videoMid)
-        VideoManager.stopAllPreloading()
+        VideoManager.suspendFeedActivityForFullScreen(protecting = videoMid)
         VideoManager.pauseVideo(videoMid)
 
         if (loadingVideoMid == videoMid && exoPlayer?.currentMediaItem != null) {
@@ -389,7 +394,64 @@ object FullScreenPlayerManager {
         newPlayer.volume = 1f
         newPlayer.playWhenReady = true
         addAutoAdvanceListener(newPlayer)
+        startProgressMonitor(videoMid, newPlayer)
         preloadNextVideo()
+    }
+
+    /**
+     * IPFS can be slow. Do not recreate a fullscreen player simply because it buffers.
+     * Only nudge playback when neither playback position nor buffered position moves
+     * for a grace window.
+     */
+    private fun startProgressMonitor(videoMid: MimeiId, player: ExoPlayer) {
+        progressMonitorJob?.cancel()
+        progressMonitorJob = scope.launch {
+            var lastPosition = player.currentPosition
+            var lastBufferedPosition = player.bufferedPosition
+            var lastProgressAt = System.currentTimeMillis()
+
+            while (exoPlayer === player && ownedFullScreenVideoMid == videoMid) {
+                delay(FULLSCREEN_PROGRESS_MONITOR_INTERVAL_MS)
+
+                val currentPosition = player.currentPosition
+                val currentBufferedPosition = player.bufferedPosition
+                val madeProgress = currentPosition > lastPosition || currentBufferedPosition > lastBufferedPosition
+                if (madeProgress || player.isPlaying) {
+                    lastProgressAt = System.currentTimeMillis()
+                    lastPosition = currentPosition
+                    lastBufferedPosition = currentBufferedPosition
+                    continue
+                }
+
+                val isWaitingForData = player.playbackState == Player.STATE_BUFFERING ||
+                    (player.playWhenReady && !player.isPlaying && player.playbackState == Player.STATE_READY)
+                if (!isWaitingForData || player.playerError != null || player.playbackState == Player.STATE_ENDED) {
+                    lastProgressAt = System.currentTimeMillis()
+                    lastPosition = currentPosition
+                    lastBufferedPosition = currentBufferedPosition
+                    continue
+                }
+
+                val idleFor = System.currentTimeMillis() - lastProgressAt
+                if (idleFor >= FULLSCREEN_NO_PROGRESS_GRACE_MS) {
+                    Timber.d(
+                        "FullScreenPlayerManager - No fullscreen progress for ${idleFor}ms on $videoMid; nudging current player at ${currentPosition}ms buffered=${currentBufferedPosition}ms"
+                    )
+                    try {
+                        player.seekTo(currentPosition.coerceAtLeast(0L))
+                        if (player.playbackState == Player.STATE_IDLE) {
+                            player.prepare()
+                        }
+                        player.playWhenReady = true
+                    } catch (e: Exception) {
+                        Timber.w("FullScreenPlayerManager - Progress nudge failed for $videoMid: ${e.message}")
+                    }
+                    lastProgressAt = System.currentTimeMillis()
+                    lastPosition = player.currentPosition
+                    lastBufferedPosition = player.bufferedPosition
+                }
+            }
+        }
     }
 
     /**
@@ -571,6 +633,8 @@ object FullScreenPlayerManager {
             player.pause()
             player.release()
         }
+        progressMonitorJob?.cancel()
+        progressMonitorJob = null
         autoAdvanceListener = null
         exoPlayer = null
         _playerFlow.value = null

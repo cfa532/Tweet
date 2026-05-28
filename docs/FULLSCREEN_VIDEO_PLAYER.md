@@ -49,6 +49,12 @@ override fun onTerminate() {
 
 ## Key Features
 
+### IPFS-Aware Fullscreen Playback
+- Treat slow buffering as normal on IPFS.
+- Suspend feed/preload work when fullscreen starts so the active video gets bandwidth.
+- Monitor player progress during fullscreen buffering. If `currentPosition` or `bufferedPosition` advances, keep waiting.
+- Only nudge playback after a no-progress grace window; avoid player recreation unless there is a real player error.
+
 ### 1. **Auto-Replay Functionality**
 - **Automatic restart**: Videos automatically restart when they end in full screen mode
 - **Configurable**: Can be enabled/disabled via the `autoReplay` parameter
@@ -282,4 +288,4 @@ Both variants now share the same drag scaling algorithm as `IndependentFullScree
 4. **Subtitle support**: Display video subtitles
 5. **Playback speed**: Variable playback speed controls
 6. **Memory profiling**: Add memory usage monitoring and alerts
-7. **Background playback**: Support for background audio playback 
+7. **Background playback**: Support for background audio playback

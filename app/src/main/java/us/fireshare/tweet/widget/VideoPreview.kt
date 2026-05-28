@@ -73,7 +73,12 @@ fun VideoPreview(
     val shouldPlay = if (shouldUseCoordinator) state.coordinatorWantsToPlay else autoPlay
     val effectivelyVisible = if (shouldUseCoordinator) (state.isVideoVisible || shouldPlay) else state.isVideoVisible
     var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
-    val shouldAcquirePlayer = !shouldUseCoordinator || shouldPlay || visibilityRatio >= 0.35f
+    val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
+    val hasWarmPlayer = videoMid?.let { VideoManager.isVideoPreloaded(it) } == true
+    val shouldAcquirePlayer = !shouldUseCoordinator ||
+        shouldPlay ||
+        visibilityRatio >= 0.35f ||
+        (hasWarmPlayer && visibilityRatio > 0f)
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, coordinator) {
@@ -116,7 +121,7 @@ fun VideoPreview(
     // --- ExoPlayer (regenerated on force-recreate) ---
     val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
     val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
-    val exoPlayer = remember(videoMid, playerGeneration, shouldAcquirePlayer, url, videoType) {
+    val exoPlayer = remember(videoMid, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType) {
         if (!shouldAcquirePlayer || url == null) return@remember null
         val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
             HlsUrlResolver.getCached(context, url)

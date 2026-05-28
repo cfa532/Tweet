@@ -198,6 +198,15 @@ val httpDataSourceFactory = DefaultHttpDataSource.Factory()
 
 ## 6. Retry Mechanism
 
+### IPFS-Aware Recovery Rule
+Videos are served over IPFS, so slow segment delivery is expected. Android should match the iOS rule: **slow is not broken; no progress is broken**.
+
+- Do not recreate an ExoPlayer just because fullscreen is buffering.
+- While fullscreen is active, suspend feed/directional preloads so the active video is not competing with background work.
+- During fullscreen buffering, monitor `currentPosition` and `bufferedPosition`.
+- If either value is moving, keep waiting.
+- If neither value moves for a grace window, nudge the current player with `seekTo(currentPosition)` and `prepare()` rather than immediately releasing/recreating it.
+
 ### Automatic Retries
 - **Max Retries**: 3 attempts
 - **Retry Delay**: 2 seconds between retries
