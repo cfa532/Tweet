@@ -1107,7 +1107,9 @@ object VideoManager {
      */
     fun cleanupInactivePlayers() {
         val inactivePlayers = videoPlayers.keys.filter { videoMid ->
-            !activeVideos.containsKey(videoMid) && !visibleVideos.contains(videoMid)
+            !activeVideos.containsKey(videoMid) &&
+                !visibleVideos.contains(videoMid) &&
+                !isVideoInFullScreen(videoMid)
         }
 
         if (inactivePlayers.isNotEmpty()) {
@@ -1331,11 +1333,27 @@ object VideoManager {
     }
 
     /**
+     * Mark a video as owned by an independent full-screen player.
+     */
+    fun markVideoInFullScreen(videoMid: MimeiId) {
+        currentFullScreenVideoMid = videoMid
+    }
+
+    /**
      * Return video player from full-screen mode back to preview
      */
     fun returnFromFullScreen(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let {
             Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
+            clearVideoInFullScreen(videoMid)
+        }
+    }
+
+    /**
+     * Clear full-screen ownership without disturbing a newer full-screen video.
+     */
+    fun clearVideoInFullScreen(videoMid: MimeiId) {
+        if (currentFullScreenVideoMid == videoMid) {
             currentFullScreenVideoMid = null
         }
     }

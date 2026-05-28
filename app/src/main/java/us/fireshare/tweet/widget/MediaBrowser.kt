@@ -175,20 +175,14 @@ fun MediaBrowser(
     var showControls by remember { mutableStateOf(false) }  // show control buttons for play/stop
     val animationScope = rememberCoroutineScope()
 
-    // Handle page changes to pause/resume videos
+    // Full-screen video is owned by FullScreenPlayerManager. Keep feed players quiet so they
+    // do not compete for codecs/network behind the full-screen player.
     LaunchedEffect(pagerState.currentPage) {
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
-        // Pause all videos except the current one
         mediaItems?.forEachIndexed { index, mediaItem ->
             if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
                 val videoMid = mediaItem.url.getMimeiKeyFromUrl()
-                if (index == pagerState.currentPage) {
-                    // Resume current video
-                    VideoManager.resumeVideo(videoMid, true)
-                } else {
-                    // Pause other videos
-                    VideoManager.pauseVideo(videoMid)
-                }
+                VideoManager.pauseVideo(videoMid)
             }
         }
     }
@@ -545,4 +539,3 @@ fun MediaBrowser(
         }
     }
 }
-

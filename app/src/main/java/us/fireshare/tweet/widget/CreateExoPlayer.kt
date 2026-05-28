@@ -41,7 +41,9 @@ fun createExoPlayer(
     url: String,
     mediaType: MediaType? = null,
     forceSoftwareDecoder: Boolean = false,
-    resolvedHlsUrl: String? = null
+    resolvedHlsUrl: String? = null,
+    bufferForPlaybackMs: Int = 1_000,
+    bufferForPlaybackAfterRebufferMs: Int = 2_000
 ): ExoPlayer {
     val reliabilityMediaId = extractMediaMidFromUrl(url)
 
@@ -82,8 +84,8 @@ fun createExoPlayer(
         .setBufferDurationsMs(
             15_000,   // min buffer (15s) - reduced from 50s to save RAM
             50_000,   // max buffer (50s) - reduced from 120s to save ~100MB RAM
-            1_000,    // buffer for playback (1s) - faster initial start
-            2_000     // buffer for playback after rebuffer (2s)
+            bufferForPlaybackMs,
+            bufferForPlaybackAfterRebufferMs
         )
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()

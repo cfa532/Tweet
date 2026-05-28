@@ -41,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -108,6 +109,7 @@ fun IndependentFullScreenPlayer(
     var videoScale by remember { mutableFloatStateOf(1f) }
     var videoOffset by remember { mutableFloatStateOf(0f) }
     var isClosing by remember { mutableStateOf(false) }
+    var shouldResumeAfterLifecyclePause by remember { mutableStateOf(false) }
 
     // Show controls (and thus action buttons) briefly when entering fullscreen
     LaunchedEffect(Unit) {
@@ -166,8 +168,17 @@ fun IndependentFullScreenPlayer(
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
                 exoPlayer?.let { player ->
                     Timber.d("IndependentFullScreenPlayer - Lifecycle ${event.name}, pausing fullscreen video")
+                    shouldResumeAfterLifecyclePause = player.isPlaying || player.playWhenReady
                     player.playWhenReady = false
                     player.pause()
+                }
+            } else if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
+                exoPlayer?.let { player ->
+                    if (shouldResumeAfterLifecyclePause && player.playbackState != Player.STATE_ENDED) {
+                        Timber.d("IndependentFullScreenPlayer - Lifecycle ${event.name}, resuming fullscreen video")
+                        player.playWhenReady = true
+                    }
+                    shouldResumeAfterLifecyclePause = false
                 }
             }
         }

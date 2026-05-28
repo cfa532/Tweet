@@ -67,6 +67,7 @@ fun FullScreenVideoPlayer(
     val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var shouldResumeAfterLifecyclePause by remember { mutableStateOf(false) }
     
     // Add player listener to handle state changes
     DisposableEffect(existingPlayer) {
@@ -120,8 +121,15 @@ fun FullScreenVideoPlayer(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
                 Timber.d("FullScreenVideoPlayer: Lifecycle ${event.name}, pausing existingPlayer")
+                shouldResumeAfterLifecyclePause = existingPlayer.isPlaying || existingPlayer.playWhenReady
                 existingPlayer.playWhenReady = false
                 existingPlayer.pause()
+            } else if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
+                if (shouldResumeAfterLifecyclePause && existingPlayer.playbackState != Player.STATE_ENDED) {
+                    Timber.d("FullScreenVideoPlayer: Lifecycle ${event.name}, resuming existingPlayer")
+                    existingPlayer.playWhenReady = true
+                }
+                shouldResumeAfterLifecyclePause = false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -298,6 +306,7 @@ fun FullScreenVideoPlayer(
     var showCloseButton by remember { mutableStateOf(false) } // Start with close button hidden
     var dragOffset by remember { mutableFloatStateOf(0f) } // horizontal offset (for swipe)
     var verticalDragOffset by remember { mutableFloatStateOf(0f) } // vertical offset (for drag-to-exit)
+    var shouldResumeAfterLifecyclePause by remember { mutableStateOf(false) }
 
     // Get the dedicated full screen player
     val exoPlayer = remember {
@@ -330,8 +339,15 @@ fun FullScreenVideoPlayer(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
                 Timber.d("FullScreenVideoPlayer (API 30+): Lifecycle ${event.name}, pausing fullscreen player")
+                shouldResumeAfterLifecyclePause = exoPlayer.isPlaying || exoPlayer.playWhenReady
                 exoPlayer.playWhenReady = false
                 exoPlayer.pause()
+            } else if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
+                if (shouldResumeAfterLifecyclePause && exoPlayer.playbackState != Player.STATE_ENDED) {
+                    Timber.d("FullScreenVideoPlayer (API 30+): Lifecycle ${event.name}, resuming fullscreen player")
+                    exoPlayer.playWhenReady = true
+                }
+                shouldResumeAfterLifecyclePause = false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -547,6 +563,5 @@ fun FullScreenVideoPlayer(
         }
     }
 }
-
 
 
