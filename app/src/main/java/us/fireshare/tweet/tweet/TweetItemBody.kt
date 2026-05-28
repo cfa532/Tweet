@@ -64,7 +64,8 @@ fun TweetItemBody(
     context: String = "default",
     currentUserId: us.fireshare.tweet.datamodel.MimeiId? = null, // Current profile userId to prevent duplicate navigation
     onScrollToTop: (suspend () -> Unit)? = null, // Callback to scroll to top
-    containerTopY: Float? = null
+    containerTopY: Float? = null,
+    enableMediaPreloading: Boolean = true
 ) {
     val navController = LocalNavController.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -208,7 +209,8 @@ fun TweetItemBody(
                                     // For retweets/quotes, parentTweet.mid is the container tweet ID which must be used for video tracking
                                     // This ensures videos are identified by the parent (retweet/quote) ID and video mid
                                     parentTweetId = parentTweet?.mid?.takeIf { it.isNotEmpty() },
-                                    containerTopY = containerTopY
+                                    containerTopY = containerTopY,
+                                    enableRowPreloading = enableMediaPreloading
                                 )
                             }
                         }
@@ -328,7 +330,8 @@ fun TweetItemBody(
                                         mediaAttachments,
                                         viewModel,
                                         parentTweetId = parentTweet?.mid?.takeIf { it.isNotEmpty() },
-                                        containerTopY = containerTopY
+                                        containerTopY = containerTopY,
+                                        enableRowPreloading = enableMediaPreloading
                                     )
                                 }
                             }

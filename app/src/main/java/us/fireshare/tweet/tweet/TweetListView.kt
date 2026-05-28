@@ -441,6 +441,8 @@ fun TweetListView(
     // Derived states for pagination - optimized with throttling
     var isAtLastTweet by remember { mutableStateOf(false) }
     var isNearBottom by remember { mutableStateOf(false) }
+    var nearBottomPreloadToken by remember { mutableLongStateOf(0L) }
+    var lastNearBottomPreloadScrollSignature by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
     val visibleTweets = remember(tweets, showPrivateTweets) {
@@ -463,15 +465,20 @@ fun TweetListView(
         var directionStableCount = 0
         val stabilityThreshold = 3 // Require 3 consecutive frames to confirm direction change
         var wasAtTop = true // Track top-of-list transitions for onScrolledToTop
+        var lastMediaPreloadIndexes = emptySet<Int>()
+        var lastMediaPreloadDirection = PreloadDirection.NONE
+        var lastMediaPreloadScrolling: Boolean? = null
+        var lastMediaPreloadTime = 0L
 
-        snapshotFlow {
-            Triple(
-                listState.firstVisibleItemIndex,
-                listState.firstVisibleItemScrollOffset,
-                listState.isScrollInProgress
-            )
-        }
-            .collect { (firstVisibleItem, scrollOffset, isScrolling) ->
+	        snapshotFlow {
+	            Triple(
+	                listState.firstVisibleItemIndex,
+	                listState.firstVisibleItemScrollOffset,
+	                listState.isScrollInProgress
+	            )
+	        }
+	            .collect { (firstVisibleItem, scrollOffset, isScrolling) ->
+                val now = System.currentTimeMillis()
                 // --- Scroll direction tracking ---
                 val indexDelta = firstVisibleItem - previousFirstVisibleItem
                 val offsetDelta = scrollOffset - previousScrollOffset
@@ -522,7 +529,14 @@ fun TweetListView(
                 val visibleTweetIndexes = listState.layoutInfo.visibleItemsInfo
                     .mapNotNull { item -> visibleTweetIndexById[item.key as? String] }
                     .toSet()
-                if (visibleTweetIndexes.isNotEmpty()) {
+                val preloadStateChanged = visibleTweetIndexes != lastMediaPreloadIndexes ||
+                    mediaPreloadDirection != lastMediaPreloadDirection ||
+                    isScrolling != lastMediaPreloadScrolling
+                val preloadThrottleMs = if (isScrolling) 250L else 0L
+                if (visibleTweetIndexes.isNotEmpty() &&
+                    preloadStateChanged &&
+                    now - lastMediaPreloadTime >= preloadThrottleMs
+                ) {
                     ImageCacheManager.updateDirectionalImagePreloads(
                         context = androidContext,
                         visibleTweetIndexes = visibleTweetIndexes,
@@ -530,13 +544,19 @@ fun TweetListView(
                         tweets = visibleTweets,
                         includeOppositeOnStop = !isScrolling
                     )
-                    VideoLoadingManager.updateDirectionalVideoPreloads(
-                        context = androidContext,
-                        visibleTweetIndexes = visibleTweetIndexes,
-                        direction = mediaPreloadDirection,
-                        tweets = visibleTweets,
-                        startPreloading = !isScrolling
-                    )
+                    if (!isScrolling) {
+                        VideoLoadingManager.updateDirectionalVideoPreloads(
+                            context = androidContext,
+                            visibleTweetIndexes = visibleTweetIndexes,
+                            direction = mediaPreloadDirection,
+                            tweets = visibleTweets,
+                            startPreloading = true
+                        )
+                    }
+                    lastMediaPreloadIndexes = visibleTweetIndexes
+                    lastMediaPreloadDirection = mediaPreloadDirection
+                    lastMediaPreloadScrolling = isScrolling
+                    lastMediaPreloadTime = now
                 }
 
                 // Detect when list arrives at the absolute top.
@@ -552,7 +572,6 @@ fun TweetListView(
                 previousScrollOffset = scrollOffset
 
                 // Throttled scroll position saving (1 sec during scroll, immediate on stop)
-                val now = System.currentTimeMillis()
                 val shouldSave = !isRefreshingAtTop && (!isScrolling || (now - lastSaveTime > 1000))
                 if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
@@ -576,6 +595,15 @@ fun TweetListView(
                 val wasAtBottom = isAtLastTweet
                 isAtLastTweet = lastIndex == totalItems - 1
                 isNearBottom = lastIndex >= totalItems - 5 && lastIndex < totalItems - 1
+                if (isNearBottom) {
+                    val scrollSignature = Pair(firstVisibleItem, scrollOffset)
+                    if (hasUserScrolled && lastNearBottomPreloadScrollSignature != scrollSignature) {
+                        lastNearBottomPreloadScrollSignature = scrollSignature
+                        nearBottomPreloadToken++
+                    }
+                } else {
+                    lastNearBottomPreloadScrollSignature = null
+                }
 
                 if (isAtLastTweet != wasAtBottom) {
                     Timber.tag("TweetListView-Position").d("isAtLastTweet=$isAtLastTweet")
@@ -697,9 +725,11 @@ fun TweetListView(
         }
     )
 
-    // EFFECT 4: Preload next page when near bottom (only after user has scrolled)
-    LaunchedEffect(isNearBottom, serverDepleted, lastLoadedPage) {
-        if (isNearBottom && hasUserScrolled && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
+    // EFFECT 4: Preload next page once per near-bottom scroll position.
+    // Do not key this to lastLoadedPage; otherwise a successful preload can
+    // immediately trigger the next page while the user has not moved.
+    LaunchedEffect(nearBottomPreloadToken, serverDepleted) {
+        if (nearBottomPreloadToken > 0 && isNearBottom && hasUserScrolled && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
             val nextPage = lastLoadedPage + 1
             if (nextPage in inFlightPages) return@LaunchedEffect // Deduplicate in-flight request
             pendingLoadMorePage = nextPage

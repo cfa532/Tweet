@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -44,7 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -66,6 +72,46 @@ import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 
+private class ComposeScopedViewModelStoreOwner(
+    private val delegate: HasDefaultViewModelProviderFactory
+) : ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
+    private val store = ViewModelStore()
+
+    override val viewModelStore: ViewModelStore
+        get() = store
+
+    override val defaultViewModelProviderFactory: ViewModelProvider.Factory
+        get() = delegate.defaultViewModelProviderFactory
+
+    override val defaultViewModelCreationExtras: CreationExtras
+        get() = delegate.defaultViewModelCreationExtras
+
+    fun clear() {
+        store.clear()
+    }
+}
+
+@Composable
+private fun rememberTweetRowViewModel(tweet: Tweet, key: String = tweet.mid): TweetViewModel {
+    val activity = LocalActivity.current as ComponentActivity
+    val owner = remember(key) {
+        ComposeScopedViewModelStoreOwner(activity)
+    }
+
+    DisposableEffect(owner) {
+        onDispose {
+            owner.clear()
+        }
+    }
+
+    return hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+        viewModelStoreOwner = owner,
+        key = key
+    ) { factory ->
+        factory.create(tweet)
+    }
+}
+
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun TweetItem(
@@ -76,13 +122,7 @@ fun TweetItem(
     currentUserId: MimeiId? = null, // Current profile userId to prevent duplicate navigation
     onScrollToTop: (suspend () -> Unit)? = null // Callback to scroll to top
 ) {
-    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
-    val activity = LocalActivity.current as ComponentActivity
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        viewModelStoreOwner = activity, key = tweet.mid
-    ) { factory ->
-        factory.create(tweet)
-    }
+    val viewModel = rememberTweetRowViewModel(tweet)
 
     // Optimize: Use derivedStateOf to avoid unnecessary recomposition
     val isTweetValid by remember(tweet, tweet.author) {
@@ -245,7 +285,8 @@ fun TweetItem(
                     context = context,
                     currentUserId = currentUserId,
                     onScrollToTop = onScrollToTop,
-                    containerTopY = tweetTopY
+                    containerTopY = tweetTopY,
+                    enableMediaPreloading = false
                 )
             }
         }
@@ -343,13 +384,10 @@ private fun RetweetContent(
                     }
                     Box(modifier = Modifier.size(0.dp))
                 } else {
-                    // The tweet area with 'Forwarded by' label above
-                    // Use activity scope to ensure same ViewModel instance is shared
-                    val activity = LocalActivity.current as ComponentActivity
-                    val originalTweetViewModel =
-                        hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                            viewModelStoreOwner = activity, key = tweet.originalTweetId
-                        ) { factory -> factory.create(originalTweetNonNull) }
+                    val originalTweetViewModel = rememberTweetRowViewModel(
+                        tweet = originalTweetNonNull,
+                        key = tweet.originalTweetId ?: originalTweetNonNull.mid
+                    )
 
                     Column(modifier = Modifier.padding(top = 0.dp)) {
                         // Label: Forward by user, above the quoted tweet
@@ -386,7 +424,8 @@ private fun RetweetContent(
                             context = context,
                             currentUserId = currentUserId,
                             onScrollToTop = onScrollToTop,
-                            containerTopY = containerTopY
+                            containerTopY = containerTopY,
+                            enableMediaPreloading = false
                         )
                     }
                 }
@@ -415,13 +454,7 @@ private fun RetweetWithContent(
 ) {
     val navController = LocalNavController.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-    // Use activity scope to ensure same ViewModel instance is shared with TweetDetailScreen
-    val activity = LocalActivity.current as ComponentActivity
-    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-        viewModelStoreOwner = activity, key = tweet.mid
-    ) { factory ->
-        factory.create(tweet)
-    }
+    val viewModel = rememberTweetRowViewModel(tweet)
     
     // Optimize: Pre-compute derived values
     val author by remember(tweet.author) {
@@ -554,12 +587,13 @@ private fun RetweetWithContent(
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {
-                MediaGrid(
-                    tweet.attachments!!,
-                    viewModel,
-                    parentTweetId = tweet.mid,
-                    containerTopY = containerTopY
-                )
+                                MediaGrid(
+                                    tweet.attachments!!,
+                                    viewModel,
+                                    parentTweetId = tweet.mid,
+                                    containerTopY = containerTopY,
+                                    enableRowPreloading = false
+                                )
                             }
                         }
                     }
@@ -667,20 +701,18 @@ private fun QuotedTweetContent(
                 tonalElevation = 8.dp,
             ) {
                 // quoted tweet
-                // Use activity scope to ensure same ViewModel instance is shared
-                val activity = LocalActivity.current as ComponentActivity
                 TweetItemBody(
-                    hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
-                        viewModelStoreOwner = activity, key = tweet.originalTweetId
-                    ) { factory ->
-                        factory.create(originalTweet!!)
-                    },
+                    rememberTweetRowViewModel(
+                        tweet = originalTweet!!,
+                        key = tweet.originalTweetId ?: originalTweet!!.mid
+                    ),
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     isQuoted = true,
                     parentEntry = parentEntry,
                     parentTweet = tweet,
                     context = context,
-                    containerTopY = containerTopY
+                    containerTopY = containerTopY,
+                    enableMediaPreloading = false
                 )
             }
         }

@@ -13,9 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -27,7 +29,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
@@ -71,6 +72,8 @@ fun VideoPreview(
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
     val shouldPlay = if (shouldUseCoordinator) state.coordinatorWantsToPlay else autoPlay
     val effectivelyVisible = if (shouldUseCoordinator) (state.isVideoVisible || shouldPlay) else state.isVideoVisible
+    var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
+    val shouldAcquirePlayer = !shouldUseCoordinator || shouldPlay || visibilityRatio >= 0.35f
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, coordinator) {
@@ -94,6 +97,18 @@ fun VideoPreview(
     }
 
     // --- Visibility tracking via VideoLoadingManager ---
+    DisposableEffect(videoMid, shouldAcquirePlayer) {
+        if (videoMid != null && shouldAcquirePlayer) {
+            VideoManager.markVideoActive(videoMid)
+        }
+        onDispose {
+            if (videoMid != null && shouldAcquirePlayer) {
+                VideoManager.markVideoInactive(videoMid)
+                VideoManager.cleanupInactivePlayersDeferred()
+            }
+        }
+    }
+
     videoMid?.let { mid ->
         rememberVideoLoadingManager(videoMid = mid, isVisible = effectivelyVisible)
     }
@@ -101,16 +116,15 @@ fun VideoPreview(
     // --- ExoPlayer (regenerated on force-recreate) ---
     val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
     val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
-    val exoPlayer = remember(videoMid, playerGeneration) {
-        val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO && url != null) {
+    val exoPlayer = remember(videoMid, playerGeneration, shouldAcquirePlayer, url, videoType) {
+        if (!shouldAcquirePlayer || url == null) return@remember null
+        val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
             HlsUrlResolver.getCached(context, url)
         } else null
-        val player = if (videoMid != null && url != null) {
+        val player = if (videoMid != null) {
             VideoManager.getVideoPlayer(context, videoMid, url, videoType, resolvedHlsUrl)
-        } else if (url != null) {
-            createExoPlayer(context, url, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
         } else {
-            createExoPlayer(context, "", videoType ?: MediaType.Video)
+            createExoPlayer(context, url, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
         }
         player.repeatMode = Player.REPEAT_MODE_OFF
         player
@@ -125,10 +139,10 @@ fun VideoPreview(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP ->
-                    currentExoPlayer.playWhenReady = false
+                    currentExoPlayer?.playWhenReady = false
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     val vis = if (shouldUseCoordinator) (state.isVideoVisible || currentShouldPlay) else state.isVideoVisible
-                    if (vis && currentShouldPlay) currentExoPlayer.playWhenReady = true
+                    if (vis && currentShouldPlay) currentExoPlayer?.playWhenReady = true
                 }
                 else -> {}
             }
@@ -136,7 +150,7 @@ fun VideoPreview(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+            if (shouldUseCoordinator) {
                 coordinator.updateVideoVisibility(videoMid, playbackTweetId, 0f)
             }
         }
@@ -149,8 +163,9 @@ fun VideoPreview(
                 if (playbackState == Player.STATE_READY && videoMid != null) {
                     VideoManager.ensureVideoPoster(context, videoMid, url, videoType, null)
                 }
+                val player = currentExoPlayer ?: return
                 state.onPlaybackStateChanged(
-                    playbackState, currentExoPlayer, shouldUseCoordinator, autoPlay,
+                    playbackState, player, shouldUseCoordinator, autoPlay,
                     state.isVideoVisible, coordinator, playbackTweetId, onLoadComplete, onVideoCompleted
                 )
             }
@@ -164,6 +179,10 @@ fun VideoPreview(
     }
 
     DisposableEffect(exoPlayer) {
+        if (exoPlayer == null) {
+            state.isLoading = false
+            onDispose { }
+        } else {
         exoPlayer.addListener(playerListener)
         // Sync loading state with actual player state
         when (exoPlayer.playbackState) {
@@ -171,15 +190,19 @@ fun VideoPreview(
             Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
         }
         onDispose { exoPlayer.removeListener(playerListener) }
+        }
     }
 
     // --- Playback state changes ---
-    LaunchedEffect(state.isVideoVisible, shouldPlay) {
-        state.handlePlaybackStateChange(exoPlayer, shouldPlay, effectivelyVisible, context, url, videoType)
+    LaunchedEffect(state.isVideoVisible, shouldPlay, exoPlayer) {
+        exoPlayer?.let {
+            state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, context, url, videoType)
+        }
     }
 
     // --- Mute state ---
-    LaunchedEffect(state.isMuted, playerGeneration) {
+    LaunchedEffect(state.isMuted, playerGeneration, exoPlayer) {
+        if (exoPlayer == null) return@LaunchedEffect
         try {
             exoPlayer.volume = if (state.isMuted) 0f else 1f
             if (!useIndependentMuteState) preferenceHelper.setSpeakerMute(state.isMuted)
@@ -196,8 +219,8 @@ fun VideoPreview(
     }
 
     // --- Time label auto-show/hide ---
-    LaunchedEffect(exoPlayer.isPlaying) {
-        if (exoPlayer.isPlaying) {
+    LaunchedEffect(state.isPlaying, exoPlayer) {
+        if (exoPlayer != null && state.isPlaying) {
             state.showTimeLabel = true
             delay(5000)
             state.showTimeLabel = false
@@ -206,7 +229,9 @@ fun VideoPreview(
 
     LaunchedEffect(state.showTimeLabel) {
         while (state.showTimeLabel) {
-            state.remainingTime = exoPlayer.duration - exoPlayer.currentPosition
+            if (exoPlayer != null) {
+                state.remainingTime = exoPlayer.duration - exoPlayer.currentPosition
+            }
             delay(1000)
         }
     }
@@ -225,15 +250,6 @@ fun VideoPreview(
             LayoutInflater.from(ctx).inflate(R.layout.video_player_view, null).apply {
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
-                // Listen for video size changes for aspect ratio
-                exoPlayer.addListener(object : Player.Listener {
-                    override fun onVideoSizeChanged(videoSize: VideoSize) {
-                        if (videoSize.width > 0 && videoSize.height > 0) {
-                            val ratio = (videoSize.width * videoSize.pixelWidthHeightRatio) / videoSize.height.toFloat()
-                            playerView.setAspectRatioListener { _, _, _ -> }
-                        }
-                    }
-                })
                 // Mute button click
                 findViewById<ImageView>(R.id.mute_button).setOnClickListener {
                     state.toggleMute()
@@ -277,13 +293,13 @@ fun VideoPreview(
             // exoPlayer and coordinator (factory closures go stale after player recreation).
             val playBtn = view.findViewById<ImageView>(R.id.play_button)
             playBtn.setOnClickListener {
-                if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                if (exoPlayer?.playbackState == Player.STATE_ENDED) {
                     exoPlayer.seekTo(0)
                 }
-                if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                if (shouldUseCoordinator) {
                     coordinator.requestPlay(videoMid, playbackTweetId)
                 } else {
-                    exoPlayer.playWhenReady = true
+                    exoPlayer?.playWhenReady = true
                 }
             }
             // Play button (show when not playing, not loading, not error)
@@ -308,7 +324,7 @@ fun VideoPreview(
             }
             // Loading spinner
             view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =
-                if (state.isLoading) View.VISIBLE else View.GONE
+                if (state.isLoading && shouldAcquirePlayer) View.VISIBLE else View.GONE
             // Error view
             val errorView = view.findViewById<LinearLayout>(R.id.error_view)
             errorView.visibility = if (state.hasError) View.VISIBLE else View.GONE
@@ -358,7 +374,7 @@ fun VideoPreview(
                 if (timeSinceLastUpdate < 200L) return@onGloballyPositioned
                 state.lastVisibilityUpdate = now
                 val totalHeight = layoutCoordinates.size.height.toFloat()
-                val visibilityRatio = if (totalHeight > 0) {
+                val measuredVisibilityRatio = if (totalHeight > 0) {
                     val windowPos = layoutCoordinates.positionInWindow()
                     val videoTop = windowPos.y
                     val videoBottom = videoTop + totalHeight
@@ -369,12 +385,13 @@ fun VideoPreview(
                     val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
                     (visibleHeight / totalHeight).coerceIn(0f, 1f)
                 } else 0f
-                val newVisibility = visibilityRatio >= 0.5f
+                visibilityRatio = measuredVisibilityRatio
+                val newVisibility = measuredVisibilityRatio >= 0.5f
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
                 }
-                if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
-                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, visibilityRatio)
+                if (shouldUseCoordinator) {
+                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, measuredVisibilityRatio)
                 }
             }
             .clickable { callback(index) }

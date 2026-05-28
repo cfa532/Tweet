@@ -98,7 +98,8 @@ fun MediaGrid(
     viewModel: TweetViewModel,
     parentTweetId: MimeiId? = null,
     enableCoordinator: Boolean = true,
-    containerTopY: Float? = null
+    containerTopY: Float? = null,
+    enableRowPreloading: Boolean = true
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
@@ -193,7 +194,8 @@ fun MediaGrid(
     }
     
     // Preload videos and images with limited concurrency to avoid thread pool contention
-    LaunchedEffect(limitedMediaList) {
+    LaunchedEffect(limitedMediaList, enableRowPreloading) {
+        if (!enableRowPreloading) return@LaunchedEffect
         // Delay preloading so fast-scrolling cancels before starting heavy work
         kotlinx.coroutines.delay(300L)
         val preloadSemaphore = kotlinx.coroutines.sync.Semaphore(2) // Max 2 concurrent preloads

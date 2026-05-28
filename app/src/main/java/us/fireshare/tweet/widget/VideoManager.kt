@@ -101,6 +101,7 @@ object VideoManager {
 
     // ===== CONFIGURATION =====
     private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
+    private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
     private const val MAX_CONCURRENT_PRELOADS = 3 // Allow up to 3 concurrent player creations
 
     // ===== MEMORY MONITORING =====
@@ -310,10 +311,14 @@ object VideoManager {
                 !isVideoVisible(video.mid) &&
                 !preloadingVideos.contains(video.mid)
             ) {
-                val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(
-                    video.mid,
-                    video.baseUrl.ifBlank { fallbackBaseUrl }
-                ) ?: return@forEach
+                val mediaUrl = if (video.url.isNotBlank()) {
+                    video.url
+                } else {
+                    us.fireshare.tweet.HproseInstance.getMediaUrl(
+                        video.mid,
+                        video.baseUrl.ifBlank { fallbackBaseUrl }
+                    ) ?: return@forEach
+                }
                 preloadVideo(context, video.mid, mediaUrl, video.type)
             } else if (videoPlayers.containsKey(video.mid)) {
                 ensureVideoPoster(context, video.mid, video.url, video.type, null)
@@ -352,8 +357,10 @@ object VideoManager {
 
         val seen = mutableSetOf<MimeiId>()
         val result = mutableListOf<DirectionalVideo>()
+        var tweetsVisited = 0
         for (index in indices) {
             val tweet = tweets.getOrNull(index) ?: continue
+            tweetsVisited++
             val baseUrl = tweet.author?.baseUrl.orEmpty()
             val attachments = tweet.attachments.orEmpty()
             for (attachment in attachments) {
@@ -363,6 +370,7 @@ object VideoManager {
                 result.add(DirectionalVideo(attachment.mid, attachment.type, baseUrl, url))
                 if (result.size >= maxVideos) return result
             }
+            if (tweetsVisited >= DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS) break
         }
         return result
     }
@@ -390,6 +398,7 @@ object VideoManager {
         videoMid: MimeiId,
         directionalPreloads: Set<MimeiId>
     ): Boolean {
+        if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
         if (currentFullScreenVideoMid == videoMid) return true
