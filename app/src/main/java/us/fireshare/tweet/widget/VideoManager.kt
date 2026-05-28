@@ -117,6 +117,10 @@ object VideoManager {
     private val posterJobs = ConcurrentHashMap<MimeiId, Job>()
     val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
 
+    // Saved playback positions so videos resume from where they were left
+    // (populated in releasePlayer before the ExoPlayer is destroyed)
+    private val savedPositions = ConcurrentHashMap<MimeiId, Long>()
+
     // ===== CACHE MANAGEMENT =====
 
     /**
@@ -245,8 +249,12 @@ object VideoManager {
             // and the player can be re-prepared when visible again.
             videoPlayers[videoMid]?.let { player ->
                 try {
-                    // Detach surface before stopping to prevent MediaCodec IllegalStateException
-                    // when the codec tries to flush against a destroyed surface.
+                    // Save position BEFORE stopping so scroll-back can resume from here.
+                    val pos = player.currentPosition
+                    val dur = player.duration
+                    if (pos > 0) {
+                        savedPositions[videoMid] = if (dur > 0 && pos.toFloat() / dur > 0.9f) 0L else pos
+                    }
                     player.clearVideoSurface()
                     player.stop()
                 } catch (e: Exception) {
@@ -548,9 +556,14 @@ object VideoManager {
                 throw e
             }
         }.also { player ->
-            // Reset player state when reusing an existing player
+            // Pop saved position before resetPlayerState can overwrite with seekTo(0)
+            val savedPos = savedPositions.remove(videoMid)
             if (isReusing) {
                 resetPlayerState(player)
+            }
+            if (savedPos != null && savedPos > 0) {
+                player.seekTo(savedPos)
+                Timber.tag("VideoManager").d("Restored position ${savedPos}ms for $videoMid")
             }
         }
     }
@@ -680,6 +693,7 @@ object VideoManager {
         posterJobs.values.forEach { it.cancel() }
         posterJobs.clear()
         posterBitmaps.clear()
+        savedPositions.clear()
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
         }
@@ -1233,6 +1247,15 @@ object VideoManager {
         val player = videoPlayers.remove(videoMid)
         if (player != null) {
             try {
+                // Save position before release (only if not already saved by markVideoNotVisible).
+                if (!savedPositions.containsKey(videoMid)) {
+                    val pos = player.currentPosition
+                    val dur = player.duration
+                    if (pos > 0) {
+                        savedPositions[videoMid] = if (dur > 0 && pos.toFloat() / dur > 0.9f) 0L else pos
+                    }
+                }
+
                 // Detach surface FIRST to prevent MediaCodec IllegalStateException
                 // during flush/stop when the surface is already destroyed.
                 player.clearVideoSurface()
@@ -1305,10 +1328,11 @@ object VideoManager {
             preloadJobs.remove(videoMid)?.cancel()
             posterJobs.remove(videoMid)?.cancel()
             posterBitmaps.remove(videoMid)
+            savedPositions.remove(videoMid)
             synchronized(currentDirectionalPreloadVideos) {
                 currentDirectionalPreloadVideos.remove(videoMid)
             }
-            
+
             // Create a completely new player with software decoder to avoid MediaCodec failures
             val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
             videoPlayers[videoMid] = newPlayer
