@@ -1,6 +1,8 @@
 package us.fireshare.tweet.widget
 
 import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +35,11 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -48,18 +56,27 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
     val contentResolver = LocalContext.current.contentResolver
     var isChecked by remember { mutableStateOf(true) }
     val context = LocalContext.current
-    
-    // Detect if the file is a video
-    val isVideo = remember(uri) {
-        try {
-            val mediaType = FileTypeDetector.detectFileType(context, uri)
-            mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
-        } catch (e: Exception) {
-            false
+    val fileName = remember(uri) {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
         }
     }
+    
+    val mediaType = remember(uri, fileName) {
+        try {
+            FileTypeDetector.detectFileType(context, uri, fileName)
+        } catch (e: Exception) {
+            MediaType.Unknown
+        }
+    }
+    val isVideo = mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
+    val isAudio = mediaType == MediaType.Audio
+    val previewWidth = if (isAudio) (viewWidth - 48).coerceAtLeast(240) else canvasSize
+    val previewHeight = if (isAudio) 96 else canvasSize
 
-    LaunchedEffect(uri) {
+    LaunchedEffect(uri, isAudio) {
+        if (isAudio) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             try {
                 val bitmap = contentResolver.loadThumbnail(
@@ -72,27 +89,34 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
         }
     }
     Box(
-        modifier = Modifier.size(canvasSize.dp)
+        modifier = Modifier.size(previewWidth.dp, previewHeight.dp)
     ) {
         // Image container with clipping
         Box(
             modifier = Modifier
-                .size(canvasSize.dp)
+                .size(previewWidth.dp, previewHeight.dp)
                 .clip(RoundedCornerShape(8.dp))
         ) {
-            imageBitmap?.let {
-                Image(
-                    bitmap = it,
-                    contentDescription = stringResource(R.string.attached_file),
-                    contentScale = ContentScale.Crop,
+            if (isAudio) {
+                AudioAttachmentPlaybackPreview(
+                    uri = uri,
                     modifier = Modifier.fillMaxSize()
                 )
-            } ?: run {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_photo_plus),
-                    contentDescription = stringResource(R.string.attached_file),
-                    modifier = Modifier.fillMaxSize()
-                )
+            } else {
+                imageBitmap?.let {
+                    Image(
+                        bitmap = it,
+                        contentDescription = stringResource(R.string.attached_file),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } ?: run {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_photo_plus),
+                        contentDescription = stringResource(R.string.attached_file),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
         
@@ -125,9 +149,49 @@ fun UploadFilePreview(uri: Uri, onCheckedChange: (Uri, Boolean) -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .offset(
-                    x = (canvasSize - 32).dp,
-                    y = (canvasSize - 32).dp
+                    x = (previewWidth - 32).dp,
+                    y = (previewHeight - 32).dp
                 )
         )
     }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun AudioAttachmentPlaybackPreview(
+    uri: Uri,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember(uri) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            prepare()
+            playWhenReady = false
+        }
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    AndroidView(
+        factory = { viewContext ->
+            PlayerView(viewContext).apply {
+                player = exoPlayer
+                useController = true
+                controllerAutoShow = true
+                controllerShowTimeoutMs = -1
+                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+            }
+        },
+        update = { playerView ->
+            if (playerView.player !== exoPlayer) {
+                playerView.player = exoPlayer
+            }
+        },
+        modifier = modifier.background(Color.Black)
+    )
 }

@@ -14,12 +14,27 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -27,15 +42,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
@@ -81,19 +102,45 @@ fun MediaGrid(
 ) {
     val tweet by viewModel.tweetState.collectAsState()
     val navController = LocalNavController.current
-    // Optimize: Pre-compute derived values to avoid recalculation
-    val maxItems by remember(mediaItems.size) {
+    val audioMediaList by remember(mediaItems) {
         derivedStateOf {
-            when (mediaItems.size) {
+            mediaItems.filter { inferMediaTypeFromAttachment(it) == MediaType.Audio }
+        }
+    }
+    val visualMediaList by remember(mediaItems) {
+        derivedStateOf {
+            mediaItems.filter {
+                when (inferMediaTypeFromAttachment(it)) {
+                    MediaType.Image, MediaType.Video, MediaType.HLS_VIDEO -> true
+                    else -> false
+                }
+            }
+        }
+    }
+    val documentMediaList by remember(mediaItems) {
+        derivedStateOf {
+            mediaItems.filter {
+                when (inferMediaTypeFromAttachment(it)) {
+                    MediaType.PDF, MediaType.Word, MediaType.Excel, MediaType.PPT,
+                    MediaType.Zip, MediaType.Txt, MediaType.Html, MediaType.Unknown -> true
+                    else -> false
+                }
+            }
+        }
+    }
+    // Optimize: Pre-compute derived values to avoid recalculation
+    val maxItems by remember(visualMediaList.size) {
+        derivedStateOf {
+            when (visualMediaList.size) {
                 1 -> 1
-                2, 3 -> mediaItems.size
+                2, 3 -> visualMediaList.size
                 else -> 4
             }
         }
     }
     
-    val limitedMediaList by remember(mediaItems, maxItems) {
-        derivedStateOf { mediaItems.take(maxItems) }
+    val limitedMediaList by remember(visualMediaList, maxItems) {
+        derivedStateOf { visualMediaList.take(maxItems) }
     }
 
     val gridState = rememberLazyGridState()
@@ -191,6 +238,7 @@ fun MediaGrid(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 400.dp)
         ) {
             when (limitedMediaList.size) {
             1 -> {
@@ -208,7 +256,7 @@ fun MediaGrid(
                         .clipToBounds()
                         .clickable {
                             val params = MediaViewerParams(
-                                mediaItems.map {
+                                visualMediaList.map {
                                     MediaItem(
                                         getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                         it.type
@@ -218,7 +266,7 @@ fun MediaGrid(
                             navController.navigate(NavTweet.MediaViewer(params))
                         },
                     index = 0,
-                    numOfHiddenItems = if (mediaItems.size > maxItems) mediaItems.size - maxItems else 0,
+                    numOfHiddenItems = if (visualMediaList.size > maxItems) visualMediaList.size - maxItems else 0,
                     autoPlay = isAutoPlayForGridIndex(0),
                     inPreviewGrid = true,
                     loadOriginalImage = true, // Load original high-res image for single image
@@ -226,7 +274,7 @@ fun MediaGrid(
                     parentTweetId = parentTweetId,
                     enableCoordinator = enableCoordinator,
                     containerTopY = containerTopY,
-                    allMediaItems = mediaItems // Pass all items for full screen navigation
+                    allMediaItems = visualMediaList // Pass all visual items for full screen navigation
                 )
             }
             2 -> {
@@ -272,7 +320,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                         Box(
@@ -292,7 +340,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                     }
@@ -326,7 +374,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                         Box(
@@ -346,7 +394,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                     }
@@ -381,7 +429,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                         Box(
@@ -401,7 +449,7 @@ fun MediaGrid(
                                 parentTweetId = parentTweetId,
                                 enableCoordinator = enableCoordinator,
                                 containerTopY = containerTopY,
-                                allMediaItems = mediaItems
+                                allMediaItems = visualMediaList
                             )
                         }
                     }
@@ -754,7 +802,7 @@ fun MediaGrid(
                 val gridAspectRatio = when {
                     allLandscape -> 1.618f
                     allPortrait -> 0.8f
-                    else -> null // No specific aspect ratio for mixed orientations
+                    else -> 1f
                 }
                 
                 // Use improved lazy grid method for 4+ items with better loading optimization
@@ -763,13 +811,7 @@ fun MediaGrid(
                     state = gridState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(
-                            if (gridAspectRatio != null) {
-                                Modifier.aspectRatio(gridAspectRatio)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .aspectRatio(gridAspectRatio)
                         .wrapContentWidth(Alignment.CenterHorizontally),
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -779,7 +821,7 @@ fun MediaGrid(
                         key = { index, item -> "${item.mid}_$index" } // Stable key for better performance
                     ) { index, mediaItem ->
                         // Use grid aspect ratio for items when all have same orientation, otherwise use square
-                        val itemAspectRatio = gridAspectRatio ?: 1f
+                        val itemAspectRatio = gridAspectRatio
                         MediaItemView(
                             limitedMediaList,
                             modifier = Modifier
@@ -787,7 +829,7 @@ fun MediaGrid(
                                 .clipToBounds()
                                 .clickable {
                                     val params = MediaViewerParams(
-                                        mediaItems.map {
+                                        visualMediaList.map {
                                             MediaItem(
                                                 getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                                 it.type
@@ -797,15 +839,15 @@ fun MediaGrid(
                                     navController.navigate(NavTweet.MediaViewer(params))
                                 },
                             index = index,
-                            numOfHiddenItems = if (index == limitedMediaList.size - 1 && mediaItems.size > maxItems)
-                                mediaItems.size - maxItems else 0,
+                            numOfHiddenItems = if (index == limitedMediaList.size - 1 && visualMediaList.size > maxItems)
+                                visualMediaList.size - maxItems else 0,
                             autoPlay = isAutoPlayForGridIndex(index),
                             inPreviewGrid = true,
                             viewModel = viewModel,
                             parentTweetId = parentTweetId,
                             enableCoordinator = enableCoordinator,
                             containerTopY = containerTopY,
-                            allMediaItems = mediaItems // Pass all items for full screen navigation
+                            allMediaItems = visualMediaList // Pass all visual items for full screen navigation
                         )
                     }
                 }
@@ -813,7 +855,262 @@ fun MediaGrid(
             }
         }
 
+        if (audioMediaList.isNotEmpty()) {
+            SimpleMp3PlaylistPlayer(
+                attachments = audioMediaList,
+                baseUrl = tweet.author?.baseUrl.orEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (limitedMediaList.isNotEmpty()) 8.dp else 0.dp)
+            )
+        }
+
+        if (documentMediaList.isNotEmpty()) {
+            DocumentAttachmentsView(
+                documents = documentMediaList,
+                baseUrl = tweet.author?.baseUrl,
+                maxDocuments = 2,
+                modifier = Modifier.padding(top = if (limitedMediaList.isNotEmpty() || audioMediaList.isNotEmpty()) 4.dp else 0.dp)
+            )
+        }
     }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun SimpleMp3PlaylistPlayer(
+    attachments: List<MimeiFileType>,
+    baseUrl: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val resolvedAttachments = remember(attachments, baseUrl) {
+        attachments.map { attachment ->
+            attachment.copy(
+                url = attachment.url?.takeIf { it.isNotBlank() }
+                    ?: getMediaUrl(attachment.mid, baseUrl).toString()
+            )
+        }
+    }
+    val mediaItems = remember(resolvedAttachments) {
+        resolvedAttachments.mapNotNull { attachment ->
+            attachment.url?.let { androidx.media3.common.MediaItem.fromUri(it) }
+        }
+    }
+    if (mediaItems.isEmpty()) return
+
+    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    var currentIndex by remember { mutableStateOf(0) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var playlistExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mediaItems) {
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        exoPlayer.addMediaItems(mediaItems)
+        exoPlayer.prepare()
+        currentIndex = 0
+        positionMs = 0L
+        durationMs = 0L
+    }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                isPlaying = isPlayingNow
+            }
+
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                currentIndex = exoPlayer.currentMediaItemIndex.coerceAtLeast(0)
+                positionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+                durationMs = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                durationMs = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+                if (playbackState == Player.STATE_ENDED) {
+                    isPlaying = false
+                    positionMs = 0L
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    LaunchedEffect(isPlaying, currentIndex) {
+        while (true) {
+            positionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+            durationMs = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+            delay(500L)
+        }
+    }
+
+    val currentTrack = resolvedAttachments.getOrNull(currentIndex)
+    val progress = if (durationMs > 0L) {
+        (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val playerBackground = MaterialTheme.colorScheme.secondaryContainer
+    val playerContent = MaterialTheme.colorScheme.onSecondaryContainer
+    val playerMutedContent = playerContent.copy(alpha = 0.72f)
+
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.small,
+        tonalElevation = 1.dp,
+        color = playerBackground
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { playlistExpanded = true }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = currentTrack?.fileName ?: currentTrack?.mid ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { playlistExpanded = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Open audio playlist",
+                            tint = playerContent
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = playlistExpanded,
+                    onDismissRequest = { playlistExpanded = false }
+                ) {
+                    resolvedAttachments.forEachIndexed { index, attachment ->
+                        val selected = index == currentIndex
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = attachment.fileName ?: attachment.mid,
+                                    style = if (selected) MaterialTheme.typography.bodySmall else MaterialTheme.typography.labelMedium,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            onClick = {
+                                playlistExpanded = false
+                                currentIndex = index
+                                exoPlayer.seekTo(index, 0L)
+                                exoPlayer.playWhenReady = true
+                            }
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        val previous = if (currentIndex <= 0) mediaItems.lastIndex else currentIndex - 1
+                        exoPlayer.seekTo(previous, 0L)
+                        exoPlayer.playWhenReady = true
+                    },
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Previous track",
+                        tint = playerContent,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        if (exoPlayer.isPlaying) {
+                            exoPlayer.pause()
+                        } else {
+                            exoPlayer.play()
+                        }
+                    },
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = playerContent,
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        val next = if (currentIndex >= mediaItems.lastIndex) 0 else currentIndex + 1
+                        exoPlayer.seekTo(next, 0L)
+                        exoPlayer.playWhenReady = true
+                    },
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Next track",
+                        tint = playerContent,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatPlaybackTime(positionMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = playerMutedContent
+                )
+                Text(
+                    text = formatPlaybackTime(durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = playerMutedContent
+                )
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface
+            )
+        }
+    }
+}
+
+private fun formatPlaybackTime(timeMs: Long): String {
+    val safeTime = timeMs.coerceAtLeast(0L)
+    val totalSeconds = safeTime / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "%d:%02d".format(minutes, seconds)
 }
 
 /**

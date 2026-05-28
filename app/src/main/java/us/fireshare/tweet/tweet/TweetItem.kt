@@ -564,8 +564,7 @@ private fun RetweetWithContent(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 4.dp)
-                                    .heightIn(min = 20.dp, max = 400.dp),
+                                    .padding(top = 4.dp),
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {

@@ -208,8 +208,7 @@ fun TweetItemBody(
                         // MediaGrid for images, videos, and audio (visual content)
                         if (mediaAttachments.isNotEmpty()) {
                             Surface(
-                                modifier = Modifier.fillMaxWidth()
-                                    .heightIn(min = 20.dp, max = 400.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 tonalElevation = 4.dp,
                                 shape = RoundedCornerShape(size = 8.dp)
                             ) {
@@ -345,7 +344,7 @@ fun TweetItemBody(
                         ) {
                             if (mediaAttachments.isNotEmpty()) {
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 20.dp, max = 400.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                     tonalElevation = 4.dp,
                                     shape = RoundedCornerShape(size = 8.dp)
                                 ) {

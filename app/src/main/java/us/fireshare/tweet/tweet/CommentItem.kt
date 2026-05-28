@@ -178,8 +178,7 @@ fun CommentItem(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .heightIn(min = 20.dp, max = 600.dp), // Max height for media grid in comments
+                            .padding(top = 4.dp),
                         tonalElevation = 4.dp,
                         shape = RoundedCornerShape(size = 8.dp)
                     ) {
