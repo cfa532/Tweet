@@ -37,8 +37,6 @@ class VideoPreviewState(
     var isMuted by mutableStateOf(initialMuted)
     var isLoading by mutableStateOf(initialLoading)
     var hasError by mutableStateOf(false)
-    var showTimeLabel by mutableStateOf(false)
-    var remainingTime by mutableLongStateOf(0L)
     var retryCount by mutableIntStateOf(0)
     var isMediaCodecRecoveryInProgress by mutableStateOf(false)
     var showControls by mutableStateOf(false)
@@ -336,19 +334,6 @@ class VideoPreviewState(
         }
     }
 
-    companion object {
-        fun formatTime(timeMs: Long): String {
-            if (timeMs <= 0) return "0:00"
-            val totalSeconds = timeMs / 1000
-            val minutes = totalSeconds / 60
-            val seconds = totalSeconds % 60
-            return if (minutes > 0) {
-                "$minutes:${seconds.toString().padStart(2, '0')}"
-            } else {
-                "0:${seconds.toString().padStart(2, '0')}"
-            }
-        }
-    }
 }
 
 @Composable
