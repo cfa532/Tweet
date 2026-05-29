@@ -62,10 +62,10 @@ Current docs should prefer one main flow doc plus one implementation detail doc.
 
 ## 6) Recommended Reading Order (Current)
 
-1. `../QUICK_START_GUIDE.md`
-2. `../TECHNICAL_ARCHITECTURE.md`
-3. `../VIDEO_LOADING_ALGORITHM.md`
-4. `../PERFORMANCE_AND_MEMORY_REVIEW.md`
-5. `../NETWORK_CONSOLIDATION_2025.md`
-6. `../UNIFIED_UPGRADE_FLOW.md`
+1. `./QUICK_START_GUIDE.md`
+2. `./TECHNICAL_ARCHITECTURE.md`
+3. `./VIDEO_LOADING_ALGORITHM.md`
+4. `./PERFORMANCE_AND_MEMORY_REVIEW.md`
+5. `./NETWORK_CONSOLIDATION_2025.md`
+6. `./UNIFIED_UPGRADE_FLOW.md`
 
