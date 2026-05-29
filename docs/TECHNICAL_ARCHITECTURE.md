@@ -1046,9 +1046,8 @@ upload = 3_000_000ms (50 min)
 ## Related Documentation
 
 - **[INDEX.md](INDEX.md)** - Documentation index
-- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current status
 - **[CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Optimization details
-- **[VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md](VIDEO_MANAGER_CONSOLIDATION_SUMMARY.md)** - Video architecture
+- **[VIDEO_LOADING_ALGORITHM.md](VIDEO_LOADING_ALGORITHM.md)** - Video loading architecture
 - **[LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md](LOCAL_VIDEO_PROCESSING_IMPLEMENTATION.md)** - Video processing
 
 ---

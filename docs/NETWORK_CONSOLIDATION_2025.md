@@ -236,7 +236,6 @@ TOTAL                                 ~150 connections
 ## Related Documentation
 
 - [CONNECTION_POOLING_OPTIMIZATION_REPORT.md](CONNECTION_POOLING_OPTIMIZATION_REPORT.md) - Original pooling implementation
-- [CLIENT_POOL_8_CLIENTS_PER_URL.md](CLIENT_POOL_8_CLIENTS_PER_URL.md) - HproseClientPool enhancements
 - [TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md) - Architecture overview
 
 ---

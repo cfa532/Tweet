@@ -4,12 +4,12 @@ Tweet is a Web3 application that leverages blockchain technology for bookkeeping
 
 ## 📚 Documentation
 
-**All documentation has been organized in the [`docs/`](docs/) folder:**
+**All project documentation is in the [`docs/`](docs/) folder:**
 
-- **[📋 Documentation Index](docs/INDEX.md)** - Complete documentation catalog (68 files)
+- **[📋 Documentation Index](docs/INDEX.md)** - Curated documentation map
+- **[🏗️ Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)** - System design and module interactions
+- **[🎥 Video Loading Algorithm](docs/VIDEO_LOADING_ALGORITHM.md)** - Playback/loading strategy
 - **[🐛 Debug Setup Guide](docs/DEBUG_SETUP_AND_LOGGING_GUIDE.md)** - Android debugging and logcat monitoring
-- **[📝 Recent Changes](docs/RECENT_CHANGES.md)** - Latest updates and improvements
-- **[⚡ Performance Report](docs/CONNECTION_POOLING_OPTIMIZATION_REPORT.md)** - Performance optimization details
 
 ## 🚀 Quick Start
 
@@ -32,9 +32,9 @@ Unlike traditional apps, Tweet is a decentralized platform. It offers standard a
 
 ## 📋 Project Status
 
-- **Total Documentation**: 68 files organized in `docs/` folder
-- **Last Updated**: December 17, 2025
-- **Status**: ✅ All documentation organized and up-to-date
+- **Documentation Scope**: Curated core docs plus engineering notes
+- **Last Updated**: May 2026
+- **Status**: ✅ Documentation cleaned and consolidated
 
 ---
 
