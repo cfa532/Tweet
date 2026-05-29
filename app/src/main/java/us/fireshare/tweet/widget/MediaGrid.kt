@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -56,8 +57,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -908,6 +912,48 @@ fun MediaGrid(
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // Remaining-time label anchored to the MediaCell's bottom-start. Shown only
+            // when the cell holds a single media item AND that item is a video — matches
+            // the iOS rule. Reads position from the cached ExoPlayer via VideoManager and
+            // polls every second while the player exists.
+            val soleVideoMid = limitedMediaList.singleOrNull()
+                ?.takeIf { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
+                ?.mid
+            if (soleVideoMid != null) {
+                var remainingMs by remember(soleVideoMid) { mutableLongStateOf(0L) }
+                LaunchedEffect(soleVideoMid) {
+                    while (true) {
+                        val player = VideoManager.getCachedVideoPlayer(soleVideoMid)
+                        if (player != null) {
+                            val dur = player.duration
+                            val pos = player.currentPosition
+                            if (dur > 0) {
+                                remainingMs = (dur - pos).coerceAtLeast(0)
+                            }
+                        }
+                        delay(1000)
+                    }
+                }
+                if (remainingMs > 0) {
+                    val totalSeconds = remainingMs / 1000
+                    val mm = totalSeconds / 60
+                    val ss = (totalSeconds % 60).toString().padStart(2, '0')
+                    Text(
+                        text = "$mm:$ss",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.Black.copy(alpha = 0.4f))
+                            .padding(horizontal = 8.dp, vertical = 0.dp)
                     )
                 }
             }
