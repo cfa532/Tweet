@@ -900,7 +900,7 @@ fun MediaGrid(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(8.dp)
+                        .padding(end = 8.dp, bottom = 4.dp)
                         .size(26.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.3f))
@@ -950,7 +950,7 @@ fun MediaGrid(
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(8.dp)
+                            .padding(start = 8.dp, bottom = 4.dp)
                             .clip(RoundedCornerShape(50))
                             .background(Color.Black.copy(alpha = 0.2f))
                             .padding(horizontal = 8.dp, vertical = 0.dp)
