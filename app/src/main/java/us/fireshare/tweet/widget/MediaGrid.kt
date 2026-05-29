@@ -952,7 +952,7 @@ fun MediaGrid(
                             .align(Alignment.BottomStart)
                             .padding(8.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color.Black.copy(alpha = 0.4f))
+                            .background(Color.Black.copy(alpha = 0.2f))
                             .padding(horizontal = 8.dp, vertical = 0.dp)
                     )
                 }
