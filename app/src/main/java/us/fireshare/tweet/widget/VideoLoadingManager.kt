@@ -101,7 +101,7 @@ fun rememberVideoLoadingManager(
     onVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
     // Track previous visibility state
-    var wasVisible by remember { mutableStateOf(false) }
+    var wasVisible by remember(videoMid) { mutableStateOf(false) }
 
     LaunchedEffect(isVisible) {
         if (isVisible != wasVisible) {
@@ -116,7 +116,7 @@ fun rememberVideoLoadingManager(
     }
 
     // Cleanup when component is disposed
-    DisposableEffect(Unit) {
+    DisposableEffect(videoMid) {
         onDispose {
             VideoLoadingManager.markVideoNotVisible(videoMid)
         }

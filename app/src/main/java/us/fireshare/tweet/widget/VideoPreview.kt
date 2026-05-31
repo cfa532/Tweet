@@ -80,6 +80,7 @@ fun VideoPreview(
     useIndependentMuteState: Boolean = false,
     enableTapToShowControls: Boolean = false,
     playbackTweetId: MimeiId? = null,
+    playbackVideoId: String? = null,
     containerTopY: Float? = null
 ) {
     val context = LocalContext.current
@@ -96,6 +97,7 @@ fun VideoPreview(
     // --- Coordinator ---
     val coordinator = LocalVideoCoordinator.current
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
+    val resolvedPlaybackVideoId = playbackVideoId ?: videoMid.orEmpty()
     val shouldPlay = if (shouldUseCoordinator) state.coordinatorWantsToPlay else autoPlay
     val effectivelyVisible = if (shouldUseCoordinator) (state.isVideoVisible || shouldPlay) else state.isVideoVisible
     var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
@@ -107,16 +109,22 @@ fun VideoPreview(
         (hasWarmPlayer && visibilityRatio > 0f)
 
     // --- Coordinator command collection ---
-    LaunchedEffect(videoMid, playbackTweetId, coordinator) {
-        if (!shouldUseCoordinator) {
+    LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
+        val currentVideoMid = videoMid
+        val currentPlaybackTweetId = playbackTweetId
+        if (currentVideoMid == null || currentPlaybackTweetId == null) {
             state.coordinatorWantsToPlay = false
             return@LaunchedEffect
         }
-        state.coordinatorWantsToPlay = coordinator.shouldAutoPlay(videoMid, playbackTweetId)
+        state.coordinatorWantsToPlay = coordinator.shouldAutoPlay(
+            currentVideoMid,
+            currentPlaybackTweetId,
+            resolvedPlaybackVideoId
+        )
         coordinator.playbackCommands.collect { command ->
             when (command) {
                 is VideoPlaybackCommand.ShouldPlayVideo ->
-                    if (command.videoMid == videoMid && command.tweetId == playbackTweetId) {
+                    if (command.playbackVideoId == resolvedPlaybackVideoId && command.videoMid == currentVideoMid) {
                         state.coordinatorWantsToPlay = true
                         // If this video becomes primary while in error, immediately retry.
                         // "Primary" reflects explicit user intent (tap) or coordinator focus.
@@ -127,9 +135,9 @@ fun VideoPreview(
                         state.coordinatorWantsToPlay = false
                     }
                 is VideoPlaybackCommand.ShouldPauseVideo ->
-                    if (command.videoMid == videoMid) state.coordinatorWantsToPlay = false
+                    if (command.playbackVideoId == resolvedPlaybackVideoId) state.coordinatorWantsToPlay = false
                 is VideoPlaybackCommand.ShouldStopVideo ->
-                    if (command.videoMid == videoMid) state.coordinatorWantsToPlay = false
+                    if (command.playbackVideoId == resolvedPlaybackVideoId) state.coordinatorWantsToPlay = false
                 VideoPlaybackCommand.ShouldStopAllVideos ->
                     state.coordinatorWantsToPlay = false
             }
@@ -190,8 +198,8 @@ fun VideoPreview(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            if (shouldUseCoordinator) {
-                coordinator.updateVideoVisibility(videoMid, playbackTweetId, 0f)
+            if (videoMid != null && playbackTweetId != null) {
+                coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, 0f)
             }
         }
     }
@@ -206,7 +214,7 @@ fun VideoPreview(
                 val player = currentExoPlayer ?: return
                 state.onPlaybackStateChanged(
                     playbackState, player, shouldUseCoordinator, autoPlay,
-                    state.isVideoVisible, coordinator, playbackTweetId, onLoadComplete, onVideoCompleted
+                    state.isVideoVisible, coordinator, playbackTweetId, resolvedPlaybackVideoId, onLoadComplete, onVideoCompleted
                 )
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -303,8 +311,8 @@ fun VideoPreview(
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
                 }
-                if (shouldUseCoordinator) {
-                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, measuredVisibilityRatio)
+                if (videoMid != null && playbackTweetId != null) {
+                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, measuredVisibilityRatio)
                 }
             }
             // When native controls are enabled, let the PlayerView intercept taps so its
@@ -405,8 +413,8 @@ fun VideoPreview(
                         if (exoPlayer?.playbackState == Player.STATE_ENDED) {
                             exoPlayer.seekTo(0)
                         }
-                        if (shouldUseCoordinator) {
-                            coordinator.requestPlay(videoMid, playbackTweetId)
+                        if (videoMid != null && playbackTweetId != null) {
+                            coordinator.requestPlay(videoMid, playbackTweetId, resolvedPlaybackVideoId)
                         } else {
                             exoPlayer?.playWhenReady = true
                         }
@@ -445,7 +453,7 @@ fun VideoPreview(
                         .size(44.dp)
                         .clickable {
                             if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
-                                coordinator.requestPlay(videoMid, playbackTweetId)
+                                coordinator.requestPlay(videoMid, playbackTweetId, resolvedPlaybackVideoId)
                             }
                             state.manualRetry(context, url, videoType, retryScope)
                         }

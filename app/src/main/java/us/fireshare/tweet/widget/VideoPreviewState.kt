@@ -62,6 +62,7 @@ class VideoPreviewState(
         isVisible: Boolean,
         coordinator: VideoPlaybackCoordinator,
         playbackTweetId: MimeiId?,
+        playbackVideoId: String?,
         onLoadComplete: (() -> Unit)?,
         onVideoCompleted: (() -> Unit)?
     ) {
@@ -81,8 +82,8 @@ class VideoPreviewState(
                 isLoading = false
                 player.playWhenReady = false
                 videoMid?.let { VideoManager.onVideoCompleted(it) }
-                if (videoMid != null && playbackTweetId != null) {
-                    coordinator.handleVideoFinished(videoMid, playbackTweetId)
+                if (videoMid != null && playbackTweetId != null && playbackVideoId != null) {
+                    coordinator.handleVideoFinished(videoMid, playbackTweetId, playbackVideoId)
                 }
                 onVideoCompleted?.invoke()
             }

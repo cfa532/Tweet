@@ -64,6 +64,7 @@ import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
+import us.fireshare.tweet.widget.videoPlaybackIdentifier
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
@@ -98,17 +99,8 @@ fun MediaItemView(
     val context = LocalContext.current
     val rootView = LocalView.current
     val videoCoordinator = LocalVideoCoordinator.current
-    // CRITICAL: Videos must be identified by parent tweet (retweet/quote) ID and video mid
-    // If parentTweetId is provided, it represents the retweet/quote container tweet
-    // If not provided, use tweet.mid (for non-retweet/non-quoted tweets)
     val playbackTweetId = if (enableCoordinator) {
-        if (!parentTweetId.isNullOrEmpty()) {
-            // Always use parentTweetId (retweet/quote ID) when available
-            parentTweetId
-        } else {
-            // Only use tweet.mid if parentTweetId is not provided (direct tweet, not retweet/quote)
-            tweet.mid
-        }
+        parentTweetId?.takeIf { it.isNotEmpty() } ?: tweet.mid
     } else null
     /**
      * Action to take when any media item is clicked.
@@ -241,9 +233,13 @@ fun MediaItemView(
                 // Use a completely stable approach with key
                 val videoMid = mediaItems[index].mid
                 val videoUrl = attachment.url
+                val playbackVideoId = videoPlaybackIdentifier(
+                    videoMid = videoMid,
+                    parentTweetId = parentTweetId?.takeIf { it.isNotEmpty() }
+                )
 
                 // Use key with a stable identifier to prevent recreation
-                key("video_${videoMid}_${index}") {
+                key("video_${playbackVideoId}_${index}") {
                     VideoPreview(
                         url = videoUrl,
                         modifier = modifier,
@@ -257,6 +253,7 @@ fun MediaItemView(
                         useIndependentMuteState = useIndependentVideoMute,
                         enableTapToShowControls = enableTapToShowControls,
                         playbackTweetId = playbackTweetId,
+                        playbackVideoId = playbackVideoId,
                         containerTopY = containerTopY
                     )
                 }

@@ -70,6 +70,7 @@ object VideoManager {
     // ===== VISIBILITY TRACKING =====
     // Track which videos are currently visible (user is viewing them)
     private val visibleVideos = mutableSetOf<MimeiId>()
+    private val visibleVideoCounts = ConcurrentHashMap<MimeiId, Int>()
 
     // Track which videos are being preloaded
     private val preloadingVideos = mutableSetOf<MimeiId>()
@@ -224,6 +225,7 @@ object VideoManager {
      * This allows the video to continue loading and playing
      */
     fun markVideoVisible(videoMid: MimeiId) {
+        visibleVideoCounts[videoMid] = visibleVideoCounts.getOrDefault(videoMid, 0) + 1
         visibleVideos.add(videoMid)
         markVideoActive(videoMid)
     }
@@ -235,13 +237,21 @@ object VideoManager {
      * the same ExoPlayer while the feed item is being disposed).
      */
     fun markVideoNotVisible(videoMid: MimeiId) {
-        visibleVideos.remove(videoMid)
+        val currentVisibleCount = visibleVideoCounts.getOrDefault(videoMid, 0)
+        val newVisibleCount = (currentVisibleCount - 1).coerceAtLeast(0)
+        if (newVisibleCount == 0) {
+            visibleVideoCounts.remove(videoMid)
+            visibleVideos.remove(videoMid)
+        } else {
+            visibleVideoCounts[videoMid] = newVisibleCount
+        }
         markVideoInactive(videoMid)
 
         // Don't stop the video if it's currently in full-screen mode
         // or if another composable is still actively using this player
+        val stillVisible = visibleVideoCounts.getOrDefault(videoMid, 0) > 0
         val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
-        if (!isVideoInFullScreen(videoMid) && !stillActive) {
+        if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
             // Stop the player to release codec and HTTP connection resources.
@@ -701,6 +711,7 @@ object VideoManager {
         videoPlayers.clear()
         activeVideos.clear()
         visibleVideos.clear()
+        visibleVideoCounts.clear()
         preloadedVideos.clear()
         preloadGenerations.clear()
         preloadJobs.values.forEach { it.cancel() }
@@ -854,9 +865,6 @@ object VideoManager {
         if (posterBitmaps.containsKey(videoMid)) return
         if (posterJobs[videoMid]?.isActive == true) return
         if (isRemoteProgressiveVideo(videoUrl, videoType, resolvedHlsUrl)) {
-            Timber.tag("VideoPlaybackDebug").d(
-                "Skip remote progressive poster extraction videoMid=$videoMid url=$videoUrl"
-            )
             return
         }
 
@@ -889,7 +897,6 @@ object VideoManager {
             }
 
             if (isRemoteProgressiveVideo(sourceUrl, videoType, resolvedHlsUrl)) {
-                Timber.tag("VideoPlaybackDebug").d("Skip poster bitmap decode for remote progressive url=$sourceUrl")
                 return null
             }
 
@@ -1315,6 +1322,7 @@ object VideoManager {
         // Clean up tracking data
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
+        visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
         preloadGenerations.remove(videoMid)
         preloadQueue.remove(videoMid)
@@ -1354,6 +1362,7 @@ object VideoManager {
             // Remove from all tracking maps
             videoPlayers.remove(videoMid)
             visibleVideos.remove(videoMid)
+            visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
@@ -1380,6 +1389,7 @@ object VideoManager {
             // Clean up any partial state
             videoPlayers.remove(videoMid)
             visibleVideos.remove(videoMid)
+            visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
@@ -1497,6 +1507,7 @@ object VideoManager {
         cancelPreload(videoMid)
         activeVideos.remove(videoMid)
         visibleVideos.remove(videoMid)
+        visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
         preloadGenerations.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
@@ -1571,6 +1582,7 @@ object VideoManager {
      */
     fun clear() {
         visibleVideos.clear()
+        visibleVideoCounts.clear()
         preloadingVideos.clear()
         preloadedVideos.clear()
         preloadGenerations.clear()
