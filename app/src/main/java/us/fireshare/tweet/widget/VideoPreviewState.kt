@@ -111,9 +111,13 @@ class VideoPreviewState(
             Timber.tag("VideoPreview").d("Ignoring transient error during recovery for $videoMid: ${error.message}")
             return
         }
-        Timber.tag("VideoPreview").e("Video loading error for $videoMid: ${error.message}")
+        Timber.tag("VideoPreview").e(
+            error,
+            "Video loading error for $videoMid code=${error.errorCodeName}/${error.errorCode} " +
+                "cause=${error.cause?.javaClass?.simpleName}: ${error.message}"
+        )
 
-        val errorMessage = error.cause?.message ?: ""
+        val errorMessage = listOfNotNull(error.message, error.cause?.message).joinToString(" ")
         val errorType = classifyError(errorMessage)
 
         when {
@@ -283,7 +287,9 @@ class VideoPreviewState(
     ) {
         if (videoMid == null || url == null) return
         retryCount++
-        Timber.tag("VideoPreview").d("Automatic retry $retryCount/$maxRetries for video: $videoMid")
+        Timber.tag("VideoPlaybackDebug").w(
+            "Automatic recovery retry $retryCount/$maxRetries for videoMid=$videoMid type=$videoType"
+        )
         isLoading = true
         hasError = false
 

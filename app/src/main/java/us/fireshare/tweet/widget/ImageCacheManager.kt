@@ -657,11 +657,11 @@ object ImageCacheManager {
                 if (!dir.exists()) dir.mkdirs()
                 tempFile = File.createTempFile("img_${mid}_", ".tmp", dir)
                 
-                // Progressive: stream in chunks and try to show partial preview during download
+                // Stream in chunks. Avoid decoding incomplete files here: BitmapFactory
+                // delegates failures to native Skia, which logs noisy "getAndroidPixels"
+                // messages repeatedly while the download is still partial.
                 val bufferSize = 8192
                 val buffer = ByteArray(bufferSize)
-                var progressivePreviewSent = false
-                val progressiveThreshold = 80 * 1024L // Try first preview after 80KB
                 val previewOptions = BitmapFactory.Options().apply {
                     inSampleSize = PROGRESSIVE_SAMPLE_SIZE
                     inPreferredConfig = Bitmap.Config.RGB_565
@@ -672,28 +672,6 @@ object ImageCacheManager {
                     while (inputStream.read(buffer).also { len = it } != -1) {
                         if (isDownloadPaused(mid)) break
                         out.write(buffer, 0, len)
-                        // Try to decode and show partial preview during download (once we have enough bytes)
-                        if (onProgressiveLoad != null && !progressivePreviewSent && tempFile.length() >= progressiveThreshold) {
-                            var preview: Bitmap? = null
-                            try {
-                                preview = BitmapFactory.decodeFile(tempFile.absolutePath, previewOptions)
-                                if (preview != null && !preview.isRecycled && preview.width > 0 && preview.height > 0) {
-                                    progressivePreviewSent = true
-                                    withContext(Dispatchers.Main) {
-                                        try {
-                                            onProgressiveLoad(preview)
-                                        } catch (e: Exception) {
-                                            Timber.tag("ImageCacheManager").w(e, "Progressive preview callback failed")
-                                        } finally {
-                                            preview = null // Callback was given the bitmap; must not recycle
-                                        }
-                                    }
-                                }
-                            } catch (_: Exception) { /* incomplete file, keep downloading */ }
-                            preview?.let {
-                                if (!it.isRecycled) try { it.recycle() } catch (_: Exception) { }
-                            }
-                        }
                     }
                 }
                 

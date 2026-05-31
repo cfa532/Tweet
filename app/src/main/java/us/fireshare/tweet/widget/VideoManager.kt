@@ -543,6 +543,9 @@ object VideoManager {
 
         return videoPlayers.getOrPut(videoMid) {
             try {
+                Timber.tag("VideoPlaybackDebug").d(
+                    "Creating player videoMid=$videoMid type=$videoType resolvedHls=${resolvedHlsUrl != null}"
+                )
                 val player = createExoPlayer(
                     context,
                     videoUrl,
@@ -558,8 +561,13 @@ object VideoManager {
         }.also { player ->
             // Pop saved position before resetPlayerState can overwrite with seekTo(0)
             val savedPos = savedPositions.remove(videoMid)
+            Timber.tag("VideoPlaybackDebug").d(
+                "Acquire player videoMid=$videoMid reused=$isReusing state=${playerStateName(player.playbackState)} " +
+                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms duration=${player.duration}ms " +
+                    "playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} savedPos=${savedPos ?: -1L}"
+            )
             if (isReusing) {
-                resetPlayerState(player)
+                resetPlayerState(videoMid, player)
             }
             if (savedPos != null && savedPos > 0) {
                 player.seekTo(savedPos)
@@ -571,23 +579,32 @@ object VideoManager {
     /**
      * Reset player state to ensure proper playback when reused
      */
-    private fun resetPlayerState(player: ExoPlayer) {
+    private fun resetPlayerState(videoMid: MimeiId, player: ExoPlayer) {
         try {
+            Timber.tag("VideoPlaybackDebug").d(
+                "Reset player videoMid=$videoMid before state=${playerStateName(player.playbackState)} " +
+                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms playWhenReady=${player.playWhenReady}"
+            )
             when (player.playbackState) {
                 Player.STATE_READY, Player.STATE_BUFFERING -> {
                     // Don't stop — just pause to preserve already-buffered data
                     player.playWhenReady = false
                 }
-                else -> {
-                    // For IDLE or ENDED states, reset and re-prepare
-                    player.stop()
-                    player.seekTo(0)
+                Player.STATE_IDLE -> {
                     player.playWhenReady = false
-                    if (player.playbackState == Player.STATE_IDLE) {
+                    if (player.mediaItemCount > 0) {
                         player.prepare()
                     }
                 }
+                Player.STATE_ENDED -> {
+                    player.playWhenReady = false
+                    player.seekTo(0)
+                }
             }
+            Timber.tag("VideoPlaybackDebug").d(
+                "Reset player videoMid=$videoMid after state=${playerStateName(player.playbackState)} " +
+                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms playWhenReady=${player.playWhenReady}"
+            )
         } catch (e: Exception) {
             Timber.e("VideoManager - Error resetting player state: $e")
         }
@@ -750,14 +767,6 @@ object VideoManager {
 
                     if (!isActive) return@launch
 
-                    ensureVideoPoster(
-                        context = context,
-                        videoMid = videoMid,
-                        videoUrl = videoUrl,
-                        videoType = videoType,
-                        resolvedHlsUrl = resolvedHlsUrl
-                    )
-
                     val player = createExoPlayer(
                         context,
                         videoUrl,
@@ -844,6 +853,12 @@ object VideoManager {
         if (videoUrl.isNullOrBlank()) return
         if (posterBitmaps.containsKey(videoMid)) return
         if (posterJobs[videoMid]?.isActive == true) return
+        if (isRemoteProgressiveVideo(videoUrl, videoType, resolvedHlsUrl)) {
+            Timber.tag("VideoPlaybackDebug").d(
+                "Skip remote progressive poster extraction videoMid=$videoMid url=$videoUrl"
+            )
+            return
+        }
 
         posterJobs[videoMid] = videoLoadingScope.launch {
             val poster = withContext(Dispatchers.IO) {
@@ -871,6 +886,11 @@ object VideoManager {
                     "${baseUrl}master.m3u8"
                 }
                 else -> videoUrl
+            }
+
+            if (isRemoteProgressiveVideo(sourceUrl, videoType, resolvedHlsUrl)) {
+                Timber.tag("VideoPlaybackDebug").d("Skip poster bitmap decode for remote progressive url=$sourceUrl")
+                return null
             }
 
             if (sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://")) {
@@ -1123,15 +1143,18 @@ object VideoManager {
     fun attemptVideoRecovery(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null, forceSoftwareDecoder: Boolean = false): Boolean {
         val player = videoPlayers[videoMid] ?: return false
 
-        Timber.d("VideoManager - Attempting thorough recovery for video: $videoMid (software: $forceSoftwareDecoder)")
+        val resumePosition = player.currentPosition.coerceAtLeast(0L)
+        val wasPlayWhenReady = player.playWhenReady
+        Timber.tag("VideoPlaybackDebug").w(
+            "Attempting recovery videoMid=$videoMid type=$videoType software=$forceSoftwareDecoder " +
+                "state=${playerStateName(player.playbackState)} pos=${resumePosition}ms buffered=${player.bufferedPosition}ms " +
+                "duration=${player.duration}ms playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} " +
+                "mediaItems=${player.mediaItemCount}"
+        )
 
         try {
-            // Thorough reset: stop, clear, and reset player state
-            player.stop()
-            player.clearMediaItems()
-            player.seekTo(0)
-            
-            // Reset playback state
+            // Keep the last known position for progressive streams. Restarting from zero
+            // during a transient retry makes playback look like it is looping backward.
             player.playWhenReady = false
             player.pause()
 
@@ -1194,13 +1217,23 @@ object VideoManager {
             }
 
             // Set the new media source and prepare
-            player.setMediaSource(mediaSource)
+            if (resumePosition > 0) {
+                player.setMediaSource(mediaSource, resumePosition)
+            } else {
+                player.setMediaSource(mediaSource)
+            }
             player.prepare()
+            player.playWhenReady = wasPlayWhenReady
+
+            Timber.tag("VideoPlaybackDebug").d(
+                "Recovery prepared videoMid=$videoMid resume=${resumePosition}ms state=${playerStateName(player.playbackState)} " +
+                    "playWhenReady=${player.playWhenReady}"
+            )
 
             return true
         } catch (e: Exception) {
             // Only log recovery failures at debug level to avoid noise during trials
-            Timber.d("VideoManager - Thorough recovery failed for video: $videoMid, error: ${e.message}")
+            Timber.tag("VideoPlaybackDebug").e(e, "Recovery failed videoMid=$videoMid pos=${resumePosition}ms")
             return false
         }
     }
@@ -1765,5 +1798,23 @@ object VideoManager {
                 Timber.e("VideoManager - Final error: ${error.message}")
             }
         }
+    }
+
+    private fun isRemoteProgressiveVideo(
+        videoUrl: String,
+        videoType: MediaType?,
+        resolvedHlsUrl: String?
+    ): Boolean {
+        val isRemote = videoUrl.startsWith("http://") || videoUrl.startsWith("https://")
+        val isProgressive = resolvedHlsUrl.isNullOrBlank() && videoType != MediaType.HLS_VIDEO
+        return isRemote && isProgressive
+    }
+
+    private fun playerStateName(state: Int): String = when (state) {
+        Player.STATE_IDLE -> "IDLE"
+        Player.STATE_BUFFERING -> "BUFFERING"
+        Player.STATE_READY -> "READY"
+        Player.STATE_ENDED -> "ENDED"
+        else -> "UNKNOWN($state)"
     }
 }

@@ -2,6 +2,8 @@ package us.fireshare.tweet.widget
 
 import android.content.Context
 import androidx.annotation.OptIn
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -101,11 +103,17 @@ fun createExoPlayer(
             // Add listener for HLS fallback logic.
             // When resolvedHlsUrl is provided we already know the correct URL, so the
             // fallback logic is a no-op (onPlayerError just logs and returns).
-            addListener(object : androidx.media3.common.Player.Listener {
+            addListener(object : Player.Listener {
                 private var hasTriedPlaylist = false
                 private var hasRecordedSuccess = false
 
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                override fun onPlayerError(error: PlaybackException) {
+                    Timber.tag("VideoPlaybackDebug").e(
+                        error,
+                        "Player error mediaId=$reliabilityMediaId type=$mediaType code=${error.errorCodeName}/${error.errorCode} " +
+                            "state=${playerStateName(playbackState)} pos=${currentPosition}ms buffered=${bufferedPosition}ms " +
+                            "duration=${duration}ms playWhenReady=$playWhenReady isPlaying=$isPlaying cause=${error.cause?.javaClass?.simpleName}"
+                    )
                     reliabilityMediaId?.let { mediaId ->
                         CoroutineScope(Dispatchers.IO).launch {
                             HproseInstance.recordReliabilityFailureMedia(mediaId)
@@ -148,7 +156,7 @@ fun createExoPlayer(
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     when (playbackState) {
-                        androidx.media3.common.Player.STATE_READY -> {
+                        Player.STATE_READY -> {
                             if (!hasRecordedSuccess && reliabilityMediaId != null) {
                                 hasRecordedSuccess = true
                                 CoroutineScope(Dispatchers.IO).launch {
@@ -157,13 +165,13 @@ fun createExoPlayer(
                             }
                             Timber.tag("createExoPlayer").d("Player ready for URL: $url (type: $mediaType, software: $forceSoftwareDecoder)")
                         }
-                        androidx.media3.common.Player.STATE_BUFFERING -> {
+                        Player.STATE_BUFFERING -> {
                             Timber.tag("createExoPlayer").d("Player buffering for URL: $url")
                         }
-                        androidx.media3.common.Player.STATE_IDLE -> {
+                        Player.STATE_IDLE -> {
                             Timber.tag("createExoPlayer").d("Player idle for URL: $url")
                         }
-                        androidx.media3.common.Player.STATE_ENDED -> {
+                        Player.STATE_ENDED -> {
                             // Auto-rewind when video ends - applies to all videos (fullscreen, MediaItemView, DetailView, etc.)
                             Timber.tag("createExoPlayer").d("Player ended for URL: $url, rewinding to beginning")
                             this@apply.seekTo(0)
@@ -174,6 +182,25 @@ fun createExoPlayer(
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     Timber.tag("createExoPlayer").d("Player playing state changed: $isPlaying for URL: $url")
+                }
+
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    val delta = newPosition.positionMs - oldPosition.positionMs
+                    val isLargeRollback = delta < -1_000
+                    val tag = Timber.tag("VideoPlaybackDebug")
+                    val message = "Position discontinuity mediaId=$reliabilityMediaId type=$mediaType " +
+                        "reason=${discontinuityReasonName(reason)} old=${oldPosition.positionMs}ms new=${newPosition.positionMs}ms " +
+                        "delta=${delta}ms state=${playerStateName(playbackState)} playWhenReady=$playWhenReady " +
+                        "isPlaying=$isPlaying buffered=${bufferedPosition}ms duration=${duration}ms"
+                    if (isLargeRollback) {
+                        tag.w(message)
+                    } else {
+                        tag.d(message)
+                    }
                 }
             })
         }
@@ -223,4 +250,22 @@ private fun extractMediaMidFromUrl(url: String): MimeiId? {
     }
 
     return null
+}
+
+private fun playerStateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "UNKNOWN($state)"
+}
+
+private fun discontinuityReasonName(reason: Int): String = when (reason) {
+    Player.DISCONTINUITY_REASON_AUTO_TRANSITION -> "AUTO_TRANSITION"
+    Player.DISCONTINUITY_REASON_SEEK -> "SEEK"
+    Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT -> "SEEK_ADJUSTMENT"
+    Player.DISCONTINUITY_REASON_SKIP -> "SKIP"
+    Player.DISCONTINUITY_REASON_REMOVE -> "REMOVE"
+    Player.DISCONTINUITY_REASON_INTERNAL -> "INTERNAL"
+    else -> "UNKNOWN($reason)"
 }
