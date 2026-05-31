@@ -12,20 +12,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -123,7 +116,16 @@ fun VideoPreview(
         coordinator.playbackCommands.collect { command ->
             when (command) {
                 is VideoPlaybackCommand.ShouldPlayVideo ->
-                    state.coordinatorWantsToPlay = command.videoMid == videoMid && command.tweetId == playbackTweetId
+                    if (command.videoMid == videoMid && command.tweetId == playbackTweetId) {
+                        state.coordinatorWantsToPlay = true
+                        // If this video becomes primary while in error, immediately retry.
+                        // "Primary" reflects explicit user intent (tap) or coordinator focus.
+                        if (state.hasError) {
+                            state.manualRetry(context, url, videoType, retryScope)
+                        }
+                    } else {
+                        state.coordinatorWantsToPlay = false
+                    }
                 is VideoPlaybackCommand.ShouldPauseVideo ->
                     if (command.videoMid == videoMid) state.coordinatorWantsToPlay = false
                 is VideoPlaybackCommand.ShouldStopVideo ->
@@ -430,39 +432,24 @@ fun VideoPreview(
 
         // Error view
         if (state.hasError) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = stringResource(R.string.video_error),
-                    modifier = Modifier.size(48.dp)
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = stringResource(R.string.retry),
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clickable {
+                            if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                                coordinator.requestPlay(videoMid, playbackTweetId)
+                            }
+                            state.manualRetry(context, url, videoType, retryScope)
+                        }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.video_unavailable),
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { state.manualRetry(context, url, videoType, retryScope) },
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text(
-                        text = if (state.retryCount > 0) "Retry Again" else "Retry",
-                        fontSize = 12.sp
-                    )
-                }
-                if (state.retryCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Attempts: ${state.retryCount}",
-                        fontSize = 10.sp
-                    )
-                }
             }
         }
     }
