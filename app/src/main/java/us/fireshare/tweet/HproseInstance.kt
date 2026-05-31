@@ -298,10 +298,18 @@ object HproseInstance {
         val appId: MimeiId,
         val timestampMs: Long
     )
+    private data class EntryResolveFailureCache(
+        val message: String,
+        val timestampMs: Long
+    )
     private val entryResolveCacheTtlMs = 30_000L
+    // Keep this short: prevent retry storms, but still allow fast recovery
+    // when DNS/network stabilizes a moment later during app startup.
+    private val entryResolveFailureBackoffMs = 1_500L
     private val entryIPResolveMutex = Mutex()
     private var entryIPResolveInFlight: CompletableDeferred<String>? = null
     private var entryResolveCache: EntryResolveCache? = null
+    private var entryResolveFailureCache: EntryResolveFailureCache? = null
     
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
@@ -501,6 +509,7 @@ object HproseInstance {
         var inFlightResolve: CompletableDeferred<String>? = null
         var shouldResolveNow = false
         var cachedResult: String? = null
+        var cachedFailure: IllegalStateException? = null
 
         entryIPResolveMutex.withLock {
             val existing = entryIPResolveInFlight
@@ -509,10 +518,21 @@ object HproseInstance {
                 inFlightResolve = existing
             } else {
                 val now = System.currentTimeMillis()
+                val failureCache = entryResolveFailureCache
+                val isFailureBackoffActive = failureCache != null &&
+                    now - failureCache.timestampMs <= entryResolveFailureBackoffMs
                 val cache = entryResolveCache
                 val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
 
-                if (isCacheValid && cache != null) {
+                if (isFailureBackoffActive && failureCache != null) {
+                    val age = now - failureCache.timestampMs
+                    Timber.tag("findEntryIP").w(
+                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCache.message}"
+                    )
+                    cachedFailure = IllegalStateException(
+                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCache.message}"
+                    )
+                } else if (isCacheValid && cache != null) {
                     // Keep appId aligned with the cached entry resolution metadata.
                     _appId = cache.appId
                     cachedResult = cache.ip
@@ -529,6 +549,7 @@ object HproseInstance {
         }
 
         cachedResult?.let { return it }
+        cachedFailure?.let { throw it }
 
         if (!shouldResolveNow) {
             return inFlightResolve!!.await()
@@ -543,10 +564,17 @@ object HproseInstance {
                     appId = resolvedAppId,
                     timestampMs = System.currentTimeMillis()
                 )
+                entryResolveFailureCache = null
             }
             inFlightResolve!!.complete(resolvedIP)
             return resolvedIP
         } catch (e: Exception) {
+            entryIPResolveMutex.withLock {
+                entryResolveFailureCache = EntryResolveFailureCache(
+                    message = e.message ?: e.javaClass.simpleName,
+                    timestampMs = System.currentTimeMillis()
+                )
+            }
             inFlightResolve!!.completeExceptionally(e)
             throw e
         } finally {
