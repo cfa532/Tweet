@@ -56,8 +56,9 @@ object ImageCacheManager {
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
     private const val READ_TIMEOUT = 20000 // 20 seconds - IPFS can be slow, give it more time
-    // Reduced from 24 to 8 for better memory management (iOS uses 4 for avatars, no explicit limit for regular images)
-    private const val MAX_CONCURRENT_DOWNLOADS = 8 // Reduced for better memory management
+    private const val MAX_VISIBLE_DOWNLOADS = 6
+    private const val MAX_BACKGROUND_DOWNLOADS = 2
+    private const val MAX_AVATAR_DOWNLOADS = 4
     private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
     private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
     private const val MAX_DOWNLOAD_RESULTS = 20 // FIX P1-4: Limit size of downloadResults map
@@ -111,7 +112,9 @@ object ImageCacheManager {
         }
     }
     
-    private val downloadSemaphore = Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    private val visibleDownloadSemaphore = Semaphore(MAX_VISIBLE_DOWNLOADS)
+    private val backgroundDownloadSemaphore = Semaphore(MAX_BACKGROUND_DOWNLOADS)
+    private val avatarDownloadSemaphore = Semaphore(MAX_AVATAR_DOWNLOADS)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
     private val downloadResults = ConcurrentHashMap<String, Bitmap>()
     private val resultTimestamps = ConcurrentHashMap<String, Long>()
@@ -134,6 +137,49 @@ object ImageCacheManager {
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
     private var currentMemoryUsage = AtomicInteger(0)
+
+    private enum class ImageDownloadPriority {
+        AVATAR, VISIBLE, BACKGROUND
+    }
+
+    private data class DownloadPermit(
+        val semaphore: Semaphore,
+        val priority: ImageDownloadPriority
+    )
+
+    private suspend fun acquireDownloadPermit(
+        mid: String,
+        imageUrl: String,
+        isVisible: Boolean,
+        isAvatar: Boolean
+    ): DownloadPermit {
+        val priority = when {
+            isAvatarRequest(mid, imageUrl, isAvatar) -> ImageDownloadPriority.AVATAR
+            isVisible -> ImageDownloadPriority.VISIBLE
+            else -> ImageDownloadPriority.BACKGROUND
+        }
+        val semaphore = when (priority) {
+            ImageDownloadPriority.AVATAR -> avatarDownloadSemaphore
+            ImageDownloadPriority.VISIBLE -> visibleDownloadSemaphore
+            ImageDownloadPriority.BACKGROUND -> backgroundDownloadSemaphore
+        }
+        semaphore.acquire()
+        return DownloadPermit(semaphore, priority)
+    }
+
+    private fun releaseDownloadPermit(permit: DownloadPermit?) {
+        permit?.semaphore?.release()
+    }
+
+    private fun isAvatarRequest(mid: String, imageUrl: String, explicitAvatar: Boolean): Boolean {
+        return explicitAvatar || imageUrl.contains("/avatar/") || mid.contains("avatar", ignoreCase = true)
+    }
+
+    private fun availableDownloadPermits(): Int {
+        return visibleDownloadSemaphore.availablePermits +
+            backgroundDownloadSemaphore.availablePermits +
+            avatarDownloadSemaphore.availablePermits
+    }
 
     /**
      * Synchronous memory cache lookup - no coroutine overhead.
@@ -354,9 +400,15 @@ object ImageCacheManager {
      * Download and cache image from URL with improved error handling and retry logic
      * Includes deduplication to prevent multiple concurrent downloads of the same image
      */
-    suspend fun downloadAndCacheImage(context: Context, imageUrl: String, mid: String): Bitmap? =
+    suspend fun downloadAndCacheImage(
+        context: Context,
+        imageUrl: String,
+        mid: String,
+        isVisible: Boolean = true,
+        isAvatar: Boolean = false
+    ): Bitmap? =
         withContext(Dispatchers.IO) {
-            var semaphoreAcquired = false
+            var permit: DownloadPermit? = null
             try {
                 // Check if already cached first
                 getCachedImage(context, mid)?.let { return@withContext it }
@@ -389,11 +441,13 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
-                // Acquire semaphore to limit concurrent downloads
-                downloadSemaphore.acquire()
-                semaphoreAcquired = true
+                permit = acquireDownloadPermit(mid, imageUrl, isVisible, isAvatar)
                 downloadQueue[mid] = true
-                activeInvisibleDownloads++ // Assume invisible for compressed images
+                if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                    activeInvisibleDownloads++
+                } else {
+                    activeVisibleDownloads++
+                }
 
                 try {
                     var bitmap: Bitmap? = null
@@ -402,7 +456,7 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            bitmap = performDownload(imageUrl, context)
+                            bitmap = performDownload(imageUrl, mid, context, isAvatar)
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Cache the downloaded image
                                 cacheImage(context, mid, bitmap)
@@ -425,9 +479,13 @@ object ImageCacheManager {
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
                     }
-                    activeInvisibleDownloads--
-                    downloadSemaphore.release()
-                    semaphoreAcquired = false
+                    if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                        activeInvisibleDownloads--
+                    } else {
+                        activeVisibleDownloads--
+                    }
+                    releaseDownloadPermit(permit)
+                    permit = null
                 }
             } catch (e: Exception) {
                 // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
@@ -455,13 +513,16 @@ object ImageCacheManager {
                         
                         // Update counter ONLY if we were in the queue
                         if (wasInQueue) {
-                            activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
+                            if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                                activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
+                            } else {
+                                activeVisibleDownloads = maxOf(0, activeVisibleDownloads - 1)
+                            }
                         }
                     }
                     
-                    if (semaphoreAcquired) {
-                        downloadSemaphore.release()
-                    }
+                    releaseDownloadPermit(permit)
+                    permit = null
                 } else {
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
@@ -476,13 +537,19 @@ object ImageCacheManager {
      * Perform the actual download with OkHttp connection pooling
      * FIX: Now streams to disk to avoid OOM for large compressed images
      */
-    private suspend fun performDownload(imageUrl: String, context: Context): Bitmap? =
+    private suspend fun performDownload(
+        imageUrl: String,
+        mid: String,
+        context: Context,
+        isAvatar: Boolean = false
+    ): Bitmap? =
         withContext(Dispatchers.IO) {
             if (!us.fireshare.tweet.HproseInstance.isOnline.value) return@withContext null
             var inputStream: InputStream? = null
 
             try {
-                val response = imageHttpClient.get(imageUrl) {
+                val client = if (isAvatarRequest(mid, imageUrl, isAvatar)) avatarHttpClient else imageHttpClient
+                val response = client.get(imageUrl) {
                     headers {
                         append(HttpHeaders.UserAgent, "TweetApp/1.0")
                         append(HttpHeaders.Accept, "image/*,*/*;q=0.8")
@@ -553,7 +620,8 @@ object ImageCacheManager {
         imageUrl: String,
         mid: String,
         context: Context,
-        onProgressiveLoad: ((Bitmap) -> Unit)? = null
+        onProgressiveLoad: ((Bitmap) -> Unit)? = null,
+        isAvatar: Boolean = false
     ): Bitmap? =
         withContext(Dispatchers.IO) {
             if (!us.fireshare.tweet.HproseInstance.isOnline.value) return@withContext null
@@ -567,8 +635,7 @@ object ImageCacheManager {
                 }
                 
                 // Use appropriate client based on URL (avatar vs regular image)
-                val isAvatar = imageUrl.contains("/avatar/") || mid.contains("avatar")
-                val client = if (isAvatar) avatarHttpClient else imageHttpClient
+                val client = if (isAvatarRequest(mid, imageUrl, isAvatar)) avatarHttpClient else imageHttpClient
                 
                 val response = client.get(imageUrl) {
                     headers {
@@ -761,10 +828,11 @@ object ImageCacheManager {
         imageUrl: String, 
         mid: String, 
         isVisible: Boolean = true,
+        isAvatar: Boolean = false,
         onProgressiveLoad: ((Bitmap) -> Unit)? = null
     ): Bitmap? =
         withContext(Dispatchers.IO) {
-            var semaphoreAcquired = false
+            var permit: DownloadPermit? = null
             try {
                 // Use separate cache key for original images
                 val originalMid = "${mid}_original"
@@ -820,14 +888,13 @@ object ImageCacheManager {
                     return@withContext null
                 }
                 
-                downloadSemaphore.acquire()
-                semaphoreAcquired = true
+                permit = acquireDownloadPermit(originalMid, imageUrl, isVisible, isAvatar)
                 
                 // Track priority for monitoring
-                if (isVisible) {
-                    activeVisibleDownloads++
-                } else {
+                if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
                     activeInvisibleDownloads++
+                } else {
+                    activeVisibleDownloads++
                 }
                 
                 // No artificial delays - let semaphore handle concurrency control
@@ -839,7 +906,13 @@ object ImageCacheManager {
                     while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
                         attempt++
                         try {
-                            bitmap = performDownloadOriginalProgressive(imageUrl, originalMid, context, onProgressiveLoad)
+                            bitmap = performDownloadOriginalProgressive(
+                                imageUrl,
+                                originalMid,
+                                context,
+                                onProgressiveLoad,
+                                isAvatar
+                            )
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Store original bitmap in memory cache with original key
                                 addToMemoryCache(originalMid, bitmap)
@@ -868,13 +941,11 @@ object ImageCacheManager {
 
                 } finally {
                     // Always release the download slot and clean up
-                    val wasVisible = downloadPriorityQueue[originalMid] ?: false
-                    
                     // Update priority counters
-                    if (wasVisible) {
-                        activeVisibleDownloads--
-                    } else {
+                    if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
                         activeInvisibleDownloads--
+                    } else {
+                        activeVisibleDownloads--
                     }
                     
                     synchronized(downloadQueueMutex) {
@@ -884,8 +955,8 @@ object ImageCacheManager {
                     }
                     
                     // Release semaphore (we always acquire it in the normal path)
-                    downloadSemaphore.release()
-                    semaphoreAcquired = false
+                    releaseDownloadPermit(permit)
+                    permit = null
                     
                     // FIX P1-4: Use scheduled cleanup instead of GlobalScope
                     // Clean up download results after a delay to allow other requests to get the result
@@ -937,9 +1008,8 @@ object ImageCacheManager {
                     }
                     
                     // Release the download slot only if we acquired it and haven't released it yet
-                    if (semaphoreAcquired) {
-                        downloadSemaphore.release()
-                    }
+                    releaseDownloadPermit(permit)
+                    permit = null
                 } else {
                     Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
                     us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
@@ -952,14 +1022,14 @@ object ImageCacheManager {
      * Check if there are available download slots
      */
     fun hasAvailableDownloadSlots(): Boolean {
-        return downloadSemaphore.availablePermits > 0
+        return availableDownloadPermits() > 0
     }
 
     /**
      * Get current download status for debugging
      */
     fun getDownloadStatus(): String {
-        return "Available: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}, Queued: ${downloadQueue.size}, Paused: ${pausedDownloads.size}"
+        return "Available: visible=${visibleDownloadSemaphore.availablePermits}/$MAX_VISIBLE_DOWNLOADS, background=${backgroundDownloadSemaphore.availablePermits}/$MAX_BACKGROUND_DOWNLOADS, avatar=${avatarDownloadSemaphore.availablePermits}/$MAX_AVATAR_DOWNLOADS, Queued: ${downloadQueue.size}, Paused: ${pausedDownloads.size}"
     }
     
     /**
@@ -984,9 +1054,17 @@ object ImageCacheManager {
         imageUrl: String,
         mid: String,
         isVisible: Boolean = true,
+        isAvatar: Boolean = false,
         onProgressiveLoad: ((Bitmap) -> Unit)? = null
     ): Deferred<Bitmap?> = imageLoadingScope.async {
-        loadOriginalImage(context, imageUrl, mid, isVisible, onProgressiveLoad)
+        loadOriginalImage(
+            context = context,
+            imageUrl = imageUrl,
+            mid = mid,
+            isVisible = isVisible,
+            isAvatar = isAvatar,
+            onProgressiveLoad = onProgressiveLoad
+        )
     }
 
     /**
@@ -1028,10 +1106,10 @@ object ImageCacheManager {
                 delay(5000L)
 
                 synchronized(pausedDownloadMutex) {
-                    if (pausedDownloads.isNotEmpty() && downloadSemaphore.availablePermits > 0) {
+                    if (pausedDownloads.isNotEmpty() && availableDownloadPermits() > 0) {
                         val pausedMids = pausedDownloads.keys.toList()
                         for (mid in pausedMids) {
-                            if (downloadSemaphore.availablePermits > 0) {
+                            if (availableDownloadPermits() > 0) {
                                 pausedDownloads.remove(mid)
                             } else {
                                 break
@@ -1237,6 +1315,7 @@ object ImageCacheManager {
         context: Context, 
         imageUrl: String, 
         mid: String,
+        isAvatar: Boolean = false,
         onProgressiveLoad: ((Bitmap) -> Unit)? = null,
         onComplete: (Bitmap?) -> Unit
     ) {
@@ -1247,7 +1326,14 @@ object ImageCacheManager {
         
         imageLoadingScope.launch {
             try {
-                val result = loadOriginalImage(context, imageUrl, mid, true, onProgressiveLoad)
+                val result = loadOriginalImage(
+                    context = context,
+                    imageUrl = imageUrl,
+                    mid = mid,
+                    isVisible = true,
+                    isAvatar = isAvatar,
+                    onProgressiveLoad = onProgressiveLoad
+                )
                 // Use withContext to ensure callback runs on main thread safely
                 withContext(Dispatchers.Main) {
                     try {
@@ -1437,7 +1523,7 @@ object ImageCacheManager {
             }
             
             // Start downloading in background
-            downloadAndCacheImage(context, imageUrl, mid)
+            downloadAndCacheImage(context, imageUrl, mid, isVisible = false)
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error preloading image: $e")
         }
@@ -1631,7 +1717,7 @@ object ImageCacheManager {
         val currentSize = memoryCache.size
         val currentMemory = currentMemoryUsage.get()
 
-        return "Memory: $currentSize items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: ${downloadSemaphore.availablePermits}/${MAX_CONCURRENT_DOWNLOADS}"
+        return "Memory: $currentSize items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: visible=${visibleDownloadSemaphore.availablePermits}/$MAX_VISIBLE_DOWNLOADS, background=${backgroundDownloadSemaphore.availablePermits}/$MAX_BACKGROUND_DOWNLOADS, avatar=${avatarDownloadSemaphore.availablePermits}/$MAX_AVATAR_DOWNLOADS"
     }
 
     /**

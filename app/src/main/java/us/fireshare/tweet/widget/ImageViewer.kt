@@ -948,7 +948,12 @@ fun ImageViewer(
                     }
                 } else {
                     // Load compressed image from server (downloads and compresses automatically)
-                    val downloadedBitmap = ImageCacheManager.downloadAndCacheImage(context, imageUrl, mid)
+                    val downloadedBitmap = ImageCacheManager.downloadAndCacheImage(
+                        context,
+                        imageUrl,
+                        mid,
+                        isVisible = isVisible
+                    )
                     
                     if (downloadedBitmap != null) {
                         // Update with loaded compressed image

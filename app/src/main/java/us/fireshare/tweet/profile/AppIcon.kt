@@ -115,16 +115,19 @@ fun UserAvatar(
                 loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
 
                 try {
-                    ImageCacheManager.loadOriginalImageWithScope(
-                        context = context,
-                        imageUrl = avatarUrl,
-                        mid = avatarMid
-                    ) { bitmap ->
-                        loadState = if (bitmap != null && !bitmap.isRecycled) {
-                            AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
-                        } else {
-                            AvatarLoadState(isLoading = false, hasError = true)
-                        }
+                    val bitmap = withContext(Dispatchers.IO) {
+                        ImageCacheManager.downloadAndCacheImage(
+                            context = context,
+                            imageUrl = avatarUrl,
+                            mid = avatarMid,
+                            isVisible = true,
+                            isAvatar = true
+                        )
+                    }
+                    loadState = if (bitmap != null && !bitmap.isRecycled) {
+                        AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
+                    } else {
+                        AvatarLoadState(isLoading = false, hasError = true)
                     }
                 } catch (e: Exception) {
                     loadState = AvatarLoadState(isLoading = false, hasError = true)
