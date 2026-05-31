@@ -106,12 +106,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     Timber.tag("TweetFeedViewModel").d("Offline: skipping network fetch, using cached tweets only")
                 } else {
                     waitForAppUser()
-                    if (appUser.baseUrl != null) {
-                        Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
-                        refresh(0)
+                    if (appUser.baseUrl == null) {
+                        Timber.tag("TweetFeedViewModel").w("AppUser baseUrl still null after wait timeout, attempting refresh anyway to avoid startup deadlock")
                     } else {
-                        Timber.tag("TweetFeedViewModel").w("AppUser baseUrl not initialized, using cached tweets only")
+                        Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
                     }
+                    // Always attempt a refresh when online. Internal retry/fallback logic
+                    // will keep cached data on failure and prevents permanent spinner lock.
+                    refresh(0)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization: ${e.message}")
@@ -125,14 +127,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     _tweets.value = emptyList()
                 }
             } finally {
-                // Only clear initState if we have tweets to show
-                // Keep spinner showing if no tweets loaded yet (including during retries)
-                if (_tweets.value.isNotEmpty()) {
-                    initState.value = false
-                    Timber.tag("TweetFeedViewModel").d("Initialization complete with tweets, initState=false")
-                } else {
-                    Timber.tag("TweetFeedViewModel").d("Initialization complete but no tweets, keeping initState=true for retry visibility")
-                }
+                // Always clear init spinner after initialization attempt.
+                // Empty state should be rendered instead of indefinite loading.
+                initState.value = false
+                Timber.tag("TweetFeedViewModel").d("Initialization flow finished, initState=false, tweetCount=${_tweets.value.size}")
             }
         }
     }

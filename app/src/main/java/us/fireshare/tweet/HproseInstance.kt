@@ -23,6 +23,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -291,6 +292,17 @@ object HproseInstance {
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
     
+    // Deduplicate concurrent entry bootstrap resolutions during startup/fallback.
+    private data class EntryResolveCache(
+        val ip: String,
+        val appId: MimeiId,
+        val timestampMs: Long
+    )
+    private val entryResolveCacheTtlMs = 30_000L
+    private val entryIPResolveMutex = Mutex()
+    private var entryIPResolveInFlight: CompletableDeferred<String>? = null
+    private var entryResolveCache: EntryResolveCache? = null
+    
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
         MediaUploadService(applicationContext, uploadHttpClient, appUser, appId)
@@ -486,6 +498,67 @@ object HproseInstance {
      * Find the best IP by trying URLs and parsing HTML parameters
      */
     private suspend fun findEntryIP(): String {
+        var inFlightResolve: CompletableDeferred<String>? = null
+        var shouldResolveNow = false
+        var cachedResult: String? = null
+
+        entryIPResolveMutex.withLock {
+            val existing = entryIPResolveInFlight
+            if (existing != null) {
+                Timber.tag("findEntryIP").d("Reusing in-flight entry IP resolution")
+                inFlightResolve = existing
+            } else {
+                val now = System.currentTimeMillis()
+                val cache = entryResolveCache
+                val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
+
+                if (isCacheValid && cache != null) {
+                    // Keep appId aligned with the cached entry resolution metadata.
+                    _appId = cache.appId
+                    cachedResult = cache.ip
+                    Timber.tag("findEntryIP").d(
+                        "Using cached entry IP ${cache.ip} (age=${now - cache.timestampMs}ms)"
+                    )
+                } else {
+                    inFlightResolve = CompletableDeferred()
+                    entryIPResolveInFlight = inFlightResolve
+                    shouldResolveNow = true
+                    Timber.tag("findEntryIP").d("Created new entry IP resolution task")
+                }
+            }
+        }
+
+        cachedResult?.let { return it }
+
+        if (!shouldResolveNow) {
+            return inFlightResolve!!.await()
+        }
+
+        try {
+            val resolvedIP = resolveEntryIPInternal()
+            val resolvedAppId = appId
+            entryIPResolveMutex.withLock {
+                entryResolveCache = EntryResolveCache(
+                    ip = resolvedIP,
+                    appId = resolvedAppId,
+                    timestampMs = System.currentTimeMillis()
+                )
+            }
+            inFlightResolve!!.complete(resolvedIP)
+            return resolvedIP
+        } catch (e: Exception) {
+            inFlightResolve!!.completeExceptionally(e)
+            throw e
+        } finally {
+            entryIPResolveMutex.withLock {
+                if (entryIPResolveInFlight === inFlightResolve) {
+                    entryIPResolveInFlight = null
+                }
+            }
+        }
+    }
+
+    private suspend fun resolveEntryIPInternal(): String {
         val urls = preferenceHelper.getAppUrls()
         Timber.tag("findEntryIP").d("Attempting to find entry IP with ${urls.size} URL(s): $urls")
 
@@ -565,7 +638,9 @@ object HproseInstance {
 
     private suspend fun initAppEntry(onBaseUrlReady: (suspend () -> Unit)? = null) {
         if (!isOnline.value) {
-            Timber.tag("initAppEntry").d("Offline: skipping")
+            Timber.tag("initAppEntry").d("Offline: skipping network bootstrap, marking app as initialized with cached data")
+            _isAppUserInitialized.value = true
+            onBaseUrlReady?.invoke()
             return
         }
         val userId = preferenceHelper.getUserId()

@@ -40,6 +40,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -106,7 +107,7 @@ class TweetActivity : ComponentActivity() {
         }
 
         // Start initialization
-        lifecycleScope.launch {
+        initJob = lifecycleScope.async {
             try {
                 // Maximum 3-second splash screen timeout
                 launch {
@@ -127,6 +128,12 @@ class TweetActivity : ComponentActivity() {
                 launch(IO) {
                     delay(5000) // Check for upgrade 5s after start
                     activityViewModel.checkForUpgrade(this@TweetActivity)
+                }
+                
+                // Always refresh entry URLs on every startup (best-effort, non-blocking)
+                launch(IO) {
+                    delay(6000) // Let bootstrap start first; loader still has internal wait
+                    activityViewModel.loadEntryUrls()
                 }
                 
                 launch(IO) {
@@ -307,8 +314,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 }
                 val elapsed = System.currentTimeMillis() - startTime
                 if (!HproseInstance.isAppUserInitialized.value) {
-                    Timber.tag("loadEntryUrls").w("Timeout waiting for appUser initialization after ${elapsed}ms, skipping loadEntryUrls")
-                    return@launch
+                    Timber.tag("loadEntryUrls").w("Timeout waiting for appUser initialization after ${elapsed}ms, continuing best-effort entry URL refresh")
                 } else {
                     Timber.tag("loadEntryUrls").d("appUser initialized after ${elapsed}ms: ${HproseInstance.appUser.baseUrl}")
                 }
@@ -420,9 +426,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     showUpdateDialog(context, downloadUrl)
                 } else {
                     Timber.tag("checkForUpgrade").d("No upgrade needed (current=$currentVersion >= server=$serverVersion)")
-
-                    // Load entry URLs (works for all versions including Play)
-                    loadEntryUrls()
                 }
             } catch (e: Exception) {
                 Timber.tag("checkForUpgrade").e(e, "Error during upgrade check: ${e.message}")
