@@ -540,7 +540,11 @@ object FullScreenPlayerManager {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Timber.e("FullScreenPlayerManager - Player error: ${error.message}")
+                if (error.isExpectedNetworkPlaybackIssue()) {
+                    Timber.w("FullScreenPlayerManager - Network playback issue: ${error.errorCodeName}")
+                } else {
+                    Timber.e(error, "FullScreenPlayerManager - Player error: ${error.message}")
+                }
             }
         }
         autoAdvanceListener = listener

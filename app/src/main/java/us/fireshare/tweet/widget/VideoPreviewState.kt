@@ -39,6 +39,8 @@ class VideoPreviewState(
     var hasError by mutableStateOf(false)
     var retryCount by mutableIntStateOf(0)
     var isMediaCodecRecoveryInProgress by mutableStateOf(false)
+    var isNetworkRecoveryInProgress by mutableStateOf(false)
+    var blockAutoPrepareAfterError by mutableStateOf(false)
     var showControls by mutableStateOf(false)
     var coordinatorWantsToPlay by mutableStateOf(false)
     var isPlaying by mutableStateOf(false)
@@ -68,6 +70,8 @@ class VideoPreviewState(
     ) {
         when (playbackState) {
             Player.STATE_READY -> {
+                retryCount = 0
+                blockAutoPrepareAfterError = false
                 isLoading = false
                 val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
                 if (currentShouldPlay && isVisible && !player.isPlaying) {
@@ -88,6 +92,12 @@ class VideoPreviewState(
                 onVideoCompleted?.invoke()
             }
             Player.STATE_IDLE -> {
+                if (hasError || isNetworkRecoveryInProgress || blockAutoPrepareAfterError) {
+                    isLoading = false
+                    player.playWhenReady = false
+                    return
+                }
+
                 isLoading = true
                 val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
                 if (currentShouldPlay && isVisible && player.mediaItemCount > 0) {
@@ -112,18 +122,22 @@ class VideoPreviewState(
             Timber.tag("VideoPreview").d("Ignoring transient error during recovery for $videoMid: ${error.message}")
             return
         }
-        Timber.tag("VideoPreview").e(
-            error,
-            "Video loading error for $videoMid code=${error.errorCodeName}/${error.errorCode} " +
-                "cause=${error.cause?.javaClass?.simpleName}: ${error.message}"
-        )
+        val errorSummary = "Video loading issue for $videoMid code=${error.errorCodeName}/${error.errorCode} " +
+            "cause=${error.shortCauseName()}: ${error.message}"
+        if (error.isExpectedNetworkPlaybackIssue()) {
+            Timber.tag("VideoPreview").w(errorSummary)
+        } else {
+            Timber.tag("VideoPreview").e(error, errorSummary)
+        }
 
         val errorMessage = listOfNotNull(error.message, error.cause?.message).joinToString(" ")
         val errorType = classifyError(errorMessage)
+        blockAutoPrepareAfterError = true
 
         when {
             errorType == ErrorType.STREAM_PARSING -> {
                 Timber.tag("VideoPreview").d("Ignoring stream parsing error for video: $videoMid")
+                blockAutoPrepareAfterError = false
                 isLoading = false
                 hasError = false
             }
@@ -135,13 +149,17 @@ class VideoPreviewState(
                 isLoading = false
                 hasError = true
             }
-            errorType == ErrorType.RECOVERABLE && retryCount < maxRetries && videoMid != null -> {
+            errorType == ErrorType.RECOVERABLE && retryCount < 1 && videoMid != null -> {
                 attemptNetworkRecovery(context, url, videoType, scope)
             }
             else -> {
                 isLoading = false
                 hasError = true
-                Timber.tag("VideoPreview").e("Final error for video: $videoMid (retries: $retryCount)")
+                if (error.isExpectedNetworkPlaybackIssue()) {
+                    Timber.tag("VideoPreview").w("Network playback issue for video: $videoMid (retries: $retryCount)")
+                } else {
+                    Timber.tag("VideoPreview").e("Final error for video: $videoMid (retries: $retryCount)")
+                }
             }
         }
     }
@@ -161,11 +179,19 @@ class VideoPreviewState(
             player.repeatMode = Player.REPEAT_MODE_OFF
             when (player.playbackState) {
                 Player.STATE_READY -> {
+                    retryCount = 0
+                    blockAutoPrepareAfterError = false
                     player.playWhenReady = shouldPlay
                     isLoading = false
                     hasError = false
                 }
                 Player.STATE_IDLE -> {
+                    if (hasError || isNetworkRecoveryInProgress || blockAutoPrepareAfterError) {
+                        isLoading = false
+                        player.playWhenReady = false
+                        return
+                    }
+
                     isLoading = true
                     hasError = false
                     if (player.mediaItemCount == 0) {
@@ -220,6 +246,9 @@ class VideoPreviewState(
         scope: CoroutineScope
     ) {
         if (videoMid == null) return
+        retryCount = 0
+        blockAutoPrepareAfterError = false
+        isNetworkRecoveryInProgress = false
         retryCount++
         hasError = false
         isLoading = true
@@ -289,15 +318,20 @@ class VideoPreviewState(
         if (videoMid == null || url == null) return
         retryCount++
         Timber.tag("VideoPlaybackDebug").w(
-            "Automatic recovery retry $retryCount/$maxRetries for videoMid=$videoMid type=$videoType"
+            "Automatic recovery retry $retryCount/1 for videoMid=$videoMid type=$videoType"
         )
         isLoading = true
         hasError = false
+        isNetworkRecoveryInProgress = true
 
         scope.launch {
             delay(1000)
-            if (isLoading && !hasError) {
-                VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+            try {
+                if (isLoading && !hasError) {
+                    VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+                }
+            } finally {
+                isNetworkRecoveryInProgress = false
             }
         }
     }

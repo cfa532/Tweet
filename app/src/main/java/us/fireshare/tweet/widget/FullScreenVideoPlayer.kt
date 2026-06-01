@@ -99,7 +99,11 @@ fun FullScreenVideoPlayer(
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Timber.e("FullScreenVideoPlayer: Player error: ${error.message}")
+                if (error.isExpectedNetworkPlaybackIssue()) {
+                    Timber.w("FullScreenVideoPlayer: Network playback issue: ${error.errorCodeName}")
+                } else {
+                    Timber.e(error, "FullScreenVideoPlayer: Player error: ${error.message}")
+                }
                 // Don't automatically retry on error - let user handle it
                 // This prevents endless retry loops
             }
@@ -563,5 +567,3 @@ fun FullScreenVideoPlayer(
         }
     }
 }
-
-

@@ -1152,7 +1152,7 @@ object VideoManager {
 
         val resumePosition = player.currentPosition.coerceAtLeast(0L)
         val wasPlayWhenReady = player.playWhenReady
-        Timber.tag("VideoPlaybackDebug").w(
+        Timber.tag("VideoPlaybackDebug").d(
             "Attempting recovery videoMid=$videoMid type=$videoType software=$forceSoftwareDecoder " +
                 "state=${playerStateName(player.playbackState)} pos=${resumePosition}ms buffered=${player.bufferedPosition}ms " +
                 "duration=${player.duration}ms playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} " +
@@ -1806,8 +1806,12 @@ object VideoManager {
                 Timber.d("VideoManager - Set fallback media source for playlist.m3u8: $playlistUrl")
             } else {
                 // Final failure - no more fallbacks
-                Timber.e("VideoManager - All HLS attempts failed for URL: $videoUrl")
-                Timber.e("VideoManager - Final error: ${error.message}")
+                if (error.isExpectedNetworkPlaybackIssue()) {
+                    Timber.w("VideoManager - HLS attempts hit network issues for URL: $videoUrl")
+                } else {
+                    Timber.e("VideoManager - All HLS attempts failed for URL: $videoUrl")
+                    Timber.e("VideoManager - Final error: ${error.message}")
+                }
             }
         }
     }

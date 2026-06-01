@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -629,10 +631,6 @@ class UserViewModel @AssistedInject constructor(
             .d("Updated user $userId counts: followers=${fans.size}, followings=${followings.size}")
     }
 
-    companion object {
-        // Use the constant from TW_CONST
-    }
-
     /**
      * Fetch followers with pagination support
      * Returns List<MimeiId> (null values are filtered out)
@@ -993,6 +991,10 @@ class UserViewModel @AssistedInject constructor(
         fun create(userId: MimeiId): UserViewModel
     }
 
+    companion object {
+        private val initUserFetchSemaphore = Semaphore(3)
+    }
+
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications()
@@ -1030,10 +1032,15 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 // Fetch fresh user data in background and update
-                if (userId != appUser.mid) {
+                if (
+                    userId != appUser.mid &&
+                    (cachedUser == null || cachedUser.username.isNullOrBlank())
+                ) {
                     launch(IO) {
                         try {
-                            val freshUser = fetchUser(userId, maxRetries = 2)
+                            val freshUser = initUserFetchSemaphore.withPermit {
+                                fetchUser(userId, maxRetries = 2)
+                            }
                             if (freshUser != null) {
                                 _user.value = freshUser
 
@@ -1052,6 +1059,8 @@ class UserViewModel @AssistedInject constructor(
                             Timber.tag("UserViewModel").e("Error updating user data for $userId: $e")
                         }
                     }
+                } else if (userId != appUser.mid) {
+                    Timber.tag("UserViewModel").d("Using cached user data for $userId")
                 }
 
                 if (userId == appUser.mid) {

@@ -136,7 +136,6 @@ fun UserAvatar(
             }
         } else {
             // No avatar
-            Timber.tag("UserAvatar").d("❌ No avatarMid, showing default icon")
             loadState = AvatarLoadState()
         }
     }

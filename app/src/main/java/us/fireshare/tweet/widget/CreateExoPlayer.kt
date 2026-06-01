@@ -108,12 +108,15 @@ fun createExoPlayer(
                 private var hasRecordedSuccess = false
 
                 override fun onPlayerError(error: PlaybackException) {
-                    Timber.tag("VideoPlaybackDebug").e(
-                        error,
-                        "Player error mediaId=$reliabilityMediaId type=$mediaType code=${error.errorCodeName}/${error.errorCode} " +
-                            "state=${playerStateName(playbackState)} pos=${currentPosition}ms buffered=${bufferedPosition}ms " +
-                            "duration=${duration}ms playWhenReady=$playWhenReady isPlaying=$isPlaying cause=${error.cause?.javaClass?.simpleName}"
-                    )
+                    val errorSummary = "Player error mediaId=$reliabilityMediaId type=$mediaType " +
+                        "code=${error.errorCodeName}/${error.errorCode} state=${playerStateName(playbackState)} " +
+                        "pos=${currentPosition}ms buffered=${bufferedPosition}ms duration=${duration}ms " +
+                        "playWhenReady=$playWhenReady isPlaying=$isPlaying cause=${error.shortCauseName()}"
+                    if (error.isExpectedNetworkPlaybackIssue()) {
+                        Timber.tag("VideoPlaybackDebug").w(errorSummary)
+                    } else {
+                        Timber.tag("VideoPlaybackDebug").e(error, errorSummary)
+                    }
                     reliabilityMediaId?.let { mediaId ->
                         CoroutineScope(Dispatchers.IO).launch {
                             HproseInstance.recordReliabilityFailureMedia(mediaId)
@@ -128,7 +131,13 @@ fun createExoPlayer(
                     // If the URL was already resolved (via HlsUrlResolver), skip sequential
                     // fallback — we already probed in parallel and know the correct URL.
                     if (resolvedHlsUrl != null) {
-                        Timber.tag("createExoPlayer").e("HLS error on pre-resolved URL $resolvedHlsUrl: ${error.message}")
+                        if (error.isExpectedNetworkPlaybackIssue()) {
+                            Timber.tag("createExoPlayer").w(
+                                "HLS network issue on pre-resolved URL $resolvedHlsUrl: ${error.errorCodeName}"
+                            )
+                        } else {
+                            Timber.tag("createExoPlayer").e("HLS error on pre-resolved URL $resolvedHlsUrl: ${error.message}")
+                        }
                         return
                     }
 
@@ -149,8 +158,12 @@ fun createExoPlayer(
                         prepare()
                     } else {
                         // Final failure - no more fallbacks
-                        Timber.tag("createExoPlayer").e("All HLS attempts failed for URL: $url")
-                        Timber.tag("createExoPlayer").e("Final error: ${error.message}")
+                        if (error.isExpectedNetworkPlaybackIssue()) {
+                            Timber.tag("createExoPlayer").w("All HLS attempts hit network issues for URL: $url")
+                        } else {
+                            Timber.tag("createExoPlayer").e("All HLS attempts failed for URL: $url")
+                            Timber.tag("createExoPlayer").e("Final error: ${error.message}")
+                        }
                     }
                 }
 

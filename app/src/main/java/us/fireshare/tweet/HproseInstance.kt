@@ -24,6 +24,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -4083,6 +4084,17 @@ object HproseInstance {
         hasExpired: Boolean,
         originalBaseUrl: String?
     ) {
+        if (attempt == 1) {
+            val accessNodeMid = user.hostIds?.getOrNull(1)
+            val poolIP = accessNodeMid?.let { NodePool.getIPFromNodeId(it) }
+            if (poolIP != null) {
+                user.baseUrl = "http://$poolIP"
+                user.clearHproseService()
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP by access node: $poolIP for userId: ${user.mid}")
+                return
+            }
+        }
+
         if (attempt == 1 && !forceFreshIP && userHasBaseUrl) {
             // NodePool is trusted only once for performance.
             val poolIP = NodePool.getIPFromNode(user)
@@ -4314,6 +4326,9 @@ object HproseInstance {
     private val ipCacheMutex = Mutex()
     private const val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
 
+    private val providerIPRequests = mutableMapOf<MimeiId, Deferred<String?>>()
+    private val providerIPRequestsMutex = Mutex()
+
     private fun normalizeIPHealthCacheKey(ipAddress: String): String {
         val trimmed = ipAddress.trim()
             .removePrefix("http://")
@@ -4534,22 +4549,11 @@ object HproseInstance {
             // Get the user instance to access their baseUrl
             val user = getUserInstance(userId)
             
-            // If user doesn't have route/host data, fetch it first. Do not fall back
-            // to appUser here: dTweet users may live on different provider nodes.
-            if (user.baseUrl.isNullOrBlank() || user.hostIds.isNullOrEmpty()) {
-                Timber.tag("resyncUser").d("User $userId missing route/host data, fetching user first")
-                fetchUser(userId, baseUrl = if (user.baseUrl.isNullOrBlank()) "" else user.baseUrl) ?: return null
-            }
-
-            val homeHostId = user.hostIds?.getOrNull(0)
-            val readHostId = user.hostIds?.getOrNull(1)
-            if (homeHostId.isNullOrBlank() || readHostId.isNullOrBlank()) {
-                Timber.tag("resyncUser").d("Skipping resync for $userId: no read-copy host")
-                return null
-            }
-            if (homeHostId == readHostId) {
-                Timber.tag("resyncUser").d("Skipping resync for $userId: home host and read host are the same")
-                return null
+            // If user doesn't have a route, fetch it first. Do not fall back to
+            // appUser here: dTweet users may live on different provider nodes.
+            if (user.baseUrl.isNullOrBlank()) {
+                Timber.tag("resyncUser").d("User $userId missing route, fetching user first")
+                fetchUser(userId, baseUrl = "") ?: return null
             }
             
             val entry = "resync_user"
@@ -4591,13 +4595,13 @@ object HproseInstance {
             
             // Validate response: must have userData and username (required field)
             if (userData == null || userData.isEmpty()) {
-                Timber.tag("resyncUser").e("Null or empty user data, ignoring result")
+                Timber.tag("resyncUser").e("Null or empty user data for user $userId, ignoring result")
                 return null
             }
             
             val username = userData["username"] as? String
             if (username == null) {
-                Timber.tag("resyncUser").e("Invalid user data (no username), ignoring result")
+                Timber.tag("resyncUser").e("Invalid user data for user $userId (no username), ignoring result")
                 return null
             }
             
@@ -4639,17 +4643,40 @@ object HproseInstance {
      * attempt. Always query it through the entry node so another user's stale or
      * healthy provider node is never used as a fallback route.
      */
-    suspend fun getProviderIP(mid: MimeiId): String? {
+    suspend fun getProviderIP(mid: MimeiId): String? = coroutineScope {
         if (!isOnline.value) {
             Timber.tag("getProviderIP").d("Offline: skipping")
-            return null
+            return@coroutineScope null
         }
         // Safety check: never try to get provider IP for GUEST_ID
         if (mid == TW_CONST.GUEST_ID) {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
-            return findEntryIP()
+            return@coroutineScope findEntryIP()
         }
 
+        val request = providerIPRequestsMutex.withLock {
+            providerIPRequests[mid]?.takeIf { it.isActive } ?: run {
+                val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
+                    resolveProviderIP(mid)
+                }
+                newRequest.invokeOnCompletion {
+                    TweetApplication.applicationScope.launch {
+                        providerIPRequestsMutex.withLock {
+                            if (providerIPRequests[mid] === newRequest) {
+                                providerIPRequests.remove(mid)
+                            }
+                        }
+                    }
+                }
+                providerIPRequests[mid] = newRequest
+                newRequest
+            }
+        }
+
+        request.await()
+    }
+
+    private suspend fun resolveProviderIP(mid: MimeiId): String? {
         // MATCH iOS: get_provider_ips is a discovery operation — always use the entry node,
         // not appUser.hproseService which may point to a stale provider IP.
         return try {
@@ -4733,7 +4760,8 @@ object HproseInstance {
             // Only log at debug level for expected network failures (timeout, unreachable)
             val message = e.message ?: e.toString()
             if (message.contains("timeout", ignoreCase = true) || 
-                message.contains("unreachable", ignoreCase = true)) {
+                message.contains("unreachable", ignoreCase = true) ||
+                message.contains("failed to connect", ignoreCase = true)) {
                 Timber.tag("isServerHealthy").d("Health check failed for $url: ${e.message}")
             } else {
                 Timber.tag("isServerHealthy").w("Health check (HEAD) exception for $url: ${e.message}")

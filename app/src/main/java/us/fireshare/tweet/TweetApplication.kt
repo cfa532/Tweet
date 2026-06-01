@@ -3,10 +3,12 @@ package us.fireshare.tweet
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
+import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.media3.common.util.UnstableApi
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -76,8 +78,12 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         }
     }
 
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_ERROR)
+        androidx.media3.common.util.Log.setLogStackTraces(false)
+
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         } else {
