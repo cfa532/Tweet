@@ -46,7 +46,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
@@ -89,11 +88,13 @@ fun ProfileScreen(
     }
 
     val initState by viewModel.initState.collectAsState()
+    val profileUser by viewModel.user.collectAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
+    var didRequestResync by remember(userId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
 
@@ -115,24 +116,13 @@ fun ProfileScreen(
         viewModel.refreshUserData()
     }
 
-    // Resync user data on server in background when profile opens.
-    LaunchedEffect(userId) {
-        try {
-            val resyncedUser = withContext(Dispatchers.IO) {
-                HproseInstance.resyncUser(userId)
-            }
-
-            if (resyncedUser != null) {
-                val applied = viewModel.applyResyncedUser(resyncedUser)
-                if (applied) {
-                    Timber.tag("ProfileScreen").d("✅ Successfully resynced user $userId on server")
-                }
-            } else {
-                Timber.tag("ProfileScreen").d("No resynced user returned for $userId")
-            }
-        } catch (e: Exception) {
-            Timber.tag("ProfileScreen").e(e, "Failed to resync user $userId")
+    // Resync user data after the profile route is available.
+    LaunchedEffect(userId, profileUser.mid, profileUser.baseUrl) {
+        if (didRequestResync || profileUser.mid != userId || profileUser.baseUrl.isNullOrBlank()) {
+            return@LaunchedEffect
         }
+        didRequestResync = true
+        viewModel.resyncProfileUser()
     }
 
     // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens

@@ -14,6 +14,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import hprose.client.HproseClient
 import hprose.io.HproseClassManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -228,6 +229,7 @@ object NodePool {
 
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
+    private const val RESYNC_USER_TIMEOUT_MS = 300_000
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
     
@@ -4536,9 +4538,14 @@ object HproseInstance {
      * Should be called each time a user profile is opened.
      * 
      * @param userId The user ID to resync
-     * @return The updated User object from server, or null if failed
+     * @return The updated User object and synced tweets from server, or null if failed
      */
-    suspend fun resyncUser(userId: MimeiId): User? {
+    data class ResyncUserResult(
+        val user: User,
+        val tweets: List<Tweet>
+    )
+
+    suspend fun resyncUser(userId: MimeiId): ResyncUserResult? {
         if (!isOnline.value) {
             Timber.tag("resyncUser").d("Offline: skipping")
             return null
@@ -4549,49 +4556,59 @@ object HproseInstance {
             // Get the user instance to access their baseUrl
             val user = getUserInstance(userId)
             
-            // If user doesn't have a route, fetch it first. Do not fall back to
-            // appUser here: dTweet users may live on different provider nodes.
             if (user.baseUrl.isNullOrBlank()) {
-                Timber.tag("resyncUser").d("User $userId missing route, fetching user first")
-                fetchUser(userId, baseUrl = "") ?: return null
+                val cachedBaseUrl = TweetCacheManager.getCachedUser(userId)?.baseUrl
+                if (!cachedBaseUrl.isNullOrBlank()) {
+                    user.baseUrl = cachedBaseUrl
+                    user.clearHproseService()
+                }
+            }
+
+            if (user.baseUrl.isNullOrBlank()) {
+                Timber.tag("resyncUser").d("Route unavailable for resync user $userId; skipping")
+                return null
             }
             
             val entry = "resync_user"
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
-                "version" to "v2",
-                "userid" to userId
+                "version" to "v3",
+                "userid" to userId,
+                "appuserid" to appUser.mid
             )
             
-            // Use only the target user's hproseService. If its route cannot be
-            // resolved, surface the failure instead of querying another node.
-            val service = user.hproseService
-            if (service == null) {
-                Timber.tag("resyncUser").e("No target hproseService available for resync")
+            val baseUrl = user.baseUrl?.trim()?.removeSuffix("/")
+            if (baseUrl.isNullOrBlank()) {
+                Timber.tag("resyncUser").e("No baseUrl available for resync user $userId, hostIds=${user.hostIds}")
                 return null
             }
             
-            Timber.tag("resyncUser").d("Calling resync_user API for user: $userId with baseUrl: ${user.baseUrl}")
+            Timber.tag("resyncUser").d("Calling resync_user API for user: $userId with baseUrl: $baseUrl")
             
             // Make the API call
             val rawResponse = withContext(Dispatchers.IO) {
+                val client = HproseClient.create("$baseUrl/webapi/")
+                client.timeout = RESYNC_USER_TIMEOUT_MS
+                val service = client.useService(HproseService::class.java)
                 service.runMApp<Any>(entry, params)
             }
             
             Timber.tag("resyncUser").d("Got response for user $userId: ${rawResponse?.javaClass?.simpleName}")
             
-            // Parse response (v2 API returns unwrapped user data)
-            val userData = when (rawResponse) {
-                is Map<*, *> -> {
-                    @Suppress("UNCHECKED_CAST")
-                    rawResponse as? Map<String, Any>
-                }
-                else -> {
-                    Timber.tag("resyncUser").w("Unexpected response type: ${rawResponse?.javaClass}")
-                    null
-                }
+            // v3 returns { user: <userData>, tweets: [<tweetData>] }. Keep a
+            // legacy fallback for older unwrapped user-only responses.
+            val responseData = rawResponse.asStringAnyMap()
+            if (responseData == null) {
+                Timber.tag("resyncUser").w("Unexpected response type for user $userId: ${rawResponse?.javaClass}")
+                return null
             }
+
+            val userData = responseData["user"].asStringAnyMap()
+                ?: responseData.takeIf { it.containsKey("username") }
+            val tweetDataList = (responseData["tweets"] as? List<*>)
+                ?.flatMap { it.asTweetDataMaps() }
+                .orEmpty()
             
             // Validate response: must have userData and username (required field)
             if (userData == null || userData.isEmpty()) {
@@ -4606,33 +4623,68 @@ object HproseInstance {
             }
             
             // Valid response - update user fields
-            (userData["name"] as? String)?.let { user.name = it }
-            user.username = username  // Username is validated above
-            (userData["email"] as? String)?.let { user.email = it }
-            (userData["profile"] as? String)?.let { user.profile = it }
-            (userData["avatar"] as? String)?.let { user.avatar = it }
-            
-            // Update counts only if provided (non-nullable Int properties)
-            (userData["tweetCount"] as? Number)?.let { user.tweetCount = it.toInt() }
-            (userData["followingCount"] as? Number)?.let { user.followingCount = it.toInt() }
-            (userData["followersCount"] as? Number)?.let { user.followersCount = it.toInt() }
-            (userData["bookmarksCount"] as? Number)?.let { user.bookmarksCount = it.toInt() }
-            (userData["favoritesCount"] as? Number)?.let { user.favoritesCount = it.toInt() }
-            (userData["commentsCount"] as? Number)?.let { user.commentsCount = it.toInt() }
-            
-            // Update cloudDrivePort if provided
-            (userData["cloudDrivePort"] as? Number)?.let { port ->
-                user.cloudDrivePort = port.toInt()
+            user.from(userData)
+
+            val syncedTweets = tweetDataList.mapNotNull { tweetData ->
+                try {
+                    Tweet.from(tweetData).also { tweet ->
+                        tweet.author = if (tweet.authorId == user.mid) {
+                            user
+                        } else {
+                            TweetCacheManager.getCachedUser(tweet.authorId)
+                        }
+                        TweetCacheManager.saveTweet(tweet, tweet.authorId)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("resyncUser").w(e, "Ignoring invalid synced tweet for user $userId")
+                    null
+                }
             }
             
             // Save updated user to cache
             TweetCacheManager.saveUser(user)
-            Timber.tag("resyncUser").d("✅ Successfully resynced user $userId")
+            Timber.tag("resyncUser").d("✅ Successfully resynced user $userId with ${syncedTweets.size} tweets")
             
-            user
+            ResyncUserResult(user = user, tweets = syncedTweets)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            Timber.tag("resyncUser").d("Cancelled resync for user $userId")
+            throw e
         } catch (e: Exception) {
+            if (e.hasTimeoutCause()) {
+                Timber.tag("resyncUser").w("Timed out resyncing user $userId after ${RESYNC_USER_TIMEOUT_MS / 1000}s, baseUrl=${getUserInstance(userId).baseUrl}")
+                return null
+            }
             Timber.tag("resyncUser").e(e, "Failed to resync user $userId")
             null
+        }
+    }
+
+    private fun Throwable.hasTimeoutCause(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            if (
+                current is java.util.concurrent.TimeoutException ||
+                current.message?.contains("timeout", ignoreCase = true) == true
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+
+    private fun Any?.asStringAnyMap(): Map<String, Any>? {
+        val map = this as? Map<*, *> ?: return null
+        return map.entries.mapNotNull { (key, value) ->
+            val stringKey = key as? String ?: return@mapNotNull null
+            if (value == null) null else stringKey to value
+        }.toMap()
+    }
+
+    private fun Any?.asTweetDataMaps(): List<Map<String, Any>> {
+        return when (this) {
+            is List<*> -> flatMap { it.asTweetDataMaps() }
+            else -> listOfNotNull(this.asStringAnyMap())
         }
     }
 

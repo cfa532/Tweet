@@ -14,8 +14,10 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +54,7 @@ class UserViewModel @AssistedInject constructor(
     
     // Track users with pending operations to prevent race conditions
     private val pendingOperations = mutableSetOf<MimeiId>()
+    private var profileResyncJob: Job? = null
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -229,6 +232,40 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    fun resyncProfileUser() {
+        val currentUser = _user.value
+        if (currentUser.mid != userId || currentUser.baseUrl.isNullOrBlank()) {
+            Timber.tag("UserViewModel").d("Profile route not ready for resync user $userId")
+            return
+        }
+
+        if (profileResyncJob?.isActive == true) {
+            Timber.tag("UserViewModel").d("Profile resync already running for user $userId")
+            return
+        }
+
+        profileResyncJob = viewModelScope.launch(IO) {
+            try {
+                val resyncResult = HproseInstance.resyncUser(userId)
+                if (resyncResult == null) {
+                    Timber.tag("UserViewModel").d("No resynced user returned for $userId")
+                    return@launch
+                }
+
+                val applied = applyResyncedUser(resyncResult.user)
+                if (applied) {
+                    applyResyncedTweets(resyncResult.tweets)
+                    Timber.tag("UserViewModel").d("✅ Successfully resynced user $userId with ${resyncResult.tweets.size} tweets")
+                }
+            } catch (e: CancellationException) {
+                Timber.tag("UserViewModel").d("Profile resync cancelled for user $userId")
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("UserViewModel").e(e, "Failed to resync profile user $userId")
+            }
+        }
+    }
+
     fun applyResyncedUser(resyncedUser: User): Boolean {
         if (
             resyncedUser.mid != userId ||
@@ -261,6 +298,31 @@ class UserViewModel @AssistedInject constructor(
         _tweetCount.value = userForState.tweetCount
 
         return true
+    }
+
+    fun applyResyncedTweets(resyncedTweets: List<Tweet>) {
+        if (resyncedTweets.isEmpty()) return
+
+        val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
+        val visibleTweets = resyncedTweets
+            .filter { tweet -> tweet.authorId == userId }
+            .filterNot { tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
+            .filterNot { tweet -> tweet.mid in pinnedTweetIds }
+            .map { tweet ->
+                if (tweet.author == null && tweet.authorId == user.value.mid) {
+                    tweet.apply { author = user.value }
+                } else {
+                    tweet
+                }
+            }
+
+        if (visibleTweets.isEmpty()) return
+
+        _tweets.update { currentTweets ->
+            (visibleTweets + currentTweets)
+                .distinctBy { tweet -> tweet.mid }
+                .sortedByDescending { tweet -> tweet.timestamp }
+        }
     }
 
     /**
