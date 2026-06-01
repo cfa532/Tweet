@@ -50,7 +50,6 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
@@ -116,29 +115,23 @@ fun ProfileScreen(
         viewModel.refreshUserData()
     }
 
-    // Resync user data on server in background (long-running operation)
-    // Only run once per app session per user to avoid redundant expensive operations
-    // Matches iOS ProfileView behavior
+    // Resync user data on server in background when profile opens.
     LaunchedEffect(userId) {
-        val shouldResync = HproseInstance.shouldResyncUser(userId)
-        
-        if (shouldResync) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val resyncedUser = HproseInstance.resyncUser(userId)
-                    if (resyncedUser != null) {
-                        Timber.tag("ProfileScreen").d("✅ Successfully resynced user $userId on server")
-                        TweetCacheManager.saveUser(resyncedUser)
-                        Timber.tag("ProfileScreen").d("Saved resynced user to cache")
-                    } else {
-                        Timber.tag("ProfileScreen").w("Failed to resync user $userId")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("ProfileScreen").e(e, "Failed to resync user $userId")
-                }
+        try {
+            val resyncedUser = withContext(Dispatchers.IO) {
+                HproseInstance.resyncUser(userId)
             }
-        } else {
-            Timber.tag("ProfileScreen").d("Skipping resync for user $userId - already resynced this session")
+
+            if (resyncedUser != null) {
+                val applied = viewModel.applyResyncedUser(resyncedUser)
+                if (applied) {
+                    Timber.tag("ProfileScreen").d("✅ Successfully resynced user $userId on server")
+                }
+            } else {
+                Timber.tag("ProfileScreen").d("No resynced user returned for $userId")
+            }
+        } catch (e: Exception) {
+            Timber.tag("ProfileScreen").e(e, "Failed to resync user $userId")
         }
     }
 

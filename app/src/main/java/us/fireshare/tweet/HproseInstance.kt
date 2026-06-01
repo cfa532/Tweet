@@ -412,13 +412,6 @@ object HproseInstance {
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
     
-    /**
-     * Track users that have been resynced this app session to avoid redundant operations
-     * Matches iOS ProfileView.resyncedUsersThisSession behavior
-     */
-    private val resyncedUsersThisSession = mutableSetOf<MimeiId>()
-    private val resyncLock = Any()
-    
     // Data class for tracking incomplete uploads
     data class IncompleteUpload(
         val workId: String,
@@ -4523,27 +4516,9 @@ object HproseInstance {
     }
 
     /**
-     * Check if user should be resynced this session and mark as resynced if so.
-     * Thread-safe check using synchronized block.
-     * 
-     * @param userId The user ID to check
-     * @return true if user should be resynced, false if already resynced this session
-     */
-    fun shouldResyncUser(userId: MimeiId): Boolean {
-        return synchronized(resyncLock) {
-            if (resyncedUsersThisSession.contains(userId)) {
-                false
-            } else {
-                resyncedUsersThisSession.add(userId)
-                true
-            }
-        }
-    }
-
-    /**
      * Resync user data on the server - matches iOS ProfileView behavior.
      * This triggers a backend operation to refresh the user's data on the server side.
-     * Should be called once per app session when a user profile is opened.
+     * Should be called each time a user profile is opened.
      * 
      * @param userId The user ID to resync
      * @return The updated User object from server, or null if failed
@@ -4559,11 +4534,22 @@ object HproseInstance {
             // Get the user instance to access their baseUrl
             val user = getUserInstance(userId)
             
-            // If user doesn't have a baseUrl, fetch it first. Do not fall back to
-            // appUser here: dTweet users may live on different provider nodes.
-            if (user.baseUrl.isNullOrBlank()) {
-                Timber.tag("resyncUser").d("User $userId has no baseUrl, fetching user first")
-                fetchUser(userId, baseUrl = "") ?: return null
+            // If user doesn't have route/host data, fetch it first. Do not fall back
+            // to appUser here: dTweet users may live on different provider nodes.
+            if (user.baseUrl.isNullOrBlank() || user.hostIds.isNullOrEmpty()) {
+                Timber.tag("resyncUser").d("User $userId missing route/host data, fetching user first")
+                fetchUser(userId, baseUrl = if (user.baseUrl.isNullOrBlank()) "" else user.baseUrl) ?: return null
+            }
+
+            val homeHostId = user.hostIds?.getOrNull(0)
+            val readHostId = user.hostIds?.getOrNull(1)
+            if (homeHostId.isNullOrBlank() || readHostId.isNullOrBlank()) {
+                Timber.tag("resyncUser").d("Skipping resync for $userId: no read-copy host")
+                return null
+            }
+            if (homeHostId == readHostId) {
+                Timber.tag("resyncUser").d("Skipping resync for $userId: home host and read host are the same")
+                return null
             }
             
             val entry = "resync_user"

@@ -227,6 +227,40 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
+    fun applyResyncedUser(resyncedUser: User): Boolean {
+        if (
+            resyncedUser.mid != userId ||
+            resyncedUser.isGuest() ||
+            resyncedUser.username.isNullOrBlank()
+        ) {
+            Timber.tag("UserViewModel").w("Ignoring invalid resynced user for profile $userId")
+            return false
+        }
+
+        // resyncUser updates the shared User instance in place. Use a fresh state
+        // object so StateFlow emits even when the current value is that instance.
+        val userForState = if (_user.value === resyncedUser) {
+            resyncedUser.copy(timestamp = System.currentTimeMillis())
+        } else {
+            resyncedUser.copy()
+        }
+
+        _user.value = userForState
+
+        if (userId == appUser.mid) {
+            User.updateUserInstance(resyncedUser)
+            appUser = User.getInstance(resyncedUser.mid)
+        }
+
+        _bookmarksCount.value = userForState.bookmarksCount
+        _favoritesCount.value = userForState.favoritesCount
+        _followersCount.value = userForState.followersCount
+        _followingsCount.value = userForState.followingCount
+        _tweetCount.value = userForState.tweetCount
+
+        return true
+    }
+
     /**
      * Simple function to fetch tweets for a specific page number.
      * TweetListView manages pagination logic internally.
