@@ -3100,9 +3100,7 @@ object HproseInstance {
                     
                     // Refresh appUser from server to get updated tweetCount and other properties
                     try {
-                        // Invalidate cache to force fresh fetch from server
-                        TweetCacheManager.removeCachedUser(appUser.mid)
-                        val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
+                        val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
                             // Update singleton and set appUser to it
                             User.updateUserInstance(refreshedUser, true)
@@ -3616,9 +3614,7 @@ object HproseInstance {
 
             // Refresh appUser from server to get updated tweetCount and other properties
             try {
-                // Invalidate cache to force fresh fetch from server
-                TweetCacheManager.removeCachedUser(appUser.mid)
-                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1)
+                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     // Update singleton and set appUser to it
                     User.updateUserInstance(refreshedUser, true)
@@ -4150,14 +4146,22 @@ object HproseInstance {
         try {
             val user = getUserInstance(userId)
 
-            // Keep the cached baseUrl on the singleton for compatibility and to allow
-            // the one-shot NodePool fast path. If NodePool misses, resolution still
-            // goes through getProviderIP() rather than trusting this stale URL.
-            if (user.baseUrl.isNullOrEmpty()) {
-                val cachedUser = TweetCacheManager.getCachedUser(userId)
-                if (cachedUser != null && !cachedUser.baseUrl.isNullOrEmpty()) {
-                    user.baseUrl = cachedUser.baseUrl
-                    Timber.tag("fetchUser").d("📥 Loaded cached baseUrl into singleton: ${user.baseUrl} for userId: $userId")
+            // Hydrate missing singleton fields from cache before a forced refresh so
+            // partial server responses cannot save a skeleton over a full cached user.
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+            if (cachedUser != null) {
+                if (user.username.isNullOrBlank()) {
+                    user.from(cachedUser)
+                    Timber.tag("fetchUser").d("📥 Hydrated singleton from cached user before fetch: userId: $userId")
+                } else {
+                    if (user.baseUrl.isNullOrEmpty()) user.baseUrl = cachedUser.baseUrl
+                    if (user.writableUrl.isNullOrEmpty()) user.writableUrl = cachedUser.writableUrl
+                    if (user.name == null) user.name = cachedUser.name
+                    if (user.avatar == null) user.avatar = cachedUser.avatar
+                    if (user.email == null) user.email = cachedUser.email
+                    if (user.profile == null) user.profile = cachedUser.profile
+                    if (user.domainToShare == null) user.domainToShare = cachedUser.domainToShare
+                    if (user.hostIds.isNullOrEmpty()) user.hostIds = cachedUser.hostIds
                 }
             }
 

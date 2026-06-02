@@ -109,13 +109,10 @@ fun ProfileTopBarButton(
                                 viewModel.viewModelScope.launch(Dispatchers.IO) {
                                     tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
                                     
-                                    // Remove cache of the followed/unfollowed user to force refresh from server
-                                    TweetCacheManager.removeCachedUser(user.mid)
-                                    
                                     // Refresh user data for the followed/unfollowed user
                                     try {
                                         // Get fresh user data from server and cache it
-                                        fetchUser(user.mid)?.let { refreshedUser ->
+                                        fetchUser(user.mid, forceRefresh = true)?.let { refreshedUser ->
                                             TweetCacheManager.saveUser(refreshedUser)
                                             // Refresh the current viewmodel's user data
                                             viewModel.refreshUserData()

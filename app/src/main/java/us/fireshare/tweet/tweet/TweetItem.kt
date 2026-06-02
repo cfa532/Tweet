@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -62,7 +63,10 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
@@ -456,10 +460,13 @@ private fun RetweetWithContent(
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val viewModel = rememberTweetRowViewModel(tweet)
     
-    // Optimize: Pre-compute derived values
-    val author by remember(tweet.author) {
-        derivedStateOf { tweet.author }
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
+    val cachedAuthor by authorStateFlow.collectAsState()
+
+    // Prefer the reactive user cache so avatar/profile updates recompose visible feed rows.
+    val author = cachedAuthor ?: tweet.author
     
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }
@@ -501,8 +508,8 @@ private fun RetweetWithContent(
                     modifier = Modifier.size(52.dp)
                 ) {
                     UserAvatar(
-                        user = author ?: us.fireshare.tweet.datamodel.User(
-                            mid = us.fireshare.tweet.datamodel.TW_CONST.GUEST_ID,
+                        user = author ?: User(
+                            mid = TW_CONST.GUEST_ID,
                             baseUrl = appUser.baseUrl
                         ),
                         size = 44

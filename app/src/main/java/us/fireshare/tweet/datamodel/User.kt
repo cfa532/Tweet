@@ -70,19 +70,19 @@ data class User(
             val oldAvatar = if (isAppUser) instance.avatar else null
 
             instance.apply {
-                name = user.name
-                username = user.username
-                password = user.password
-                avatar = user.avatar
-                email = user.email
-                profile = user.profile
-                domainToShare = user.domainToShare
-                lastLogin = user.lastLogin
+                user.name?.let { name = it }
+                user.username?.let { username = it }
+                user.password?.let { password = it }
+                user.avatar?.let { avatar = it }
+                user.email?.let { email = it }
+                user.profile?.let { profile = it }
+                user.domainToShare?.let { domainToShare = it }
+                user.lastLogin?.let { lastLogin = it }
                 cloudDrivePort = user.cloudDrivePort
-                hostIds = user.hostIds
+                user.hostIds?.let { hostIds = it }
 
-                // CRITICAL: Never overwrite baseUrl from user parameter
-                if (shouldUpdateBaseUrl) {
+                // CRITICAL: Never overwrite baseUrl from user parameter unless it has a value.
+                if (shouldUpdateBaseUrl && user.baseUrl != null) {
                     baseUrl = user.baseUrl
                 }
 
@@ -94,13 +94,13 @@ data class User(
                 commentsCount = user.commentsCount
 
                 // Update array properties
-                fansList = user.fansList
-                followingList = user.followingList
-                bookmarkedTweets = user.bookmarkedTweets
-                favoriteTweets = user.favoriteTweets
-                repliedTweets = user.repliedTweets
-                commentsList = user.commentsList
-                topTweets = user.topTweets
+                user.fansList?.let { fansList = it }
+                user.followingList?.let { followingList = it }
+                user.bookmarkedTweets?.let { bookmarkedTweets = it }
+                user.favoriteTweets?.let { favoriteTweets = it }
+                user.repliedTweets?.let { repliedTweets = it }
+                user.commentsList?.let { commentsList = it }
+                user.topTweets?.let { topTweets = it }
             }
 
             // If we just mutated the appUser singleton, sync StateFlows
@@ -375,12 +375,12 @@ data class User(
         val prevBaseUrl = if (isAppUser) baseUrl else null
         val prevAvatar = if (isAppUser) avatar else null
 
-        name = userData.name
-        username = userData.username
-        avatar = userData.avatar
-        email = userData.email
-        profile = userData.profile
-        domainToShare = userData.domainToShare
+        userData.name?.let { name = it }
+        userData.username?.let { username = it }
+        userData.avatar?.let { avatar = it }
+        userData.email?.let { email = it }
+        userData.profile?.let { profile = it }
+        userData.domainToShare?.let { domainToShare = it }
         cloudDrivePort = userData.cloudDrivePort
 
         tweetCount = userData.tweetCount
@@ -389,7 +389,7 @@ data class User(
         bookmarksCount = userData.bookmarksCount
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
-        hostIds = userData.hostIds
+        userData.hostIds?.let { hostIds = it }
 
         // Sync appUser StateFlows if this instance is appUser
         if (isAppUser) {

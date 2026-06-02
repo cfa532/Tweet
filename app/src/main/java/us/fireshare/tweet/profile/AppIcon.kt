@@ -78,17 +78,9 @@ fun UserAvatar(
     // State reset only happens when avatarMid changes, but effect reruns to update URLs
     LaunchedEffect(avatarMid, avatarBaseUrl) {
         // Only reset state if avatarMid changed from the current loaded state
-        if (loadState.bitmap != null && !avatarMid.isNullOrEmpty()) {
-            // We have a cached bitmap, check if it matches the current avatar ID
-            val originalMid = "${avatarMid}_original"
-            val cachedBitmap = withContext(Dispatchers.IO) {
-                ImageCacheManager.getCachedImage(context, originalMid) 
-                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
-            }
-            if (cachedBitmap != null && cachedBitmap == loadState.bitmap) {
-                // Same avatar, keep using cached bitmap - don't reload
-                return@LaunchedEffect
-            }
+        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled && !avatarMid.isNullOrEmpty()) {
+            // Same avatar ID is already rendered; route changes should not disturb id-keyed avatar cache.
+            return@LaunchedEffect
         }
         
         // Reset state when avatar changes or first load

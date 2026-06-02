@@ -93,13 +93,10 @@ fun ToggleFollowingButton(
                             isFollowingResult
                         )
                         
-                        // Remove cache of the followed/unfollowed user to force refresh from server
-                        TweetCacheManager.removeCachedUser(userId)
-                        
                         // Refresh user data for the followed/unfollowed user
                         try {
                             // Get fresh user data from server and cache it
-                            fetchUser(userId)?.let { refreshedUser ->
+                            fetchUser(userId, forceRefresh = true)?.let { refreshedUser ->
                                 TweetCacheManager.saveUser(refreshedUser)
                                 // Refresh the current viewmodel's user data
                                 viewModel.refreshUserData()
