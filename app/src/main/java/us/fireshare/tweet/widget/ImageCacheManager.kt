@@ -23,6 +23,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
@@ -137,6 +140,7 @@ object ImageCacheManager {
     // Simple memory cache (mid -> Bitmap) - using ConcurrentHashMap for thread safety
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
     private var currentMemoryUsage = AtomicInteger(0)
+    private val imageCacheVersionFlows = ConcurrentHashMap<String, MutableStateFlow<Int>>()
 
     private enum class ImageDownloadPriority {
         AVATAR, VISIBLE, BACKGROUND
@@ -187,6 +191,18 @@ object ImageCacheManager {
      */
     fun getMemoryCachedBitmap(mid: String): Bitmap? {
         return memoryCache[mid]?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 }
+    }
+
+    fun getImageCacheVersionFlow(mid: String): StateFlow<Int> {
+        return imageCacheVersionFlows
+            .computeIfAbsent(mid) { MutableStateFlow(0) }
+            .asStateFlow()
+    }
+
+    private fun notifyImageCached(mid: String) {
+        imageCacheVersionFlows[mid]?.let { flow ->
+            flow.value = flow.value + 1
+        }
     }
 
     /**
@@ -1219,6 +1235,7 @@ object ImageCacheManager {
                         FileOutputStream(file).use { out ->
                             out.write(byteArray)
                         }
+                        notifyImageCached(mid)
                     } catch (e: IOException) {
                         // Ignore disk write errors
                     }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,9 @@ fun UserAvatar(
     val context = LocalContext.current
     val avatarMid = user.avatar
     val avatarBaseUrl = user.baseUrl
+    val avatarCacheVersion by remember(avatarMid) {
+        ImageCacheManager.getImageCacheVersionFlow(avatarMid.orEmpty())
+    }.collectAsState()
 
     // Watch both avatar and user object - state resets only when avatar ID changes,
     // but we recompose when user object changes to ensure toolbar updates
@@ -76,7 +80,7 @@ fun UserAvatar(
     // React to avatar changes and route changes. If baseUrl was unavailable during
     // the first render, this reruns as soon as profile refresh resolves the route.
     // State reset only happens when avatarMid changes, but effect reruns to update URLs
-    LaunchedEffect(avatarMid, avatarBaseUrl) {
+    LaunchedEffect(avatarMid, avatarBaseUrl, avatarCacheVersion) {
         // Only reset state if avatarMid changed from the current loaded state
         if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled && !avatarMid.isNullOrEmpty()) {
             // Same avatar ID is already rendered; route changes should not disturb id-keyed avatar cache.
