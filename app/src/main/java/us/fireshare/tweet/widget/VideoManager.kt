@@ -105,7 +105,7 @@ object VideoManager {
     // ===== CONFIGURATION =====
     private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
     private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
-    private const val MAX_CONCURRENT_PRELOADS = 3 // Allow up to 3 concurrent player creations
+    private const val MAX_CONCURRENT_PRELOADS = 1
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -736,12 +736,11 @@ object VideoManager {
     // ===== PRELOADING =====
 
     /**
-     * Preload a video in the background.
+     * Warm video metadata in the background.
      *
-     * For HLS videos this resolves the correct playlist URL (master.m3u8 vs playlist.m3u8)
-     * via parallel HEAD probing BEFORE creating the player, so ExoPlayer starts with the
-     * right URL immediately. The result is persisted to disk by [HlsUrlResolver] so that
-     * subsequent loads (including the visible player in VideoPreview) skip the probe entirely.
+     * This intentionally avoids creating an ExoPlayer. Preparing hidden players allocates
+     * MediaCodec instances, and after moving between feed/detail/fullscreen that can exhaust
+     * device decoders and strand visible videos on the retry button.
      */
     fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
         if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
@@ -771,42 +770,15 @@ object VideoManager {
                     semaphoreAcquired = true
                     if (!isActive) return@launch
 
-                    // Resolve the correct HLS URL before player creation.
-                    // HlsUrlResolver probes master.m3u8 and playlist.m3u8 in parallel
-                    // and caches the winner to disk — O(0) cost on all future loads.
-                    val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                    if (videoType == MediaType.HLS_VIDEO) {
                         HlsUrlResolver.resolve(context, videoUrl)
-                    } else null
-
-                    if (!isActive) return@launch
-
-                    val player = createExoPlayer(
-                        context,
-                        videoUrl,
-                        videoType ?: MediaType.Video,
-                        resolvedHlsUrl = resolvedHlsUrl
-                    )
-
-                    if (!isActive) {
-                        try { player.release() } catch (_: Exception) {}
-                        return@launch
                     }
-                    videoPlayers[videoMid] = player
-                    preloadedVideos.add(videoMid)
-                    preloadGenerations[videoMid] = (preloadGenerations[videoMid] ?: 0) + 1
+
                     preloadQueue.remove(videoMid)
-                    attachPosterGenerationOnReady(
-                        context = context,
-                        videoMid = videoMid,
-                        videoUrl = videoUrl,
-                        videoType = videoType,
-                        resolvedHlsUrl = resolvedHlsUrl,
-                        player = player
-                    )
-                    Timber.tag("preloadVideo").d("Successfully preloaded $videoMid (resolvedHls=${resolvedHlsUrl != null})")
+                    Timber.tag("preloadVideo").d("Warmed video metadata for $videoMid")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
-                    Timber.e("VideoManager - Failed to preload video: $videoMid, error: ${e.message}")
+                    Timber.e("VideoManager - Failed to warm video metadata: $videoMid, error: ${e.message}")
                 } finally {
                     if (semaphoreAcquired) preloadSemaphore.release()
                     preloadingVideos.remove(videoMid)
@@ -828,32 +800,6 @@ object VideoManager {
         }
         preloadingVideos.remove(videoMid)
         preloadQueue.remove(videoMid)
-    }
-
-    private fun attachPosterGenerationOnReady(
-        context: Context,
-        videoMid: MimeiId,
-        videoUrl: String,
-        videoType: MediaType?,
-        resolvedHlsUrl: String?,
-        player: ExoPlayer
-    ) {
-        if (posterBitmaps.containsKey(videoMid)) return
-
-        if (player.playbackState == Player.STATE_READY) {
-            ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
-            return
-        }
-
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    player.removeListener(this)
-                    ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
-                }
-            }
-        }
-        player.addListener(listener)
     }
 
     fun ensureVideoPoster(

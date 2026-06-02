@@ -10,6 +10,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,9 +73,20 @@ fun createExoPlayer(
     // Create ExoPlayer with enhanced software decoder fallback for MediaCodec failures
     val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context).apply {
         if (forceSoftwareDecoder) {
-            // Force software decoder usage to avoid MediaCodec failures
-            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-            setEnableDecoderFallback(false) // Disable hardware decoder fallback
+            setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                MediaCodecSelector.PREFER_SOFTWARE
+                    .getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+                    .filter { it.softwareOnly }
+                    .ifEmpty {
+                        MediaCodecSelector.PREFER_SOFTWARE.getDecoderInfos(
+                            mimeType,
+                            requiresSecureDecoder,
+                            requiresTunnelingDecoder
+                        )
+                    }
+            }
+            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+            setEnableDecoderFallback(false)
             Timber.tag("createExoPlayer").w("🔧 FORCING SOFTWARE DECODER for URL: $url")
         } else {
             // Prefer hardware decoders but allow software fallback
