@@ -300,6 +300,9 @@ private fun ProfileContentWithTweetListView(
         context = if (userId == appUser.mid) "appUserProfile" else "userProfile_$userId", // Each user profile maintains its own scroll position
         isInitialLoading = initState, // Pass the initialization state to delay videolist creation
         pinnedTweets = pinnedTweets, // Include pinned tweets in video navigation
-        onScrolledToTop = onScrolledToTop
+        onScrolledToTop = onScrolledToTop,
+        onPullRefresh = {
+            viewModel.resyncProfileUser(ignoreDebounce = true)
+        }
     )
 }

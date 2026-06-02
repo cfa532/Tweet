@@ -3,6 +3,8 @@ package us.fireshare.tweet.tweet
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -62,8 +64,8 @@ fun TweetDropdownMenuItems(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
 
-    // Use the singleton TweetFeedViewModel from AppModule
-    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel()
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val context = LocalContext.current
     // Capture string resources at composable level to avoid Android Studio warnings
     val deleteTweetText = stringResource(R.string.delete_tweet)

@@ -230,6 +230,7 @@ object NodePool {
 // Encapsulate Hprose client and related operations in a singleton object.
 object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
+    const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
     
@@ -313,6 +314,36 @@ object HproseInstance {
     private var entryIPResolveInFlight: CompletableDeferred<String>? = null
     private var entryResolveCache: EntryResolveCache? = null
     private var entryResolveFailureCache: EntryResolveFailureCache? = null
+
+    private val heavyCallDebounceMutex = Mutex()
+    private val heavyCallLastRunAtMs = mutableMapOf<String, Long>()
+
+    private suspend fun shouldRunHeavyCall(
+        key: String,
+        tag: String,
+        ignoreDebounce: Boolean = false
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        return heavyCallDebounceMutex.withLock {
+            if (ignoreDebounce) {
+                heavyCallLastRunAtMs[key] = now
+                return@withLock true
+            }
+
+            val lastRunAt = heavyCallLastRunAtMs[key]
+            if (lastRunAt != null) {
+                val elapsed = now - lastRunAt
+                if (elapsed < HEAVY_CALL_INTERVAL_MS) {
+                    val remainingSeconds = (HEAVY_CALL_INTERVAL_MS - elapsed + 999) / 1000
+                    Timber.tag(tag).d("Skipping heavy call; ${remainingSeconds}s left in debounce window")
+                    return@withLock false
+                }
+            }
+
+            heavyCallLastRunAtMs[key] = now
+            true
+        }
+    }
     
     // Lazy initialization of MediaUploadService (uses dedicated upload client)
     private val mediaUploadService: MediaUploadService by lazy {
@@ -2023,6 +2054,12 @@ object HproseInstance {
             Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
             return emptyList()
         }
+
+        if (entry == "update_following_tweets" &&
+            !shouldRunHeavyCall("update_following_tweets:${appUser.mid}", "getTweetFeed")
+        ) {
+            return emptyList()
+        }
         
         val params = mutableMapOf(
             "aid" to appId,
@@ -2060,8 +2097,9 @@ object HproseInstance {
                     }
                 }
                 
+                val feedService = getTweetFeedService(entry)
                 val response = try {
-                    appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                    feedService?.runMApp<Map<String, Any>>(entry, params)
                 } catch (e: Exception) {
                     Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
                     throw e
@@ -2076,6 +2114,10 @@ object HproseInstance {
                     // Throw exception to trigger retry logic for server failures
                     // This allows baseUrl refresh and retry on different nodes
                     throw Exception("Server returned failure: ${serverMessage ?: "Unknown error"}")
+                }
+
+                if (entry == "update_following_tweets") {
+                    updateCurrentHostFollowingTweetsIfNeeded(response, params)
                 }
 
                 // Extract tweets and originalTweets from the new response format
@@ -2183,6 +2225,107 @@ object HproseInstance {
         
         // All retries exhausted
         return emptyList()
+    }
+
+    /**
+     * Pick the node that should execute a feed entry.
+     *
+     * `get_tweet_feed` is a regular read and uses appUser.baseUrl.
+     * `update_following_tweets` mutates appUser's followings_tweets, so it must
+     * execute on appUser.hostIds[0], the writable/home host. After that call
+     * succeeds and returns new tweets, the client makes a second
+     * update_following_tweets call on the current/access host so it pulls the
+     * updated home state. The feed still merges the first/home response.
+     */
+    private suspend fun getTweetFeedService(entry: String): HproseService? {
+        if (entry != "update_following_tweets") {
+            return appUser.hproseService
+        }
+
+        val hostIds = appUser.hostIds.orEmpty()
+        val homeHostId = hostIds.getOrNull(0)
+
+        if (!homeHostId.isNullOrBlank()) {
+            appUser.resolveWritableUrl()
+            appUser.writableClient?.let { homeService ->
+                Timber.tag("getTweetFeed").d(
+                    "Routing update_following_tweets to appUser home host $homeHostId"
+                )
+                return homeService
+            }
+
+            val homeIp = getHostIP(homeHostId)
+            val homeService = homeIp?.let { HproseClientPool.getRegularClient("http://$it") }
+            if (homeService != null) {
+                Timber.tag("getTweetFeed").d(
+                    "Routing update_following_tweets to resolved home host $homeHostId"
+                )
+                return homeService
+            }
+            Timber.tag("getTweetFeed").w(
+                "Could not resolve home host $homeHostId for update_following_tweets; falling back to appUser.baseUrl=${appUser.baseUrl}"
+            )
+        }
+
+        return appUser.hproseService
+    }
+
+    /**
+     * First call updates appUser.hostIds[0]. If that home update found new
+     * tweets, call update_following_tweets again on hostIds[1] so the current
+     * host pulls the updated appUser state. The second response is not used; it
+     * should contain the same new tweets as the home response.
+     */
+    private suspend fun updateCurrentHostFollowingTweetsIfNeeded(
+        homeResponse: Map<String, Any>,
+        params: Map<String, Any>
+    ) {
+        val hostIds = appUser.hostIds.orEmpty()
+        val homeHostId = hostIds.getOrNull(0)
+        val accessHostId = hostIds.getOrNull(1)
+        val homeTweets = homeResponse["tweets"] as? List<*> ?: emptyList<Any>()
+
+        if (homeHostId.isNullOrBlank() ||
+            accessHostId.isNullOrBlank() ||
+            homeHostId == accessHostId ||
+            homeTweets.isEmpty()
+        ) {
+            return
+        }
+
+        try {
+            val accessIp = getHostIP(accessHostId)
+            val accessService = accessIp?.let { HproseClientPool.getRegularClient("http://$it") }
+
+            if (accessService == null) {
+                Timber.tag("getTweetFeed").w(
+                    "Could not resolve access host $accessHostId after update_following_tweets"
+                )
+                return
+            }
+
+            val accessResponse = accessService.runMApp<Map<String, Any>>(
+                "update_following_tweets",
+                params + ("homeupdated" to true)
+            )
+            val success = accessResponse?.get("success") as? Boolean
+            if (success != true) {
+                val serverMessage = accessResponse?.get("message") as? String
+                Timber.tag("getTweetFeed").w(
+                    "Current host update_following_tweets failed after home update: ${serverMessage ?: "Unknown error"}"
+                )
+                return
+            }
+
+            Timber.tag("getTweetFeed").d(
+                "Updated current host $accessHostId from home host $homeHostId after ${homeTweets.size} new tweets"
+            )
+        } catch (e: Exception) {
+            Timber.tag("getTweetFeed").w(
+                e,
+                "Failed to update current host $accessHostId from home host $homeHostId"
+            )
+        }
     }
 
     /**
@@ -4545,9 +4688,15 @@ object HproseInstance {
         val tweets: List<Tweet>
     )
 
-    suspend fun resyncUser(userId: MimeiId): ResyncUserResult? {
+    suspend fun resyncUser(
+        userId: MimeiId,
+        ignoreDebounce: Boolean = false
+    ): ResyncUserResult? {
         if (!isOnline.value) {
             Timber.tag("resyncUser").d("Offline: skipping")
+            return null
+        }
+        if (!shouldRunHeavyCall("resync_user:$userId", "resyncUser", ignoreDebounce)) {
             return null
         }
         return try {

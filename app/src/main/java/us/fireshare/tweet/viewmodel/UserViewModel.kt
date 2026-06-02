@@ -232,7 +232,7 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun resyncProfileUser() {
+    fun resyncProfileUser(ignoreDebounce: Boolean = false) {
         val currentUser = _user.value
         if (currentUser.mid != userId || currentUser.baseUrl.isNullOrBlank()) {
             Timber.tag("UserViewModel").d("Profile route not ready for resync user $userId")
@@ -246,7 +246,7 @@ class UserViewModel @AssistedInject constructor(
 
         profileResyncJob = viewModelScope.launch(IO) {
             try {
-                val resyncResult = HproseInstance.resyncUser(userId)
+                val resyncResult = HproseInstance.resyncUser(userId, ignoreDebounce)
                 if (resyncResult == null) {
                     Timber.tag("UserViewModel").d("No resynced user returned for $userId")
                     return@launch

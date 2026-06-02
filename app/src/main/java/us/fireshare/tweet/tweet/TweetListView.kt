@@ -214,7 +214,8 @@ fun TweetListView(
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
     scrollToTopTrigger: Int = 0, // Increment to trigger scroll-to-top from parent
     pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
-    onScrolledToTop: (() -> Unit)? = null // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
+    onScrolledToTop: (() -> Unit)? = null, // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
+    onPullRefresh: (() -> Unit)? = null
 
 ) {
     // Inject SharedViewModel to get TweetListViewModel
@@ -711,6 +712,7 @@ fun TweetListView(
                         inFlightPages.clear()
                         fetchTweets(0)
                     }
+                    onPullRefresh?.invoke()
                     listState.scrollToItem(0, 0)
                     savedScrollPosition.value = Pair(0, 0)
                 } catch (e: Exception) {

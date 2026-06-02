@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.BackoffPolicy
@@ -16,11 +20,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -60,9 +67,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     // Track if ViewModel has been initialized to prevent race conditions
     private var isInitialized = false
 
+    private var feedRefreshTimerJob: Job? = null
+    private var nextFeedRefreshRunAtMs: Long = 0L
+    private val appForegroundObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            startFeedRefreshTimer()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            stopFeedRefreshTimer()
+        }
+    }
+
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appForegroundObserver)
+        if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            startFeedRefreshTimer()
+        }
         
         // Don't load tweets immediately - wait for explicit initialization
         // This prevents race conditions with HproseInstance initialization
@@ -201,6 +224,90 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private var followingTweetsJob: Job? = null
+    private val pageZeroFetchMutex = Mutex()
+
+    private fun startFeedRefreshTimer() {
+        if (feedRefreshTimerJob?.isActive == true) {
+            return
+        }
+
+        if (nextFeedRefreshRunAtMs == 0L) {
+            nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
+        }
+
+        feedRefreshTimerJob = applicationScope.launch(IO) {
+            while (isActive) {
+                val waitMs = (nextFeedRefreshRunAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
+                delay(waitMs)
+                if (!isActive) {
+                    break
+                }
+
+                fetchTweets(0)
+                nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
+            }
+        }
+    }
+
+    private fun stopFeedRefreshTimer() {
+        feedRefreshTimerJob?.cancel()
+        feedRefreshTimerJob = null
+    }
+
+    fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE) {
+        if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value) {
+            return
+        }
+
+        followingTweetsJob = applicationScope.launch(IO) {
+            try {
+                val followingTweetsWithNulls = HproseInstance.getTweetFeed(
+                    pageNumber = 0,
+                    pageSize = pageSize,
+                    entry = "update_following_tweets",
+                    onRetry = { attempt, maxRetries ->
+                        if (_tweets.value.isEmpty()) {
+                            viewModelScope.launch(Main) {
+                                val context = contextRef.get()
+                                if (context != null) {
+                                    val message = context.getString(R.string.retrying, attempt, maxRetries)
+                                    _retryMessage.value = message
+                                }
+                            }
+                        }
+                    }
+                )
+
+                val followingTweets = followingTweetsWithNulls.filterNotNull()
+
+                withContext(Main) {
+                    _tweets.update { currentTweets ->
+                        val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                        val trulyNewFollowingTweets =
+                            followingTweets.filter { it.mid !in currentTweetIds }
+
+                        if (trulyNewFollowingTweets.isNotEmpty()) {
+                            (currentTweets + trulyNewFollowingTweets)
+                                .distinctBy { it.mid }
+                                .sortedByDescending { it.timestamp }
+                        } else {
+                            currentTweets
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
+            } finally {
+                followingTweetsJob = null
+            }
+        }
+    }
+
+    override fun onCleared() {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(appForegroundObserver)
+        stopFeedRefreshTimer()
+        super.onCleared()
+    }
 
     /**
      * Simple function to fetch tweets for a specific page number.
@@ -211,6 +318,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
     ): List<Tweet?> {
+        val guardPageZero = pageNumber == 0
+        if (guardPageZero && !pageZeroFetchMutex.tryLock()) {
+            Timber.tag("TweetFeedViewModel").d("Page 0 feed refresh already running; skipping duplicate")
+            return emptyList()
+        }
+
+        try {
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
         
         if (pageNumber == 0) {
@@ -346,57 +460,15 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * val followingTweets = deferredFollowing.await()
              * // Process both results together
              * */
-            if (pageNumber == 0 && followingTweetsJob?.isActive != true && HproseInstance.isOnline.value) {
-                followingTweetsJob = applicationScope.launch(IO) {
-                    try {
-                        val followingTweetsWithNulls = HproseInstance.getTweetFeed(
-                            pageNumber = pageNumber,
-                            pageSize = pageSize,
-                            entry = "update_following_tweets",
-                            onRetry = { attempt, maxRetries ->
-                                // Show retry message when no tweets are loaded yet
-                                if (_tweets.value.isEmpty() && pageNumber == 0) {
-                                    viewModelScope.launch(Main) {
-                                        val context = contextRef.get()
-                                        if (context != null) {
-                                            val message = context.getString(R.string.retrying, attempt, maxRetries)
-                                            _retryMessage.value = message
-                                        }
-                                    }
-                                }
-                            }
-                        )
-
-                        // Filter out null elements and get valid tweets
-                        val followingTweets = followingTweetsWithNulls.filterNotNull()
-
-                        // Always merge following tweets with existing ones
-                        withContext(Main) {
-                            _tweets.update { currentTweets ->
-                                // Use Set for O(1) lookup performance
-                                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                                val trulyNewFollowingTweets =
-                                    followingTweets.filter { it.mid !in currentTweetIds }
-
-                                if (trulyNewFollowingTweets.isNotEmpty()) {
-                                    val mergedTweets = (currentTweets + trulyNewFollowingTweets)
-                                        .distinctBy { it.mid }
-                                        .sortedByDescending { it.timestamp }
-                                    mergedTweets
-                                } else {
-                                    currentTweets
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
-                        // Consider implementing retry logic here
-                    } finally {
-                        followingTweetsJob = null
-                    }
-                }
+            if (pageNumber == 0) {
+                refreshFollowingTweets(pageSize)
             }
             return tweetsWithNulls
+        }
+        } finally {
+            if (guardPageZero) {
+                pageZeroFetchMutex.unlock()
+            }
         }
     }
 
