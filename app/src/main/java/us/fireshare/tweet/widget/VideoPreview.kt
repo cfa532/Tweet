@@ -98,15 +98,30 @@ fun VideoPreview(
     val coordinator = LocalVideoCoordinator.current
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
     val resolvedPlaybackVideoId = playbackVideoId ?: videoMid.orEmpty()
-    val shouldPlay = if (shouldUseCoordinator) state.coordinatorWantsToPlay else autoPlay
-    val effectivelyVisible = if (shouldUseCoordinator) (state.isVideoVisible || shouldPlay) else state.isVideoVisible
+    val isInFullScreen = videoMid?.let { VideoManager.isVideoInFullScreen(it) } == true
+    val shouldPlay = if (isInFullScreen) {
+        false
+    } else if (shouldUseCoordinator) {
+        state.coordinatorWantsToPlay
+    } else {
+        autoPlay
+    }
+    val effectivelyVisible = if (isInFullScreen) {
+        false
+    } else if (shouldUseCoordinator) {
+        state.isVideoVisible || shouldPlay
+    } else {
+        state.isVideoVisible
+    }
     var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
     val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
     val hasWarmPlayer = videoMid?.let { VideoManager.isVideoPreloaded(it) } == true
-    val shouldAcquirePlayer = !shouldUseCoordinator ||
-        shouldPlay ||
-        visibilityRatio >= 0.35f ||
-        (hasWarmPlayer && visibilityRatio > 0f)
+    val shouldAcquirePlayer = !isInFullScreen && (
+        !shouldUseCoordinator ||
+            shouldPlay ||
+            visibilityRatio >= 0.35f ||
+            (hasWarmPlayer && visibilityRatio > 0f)
+    )
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {

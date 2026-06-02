@@ -282,8 +282,13 @@ fun MediaGrid(
                             ) {
                                 if (enableCoordinator) {
                                     videoCoordinator.syncToFullScreenPlayer()
+                                    videoCoordinator.stopAllVideos()
                                 } else {
                                     FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+                                }
+                                visualMediaList.getOrNull(0)?.mid?.let { tappedVideoMid ->
+                                    VideoManager.suspendFeedActivityForFullScreen(tappedVideoMid)
+                                    VideoManager.pauseVideo(tappedVideoMid)
                                 }
                             }
                             navController.navigate(NavTweet.MediaViewer(params))
@@ -864,8 +869,13 @@ fun MediaGrid(
                                     ) {
                                         if (enableCoordinator) {
                                             videoCoordinator.syncToFullScreenPlayer()
+                                            videoCoordinator.stopAllVideos()
                                         } else {
                                             FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+                                        }
+                                        visualMediaList.getOrNull(index)?.mid?.let { tappedVideoMid ->
+                                            VideoManager.suspendFeedActivityForFullScreen(tappedVideoMid)
+                                            VideoManager.pauseVideo(tappedVideoMid)
                                         }
                                     }
                                     navController.navigate(NavTweet.MediaViewer(params))

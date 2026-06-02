@@ -62,6 +62,7 @@ import us.fireshare.tweet.widget.AudioPreview
 import us.fireshare.tweet.widget.FullScreenPlayerManager
 import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import us.fireshare.tweet.widget.videoPlaybackIdentifier
@@ -124,6 +125,7 @@ fun MediaItemView(
                 val fullScreenMediaItems = allMediaItems ?: mediaItems
                 val fullScreenIndex = fullScreenMediaItems.indexOfFirst { it.mid == mediaItems[idx].mid }
                     .takeIf { it >= 0 } ?: idx
+                val tappedVideoMid = mediaItems[idx].mid
                 val params = MediaViewerParams(
                     fullScreenMediaItems.map {
                         MediaItem(
@@ -140,11 +142,14 @@ fun MediaItemView(
                     // Sync the current coordinator's video list to FullScreenPlayerManager
                     // so full-screen playback uses the same list (bookmarks/favorites/profile).
                     videoCoordinator.syncToFullScreenPlayer()
+                    videoCoordinator.stopAllVideos()
                 } else {
                     // Detail main-tweet videos are intentionally outside the comments coordinator;
                     // seed fullscreen from the exact media payload instead.
                     FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
                 }
+                VideoManager.suspendFeedActivityForFullScreen(tappedVideoMid)
+                VideoManager.pauseVideo(tappedVideoMid)
                 // Navigate to MediaViewer for full-screen video (same as TweetDetailView)
                 navController.navigate(NavTweet.MediaViewer(params))
             }

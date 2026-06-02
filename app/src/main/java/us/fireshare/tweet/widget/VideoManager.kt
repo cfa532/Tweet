@@ -487,6 +487,7 @@ object VideoManager {
      * release stale preloaded players so weak IPFS links are not shared with off-screen videos.
      */
     fun suspendFeedActivityForFullScreen(protecting: MimeiId) {
+        markVideoInFullScreen(protecting)
         stopAllPreloading()
 
         val protectedForFullScreen = synchronized(fullScreenProtectedVideos) {
@@ -655,6 +656,7 @@ object VideoManager {
     fun pauseVideo(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let { player ->
             player.playWhenReady = false
+            player.pause()
         }
     }
 
@@ -1529,6 +1531,9 @@ object VideoManager {
      * Mark a video as owned by an independent full-screen player.
      */
     fun markVideoInFullScreen(videoMid: MimeiId) {
+        if (currentFullScreenVideoMid != videoMid) {
+            playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
+        }
         currentFullScreenVideoMid = videoMid
     }
 
@@ -1567,6 +1572,7 @@ object VideoManager {
     fun clearVideoInFullScreen(videoMid: MimeiId) {
         if (currentFullScreenVideoMid == videoMid) {
             currentFullScreenVideoMid = null
+            playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
         }
     }
 
