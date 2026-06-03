@@ -66,6 +66,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     
     // Track if ViewModel has been initialized to prevent race conditions
     private var isInitialized = false
+    private val tweetRowTimestamps = mutableMapOf<MimeiId, Long>()
+
+    private fun rememberTweetRowTimestamps(tweets: List<Tweet>) {
+        tweets.forEach { tweet ->
+            tweet.rowTimestamp?.let { rowTimestamp ->
+                tweetRowTimestamps[tweet.mid] = rowTimestamp
+            }
+        }
+    }
+
+    private fun Tweet.feedOrderingTimestamp(): Long {
+        return tweetRowTimestamps[mid] ?: timestamp
+    }
 
     private var feedRefreshTimerJob: Job? = null
     private var nextFeedRefreshRunAtMs: Long = 0L
@@ -166,7 +179,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             val cachedTweets = loadCachedTweets(0, TW_CONST.PAGE_SIZE)
             _tweets.value = cachedTweets
                 .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
+                .sortedByDescending { it.feedOrderingTimestamp() }
             
             // Log timestamps to verify sort order
             Timber.tag("TweetFeedViewModel").d("Loaded ${cachedTweets.size} cached tweets, sorted by timestamp DESC:")
@@ -191,6 +204,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         // This matches iOS behavior where cache is not cleared on logout
         
         _tweets.value = emptyList()
+        tweetRowTimestamps.clear()
         initState.value = true
         
         // Re-initialize after a short delay to ensure appUser state is updated
@@ -279,6 +293,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 )
 
                 val followingTweets = followingTweetsWithNulls.filterNotNull()
+                rememberTweetRowTimestamps(followingTweets)
 
                 withContext(Main) {
                     _tweets.update { currentTweets ->
@@ -289,7 +304,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         if (trulyNewFollowingTweets.isNotEmpty()) {
                             (currentTweets + trulyNewFollowingTweets)
                                 .distinctBy { it.mid }
-                                .sortedByDescending { it.timestamp }
+                                .sortedByDescending { it.feedOrderingTimestamp() }
                         } else {
                             currentTweets
                         }
@@ -347,7 +362,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     // only show default tweets to guest
                     .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
                     .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
                 Timber.tag("TweetFeedViewModel").d("🔍 Cached tweets for alphaId: ${allTweets.size}")
                 allTweets
             }
@@ -365,7 +380,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 if (newCachedTweets.isNotEmpty()) {
                     val allTweets = (currentTweets + newCachedTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
                     allTweets
                 } else {
                     currentTweets
@@ -420,6 +435,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
+            rememberTweetRowTimestamps(validTweets)
             
             if (pageNumber == 0) {
                 Timber.tag("MainFeed").d("🌐 Network returned ${validTweets.size} tweets")
@@ -433,7 +449,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 if (trulyNewTweets.isNotEmpty()) {
                     val mergedTweets = (currentTweets + trulyNewTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
                     mergedTweets
                 } else {
                     currentTweets
@@ -508,6 +524,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 
                 // Filter out null elements and get valid tweets
                 val validTweets = tweetsWithNulls.filterNotNull()
+                rememberTweetRowTimestamps(validTweets)
                 Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
                 _tweets.update { list ->
@@ -516,7 +533,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                         beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
                     val mergedTweets = afterPrivateFilter
                         .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
 
                     Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
                     mergedTweets
@@ -543,6 +560,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             
             // Filter out null elements and get valid tweets
             val validTweets = tweetsWithNulls.filterNotNull()
+            rememberTweetRowTimestamps(validTweets)
             Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
             _tweets.update { list ->
@@ -551,7 +569,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
                 val mergedTweets = afterPrivateFilter
                     .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                    .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
 
                 Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
                 mergedTweets
@@ -725,7 +743,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             Timber.tag("TweetFeedViewModel").d("Tweet already in list, skipping restoration")
                             current
                         } else {
-                            val restored = (current + tweetToRestore).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                            val restored = (current + tweetToRestore).distinctBy { it.mid }.sortedByDescending { it.feedOrderingTimestamp() }
                             Timber.tag("TweetFeedViewModel").d("Restored tweet to TweetFeedViewModel, now ${restored.size} tweets")
                             restored
                         }
@@ -934,7 +952,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             withContext(Main) {
                                 _tweets.update { currentTweets ->
                                     if (!currentTweets.any { it.mid == event.tweet.mid }) {
-                                        val restored = (listOf(event.tweet) + currentTweets).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                                        val restored = (listOf(event.tweet) + currentTweets).distinctBy { it.mid }.sortedByDescending { it.feedOrderingTimestamp() }
                                         Timber.tag("TweetFeedViewModel")
                                             .d("Restored tweet ${event.tweet.mid} to feed after failed deletion")
                                         restored

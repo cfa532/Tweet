@@ -55,6 +55,20 @@ class UserViewModel @AssistedInject constructor(
     // Track users with pending operations to prevent race conditions
     private val pendingOperations = mutableSetOf<MimeiId>()
     private var profileResyncJob: Job? = null
+    private val tweetRowTimestamps = mutableMapOf<MimeiId, Long>()
+
+    private fun rememberTweetRowTimestamps(tweets: List<Tweet>) {
+        tweets.forEach { tweet ->
+            tweet.rowTimestamp?.let { rowTimestamp ->
+                tweetRowTimestamps[tweet.mid] = rowTimestamp
+            }
+        }
+    }
+
+    private fun Tweet.profileOrderingTimestamp(): Long {
+        return tweetRowTimestamps[mid] ?: timestamp
+    }
+
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
@@ -666,6 +680,7 @@ class UserViewModel @AssistedInject constructor(
         // The observers will be automatically cleaned up when the app context is destroyed
         activeWorkObservers.clear()
         pendingOperations.clear()
+        tweetRowTimestamps.clear()
         Timber.tag("UserViewModel").d("ViewModel cleared, cleaned up ${activeWorkObservers.size} observers and ${pendingOperations.size} pending operations")
     }
 
@@ -1210,7 +1225,7 @@ class UserViewModel @AssistedInject constructor(
                 if (newCachedTweets.isNotEmpty()) {
                     val mergedTweets = (currentTweets + newCachedTweets)
                         .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                        .sortedByDescending { tweet: Tweet -> tweet.profileOrderingTimestamp() }
                     mergedTweets
                 } else {
                     currentTweets
@@ -1242,6 +1257,7 @@ class UserViewModel @AssistedInject constructor(
 
                 // Filter out null elements and get valid tweets
                 val newTweets = newTweetsWithNulls.filterNotNull()
+                rememberTweetRowTimestamps(newTweets)
 
                 Timber.tag("getTweets")
                     .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
@@ -1264,7 +1280,7 @@ class UserViewModel @AssistedInject constructor(
                     if (trulyNewTweets.isNotEmpty()) {
                         val mergedTweets = (currentTweets + trulyNewTweets)
                             .distinctBy { tweet: Tweet -> tweet.mid }
-                            .sortedByDescending { tweet: Tweet -> tweet.timestamp }
+                            .sortedByDescending { tweet: Tweet -> tweet.profileOrderingTimestamp() }
                         // Don't override tweet count - it should come from server data, not local list size
                         mergedTweets
                     } else {
@@ -1443,11 +1459,11 @@ class UserViewModel @AssistedInject constructor(
                     currentPinnedTweets.filterNot { it.mid == tweet.mid }
                 }
 
-                // Add back to regular tweets with original timestamp
+                // Add back to regular tweets using the same ordering as the main list
                 _tweets.update { currentTweets ->
                     (listOf(tweet) + currentTweets)
                         .distinctBy { it.mid }
-                        .sortedByDescending { it.timestamp } // Sort by original tweet timestamp
+                        .sortedByDescending { it.profileOrderingTimestamp() }
                 }
 
                 Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
@@ -1738,7 +1754,7 @@ class UserViewModel @AssistedInject constructor(
                             // Batch update all related state to reduce recompositions
                             val updatedTweets = (listOf(tweetWithAuthor) + tweets.value)
                                 .distinctBy { it.mid }
-                                .sortedByDescending { it.timestamp }
+                                .sortedByDescending { it.profileOrderingTimestamp() }
 
                             _tweets.value = updatedTweets
                             
@@ -1777,7 +1793,7 @@ class UserViewModel @AssistedInject constructor(
                             
                             // Add back to tweets list if not already present
                             if (!tweets.value.any { it.mid == event.tweet.mid }) {
-                                _tweets.value = (listOf(event.tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+                                _tweets.value = (listOf(event.tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.profileOrderingTimestamp() }
                             }
                             
                             // Note: Don't restore to pinned/favorites/bookmarks automatically
@@ -1792,7 +1808,7 @@ class UserViewModel @AssistedInject constructor(
                             _tweets.update { currentTweets ->
                                 (listOf(event.retweet) + currentTweets)
                                     .distinctBy { it.mid }
-                                    .sortedByDescending { it.timestamp }
+                                    .sortedByDescending { it.profileOrderingTimestamp() }
                             }
                             
                             // Don't update tweet count here - let UserDataUpdated event handle it
@@ -1840,10 +1856,10 @@ class UserViewModel @AssistedInject constructor(
     
     fun restoreTweetToLists(tweet: Tweet, inTweets: Boolean, inPinned: Boolean, inFavorites: Boolean, inBookmarks: Boolean) {
         if (inTweets && !tweets.value.any { it.mid == tweet.mid }) {
-            _tweets.value = (listOf(tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            _tweets.value = (listOf(tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.profileOrderingTimestamp() }
         }
         if (inPinned && !pinnedTweets.value.any { it.mid == tweet.mid }) {
-            _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.timestamp }
+            _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.profileOrderingTimestamp() }
         }
         if (inFavorites && !favorites.value.any { it.mid == tweet.mid }) {
             _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }

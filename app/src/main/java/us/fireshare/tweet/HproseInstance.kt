@@ -2034,6 +2034,42 @@ object HproseInstance {
      * Includes retry logic with exponential backoff for network-related failures.
      * Always uses appUser - caller should wait for isAppUserInitialized before calling.
      * */
+    private fun normalizeRowTimestamp(value: Any?): Long? {
+        val rawTimestamp = when (value) {
+            is Number -> value.toLong()
+            is String -> value.toDoubleOrNull()?.toLong()
+            else -> null
+        } ?: return null
+
+        return if (rawTimestamp in 1_000_000_000L until 10_000_000_000L) {
+            rawTimestamp * 1000L
+        } else {
+            rawTimestamp
+        }
+    }
+
+    private fun tweetRowTimestamp(row: Map<String, Any>?): Long? {
+        return normalizeRowTimestamp(row?.get("value"))
+    }
+
+    private fun orderedTweetRows(rows: List<Map<String, Any>?>?): List<Map<String, Any>?>? {
+        if (rows == null || rows.none { tweetRowTimestamp(it) != null }) {
+            return rows
+        }
+
+        return rows.sortedWith(compareByDescending<Map<String, Any>?> {
+            tweetRowTimestamp(it) ?: Long.MIN_VALUE
+        })
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun tweetPayload(row: Map<String, Any>): Map<String, Any> {
+        return (row["tweet"] as? Map<String, Any>)
+            ?: (row["data"] as? Map<String, Any>)
+            ?: (row["item"] as? Map<String, Any>)
+            ?: row
+    }
+
     suspend fun getTweetFeed(
         pageNumber: Int = 0,
         pageSize: Int = 5,
@@ -2121,7 +2157,7 @@ object HproseInstance {
                 }
 
                 // Extract tweets and originalTweets from the new response format
-                val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+                val tweetsData = orderedTweetRows(response["tweets"] as? List<Map<String, Any>?>)
                 val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
                 // Cache original tweets by authorId
@@ -2159,7 +2195,8 @@ object HproseInstance {
                     } else {
                         // Try to decode the tweet
                         try {
-                            val tweet = Tweet.from(tweetJson)
+                            val tweet = Tweet.from(tweetPayload(tweetJson))
+                            tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
                             
                             // IMPORTANT: Set cached author FIRST (immediate, fast)
                             // This ensures tweets render with cached author data right away
@@ -2382,7 +2419,7 @@ object HproseInstance {
             }
 
             // Extract tweets and originalTweets from the new response format
-            val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+            val tweetsData = orderedTweetRows(response["tweets"] as? List<Map<String, Any>?>)
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
 
             // Cache original tweets by authorId
@@ -2426,7 +2463,8 @@ object HproseInstance {
                 } else {
                     // Try to decode the tweet
                     try {
-                        val tweet = Tweet.from(tweetJson)
+                        val tweet = Tweet.from(tweetPayload(tweetJson))
+                        tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
                         tweet.author = activeUser
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                         // Cache all tweets by their authorId
@@ -3513,7 +3551,7 @@ object HproseInstance {
                 Timber.tag("getUserTweetsByType").e(e, "Exception calling runMApp for getUserTweetsByType, userId: ${user.mid}, type: $type")
                 throw e
             }
-            val response = unwrapV2Response<List<Map<String, Any>?>>(rawResponse)
+            val response = orderedTweetRows(unwrapV2Response<List<Map<String, Any>?>>(rawResponse))
 
             // Determine cache ID based on content type
             val cacheUserId = when (type) {
@@ -3529,7 +3567,8 @@ object HproseInstance {
                 } else {
                     // Try to decode the tweet
                     try {
-                        val tweet = Tweet.from(tweetJson)
+                        val tweet = Tweet.from(tweetPayload(tweetJson))
+                        tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
 
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
                         tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)

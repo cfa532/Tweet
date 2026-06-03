@@ -283,35 +283,10 @@ data class User(
             val prevBaseUrl = if (isAppUser) baseUrl else null
             val prevAvatar = if (isAppUser) avatar else null
 
-            // Pre-process the data to handle scientific notation in numeric fields
             val processedData = userData.toMutableMap()
             
-            // Handle timestamp and lastLogin fields
-            processedData["timestamp"]?.let { value ->
-                when (value) {
-                    is Number -> processedData["timestamp"] = value.toLong()
-                    is String -> {
-                        try {
-                            processedData["timestamp"] = value.toDouble().toLong()
-                        } catch (_: NumberFormatException) {
-                            Timber.w("Failed to parse timestamp: $value")
-                        }
-                    }
-                }
-            }
-            
-            processedData["lastLogin"]?.let { value ->
-                when (value) {
-                    is Number -> processedData["lastLogin"] = value.toLong()
-                    is String -> {
-                        try {
-                            processedData["lastLogin"] = value.toDouble().toLong()
-                        } catch (_: NumberFormatException) {
-                            Timber.w("Failed to parse lastLogin: $value")
-                        }
-                    }
-                }
-            }
+            val decodedTimestamp = decodeServerDateMillis(processedData["timestamp"], "timestamp")
+            val decodedLastLogin = decodeServerDateMillis(processedData["lastLogin"], "lastLogin")
             
             val oldBaseUrl = baseUrl
             val oldWritableUrl = writableUrl
@@ -320,6 +295,8 @@ data class User(
             avatar = processedData["avatar"] as? String ?: avatar
             email = processedData["email"] as? String ?: email
             profile = processedData["profile"] as? String ?: profile
+            decodedTimestamp?.let { timestamp = it }
+            decodedLastLogin?.let { lastLogin = it }
             // Handle domainToShare: update if present in response (including null), otherwise keep existing
             if (processedData.containsKey("domainToShare")) {
                 domainToShare = processedData["domainToShare"] as? String
@@ -367,6 +344,23 @@ data class User(
         } catch (e: Exception) {
             Timber.tag("User.from").e("Error updating user from map: $e")
         }
+    }
+
+    private fun decodeServerDateMillis(value: Any?, fieldName: String): Long? {
+        if (value == null) return null
+
+        val rawMillis = when (value) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> null
+        }
+
+        if (rawMillis == null || rawMillis.isNaN() || rawMillis.isInfinite()) {
+            Timber.w("Failed to parse $fieldName: $value")
+            return null
+        }
+
+        return rawMillis.toLong()
     }
 
     fun from(userData: User) {

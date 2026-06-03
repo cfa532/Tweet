@@ -420,10 +420,10 @@ fun VideoPreview(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color(0xC82196F3))
-                    .border(2.dp, Color.White, CircleShape)
+                    .background(Color.Black.copy(alpha = 0.34f))
+                    .border(1.dp, Color.White.copy(alpha = 0.45f), CircleShape)
                     .clickable {
                         if (exoPlayer?.playbackState == Player.STATE_ENDED) {
                             exoPlayer.seekTo(0)
@@ -438,8 +438,8 @@ fun VideoPreview(
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = stringResource(R.string.play),
-                    tint = Color.White,
-                    modifier = Modifier.size(36.dp)
+                    tint = Color.White.copy(alpha = 0.78f),
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

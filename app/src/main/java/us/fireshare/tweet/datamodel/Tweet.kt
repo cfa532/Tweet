@@ -223,6 +223,10 @@ data class Tweet(
             favorites!![1] = value
         }
 
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var rowTimestamp: Long? = null
+
     /**
      * Updates the tweet instance with values from another tweet
      */
