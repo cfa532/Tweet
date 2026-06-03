@@ -1,6 +1,8 @@
 package us.fireshare.tweet.widget
 
 import android.os.Build
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -57,20 +60,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.HproseInstance.preferenceHelper
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
@@ -1013,27 +1018,70 @@ fun SimpleMp3PlaylistPlayer(
     }
     if (mediaItems.isEmpty()) return
 
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    val exoPlayer = remember { createAudioExoPlayer(context) }
     var currentIndex by remember { mutableStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var playlistExpanded by remember { mutableStateOf(false) }
+    var isPlaybackLoading by remember { mutableStateOf(false) }
+    var playbackLoadFailed by remember { mutableStateOf(false) }
+    var lastAudioUnavailableToastAtMs by remember { mutableLongStateOf(0L) }
+    val audioUnavailableMessage = stringResource(R.string.audio_unavailable)
+
+    fun showAudioUnavailableToast() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastAudioUnavailableToastAtMs > 1_000L) {
+            lastAudioUnavailableToastAtMs = now
+            Toast.makeText(context, audioUnavailableMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun startAudioPlayback(index: Int, resetPosition: Boolean, reloadQueue: Boolean = false) {
+        val targetIndex = index.coerceIn(0, mediaItems.lastIndex)
+        val canResumeCurrentTrack = !reloadQueue &&
+            !resetPosition &&
+            !playbackLoadFailed &&
+            exoPlayer.playerError == null &&
+            exoPlayer.playbackState == Player.STATE_READY &&
+            exoPlayer.currentMediaItemIndex == targetIndex
+
+        currentIndex = targetIndex
+        playbackLoadFailed = false
+
+        if (canResumeCurrentTrack) {
+            isPlaybackLoading = false
+            exoPlayer.play()
+            return
+        }
+
+        positionMs = 0L
+        durationMs = 0L
+        exoPlayer.stop()
+        exoPlayer.setMediaItems(mediaItems, targetIndex, 0L)
+        isPlaybackLoading = true
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
 
     LaunchedEffect(mediaItems) {
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        exoPlayer.addMediaItems(mediaItems)
-        exoPlayer.prepare()
         currentIndex = 0
         positionMs = 0L
         durationMs = 0L
+        isPlaying = false
+        isPlaybackLoading = false
+        playbackLoadFailed = false
     }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlayingNow: Boolean) {
                 isPlaying = isPlayingNow
+                if (isPlayingNow) {
+                    isPlaybackLoading = false
+                }
             }
 
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
@@ -1044,10 +1092,30 @@ fun SimpleMp3PlaylistPlayer(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 durationMs = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+                if (exoPlayer.playWhenReady && playbackState == Player.STATE_BUFFERING) {
+                    isPlaybackLoading = true
+                }
+                if (playbackState == Player.STATE_READY) {
+                    isPlaybackLoading = false
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     isPlaying = false
+                    isPlaybackLoading = false
                     positionMs = 0L
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                Timber.tag("SimpleMp3PlaylistPlayer").w(
+                    error,
+                    "Audio playback failed index=$currentIndex state=${exoPlayer.playbackState} " +
+                        "url=${resolvedAttachments.getOrNull(currentIndex)?.url}"
+                )
+                playbackLoadFailed = true
+                isPlaying = false
+                isPlaybackLoading = false
+                exoPlayer.playWhenReady = false
+                showAudioUnavailableToast()
             }
         }
         exoPlayer.addListener(listener)
@@ -1130,9 +1198,7 @@ fun SimpleMp3PlaylistPlayer(
                             },
                             onClick = {
                                 playlistExpanded = false
-                                currentIndex = index
-                                exoPlayer.seekTo(index, 0L)
-                                exoPlayer.playWhenReady = true
+                                startAudioPlayback(index, resetPosition = true, reloadQueue = true)
                             }
                         )
                     }
@@ -1146,8 +1212,7 @@ fun SimpleMp3PlaylistPlayer(
                 IconButton(
                     onClick = {
                         val previous = if (currentIndex <= 0) mediaItems.lastIndex else currentIndex - 1
-                        exoPlayer.seekTo(previous, 0L)
-                        exoPlayer.playWhenReady = true
+                        startAudioPlayback(previous, resetPosition = true, reloadQueue = true)
                     },
                     modifier = Modifier.size(60.dp)
                 ) {
@@ -1162,24 +1227,35 @@ fun SimpleMp3PlaylistPlayer(
                     onClick = {
                         if (exoPlayer.isPlaying) {
                             exoPlayer.pause()
+                            isPlaybackLoading = false
                         } else {
-                            exoPlayer.play()
+                            startAudioPlayback(
+                                currentIndex,
+                                resetPosition = playbackLoadFailed || exoPlayer.playbackState == Player.STATE_ENDED
+                            )
                         }
                     },
                     modifier = Modifier.size(60.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = playerContent,
-                        modifier = Modifier.size(34.dp)
-                    )
+                    if (isPlaybackLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(30.dp),
+                            color = playerContent,
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = playerContent,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                 }
                 IconButton(
                     onClick = {
                         val next = if (currentIndex >= mediaItems.lastIndex) 0 else currentIndex + 1
-                        exoPlayer.seekTo(next, 0L)
-                        exoPlayer.playWhenReady = true
+                        startAudioPlayback(next, resetPosition = true, reloadQueue = true)
                     },
                     modifier = Modifier.size(60.dp)
                 ) {

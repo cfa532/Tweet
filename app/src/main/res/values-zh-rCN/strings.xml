@@ -205,6 +205,7 @@
     <string name="video_received">视频已接收</string>
     <string name="audio_sent">音频已发送</string>
     <string name="audio_received">音频已接收</string>
+    <string name="audio_unavailable">此音频不可用。</string>
     <string name="document_sent">文档已发送</string>
     <string name="document_received">文档已接收</string>
     <string name="archive_sent">压缩包已发送</string>

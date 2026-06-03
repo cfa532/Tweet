@@ -1,5 +1,7 @@
 package us.fireshare.tweet.widget
 
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,8 +40,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
@@ -57,7 +60,8 @@ fun AudioPlayer(
     val context = LocalContext.current
     val aspectRatio by remember { mutableFloatStateOf(16 / 9f) }
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    var lastAudioUnavailableToastAtMs by remember { mutableLongStateOf(0L) }
+    val exoPlayer = remember { createAudioExoPlayer(context) }
 
     val resolvedAttachments = remember(attachments) {
         attachments.mapNotNull { attachment ->
@@ -71,6 +75,8 @@ fun AudioPlayer(
         return
     }
 
+    val audioUnavailableMessage = stringResource(R.string.audio_unavailable)
+
     LaunchedEffect(resolvedAttachments.size) {
         if (currentIndex >= resolvedAttachments.size) {
             currentIndex = 0
@@ -78,13 +84,23 @@ fun AudioPlayer(
     }
 
     // Create a Player.Listener outside the DisposableEffect
-    val playerListener = remember {
+    val playerListener = remember(audioUnavailableMessage) {
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED && currentIndex < resolvedAttachments.size - 1) {
                     currentIndex = (currentIndex + 1) % resolvedAttachments.size
                     exoPlayer.seekTo(currentIndex, 0)
                     exoPlayer.playWhenReady = true
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                exoPlayer.playWhenReady = false
+
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastAudioUnavailableToastAtMs > 1_000L) {
+                    lastAudioUnavailableToastAtMs = now
+                    Toast.makeText(context, audioUnavailableMessage, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -111,7 +127,7 @@ fun AudioPlayer(
         currentIndex = targetIndex
     }
     // Listen for playback completion
-    DisposableEffect(exoPlayer) {
+    DisposableEffect(exoPlayer, playerListener) {
         exoPlayer.addListener(playerListener)
         onDispose {
             exoPlayer.removeListener(playerListener)
