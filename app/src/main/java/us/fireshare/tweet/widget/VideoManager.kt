@@ -377,12 +377,8 @@ object VideoManager {
         }
     }
 
-    private fun directionalPreloadCountForFeed(feedContext: String): Int {
-        return if (feedContext.startsWith("userProfile_") || feedContext == "appUserProfile") {
-            1
-        } else {
-            DIRECTIONAL_VIDEO_PRELOAD_COUNT
-        }
+    private fun directionalPreloadCountForFeed(@Suppress("UNUSED_PARAMETER") feedContext: String): Int {
+        return DIRECTIONAL_VIDEO_PRELOAD_COUNT
     }
 
     private data class DirectionalVideo(
