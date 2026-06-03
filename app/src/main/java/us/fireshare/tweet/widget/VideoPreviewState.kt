@@ -175,7 +175,8 @@ class VideoPreviewState(
         effectivelyVisible: Boolean,
         context: Context,
         url: String?,
-        videoType: MediaType?
+        videoType: MediaType?,
+        playerKey: MimeiId? = videoMid
     ) {
         if (effectivelyVisible) {
             player.repeatMode = Player.REPEAT_MODE_OFF
@@ -226,9 +227,9 @@ class VideoPreviewState(
                 }
             }
         } else {
-            videoMid?.let { mid ->
-                val activeCount = VideoManager.getVideoActiveCount(mid)
-                val isInFullScreen = VideoManager.isVideoInFullScreen(mid)
+            playerKey?.let { key ->
+                val activeCount = VideoManager.getVideoActiveCount(key)
+                val isInFullScreen = videoMid?.let { VideoManager.isVideoInFullScreen(it) } == true
                 if (activeCount <= 1 && !isInFullScreen) {
                     player.playWhenReady = false
                 }

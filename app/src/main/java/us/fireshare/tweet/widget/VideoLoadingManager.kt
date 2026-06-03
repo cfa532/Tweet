@@ -67,7 +67,8 @@ object VideoLoadingManager {
         direction: PreloadDirection,
         tweets: List<us.fireshare.tweet.datamodel.Tweet>,
         startPreloading: Boolean,
-        fallbackBaseUrl: String = ""
+        fallbackBaseUrl: String = "",
+        feedContext: String = ""
     ) {
         VideoManager.updateDirectionalVideoPreloads(
             context = context,
@@ -75,7 +76,8 @@ object VideoLoadingManager {
             direction = direction,
             tweets = tweets,
             startPreloading = startPreloading,
-            fallbackBaseUrl = fallbackBaseUrl
+            fallbackBaseUrl = fallbackBaseUrl,
+            feedContext = feedContext
         )
     }
 

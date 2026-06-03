@@ -282,6 +282,12 @@ object TweetCacheManager {
         try {
             val cachedUser = synchronized(userCacheLock) {
                 val currentTime = System.currentTimeMillis()
+                if (!hasValidUserIdentity(user)) {
+                    Timber.tag("TweetCacheManager").w(
+                        "Skipping user cache overwrite with invalid data: userId=${user.mid}, username=${user.username}"
+                    )
+                    return
+                }
                 
                 // Update memory cache (LRU: put moves entry to most recent)
                 userMemoryCache[user.mid] = user
@@ -304,12 +310,16 @@ object TweetCacheManager {
             
             // Update StateFlow to notify observers
             synchronized(userStateFlowsLock) {
-                userStateFlows[user.mid]?.value = user
-                Timber.tag("TweetCacheManager").d("📡 USER STATEFLOW UPDATED: userId: ${user.mid}")
+                userStateFlows[cachedUser.userId]?.value = cachedUser.user
+                Timber.tag("TweetCacheManager").d("📡 USER STATEFLOW UPDATED: userId: ${cachedUser.userId}")
             }
         } catch (e: Exception) {
             Timber.tag("TweetCacheManager").e("❌ ERROR SAVING USER TO CACHE: userId: ${user.mid}, error: $e")
         }
+    }
+
+    private fun hasValidUserIdentity(user: User): Boolean {
+        return user.mid.isNotBlank() && !user.username.isNullOrBlank()
     }
 
     /**

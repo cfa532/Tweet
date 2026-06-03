@@ -235,7 +235,8 @@ class VideoPlaybackCoordinator(
                         tweetId = tweet.mid,
                         videoMid = attachment.mid,
                         index = index,
-                        mediaType = attachment.type
+                        mediaType = attachment.type,
+                        playbackParentTweetId = tweet.mid
                     )
                     videos.add(videoInfo)
                 }
@@ -282,7 +283,8 @@ class VideoPlaybackCoordinator(
                             tweetId = tweet.mid,
                             videoMid = attachment.mid,
                             index = index,
-                            mediaType = attachment.type
+                            mediaType = attachment.type,
+                            playbackParentTweetId = tweet.mid
                         )
                         videos.add(videoInfo)
                     }

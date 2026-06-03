@@ -70,6 +70,7 @@ fun VideoPreview(
     val coordinator = LocalVideoCoordinator.current
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
     val resolvedPlaybackVideoId = playbackVideoId ?: videoMid.orEmpty()
+    val playerKey = if (shouldUseCoordinator) resolvedPlaybackVideoId else videoMid
     val isInFullScreen = videoMid?.let { VideoManager.isVideoInFullScreen(it) } == true
     val shouldPlay = if (isInFullScreen) {
         false
@@ -85,8 +86,14 @@ fun VideoPreview(
     } else {
         state.isVideoVisible
     }
-    val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
-    val shouldAcquirePlayer = !isInFullScreen
+    val preloadGeneration = VideoManager.preloadGenerations[playerKey] ?: 0
+    val hasWarmPlayer = playerKey?.let { VideoManager.hasWarmVideoPlayer(it) } == true
+    val shouldAcquirePlayer = !isInFullScreen && (
+        !shouldUseCoordinator ||
+            effectivelyVisible ||
+            shouldPlay ||
+            hasWarmPlayer
+        )
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
@@ -125,32 +132,39 @@ fun VideoPreview(
     }
 
     // --- Visibility tracking via VideoLoadingManager ---
-    DisposableEffect(videoMid, shouldAcquirePlayer) {
-        if (videoMid != null && shouldAcquirePlayer) {
-            VideoManager.markVideoActive(videoMid)
+    DisposableEffect(playerKey, shouldAcquirePlayer) {
+        if (playerKey != null && shouldAcquirePlayer) {
+            VideoManager.markVideoActive(playerKey)
         }
         onDispose {
-            if (videoMid != null && shouldAcquirePlayer) {
-                VideoManager.markVideoInactive(videoMid)
+            if (playerKey != null && shouldAcquirePlayer) {
+                VideoManager.markVideoInactive(playerKey)
                 VideoManager.cleanupInactivePlayersDeferred()
             }
         }
     }
 
-    videoMid?.let { mid ->
-        rememberVideoLoadingManager(videoMid = mid, isVisible = effectivelyVisible)
+    playerKey?.let { key ->
+        rememberVideoLoadingManager(videoMid = key, isVisible = effectivelyVisible)
     }
 
     // --- ExoPlayer (regenerated on force-recreate) ---
-    val playerGeneration = VideoManager.playerGenerations[videoMid] ?: 0
+    val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
-    val exoPlayer = remember(videoMid, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType) {
+    val exoPlayer = remember(playerKey, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType) {
         if (!shouldAcquirePlayer || url == null) return@remember null
         val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
             HlsUrlResolver.getCached(context, url)
         } else null
-        val player = if (videoMid != null) {
-            VideoManager.getVideoPlayer(context, videoMid, url, videoType, resolvedHlsUrl)
+        val player = if (playerKey != null) {
+            VideoManager.getVideoPlayer(
+                context,
+                playerKey,
+                url,
+                videoType,
+                resolvedHlsUrl,
+                mediaMid = videoMid ?: playerKey
+            )
         } else {
             createExoPlayer(context, url, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
         }
@@ -228,7 +242,7 @@ fun VideoPreview(
     // --- Playback state changes ---
     LaunchedEffect(state.isVideoVisible, shouldPlay, exoPlayer) {
         exoPlayer?.let {
-            state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, context, url, videoType)
+            state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, context, url, videoType, playerKey)
         }
     }
 
@@ -408,7 +422,7 @@ fun VideoPreview(
                     val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
                     (visibleHeight / totalHeight).coerceIn(0f, 1f)
                 } else 0f
-                val newVisibility = measuredVisibilityRatio >= 0.5f
+                val newVisibility = measuredVisibilityRatio > 0f
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
                 }

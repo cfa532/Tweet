@@ -4233,7 +4233,7 @@ object HproseInstance {
     /**
      * Validates user data is complete and valid
      */
-    private fun isValidUserData(user: User): Boolean = user.mid.isNotEmpty() && user.username != null
+    private fun isValidUserData(user: User): Boolean = user.mid.isNotEmpty() && !user.username.isNullOrBlank()
 
     /**
      * Processes user data response from server
@@ -4809,7 +4809,7 @@ object HproseInstance {
             }
             
             val username = userData["username"] as? String
-            if (username == null) {
+            if (username.isNullOrBlank()) {
                 Timber.tag("resyncUser").e("Invalid user data for user $userId (no username), ignoring result")
                 return null
             }

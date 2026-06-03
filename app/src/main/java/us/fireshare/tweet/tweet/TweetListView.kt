@@ -610,7 +610,8 @@ fun TweetListView(
                         visibleTweetIndexes = visibleTweetIndexes,
                         direction = mediaPreloadDirection,
                         tweets = visibleTweets,
-                        startPreloading = true
+                        startPreloading = true,
+                        feedContext = context
                     )
                     lastMediaPreloadIndexes = visibleTweetIndexes
                     lastMediaPreloadDirection = mediaPreloadDirection

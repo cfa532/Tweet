@@ -240,7 +240,7 @@ fun MediaItemView(
                 val videoUrl = attachment.url
                 val playbackVideoId = videoPlaybackIdentifier(
                     videoMid = videoMid,
-                    parentTweetId = parentTweetId?.takeIf { it.isNotEmpty() }
+                    parentTweetId = playbackTweetId?.takeIf { it.isNotEmpty() }
                 )
 
                 // Use key with a stable identifier to prevent recreation
