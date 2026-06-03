@@ -1169,6 +1169,15 @@ fun SimpleMp3PlaylistPlayer(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    if (resolvedAttachments.size > 1) {
+                        Text(
+                            text = "${currentIndex + 1}/${resolvedAttachments.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = playerMutedContent,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                     IconButton(
                         onClick = { playlistExpanded = true },
                         modifier = Modifier.size(36.dp)
@@ -1198,7 +1207,14 @@ fun SimpleMp3PlaylistPlayer(
                             },
                             onClick = {
                                 playlistExpanded = false
-                                startAudioPlayback(index, resetPosition = true, reloadQueue = true)
+                                currentIndex = index
+                                positionMs = 0L
+                                durationMs = 0L
+                                isPlaying = false
+                                isPlaybackLoading = false
+                                playbackLoadFailed = false
+                                exoPlayer.stop()
+                                exoPlayer.clearMediaItems()
                             }
                         )
                     }
