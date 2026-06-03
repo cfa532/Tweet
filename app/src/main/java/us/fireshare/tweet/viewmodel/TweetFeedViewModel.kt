@@ -220,7 +220,43 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * */
     suspend fun refresh(pageNumber: Int = 0) {
         // Don't save appUser here - it gets saved after network initialization with full data
-        fetchTweets(pageNumber)
+        if (pageNumber != 0) {
+            fetchTweets(pageNumber)
+            return
+        }
+
+        fetchInitialPagesUsingIosPaginationRule()
+    }
+
+    private suspend fun fetchInitialPagesUsingIosPaginationRule() {
+        var pageToLoad = 0
+        var autoLoadedExtraPages = 0
+
+        while (true) {
+            val tweetsFromServer = fetchTweets(pageToLoad)
+            val validTweetCount = tweetsFromServer.count { it != null }
+            val responseWasFull = tweetsFromServer.size >= TW_CONST.PAGE_SIZE
+            val needsMinimumTweets = _tweets.value.size < minimumTweetsBeforeStoppingInitialLoad
+            val shouldLoadNextPage = responseWasFull && (validTweetCount == 0 || needsMinimumTweets)
+
+            Timber.tag("TweetFeedViewModel").d(
+                "Initial pagination page=$pageToLoad raw=${tweetsFromServer.size}, valid=$validTweetCount, total=${_tweets.value.size}, shouldLoadNext=$shouldLoadNextPage"
+            )
+
+            if (!shouldLoadNextPage) {
+                break
+            }
+
+            autoLoadedExtraPages++
+            if (autoLoadedExtraPages >= maxAutoLoadedInitialPages) {
+                Timber.tag("TweetFeedViewModel").w(
+                    "Stopped initial auto-loading after $autoLoadedExtraPages extra pages from page 0"
+                )
+                break
+            }
+
+            pageToLoad++
+        }
     }
 
     private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
@@ -239,6 +275,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     private var followingTweetsJob: Job? = null
     private val pageZeroFetchMutex = Mutex()
+    private val minimumTweetsBeforeStoppingInitialLoad = 4
+    private val maxAutoLoadedInitialPages = 200
 
     private fun startFeedRefreshTimer() {
         if (feedRefreshTimerJob?.isActive == true) {
@@ -257,7 +295,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     break
                 }
 
-                fetchTweets(0)
+                refresh(0)
                 nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
             }
         }
@@ -438,7 +476,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             rememberTweetRowTimestamps(validTweets)
             
             if (pageNumber == 0) {
-                Timber.tag("MainFeed").d("🌐 Network returned ${validTweets.size} tweets")
+                Timber.tag("MainFeed").d("🌐 Network returned raw=${tweetsWithNulls.size}, valid=${validTweets.size} tweets")
             }
 
             // Always merge new tweets with existing ones, never replace

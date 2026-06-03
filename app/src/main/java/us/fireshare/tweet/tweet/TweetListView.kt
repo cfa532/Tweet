@@ -444,6 +444,8 @@ fun TweetListView(
     var isNearBottom by remember { mutableStateOf(false) }
     var nearBottomPreloadToken by remember { mutableLongStateOf(0L) }
     var lastNearBottomPreloadScrollSignature by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val minimumTweetsBeforeStoppingPagination = 4
+    val maxAutoLoadedExtraPages = 200
 
     // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
     val visibleTweets = remember(tweets, showPrivateTweets) {
@@ -451,6 +453,64 @@ fun TweetListView(
     }
     val visibleTweetIndexById = remember(visibleTweets) {
         visibleTweets.mapIndexed { index, tweet -> tweet.mid to index }.toMap()
+    }
+
+    suspend fun fetchPagesUsingIosPaginationRule(
+        startPage: Int,
+        logTag: String
+    ): Int {
+        var currentPage = startPage
+        var autoLoadedExtraPages = 0
+        var loadedValidCount = 0
+        val expectedTweetIds = tweets.map { it.mid }.toMutableSet()
+        var expectedTweetCount = expectedTweetIds.size
+
+        while (!serverDepleted) {
+            Timber.tag(logTag).d("Fetching page=$currentPage")
+            val result = fetchTweets(currentPage)
+            val validTweets = result.filterNotNull()
+            val validCount = validTweets.size
+            val responseWasFull = result.size >= TW_CONST.PAGE_SIZE
+
+            loadedValidCount += validCount
+            expectedTweetCount += validTweets.count { expectedTweetIds.add(it.mid) }
+            lastLoadedPage = currentPage
+            serverDepleted = !responseWasFull
+
+            val shouldLoadNextPage = responseWasFull &&
+                (validCount == 0 || expectedTweetCount < minimumTweetsBeforeStoppingPagination)
+
+            if (!shouldLoadNextPage) {
+                Timber.tag(logTag).d(
+                    "Pagination stopped at page=$currentPage, raw=${result.size}, valid=$validCount, loadedValid=$loadedValidCount, expectedTweets=$expectedTweetCount, depleted=$serverDepleted"
+                )
+                break
+            }
+
+            autoLoadedExtraPages++
+            if (autoLoadedExtraPages >= maxAutoLoadedExtraPages) {
+                Timber.tag(logTag).w(
+                    "Stopped auto-loading after $autoLoadedExtraPages extra pages from page=$startPage"
+                )
+                break
+            }
+
+            if (validCount == 0) {
+                Timber.tag(logTag).d(
+                    "Page=$currentPage was full but empty; trying next page"
+                )
+            } else {
+                Timber.tag(logTag).d(
+                    "Page=$currentPage had $validCount valid tweets; continuing to reach $minimumTweetsBeforeStoppingPagination total tweets"
+                )
+            }
+            currentPage++
+        }
+
+        Timber.tag(logTag).d(
+            "Pagination fetched loadedValid=$loadedValidCount, lastLoadedPage=$lastLoadedPage, depleted=$serverDepleted"
+        )
+        return loadedValidCount
     }
 
     // EFFECT 3: Unified scroll tracking + pagination in a single snapshotFlow collector
@@ -647,30 +707,13 @@ fun TweetListView(
                 }
 
                 val loadJob = coroutineScope.launch {
-                    var foundValidTweets = false
+                    var validTweetsLoaded = 0
                     try {
                         withContext(Dispatchers.IO) {
-                            var currentPage = nextPage
-                            Timber.tag("TweetListView-LoadMore").d("Fetching page=$currentPage")
-
-                            while (!foundValidTweets && !serverDepleted && currentPage < lastLoadedPage + 5) {
-                                val result = fetchTweets(currentPage)
-                                val validCount = result.count { it != null }
-
-                                if (validCount > 0) {
-                                    foundValidTweets = true
-                                    lastLoadedPage = currentPage
-                                    serverDepleted = result.size < TW_CONST.PAGE_SIZE
-                                    Timber.tag("TweetListView-LoadMore").d("Found $validCount tweets, depleted=$serverDepleted")
-                                } else if (result.size < TW_CONST.PAGE_SIZE) {
-                                    lastLoadedPage = currentPage
-                                    serverDepleted = true
-                                    Timber.tag("TweetListView-LoadMore").d("No more data")
-                                    break
-                                } else {
-                                    currentPage++
-                                }
-                            }
+                            validTweetsLoaded = fetchPagesUsingIosPaginationRule(
+                                startPage = nextPage,
+                                logTag = "TweetListView-LoadMore"
+                            )
                         }
                     } catch (e: Exception) {
                         Timber.tag("TweetListView-LoadMore").e(e, "Error loading more")
@@ -687,7 +730,7 @@ fun TweetListView(
                             pendingLoadMorePage = -1
                             inFlightPages.remove(nextPage)
 
-                            if (!foundValidTweets) {
+                            if (validTweetsLoaded == 0) {
                                 lastNoMoreTweetsShown = System.currentTimeMillis()
                                 delay(2000)
                             }
@@ -710,7 +753,10 @@ fun TweetListView(
                         serverDepleted = false
                         lastLoadedPage = -1
                         inFlightPages.clear()
-                        fetchTweets(0)
+                        fetchPagesUsingIosPaginationRule(
+                            startPage = 0,
+                            logTag = "TweetListView-PullRefresh"
+                        )
                     }
                     onPullRefresh?.invoke()
                     listState.scrollToItem(0, 0)
@@ -740,20 +786,10 @@ fun TweetListView(
                 val spinnerShowTime = System.currentTimeMillis()
                 try {
                     withContext(Dispatchers.IO) {
-                        Timber.tag("TweetListView").d("Preloading page: $nextPage")
-                        val result = fetchTweets(nextPage)
-                        val validCount = result.count { it != null }
-
-                        if (validCount > 0) {
-                            lastLoadedPage = nextPage
-                            if (result.size < TW_CONST.PAGE_SIZE) {
-                                serverDepleted = true
-                            }
-                            Timber.tag("TweetListView").d("Preloaded $validCount tweets from page $nextPage, depleted=$serverDepleted")
-                        } else if (result.size < TW_CONST.PAGE_SIZE) {
-                            serverDepleted = true
-                            Timber.tag("TweetListView").d("No more data during preload at page $nextPage")
-                        }
+                        fetchPagesUsingIosPaginationRule(
+                            startPage = nextPage,
+                            logTag = "TweetListView-Preload"
+                        )
                     }
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Preload error")
