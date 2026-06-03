@@ -13,11 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -87,15 +85,8 @@ fun VideoPreview(
     } else {
         state.isVideoVisible
     }
-    var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
     val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
-    val hasWarmPlayer = videoMid?.let { VideoManager.isVideoPreloaded(it) } == true
-    val shouldAcquirePlayer = !isInFullScreen && (
-        !shouldUseCoordinator ||
-            shouldPlay ||
-            visibilityRatio >= 0.35f ||
-            (hasWarmPlayer && visibilityRatio > 0f)
-        )
+    val shouldAcquirePlayer = !isInFullScreen
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
@@ -201,9 +192,14 @@ fun VideoPreview(
                     VideoManager.ensureVideoPoster(context, videoMid, url, videoType, null)
                 }
                 val player = currentExoPlayer ?: return
+                val playbackVisible = if (shouldUseCoordinator) {
+                    state.isVideoVisible || state.coordinatorWantsToPlay
+                } else {
+                    state.isVideoVisible
+                }
                 state.onPlaybackStateChanged(
                     playbackState, player, shouldUseCoordinator, autoPlay,
-                    state.isVideoVisible, coordinator, playbackTweetId, resolvedPlaybackVideoId, onLoadComplete, onVideoCompleted
+                    playbackVisible, coordinator, playbackTweetId, resolvedPlaybackVideoId, onLoadComplete, onVideoCompleted
                 )
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -341,13 +337,18 @@ fun VideoPreview(
                 }.start()
             }
             if (showPlayButton) {
+                val density = view.resources.displayMetrics.density
                 val playBgDrawable = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(android.graphics.Color.argb(200, 33, 150, 243))
-                    setStroke(4, android.graphics.Color.WHITE)
+                    setColor(android.graphics.Color.argb(87, 0, 0, 0))
+                    setStroke(
+                        (1f * density).toInt().coerceAtLeast(1),
+                        android.graphics.Color.argb(115, 255, 255, 255)
+                    )
                 }
                 playBtn.background = playBgDrawable
                 playBtn.setColorFilter(android.graphics.Color.WHITE)
+                playBtn.alpha = 0.78f
             }
 
             view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =
@@ -407,7 +408,6 @@ fun VideoPreview(
                     val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
                     (visibleHeight / totalHeight).coerceIn(0f, 1f)
                 } else 0f
-                visibilityRatio = measuredVisibilityRatio
                 val newVisibility = measuredVisibilityRatio >= 0.5f
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility

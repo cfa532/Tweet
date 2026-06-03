@@ -236,6 +236,7 @@ object VideoManager {
     fun markVideoVisible(videoMid: MimeiId) {
         visibleVideoCounts[videoMid] = visibleVideoCounts.getOrDefault(videoMid, 0) + 1
         visibleVideos.add(videoMid)
+        preloadedVideos.remove(videoMid)
         touchPlayer(videoMid)
         markVideoActive(videoMid)
     }
@@ -328,9 +329,9 @@ object VideoManager {
             tweets = tweets,
             maxVideos = DIRECTIONAL_VIDEO_PRELOAD_COUNT
         )
-        val preloadTargets = (loadVisibleVideos + directionalVideos)
+        val preloadTargets = directionalVideos
             .distinctBy { it.mid }
-            .take(DIRECTIONAL_VIDEO_PRELOAD_COUNT + loadVisibleVideos.size)
+            .take(DIRECTIONAL_VIDEO_PRELOAD_COUNT)
         val protectedIds = preloadTargets.map { it.mid }.toSet()
 
         synchronized(currentDirectionalPreloadVideos) {
@@ -344,6 +345,12 @@ object VideoManager {
 
         cleanupInactivePlayers()
         enforcePlayerCacheLimit()
+
+        loadVisibleVideos.forEach { video ->
+            if (videoPlayers.containsKey(video.mid)) {
+                ensureVideoPoster(context, video.mid, video.url, video.type, null)
+            }
+        }
 
         preloadTargets.forEach { video ->
             if (!isVideoPreloaded(video.mid) &&
@@ -715,6 +722,7 @@ object VideoManager {
     fun markVideoActive(videoMid: MimeiId) {
         val currentCount = activeVideos.getOrDefault(videoMid, 0)
         activeVideos[videoMid] = currentCount + 1
+        preloadedVideos.remove(videoMid)
     }
 
     /**
@@ -924,8 +932,36 @@ object VideoManager {
             return false
         }
         enforcePlayerCacheLimit(reserveSlots = 1)
-        val warmPreloadCount = preloadedVideos.count { videoPlayers.containsKey(it) }
-        return warmPreloadCount < MAX_WARM_PRELOADED_PLAYERS
+        if (hiddenWarmPreloadCount() < MAX_WARM_PRELOADED_PLAYERS) return true
+
+        releaseOldestHiddenWarmPreload()
+        return hiddenWarmPreloadCount() < MAX_WARM_PRELOADED_PLAYERS
+    }
+
+    private fun hiddenWarmPreloadCount(): Int {
+        return preloadedVideos.count { isHiddenWarmPreload(it) }
+    }
+
+    private fun isHiddenWarmPreload(videoMid: MimeiId): Boolean {
+        val player = videoPlayers[videoMid] ?: return false
+        if (!preloadedVideos.contains(videoMid)) return false
+        if (activeVideos.containsKey(videoMid)) return false
+        if (visibleVideos.contains(videoMid)) return false
+        if (isVideoInFullScreen(videoMid)) return false
+        if (isVideoProtectedForFullScreen(videoMid)) return false
+        return !player.isPlaying && !player.playWhenReady
+    }
+
+    private fun releaseOldestHiddenWarmPreload() {
+        val releaseCandidate = preloadedVideos
+            .filter { isHiddenWarmPreload(it) }
+            .minByOrNull { playerAccessTimestamps[it] ?: 0L }
+            ?: return
+
+        Timber.tag("VideoManager").d(
+            "🧹 WARM PRELOAD SLOT: Releasing oldest hidden warm player $releaseCandidate"
+        )
+        releasePlayer(releaseCandidate)
     }
 
     private fun isHeapTightForWarmPreload(): Boolean {

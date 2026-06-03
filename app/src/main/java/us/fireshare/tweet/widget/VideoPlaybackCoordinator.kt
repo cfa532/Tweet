@@ -742,8 +742,7 @@ class VideoPlaybackCoordinator(
 
     fun shouldAutoPlay(videoMid: MimeiId, tweetId: String, playbackVideoId: String): Boolean {
         val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
-        if (primaryVideoId == identifier && visibleVideos.isNotEmpty()) return true
-        return false
+        return primaryVideoId == identifier
     }
 
     fun handleVideoFinished(videoMid: MimeiId, tweetId: String, playbackVideoId: String) {
