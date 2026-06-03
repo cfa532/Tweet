@@ -1,191 +1,304 @@
-Calculating task graph as no cached configuration is available for tasks: assembleFullRelease assembleMiniRelease
+Caught exception: Could not start the FSEvents stream: /Users/cfa532/Documents/GitHub/Tweet
+Unable to watch the file system for changes
+net.rubygrapefruit.platform.NativeException: Could not start the FSEvents stream: /Users/cfa532/Documents/GitHub/Tweet
+	at org.gradle.fileevents.internal.AbstractNativeFileEventFunctions$NativeFileWatcher.startWatching0(Native Method)
+	at org.gradle.fileevents.internal.AbstractNativeFileEventFunctions$NativeFileWatcher.doStartWatching(AbstractNativeFileEventFunctions.java:39)
+	at org.gradle.fileevents.internal.AbstractFileEventFunctions$AbstractFileWatcher.startWatching(AbstractFileEventFunctions.java:181)
+	at org.gradle.fileevents.internal.OsxFileEventFunctions$OsxFileWatcher.startWatching(OsxFileEventFunctions.java:52)
+	at org.gradle.internal.watch.registry.impl.HierarchicalFileWatcherUpdater.updateWatchesOnChangedWatchedFiles(HierarchicalFileWatcherUpdater.java:121)
+	at org.gradle.internal.watch.registry.impl.AbstractFileWatcherUpdater.update(AbstractFileWatcherUpdater.java:141)
+	at org.gradle.internal.watch.registry.impl.AbstractFileWatcherUpdater.virtualFileSystemContentsChanged(AbstractFileWatcherUpdater.java:90)
+	at org.gradle.internal.watch.registry.impl.DefaultFileWatcherRegistry.virtualFileSystemContentsChanged(DefaultFileWatcherRegistry.java:147)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.lambda$updateNotifyingListeners$0(WatchingVirtualFileSystem.java:103)
+	at org.gradle.internal.watch.registry.impl.SnapshotCollectingDiffListener.publishSnapshotDiff(SnapshotCollectingDiffListener.java:32)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.lambda$updateNotifyingListeners$1(WatchingVirtualFileSystem.java:102)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.lambda$withWatcherChangeErrorHandling$9(WatchingVirtualFileSystem.java:444)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.withWatcherChangeErrorHandling(WatchingVirtualFileSystem.java:451)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.withWatcherChangeErrorHandling(WatchingVirtualFileSystem.java:443)
+	at org.gradle.internal.watch.vfs.impl.WatchingVirtualFileSystem.updateNotifyingListeners(WatchingVirtualFileSystem.java:102)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.lambda$storeIfUnchanged$3(AbstractVirtualFileSystem.java:108)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.lambda$updateRootUnderLock$0(AbstractVirtualFileSystem.java:61)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.underLock(AbstractVirtualFileSystem.java:52)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.updateRootUnderLock(AbstractVirtualFileSystem.java:59)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.storeIfUnchanged(AbstractVirtualFileSystem.java:103)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.lambda$storeWithAction$1(AbstractVirtualFileSystem.java:92)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.lambda$snapshotAndReuse$11(DefaultFileSystemAccess.java:188)
+	at org.gradle.internal.vfs.impl.AbstractVirtualFileSystem.storeWithAction(AbstractVirtualFileSystem.java:91)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.snapshotAndReuse(DefaultFileSystemAccess.java:181)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.snapshot(DefaultFileSystemAccess.java:173)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.lambda$read$5(DefaultFileSystemAccess.java:128)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.lambda$readSnapshotFromLocation$9(DefaultFileSystemAccess.java:155)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess$StripedProducerGuard.guardByKey(DefaultFileSystemAccess.java:253)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.lambda$readSnapshotFromLocation$10(DefaultFileSystemAccess.java:152)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.readSnapshotFromLocation(DefaultFileSystemAccess.java:152)
+	at org.gradle.internal.vfs.impl.DefaultFileSystemAccess.read(DefaultFileSystemAccess.java:126)
+	at org.gradle.internal.cc.impl.fingerprint.DefaultConfigurationCacheInputFileCheckerHost.locationSnapshot(ConfigurationCacheInputFileChecker.kt:88)
+	at org.gradle.internal.cc.impl.fingerprint.DefaultConfigurationCacheInputFileCheckerHost.hashCodeAndTypeOf(ConfigurationCacheInputFileChecker.kt:80)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheFingerprintController$CacheFingerprintCheckerHost.hashCodeAndTypeOf(ConfigurationCacheFingerprintController.kt)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheInputFileChecker.checkFileUpToDateStatus(ConfigurationCacheInputFileChecker.kt:58)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheInputFileChecker.check(ConfigurationCacheInputFileChecker.kt:50)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheFingerprintChecker.check(ConfigurationCacheFingerprintChecker.kt:200)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheFingerprintChecker.checkBuildScopedFingerprint(ConfigurationCacheFingerprintChecker.kt:85)
+	at org.gradle.internal.cc.impl.fingerprint.ConfigurationCacheFingerprintController.checkBuildScopedFingerprint(ConfigurationCacheFingerprintController.kt:338)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$checkBuildScopedFingerprint$1.invokeSuspend(DefaultConfigurationCache.kt:867)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$checkBuildScopedFingerprint$1.invoke(DefaultConfigurationCache.kt)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$checkBuildScopedFingerprint$1.invoke(DefaultConfigurationCache.kt)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$readFingerprintFile$1.invokeSuspend(DefaultConfigurationCache.kt:886)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$readFingerprintFile$1.invoke(DefaultConfigurationCache.kt)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache$readFingerprintFile$1.invoke(DefaultConfigurationCache.kt)
+	at org.gradle.internal.serialize.graph.CodecKt$readWith$1$1.invokeSuspend(Codec.kt:148)
+	at org.gradle.internal.serialize.graph.CodecKt$readWith$1$1.invoke(Codec.kt)
+	at org.gradle.internal.serialize.graph.CodecKt$readWith$1$1.invoke(Codec.kt)
+	at org.gradle.internal.serialize.graph.RunningKt$runReadOperation$1.invokeSuspend(Running.kt:33)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlin.coroutines.ContinuationKt.startCoroutine(Continuation.kt:115)
+	at org.gradle.internal.serialize.graph.RunningKt.runToCompletion(Running.kt:58)
+	at org.gradle.internal.serialize.graph.RunningKt.runReadOperation(Running.kt:32)
+	at org.gradle.internal.serialize.graph.CodecKt.readWith(Codec.kt:147)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCacheIO.withReadContextFor(DefaultConfigurationCacheIO.kt:504)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCacheIO.withReadContextFor(DefaultConfigurationCacheIO.kt:496)
+	at org.gradle.internal.cc.impl.ConfigurationCacheBuildTreeIO.withReadContextFor(ConfigurationCacheBuildTreeIO.kt:100)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCacheIO.withReadContextFor(DefaultConfigurationCacheIO.kt:99)
+	at org.gradle.internal.cc.impl.ConfigurationCacheBuildTreeIO.withReadContextFor$default(ConfigurationCacheBuildTreeIO.kt:94)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.readFingerprintFile(DefaultConfigurationCache.kt:884)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkBuildScopedFingerprint(DefaultConfigurationCache.kt:865)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkFingerprintAgainstLoadedProperties(DefaultConfigurationCache.kt:851)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkFingerprint(DefaultConfigurationCache.kt:829)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkedFingerprint(DefaultConfigurationCache.kt:623)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkCandidate$lambda$0(DefaultConfigurationCache.kt:612)
+	at org.gradle.internal.cc.impl.ConfigurationCacheRepository$StoreImpl.useForStateLoad$lambda$1(ConfigurationCacheRepository.kt:239)
+	at org.gradle.internal.cc.impl.ConfigurationCacheRepository$withExclusiveAccessToCache$1.get(ConfigurationCacheRepository.kt:321)
+	at org.gradle.cache.internal.LockOnDemandCrossProcessCacheAccess.withFileLock(LockOnDemandCrossProcessCacheAccess.java:90)
+	at org.gradle.cache.internal.DefaultCacheCoordinator.withFileLock(DefaultCacheCoordinator.java:226)
+	at org.gradle.cache.internal.DefaultPersistentDirectoryStore.withFileLock(DefaultPersistentDirectoryStore.java:147)
+	at org.gradle.cache.internal.DefaultCacheFactory$ReferenceTrackingPersistentCache.withFileLock(DefaultCacheFactory.java:245)
+	at org.gradle.internal.cc.impl.ConfigurationCacheRepository.withExclusiveAccessToCache(ConfigurationCacheRepository.kt:319)
+	at org.gradle.internal.cc.impl.ConfigurationCacheRepository.access$withExclusiveAccessToCache(ConfigurationCacheRepository.kt:54)
+	at org.gradle.internal.cc.impl.ConfigurationCacheRepository$StoreImpl.useForStateLoad(ConfigurationCacheRepository.kt:235)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkCandidate(DefaultConfigurationCache.kt:611)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.searchForValidEntry(DefaultConfigurationCache.kt:543)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkFingerprint$lambda$0(DefaultConfigurationCache.kt:531)
+	at org.gradle.internal.cc.operations.ConfigurationCacheBuildOperationsKt$withFingerprintCheckOperations$1.call(ConfigurationCacheBuildOperations.kt:136)
+	at org.gradle.internal.cc.operations.ConfigurationCacheBuildOperationsKt$withFingerprintCheckOperations$1.call(ConfigurationCacheBuildOperations.kt:130)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.cc.operations.ConfigurationCacheBuildOperationsKt.withFingerprintCheckOperations(ConfigurationCacheBuildOperations.kt:130)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.checkFingerprint(DefaultConfigurationCache.kt:529)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.determineBasicCacheAction(DefaultConfigurationCache.kt:463)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.determineCacheAction(DefaultConfigurationCache.kt:416)
+	at org.gradle.internal.cc.impl.DefaultConfigurationCache.initializeCacheEntry(DefaultConfigurationCache.kt:199)
+	at org.gradle.internal.cc.impl.ConfigurationCacheBuildTreeLifecycleControllerFactory.createRootBuildController(ConfigurationCacheBuildTreeLifecycleControllerFactory.kt:65)
+	at org.gradle.composite.internal.DefaultRootBuildState.<init>(DefaultRootBuildState.java:76)
+	at org.gradle.composite.internal.BuildStateFactory.createRootBuild(BuildStateFactory.java:65)
+	at org.gradle.composite.internal.DefaultIncludedBuildRegistry.createRootBuild(DefaultIncludedBuildRegistry.java:88)
+	at org.gradle.launcher.exec.RootBuildLifecycleBuildActionExecutor.execute(RootBuildLifecycleBuildActionExecutor.java:100)
+	at org.gradle.launcher.exec.BuildTreeLifecycleBuildActionExecutor.runRootBuildAction(BuildTreeLifecycleBuildActionExecutor.java:104)
+	at org.gradle.launcher.exec.BuildTreeLifecycleBuildActionExecutor.execute(BuildTreeLifecycleBuildActionExecutor.java:74)
+	at org.gradle.launcher.exec.RunAsBuildOperationBuildActionExecutor$2.call(RunAsBuildOperationBuildActionExecutor.java:65)
+	at org.gradle.launcher.exec.RunAsBuildOperationBuildActionExecutor$2.call(RunAsBuildOperationBuildActionExecutor.java:61)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.launcher.exec.RunAsBuildOperationBuildActionExecutor.execute(RunAsBuildOperationBuildActionExecutor.java:61)
+	at org.gradle.launcher.exec.RunAsWorkerThreadBuildActionExecutor.lambda$execute$0(RunAsWorkerThreadBuildActionExecutor.java:36)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$withLocksAcquired$0(DefaultWorkerLeaseService.java:275)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocksAcquired(DefaultWorkerLeaseService.java:273)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:265)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:128)
+	at org.gradle.launcher.exec.RunAsWorkerThreadBuildActionExecutor.execute(RunAsWorkerThreadBuildActionExecutor.java:36)
+	at org.gradle.tooling.internal.provider.continuous.ContinuousBuildActionExecutor.execute(ContinuousBuildActionExecutor.java:110)
+	at org.gradle.tooling.internal.provider.SubscribableBuildActionExecutor.execute(SubscribableBuildActionExecutor.java:64)
+	at org.gradle.internal.session.DefaultBuildSessionContext.execute(DefaultBuildSessionContext.java:46)
+	at org.gradle.internal.buildprocess.execution.BuildSessionLifecycleBuildActionExecutor$ActionImpl.apply(BuildSessionLifecycleBuildActionExecutor.java:106)
+	at org.gradle.internal.buildprocess.execution.BuildSessionLifecycleBuildActionExecutor$ActionImpl.apply(BuildSessionLifecycleBuildActionExecutor.java:94)
+	at org.gradle.internal.session.BuildSessionState.run(BuildSessionState.java:73)
+	at org.gradle.internal.buildprocess.execution.BuildSessionLifecycleBuildActionExecutor.execute(BuildSessionLifecycleBuildActionExecutor.java:67)
+	at org.gradle.internal.buildprocess.execution.BuildSessionLifecycleBuildActionExecutor.execute(BuildSessionLifecycleBuildActionExecutor.java:45)
+	at org.gradle.internal.buildprocess.execution.StartParamsValidatingActionExecutor.execute(StartParamsValidatingActionExecutor.java:57)
+	at org.gradle.internal.buildprocess.execution.StartParamsValidatingActionExecutor.execute(StartParamsValidatingActionExecutor.java:32)
+	at org.gradle.internal.buildprocess.execution.SessionFailureReportingActionExecutor.execute(SessionFailureReportingActionExecutor.java:51)
+	at org.gradle.internal.buildprocess.execution.SessionFailureReportingActionExecutor.execute(SessionFailureReportingActionExecutor.java:39)
+	at org.gradle.internal.buildprocess.execution.SetupLoggingActionExecutor.execute(SetupLoggingActionExecutor.java:47)
+	at org.gradle.internal.buildprocess.execution.SetupLoggingActionExecutor.execute(SetupLoggingActionExecutor.java:31)
+	at org.gradle.launcher.daemon.server.exec.ExecuteBuild.doBuild(ExecuteBuild.java:70)
+	at org.gradle.launcher.daemon.server.exec.BuildCommandOnly.execute(BuildCommandOnly.java:37)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.WatchForDisconnection.execute(WatchForDisconnection.java:39)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.ResetDeprecationLogger.execute(ResetDeprecationLogger.java:29)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.RequestStopIfSingleUsedDaemon.execute(RequestStopIfSingleUsedDaemon.java:35)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.ForwardClientInput.lambda$execute$0(ForwardClientInput.java:40)
+	at org.gradle.internal.daemon.clientinput.ClientInputForwarder.forwardInput(ClientInputForwarder.java:80)
+	at org.gradle.launcher.daemon.server.exec.ForwardClientInput.execute(ForwardClientInput.java:37)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.LogAndCheckHealth.execute(LogAndCheckHealth.java:64)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.LogToClient.doBuild(LogToClient.java:63)
+	at org.gradle.launcher.daemon.server.exec.BuildCommandOnly.execute(BuildCommandOnly.java:37)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.EstablishBuildEnvironment.doBuild(EstablishBuildEnvironment.java:84)
+	at org.gradle.launcher.daemon.server.exec.BuildCommandOnly.execute(BuildCommandOnly.java:37)
+	at org.gradle.launcher.daemon.server.api.DaemonCommandExecution.proceed(DaemonCommandExecution.java:104)
+	at org.gradle.launcher.daemon.server.exec.StartBuildOrRespondWithBusy$1.run(StartBuildOrRespondWithBusy.java:52)
+	at org.gradle.launcher.daemon.server.DaemonStateCoordinator.lambda$runCommand$0(DaemonStateCoordinator.java:321)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Stopping file watching and invalidating VFS after an error happened
+Calculating task graph as configuration cache cannot be reused because a build logic input of type 'AnalyticsEnabledValueSource' has changed.
+Caught exception: Could not start the FSEvents stream: /Users/cfa532/Documents/GitHub/Tweet
 
 > Configure project :app
 WARNING: The option setting 'android.disallowKotlinSourceSets=false' is experimental.
 The current default is 'true'.
 
-> Task :app:preBuild UP-TO-DATE
 > Task :app:generateMiniReleaseAssets UP-TO-DATE
 > Task :app:generateFullReleaseAssets UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
 > Task :app:preMiniReleaseBuild UP-TO-DATE
 > Task :app:preFullReleaseBuild UP-TO-DATE
+> Task :app:mergeMiniReleaseJniLibFolders UP-TO-DATE
 > Task :app:generateFullReleaseBuildConfig UP-TO-DATE
-> Task :app:processFullReleaseGoogleServices UP-TO-DATE
-> Task :app:extractProguardFiles UP-TO-DATE
-> Task :app:generateFullReleaseResources UP-TO-DATE
-> Task :app:extractFullReleaseVersionControlInfo UP-TO-DATE
-> Task :app:injectCrashlyticsVersionControlInfoFullRelease UP-TO-DATE
 > Task :app:mergeFullReleaseJniLibFolders UP-TO-DATE
-> Task :app:createFullReleaseCompatibleScreenManifests UP-TO-DATE
-> Task :app:mergeFullReleaseStartupProfile UP-TO-DATE
-> Task :app:processMiniReleaseGoogleServices
-> Task :app:javaPreCompileFullRelease UP-TO-DATE
-> Task :app:injectCrashlyticsMappingFileIdFullRelease
-> Task :app:validateSigningFullRelease UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:processFullReleaseGoogleServices UP-TO-DATE
+> Task :app:processMiniReleaseGoogleServices UP-TO-DATE
 > Task :app:injectCrashlyticsMappingFileIdMiniRelease
+> Task :app:createFullReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractFullReleaseVersionControlInfo UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdFullRelease
+> Task :app:mergeFullReleaseStartupProfile UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoFullRelease UP-TO-DATE
+> Task :app:generateFullReleaseResources UP-TO-DATE
 > Task :app:mapFullReleaseSourceSetPaths UP-TO-DATE
+> Task :app:javaPreCompileFullRelease UP-TO-DATE
 > Task :app:extractDeepLinksFullRelease UP-TO-DATE
 > Task :app:collectFullReleaseDependencies UP-TO-DATE
 > Task :app:sdkFullReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningFullRelease UP-TO-DATE
 > Task :app:writeFullReleaseAppMetadata UP-TO-DATE
 > Task :app:writeFullReleaseSigningConfigVersions UP-TO-DATE
 > Task :app:packageFullReleaseResources
-> Task :app:checkMiniReleaseDuplicateClasses
-> Task :app:checkFullReleaseAarMetadata UP-TO-DATE
-> Task :app:mergeFullReleaseAssets UP-TO-DATE
-> Task :app:compressFullReleaseAssets UP-TO-DATE
-> Task :app:generateMiniReleaseResources
-> Task :app:generateMiniReleaseBuildConfig
-> Task :app:processMiniReleaseNavigationResources
-> Task :app:processFullReleaseNavigationResources UP-TO-DATE
-> Task :app:extractMiniReleaseVersionControlInfo
-> Task :app:compileFullReleaseNavigationResources UP-TO-DATE
-> Task :app:injectCrashlyticsVersionControlInfoMiniRelease
-> Task :app:mergeMiniReleaseJniLibFolders
-> Task :app:mergeFullReleaseArtProfile UP-TO-DATE
-> Task :app:processFullReleaseMainManifest UP-TO-DATE
-> Task :app:javaPreCompileMiniRelease
-> Task :app:processFullReleaseManifest UP-TO-DATE
-> Task :app:processFullReleaseManifestForPackage UP-TO-DATE
-> Task :app:mapMiniReleaseSourceSetPaths
 > Task :app:checkFullReleaseDuplicateClasses UP-TO-DATE
+> Task :app:checkMiniReleaseDuplicateClasses UP-TO-DATE
+> Task :app:generateMiniReleaseBuildConfig UP-TO-DATE
+> Task :app:generateMiniReleaseResources UP-TO-DATE
+> Task :app:extractMiniReleaseVersionControlInfo UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoMiniRelease UP-TO-DATE
+> Task :app:packageMiniReleaseResources
+> Task :app:mergeFullReleaseAssets UP-TO-DATE
+> Task :app:checkFullReleaseAarMetadata UP-TO-DATE
+> Task :app:compressFullReleaseAssets UP-TO-DATE
+> Task :app:javaPreCompileMiniRelease UP-TO-DATE
+> Task :app:mergeMiniReleaseNativeLibs UP-TO-DATE
+> Task :app:mergeMiniReleaseArtProfile UP-TO-DATE
+> Task :app:checkMiniReleaseAarMetadata UP-TO-DATE
+> Task :app:mapMiniReleaseSourceSetPaths UP-TO-DATE
+> Task :app:processFullReleaseMainManifest UP-TO-DATE
+> Task :app:mergeFullReleaseArtProfile UP-TO-DATE
+> Task :app:createMiniReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksMiniRelease UP-TO-DATE
+> Task :app:processFullReleaseManifest UP-TO-DATE
+> Task :app:stripMiniReleaseDebugSymbols UP-TO-DATE
+> Task :app:mergeMiniReleaseStartupProfile UP-TO-DATE
+> Task :app:extractMiniReleaseNativeDebugMetadata UP-TO-DATE
+> Task :app:processFullReleaseManifestForPackage UP-TO-DATE
+> Task :app:mergeMiniReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:validateSigningMiniRelease UP-TO-DATE
+> Task :app:processMiniReleaseMainManifest UP-TO-DATE
+> Task :app:writeMiniReleaseAppMetadata UP-TO-DATE
+> Task :app:collectMiniReleaseDependencies UP-TO-DATE
+> Task :app:mergeMiniReleaseAssets UP-TO-DATE
+> Task :app:writeMiniReleaseSigningConfigVersions UP-TO-DATE
 > Task :app:mergeFullReleaseNativeLibs UP-TO-DATE
-> Task :app:mergeMiniReleaseArtProfile
-> Task :app:compileMiniReleaseNavigationResources
+> Task :app:compressMiniReleaseAssets UP-TO-DATE
+> Task :app:sdkMiniReleaseDependencyData UP-TO-DATE
 > Task :app:stripFullReleaseDebugSymbols UP-TO-DATE
-> Task :app:mergeMiniReleaseStartupProfile
-> Task :app:extractDeepLinksMiniRelease
 > Task :app:extractFullReleaseNativeDebugMetadata UP-TO-DATE
 > Task :app:mergeFullReleaseNativeDebugMetadata NO-SOURCE
-> Task :app:createMiniReleaseCompatibleScreenManifests
-> Task :app:validateSigningMiniRelease
-> Task :app:writeMiniReleaseAppMetadata
-> Task :app:mergeMiniReleaseAssets
-> Task :app:checkMiniReleaseAarMetadata
-> Task :app:mergeMiniReleaseNativeLibs
-> Task :app:writeMiniReleaseSigningConfigVersions
-> Task :app:compressMiniReleaseAssets
-
-> Task :app:stripMiniReleaseDebugSymbols
-Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libdatastore_shared_counter.so, libimage_processing_util_jni.so, libsurface_util_jni.so. Run with --info option to learn more.
-
-> Task :app:extractMiniReleaseNativeDebugMetadata
-> Task :app:mergeMiniReleaseNativeDebugMetadata NO-SOURCE
-> Task :app:packageMiniReleaseResources
+> Task :app:processMiniReleaseManifest UP-TO-DATE
+> Task :app:processMiniReleaseManifestForPackage UP-TO-DATE
+> Task :app:processFullReleaseNavigationResources UP-TO-DATE
+> Task :app:processMiniReleaseNavigationResources UP-TO-DATE
+> Task :app:compileMiniReleaseNavigationResources UP-TO-DATE
+> Task :app:compileFullReleaseNavigationResources UP-TO-DATE
 > Task :app:parseFullReleaseLocalResources
-> Task :app:generateFullReleaseRFile UP-TO-DATE
 > Task :app:parseMiniReleaseLocalResources
-> Task :app:generateMiniReleaseRFile
-> Task :app:processMiniReleaseMainManifest
+> Task :app:generateFullReleaseRFile UP-TO-DATE
+> Task :app:generateMiniReleaseRFile UP-TO-DATE
+> Task :app:kspMiniReleaseKotlin UP-TO-DATE
 > Task :app:kspFullReleaseKotlin UP-TO-DATE
-> Task :app:collectMiniReleaseDependencies
-> Task :app:sdkMiniReleaseDependencyData
 > Task :app:compileFullReleaseKotlin UP-TO-DATE
+> Task :app:compileMiniReleaseKotlin UP-TO-DATE
 > Task :app:processFullReleaseJavaRes UP-TO-DATE
+> Task :app:processMiniReleaseJavaRes UP-TO-DATE
+> Task :app:compileMiniReleaseJavaWithJavac UP-TO-DATE
 > Task :app:compileFullReleaseJavaWithJavac UP-TO-DATE
-> Task :app:processMiniReleaseManifest
-> Task :app:hiltSyncFullRelease UP-TO-DATE
-> Task :app:processMiniReleaseManifestForPackage
+> Task :app:mergeMiniReleaseJavaResource UP-TO-DATE
 > Task :app:mergeFullReleaseJavaResource UP-TO-DATE
+> Task :app:hiltSyncMiniRelease UP-TO-DATE
+> Task :app:hiltSyncFullRelease UP-TO-DATE
+> Task :app:hiltAggregateDepsMiniRelease UP-TO-DATE
 > Task :app:hiltAggregateDepsFullRelease UP-TO-DATE
+> Task :app:hiltJavaCompileMiniRelease UP-TO-DATE
 > Task :app:hiltJavaCompileFullRelease UP-TO-DATE
 > Task :app:generateFullReleaseLintVitalReportModel
-> Task :app:mergeFullReleaseResources
+> Task :app:generateMiniReleaseLintVitalReportModel
 > Task :app:mergeMiniReleaseResources
+> Task :app:mergeFullReleaseResources
 > Task :app:processMiniReleaseResources
 > Task :app:processFullReleaseResources
+> Task :app:transformMiniReleaseClassesWithAsm UP-TO-DATE
 > Task :app:transformFullReleaseClassesWithAsm UP-TO-DATE
+> Task :app:mergeMiniReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :app:expandMiniReleaseArtProfileWildcards UP-TO-DATE
 > Task :app:mergeFullReleaseGeneratedProguardFiles UP-TO-DATE
 > Task :app:expandFullReleaseArtProfileWildcards UP-TO-DATE
-> Task :app:produceFullReleaseComposeMapping
+> Task :app:produceMiniReleaseComposeMapping UP-TO-DATE
+> Task :app:produceFullReleaseComposeMapping UP-TO-DATE
 > Task :app:reportFullReleaseComposeMappingErrors
-
-> Task :app:kspMiniReleaseKotlin
-w: [ksp] /Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/datamodel/ChatMessage.kt:483: Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
-w: [ksp] /Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/datamodel/TweetDAO.kt:192: Schema export directory was not provided to the annotation processor so Room cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument by applying the Room Gradle plugin (id 'androidx.room') OR set exportSchema to false.
-
-> Task :app:lintVitalAnalyzeFullRelease
-> Task :app:minifyFullReleaseWithR8
-> Task :app:compileMiniReleaseKotlin
-> Task :app:lintVitalReportFullRelease
-> Task :app:lintVitalFullRelease
-
-> Task :app:compileMiniReleaseKotlin
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:539:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatMessageDao_Impl.kt:629:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:129:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/build/generated/ksp/miniRelease/kotlin/us/fireshare/tweet/datamodel/ChatSessionDao_Impl.kt:197:31 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:249:44 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:842:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:857:137 Unnecessary safe call on a non-null receiver of type 'String'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:939:59 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1005:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1096:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1281:57 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1538:49 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1928:53 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:1929:69 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2084:49 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2085:65 Unchecked cast of 'Any?' to 'List<Map<String, Any>?>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2353:41 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2828:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2839:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2962:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:2963:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3029:56 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3030:58 Unchecked cast of 'Any?' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:3617:28 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:4313:51 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/HproseInstance.kt:4323:52 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetDetailScreen.kt:252:13 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:83:26 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/tweet/TweetItemBody.kt:83:52 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:110:77 'static field HIDE_NOT_ALWAYS: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:114:81 'static field HIDE_IMPLICIT_ONLY: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:160:77 'static field HIDE_NOT_ALWAYS: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/ui/CameraXComposable.kt:164:81 'static field HIDE_IMPLICIT_ONLY: Int' is deprecated. Deprecated in Java.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/viewmodel/UserViewModel.kt:1145:57 Unchecked cast of 'Map<*, *>' to 'Map<String, Any>'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/MediaGrid.kt:901:9 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:138:41 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:138:61 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:265:45 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:265:65 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:357:45 Condition is always 'true'.
-w: file:///Users/cfa532/Documents/GitHub/Tweet/app/src/main/java/us/fireshare/tweet/widget/VideoPreview.kt:357:65 Condition is always 'true'.
-
-> Task :app:processMiniReleaseJavaRes
-> Task :app:mergeMiniReleaseJavaResource
-> Task :app:compileMiniReleaseJavaWithJavac
-> Task :app:generateMiniReleaseLintVitalReportModel
-> Task :app:hiltSyncMiniRelease
-> Task :app:hiltAggregateDepsMiniRelease
-> Task :app:hiltJavaCompileMiniRelease
-> Task :app:transformMiniReleaseClassesWithAsm
-> Task :app:mergeMiniReleaseGeneratedProguardFiles
-> Task :app:expandMiniReleaseArtProfileWildcards
-> Task :app:produceMiniReleaseComposeMapping
 > Task :app:reportMiniReleaseComposeMappingErrors
-> Task :app:convertShrunkResourcesToBinaryFullRelease
-> Task :app:optimizeFullReleaseResources
-> Task :app:mergeFullReleaseComposeMapping
-> Task :app:compileFullReleaseArtProfile
-> Task :app:packageFullRelease
-> Task :app:assembleFullRelease
-> Task :app:createFullReleaseApkListingFileRedirect
-> Task :app:uploadCrashlyticsMappingFileFullRelease
 > Task :app:lintVitalAnalyzeMiniRelease
+> Task :app:lintVitalAnalyzeFullRelease
+> Task :app:minifyMiniReleaseWithR8
 > Task :app:lintVitalReportMiniRelease
 > Task :app:lintVitalMiniRelease
-> Task :app:minifyMiniReleaseWithR8
+> Task :app:lintVitalReportFullRelease
+> Task :app:lintVitalFullRelease
+> Task :app:mergeMiniReleaseComposeMapping UP-TO-DATE
+> Task :app:compileMiniReleaseArtProfile UP-TO-DATE
 > Task :app:convertShrunkResourcesToBinaryMiniRelease
 > Task :app:optimizeMiniReleaseResources
-> Task :app:mergeMiniReleaseComposeMapping
-> Task :app:compileMiniReleaseArtProfile
 > Task :app:packageMiniRelease
 > Task :app:assembleMiniRelease
-> Task :app:createMiniReleaseApkListingFileRedirect
+> Task :app:createMiniReleaseApkListingFileRedirect UP-TO-DATE
 > Task :app:uploadCrashlyticsMappingFileMiniRelease
+> Task :app:minifyFullReleaseWithR8
+> Task :app:mergeFullReleaseComposeMapping UP-TO-DATE
+> Task :app:compileFullReleaseArtProfile UP-TO-DATE
+> Task :app:convertShrunkResourcesToBinaryFullRelease
+> Task :app:optimizeFullReleaseResources
+> Task :app:packageFullRelease
+> Task :app:assembleFullRelease
+> Task :app:createFullReleaseApkListingFileRedirect UP-TO-DATE
+> Task :app:uploadCrashlyticsMappingFileFullRelease
 
-BUILD SUCCESSFUL in 2m 7s
-121 actionable tasks: 79 executed, 42 up-to-date
+BUILD SUCCESSFUL in 2m 19s
+121 actionable tasks: 30 executed, 91 up-to-date
 Configuration cache entry stored.
