@@ -1,56 +1,35 @@
 package us.fireshare.tweet.widget
 
-import android.view.TextureView
-import android.view.ViewGroup
-import android.widget.FrameLayout
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import timber.log.Timber
@@ -60,9 +39,8 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 
 /**
- * Compose-only video preview. The video surface is hosted in a programmatically-created
- * PlayerView (wrapped in AndroidView); every other UI element — poster, play button,
- * loading spinner, error view — is a native Compose composable.
+ * Lightweight video preview composable using XML PlayerView layout.
+ * All mutable state and error handling logic is extracted into [VideoPreviewState].
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -90,10 +68,6 @@ fun VideoPreview(
     // --- State holder (all mutable state lives here) ---
     val state = rememberVideoPreviewState(videoMid, useIndependentMuteState)
 
-    // Reference to the AspectRatioFrameLayout hosting the TextureView (non-controls path).
-    // Updated from onVideoSizeChanged so the frame can resize to the actual video AR.
-    val frameLayoutRef = remember { mutableStateOf<AspectRatioFrameLayout?>(null) }
-
     // --- Coordinator ---
     val coordinator = LocalVideoCoordinator.current
     val shouldUseCoordinator = playbackTweetId != null && videoMid != null
@@ -115,7 +89,13 @@ fun VideoPreview(
     }
     var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
     val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
-    val shouldAcquirePlayer = !isInFullScreen
+    val hasWarmPlayer = videoMid?.let { VideoManager.isVideoPreloaded(it) } == true
+    val shouldAcquirePlayer = !isInFullScreen && (
+        !shouldUseCoordinator ||
+            shouldPlay ||
+            visibilityRatio >= 0.35f ||
+            (hasWarmPlayer && visibilityRatio > 0f)
+        )
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
@@ -229,13 +209,6 @@ fun VideoPreview(
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 state.isPlaying = isPlaying
             }
-            override fun onVideoSizeChanged(videoSize: VideoSize) {
-                // Push the real video AR into AspectRatioFrameLayout (TextureView path only).
-                val ratio = if (videoSize.height > 0) {
-                    videoSize.width.toFloat() / videoSize.height.toFloat()
-                } else 0f
-                frameLayoutRef.value?.setAspectRatio(ratio)
-            }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 state.onPlayerError(error, context, url, videoType, retryScope)
             }
@@ -281,6 +254,24 @@ fun VideoPreview(
         }
     }
 
+    // --- Time label auto-show/hide ---
+    LaunchedEffect(state.isPlaying, exoPlayer) {
+        if (exoPlayer != null && state.isPlaying) {
+            state.showTimeLabel = true
+            delay(5000)
+            state.showTimeLabel = false
+        }
+    }
+
+    LaunchedEffect(state.showTimeLabel) {
+        while (state.showTimeLabel) {
+            if (exoPlayer != null) {
+                state.remainingTime = exoPlayer.duration - exoPlayer.currentPosition
+            }
+            delay(1000)
+        }
+    }
+
     // --- Auto-hide controls ---
     LaunchedEffect(state.showControls) {
         if (state.showControls && enableTapToShowControls) {
@@ -289,13 +280,114 @@ fun VideoPreview(
         }
     }
 
-    val showPoster = cachedPoster != null &&
-        !state.isPlaying &&
-        !state.hasError &&
-        (state.isLoading || !shouldPlay)
-    val showPlayButton = !enableTapToShowControls && !state.isPlaying && !state.isLoading && !state.hasError
+    // --- XML PlayerView layout ---
+    AndroidView(
+        factory = { ctx ->
+            LayoutInflater.from(ctx).inflate(R.layout.video_player_view, null).apply {
+                val playerView = findViewById<PlayerView>(R.id.player_view)
+                playerView.player = exoPlayer
+                findViewById<ImageView>(R.id.mute_button).setOnClickListener {
+                    state.toggleMute()
+                }
+                findViewById<Button>(R.id.retry_button).setOnClickListener {
+                    state.manualRetry(ctx, url, videoType, retryScope)
+                }
+                if (enableTapToShowControls) {
+                    playerView.useController = true
+                    playerView.controllerAutoShow = false
+                    playerView.controllerShowTimeoutMs = 3000
+                } else {
+                    playerView.setOnClickListener { callback(index) }
+                }
+            }
+        },
+        update = { view ->
+            val playerView = view.findViewById<PlayerView>(R.id.player_view)
+            if (playerView.player !== exoPlayer) {
+                playerView.player = exoPlayer
+            }
 
-    Box(
+            val posterView = view.findViewById<ImageView>(R.id.video_poster)
+            val showPoster = cachedPoster != null &&
+                !state.isPlaying &&
+                !state.hasError &&
+                (state.isLoading || !shouldPlay)
+            if (showPoster) {
+                posterView.setImageBitmap(cachedPoster)
+                posterView.visibility = View.VISIBLE
+            } else {
+                posterView.visibility = View.GONE
+            }
+
+            val playBtn = view.findViewById<ImageView>(R.id.play_button)
+            playBtn.setOnClickListener {
+                if (exoPlayer?.playbackState == Player.STATE_ENDED) {
+                    exoPlayer.seekTo(0)
+                }
+                if (videoMid != null && playbackTweetId != null) {
+                    coordinator.requestPlay(videoMid, playbackTweetId, resolvedPlaybackVideoId)
+                } else {
+                    exoPlayer?.playWhenReady = true
+                }
+            }
+
+            val showPlayButton = !enableTapToShowControls && !state.isPlaying && !state.isLoading && !state.hasError
+            if (showPlayButton && playBtn.visibility != View.VISIBLE) {
+                playBtn.alpha = 1f
+                playBtn.visibility = View.VISIBLE
+            } else if (!showPlayButton && playBtn.visibility == View.VISIBLE) {
+                playBtn.animate().alpha(0f).setDuration(300).withEndAction {
+                    playBtn.visibility = View.GONE
+                }.start()
+            }
+            if (showPlayButton) {
+                val playBgDrawable = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(android.graphics.Color.argb(200, 33, 150, 243))
+                    setStroke(4, android.graphics.Color.WHITE)
+                }
+                playBtn.background = playBgDrawable
+                playBtn.setColorFilter(android.graphics.Color.WHITE)
+            }
+
+            view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =
+                if (state.isLoading && shouldAcquirePlayer) View.VISIBLE else View.GONE
+
+            val errorView = view.findViewById<LinearLayout>(R.id.error_view)
+            errorView.visibility = if (state.hasError) View.VISIBLE else View.GONE
+            if (state.hasError && state.retryCount > 0) {
+                val retryLabel = view.findViewById<TextView>(R.id.retry_count_label)
+                retryLabel.visibility = View.VISIBLE
+                retryLabel.text = "Attempts: ${state.retryCount}"
+                view.findViewById<Button>(R.id.retry_button).text =
+                    if (state.retryCount > 0) "Retry Again" else "Retry"
+            }
+
+            val muteBtn = view.findViewById<ImageView>(R.id.mute_button)
+            muteBtn.setImageResource(
+                if (state.isMuted) android.R.drawable.ic_lock_silent_mode
+                else android.R.drawable.ic_lock_silent_mode_off
+            )
+            muteBtn.setColorFilter(android.graphics.Color.argb(153, 255, 255, 255))
+            muteBtn.alpha = if (state.isMuted) 0.6f else 0.8f
+            muteBtn.setBackgroundResource(0)
+            muteBtn.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(android.graphics.Color.argb(51, 0, 0, 0))
+            }
+
+            val timeLabel = view.findViewById<TextView>(R.id.time_label)
+            if (state.showTimeLabel) {
+                timeLabel.visibility = View.VISIBLE
+                timeLabel.text = VideoPreviewState.formatTime(state.remainingTime)
+                timeLabel.background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 4f * view.resources.displayMetrics.density
+                    setColor(android.graphics.Color.argb(51, 0, 0, 0))
+                }
+            } else {
+                timeLabel.visibility = View.GONE
+            }
+        },
         modifier = modifier
             .clipToBounds()
             .onGloballyPositioned { layoutCoordinates ->
@@ -324,150 +416,6 @@ fun VideoPreview(
                     coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, measuredVisibilityRatio)
                 }
             }
-            // When native controls are enabled, let the PlayerView intercept taps so its
-            // controller can show/hide. Otherwise route taps to the caller's callback.
-            .then(
-                if (enableTapToShowControls) Modifier
-                else Modifier.clickable { callback(index) }
-            )
-    ) {
-        // Video surface. Two paths:
-        //  1) enableTapToShowControls = true: PlayerView (needed for native controller UI).
-        //     Used by the detail view, which shows ONE video — no risk of the SurfaceView
-        //     bleed bug where adjacent video surfaces overlap each other.
-        //  2) enableTapToShowControls = false: AspectRatioFrameLayout + TextureView. This
-        //     replicates what PlayerView does internally with surface_type="texture_view"
-        //     and avoids the SurfaceView z-order bug that lets one video draw over another
-        //     in multi-video grids.
-        if (enableTapToShowControls) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = true
-                        controllerAutoShow = false
-                        controllerShowTimeoutMs = 3000
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        setBackgroundColor(android.graphics.Color.parseColor("#FFF5F5F5"))
-                        player = exoPlayer
-                    }
-                },
-                update = { playerView ->
-                    if (playerView.player !== exoPlayer) {
-                        playerView.player = exoPlayer
-                    }
-                }
-            )
-        } else {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    AspectRatioFrameLayout(ctx).apply {
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        setBackgroundColor(android.graphics.Color.parseColor("#FFF5F5F5"))
-                        val textureView = TextureView(ctx)
-                        addView(
-                            textureView,
-                            FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        )
-                        exoPlayer?.setVideoTextureView(textureView)
-                        // Initial aspect ratio if the player already knows the video size.
-                        val vs = exoPlayer?.videoSize
-                        if (vs != null && vs.height > 0) {
-                            setAspectRatio(vs.width.toFloat() / vs.height.toFloat())
-                        }
-                        frameLayoutRef.value = this
-                    }
-                },
-                update = { frame ->
-                    val tv = frame.getChildAt(0) as? TextureView ?: return@AndroidView
-                    // Re-attach when the player generation changes.
-                    exoPlayer?.setVideoTextureView(tv)
-                    val vs = exoPlayer?.videoSize
-                    if (vs != null && vs.height > 0) {
-                        frame.setAspectRatio(vs.width.toFloat() / vs.height.toFloat())
-                    }
-                }
-            )
-        }
-
-        // Poster (shown while loading / before first play)
-        if (showPoster && cachedPoster != null) {
-            Image(
-                bitmap = cachedPoster.asImageBitmap(),
-                contentDescription = stringResource(R.string.video_preview),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        // Centered play button (hidden when native controls are enabled)
-        AnimatedVisibility(
-            visible = showPlayButton,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.Center)
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.34f))
-                    .border(1.dp, Color.White.copy(alpha = 0.45f), CircleShape)
-                    .clickable {
-                        if (exoPlayer?.playbackState == Player.STATE_ENDED) {
-                            exoPlayer.seekTo(0)
-                        }
-                        if (videoMid != null && playbackTweetId != null) {
-                            coordinator.requestPlay(videoMid, playbackTweetId, resolvedPlaybackVideoId)
-                        } else {
-                            exoPlayer?.playWhenReady = true
-                        }
-                    }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.play),
-                    tint = Color.White.copy(alpha = 0.78f),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        // Loading spinner
-        if (state.isLoading && shouldAcquirePlayer) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(32.dp)
-            )
-        }
-
-        // Error view
-        if (state.hasError) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.Center)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = stringResource(R.string.retry),
-                    tint = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clickable {
-                            if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
-                                coordinator.requestPlay(videoMid, playbackTweetId, resolvedPlaybackVideoId)
-                            }
-                            state.manualRetry(context, url, videoType, retryScope)
-                        }
-                )
-            }
-        }
-    }
+            .then(if (enableTapToShowControls) Modifier else Modifier.clickable { callback(index) })
+    )
 }

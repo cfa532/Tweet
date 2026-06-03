@@ -104,7 +104,7 @@ object VideoManager {
     private val playerAccessTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
     // ===== CONFIGURATION =====
-    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 4
+    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
     private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
     private const val MAX_CONCURRENT_PRELOADS = 2
     private const val PRELOAD_MIN_BUFFER_MS = 3_000
@@ -264,15 +264,6 @@ object VideoManager {
         if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
-            val shouldKeepAsDirectionalPreload = isCurrentDirectionalPreload(videoMid)
-            if (!shouldKeepAsDirectionalPreload) {
-                releasePlayer(videoMid)
-                cleanupInactivePlayers()
-                return
-            }
-
-            // Current directional preloads may stay warm. Stop the player to release
-            // active loading work while keeping it available for near-immediate reuse.
             videoPlayers[videoMid]?.let { player ->
                 try {
                     // Save position BEFORE stopping so scroll-back can resume from here.
@@ -287,6 +278,7 @@ object VideoManager {
                     Timber.e("VideoManager - Error stopping video: $e")
                 }
             }
+            enforcePlayerCacheLimit()
         }
     }
 
@@ -670,9 +662,15 @@ object VideoManager {
             if (isReusing) {
                 resetPlayerState(videoMid, player)
             }
-            if (savedPos != null && savedPos > 0) {
-                player.seekTo(savedPos)
-                Timber.tag("VideoManager").d("Restored position ${savedPos}ms for $videoMid")
+            if (savedPos != null && savedPos > 0 && player.playbackState == Player.STATE_READY) {
+                try {
+                    player.seekTo(savedPos)
+                    Timber.tag("VideoManager").d("Restored position ${savedPos}ms for $videoMid")
+                } catch (e: RuntimeException) {
+                    Timber.tag("VideoManager").w(
+                        "Skipped saved position restore for $videoMid at ${savedPos}ms: ${e.message}"
+                    )
+                }
             }
         }
     }
