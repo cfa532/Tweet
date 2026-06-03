@@ -99,13 +99,20 @@ object VideoManager {
 
     // ===== PRELOAD MANAGEMENT =====
     private val preloadedVideos = mutableSetOf<MimeiId>()
+    private val preloadedVideoTimestamps = ConcurrentHashMap<MimeiId, Long>()
     private val preloadQueue = mutableListOf<MimeiId>()
     private val currentDirectionalPreloadVideos = mutableSetOf<MimeiId>()
 
     // ===== CONFIGURATION =====
-    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
+    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 4
     private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
-    private const val MAX_CONCURRENT_PRELOADS = 1
+    private const val MAX_CONCURRENT_PRELOADS = 3
+    private const val PRELOADED_PLAYER_GRACE_MS = 12_000L
+    private const val PRELOAD_MIN_BUFFER_MS = 3_000
+    private const val PRELOAD_MAX_BUFFER_MS = 12_000
+    private const val PRELOAD_BUFFER_FOR_PLAYBACK_MS = 500
+    private const val PRELOAD_BUFFER_FOR_REBUFFER_MS = 1_000
+    private const val MAX_WARM_PRELOADED_PLAYERS = 4
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -347,7 +354,7 @@ object VideoManager {
                         video.baseUrl.ifBlank { fallbackBaseUrl }
                     ) ?: return@forEach
                 }
-                preloadVideo(context, video.mid, mediaUrl, video.type)
+                preloadVideo(context, video.mid, mediaUrl, video.type, warmPlayer = true)
             } else if (videoPlayers.containsKey(video.mid)) {
                 ensureVideoPoster(context, video.mid, video.url, video.type, null)
             }
@@ -458,10 +465,20 @@ object VideoManager {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
+        if (isPreloadedPlayerGraceProtected(videoMid)) return true
         if (isVideoProtectedForFullScreen(videoMid)) return true
         if (currentFullScreenVideoMid == videoMid) return true
         val player = videoPlayers[videoMid]
         return player?.isPlaying == true || player?.playWhenReady == true
+    }
+
+    private fun isPreloadedPlayerGraceProtected(videoMid: MimeiId): Boolean {
+        val preloadedAt = preloadedVideoTimestamps[videoMid] ?: return false
+        if (System.currentTimeMillis() - preloadedAt <= PRELOADED_PLAYER_GRACE_MS) {
+            return true
+        }
+        preloadedVideoTimestamps.remove(videoMid)
+        return false
     }
 
     /**
@@ -715,6 +732,7 @@ object VideoManager {
         visibleVideos.clear()
         visibleVideoCounts.clear()
         preloadedVideos.clear()
+        preloadedVideoTimestamps.clear()
         preloadGenerations.clear()
         preloadJobs.values.forEach { it.cancel() }
         preloadJobs.clear()
@@ -736,16 +754,22 @@ object VideoManager {
     // ===== PRELOADING =====
 
     /**
-     * Warm video metadata in the background.
+     * Warm video metadata or a bounded hidden player in the background.
      *
-     * This intentionally avoids creating an ExoPlayer. Preparing hidden players allocates
-     * MediaCodec instances, and after moving between feed/detail/fullscreen that can exhaust
-     * device decoders and strand visible videos on the retry button.
+     * By default this intentionally avoids creating an ExoPlayer because broad hidden-player
+     * preloads can allocate MediaCodec instances. Tweet-list directional preloading opts into
+     * [warmPlayer] for only the next small scroll-direction window, using reduced buffers.
      */
-    fun preloadVideo(context: Context, videoMid: MimeiId, videoUrl: String, videoType: MediaType? = null) {
+    fun preloadVideo(
+        context: Context,
+        videoMid: MimeiId,
+        videoUrl: String,
+        videoType: MediaType? = null,
+        warmPlayer: Boolean = false
+    ) {
         if (!us.fireshare.tweet.HproseInstance.isOnline.value) return
         // Don't preload if video is already visible
-        if (isVideoVisible(videoMid)) {
+        if (isVideoVisible(videoMid) && !warmPlayer) {
             return
         }
 
@@ -770,15 +794,43 @@ object VideoManager {
                     semaphoreAcquired = true
                     if (!isActive) return@launch
 
-                    if (videoType == MediaType.HLS_VIDEO) {
+                    val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
                         HlsUrlResolver.resolve(context, videoUrl)
+                    } else null
+
+                    if (warmPlayer && canCreateWarmPreload(videoMid)) {
+                        val player = createExoPlayer(
+                            context = context,
+                            url = videoUrl,
+                            mediaType = videoType ?: MediaType.Video,
+                            resolvedHlsUrl = resolvedHlsUrl,
+                            minBufferMs = PRELOAD_MIN_BUFFER_MS,
+                            maxBufferMs = PRELOAD_MAX_BUFFER_MS,
+                            bufferForPlaybackMs = PRELOAD_BUFFER_FOR_PLAYBACK_MS,
+                            bufferForPlaybackAfterRebufferMs = PRELOAD_BUFFER_FOR_REBUFFER_MS
+                        )
+                        if (!isActive) {
+                            try {
+                                player.clearVideoSurface()
+                                player.release()
+                            } catch (_: Exception) { }
+                            return@launch
+                        }
+                        player.playWhenReady = false
+                        videoPlayers[videoMid] = player
+                        preloadedVideos.add(videoMid)
+                        preloadedVideoTimestamps[videoMid] = System.currentTimeMillis()
+                        preloadGenerations[videoMid] = (preloadGenerations[videoMid] ?: 0) + 1
+                        ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
+                        Timber.tag("preloadVideo").d("Prepared warm player for $videoMid")
+                    } else {
+                        Timber.tag("preloadVideo").d("Warmed video metadata for $videoMid")
                     }
 
                     preloadQueue.remove(videoMid)
-                    Timber.tag("preloadVideo").d("Warmed video metadata for $videoMid")
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
-                    Timber.e("VideoManager - Failed to warm video metadata: $videoMid, error: ${e.message}")
+                    Timber.e("VideoManager - Failed to warm video preload: $videoMid, error: ${e.message}")
                 } finally {
                     if (semaphoreAcquired) preloadSemaphore.release()
                     preloadingVideos.remove(videoMid)
@@ -787,6 +839,12 @@ object VideoManager {
             }
             preloadJobs[videoMid] = job
         }
+    }
+
+    private fun canCreateWarmPreload(videoMid: MimeiId): Boolean {
+        if (videoPlayers.containsKey(videoMid)) return false
+        val warmPreloadCount = preloadedVideos.count { videoPlayers.containsKey(it) }
+        return warmPreloadCount < MAX_WARM_PRELOADED_PLAYERS
     }
 
     /**
@@ -1202,7 +1260,8 @@ object VideoManager {
             !activeVideos.containsKey(videoMid) &&
                 !visibleVideos.contains(videoMid) &&
                 !isVideoInFullScreen(videoMid) &&
-                !isVideoProtectedForFullScreen(videoMid)
+                !isVideoProtectedForFullScreen(videoMid) &&
+                !isPreloadedPlayerGraceProtected(videoMid)
         }
 
         if (inactivePlayers.isNotEmpty()) {
@@ -1272,6 +1331,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        preloadedVideoTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
         preloadQueue.remove(videoMid)
         preloadingVideos.remove(videoMid)
@@ -1312,6 +1372,7 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
+            preloadedVideoTimestamps.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
@@ -1339,6 +1400,7 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
+            preloadedVideoTimestamps.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
@@ -1457,6 +1519,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        preloadedVideoTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.remove(videoMid)
@@ -1537,6 +1600,7 @@ object VideoManager {
         visibleVideoCounts.clear()
         preloadingVideos.clear()
         preloadedVideos.clear()
+        preloadedVideoTimestamps.clear()
         preloadGenerations.clear()
         preloadQueue.clear()
         synchronized(currentDirectionalPreloadVideos) {

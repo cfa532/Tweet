@@ -115,13 +115,7 @@ fun VideoPreview(
     }
     var visibilityRatio by remember(videoMid) { mutableFloatStateOf(0f) }
     val preloadGeneration = VideoManager.preloadGenerations[videoMid] ?: 0
-    val hasWarmPlayer = videoMid?.let { VideoManager.isVideoPreloaded(it) } == true
-    val shouldAcquirePlayer = !isInFullScreen && (
-        !shouldUseCoordinator ||
-            shouldPlay ||
-            visibilityRatio >= 0.35f ||
-            (hasWarmPlayer && visibilityRatio > 0f)
-    )
+    val shouldAcquirePlayer = !isInFullScreen
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
