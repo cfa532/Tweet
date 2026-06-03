@@ -36,4 +36,5 @@ fun createAudioExoPlayer(context: Context): ExoPlayer {
     return ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
         .build()
+        .apply { volume = 1f }
 }
