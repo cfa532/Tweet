@@ -99,20 +99,22 @@ object VideoManager {
 
     // ===== PRELOAD MANAGEMENT =====
     private val preloadedVideos = mutableSetOf<MimeiId>()
-    private val preloadedVideoTimestamps = ConcurrentHashMap<MimeiId, Long>()
     private val preloadQueue = mutableListOf<MimeiId>()
     private val currentDirectionalPreloadVideos = mutableSetOf<MimeiId>()
+    private val playerAccessTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
     // ===== CONFIGURATION =====
     private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 4
     private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
-    private const val MAX_CONCURRENT_PRELOADS = 3
-    private const val PRELOADED_PLAYER_GRACE_MS = 12_000L
+    private const val MAX_CONCURRENT_PRELOADS = 2
     private const val PRELOAD_MIN_BUFFER_MS = 3_000
     private const val PRELOAD_MAX_BUFFER_MS = 12_000
     private const val PRELOAD_BUFFER_FOR_PLAYBACK_MS = 500
     private const val PRELOAD_BUFFER_FOR_REBUFFER_MS = 1_000
-    private const val MAX_WARM_PRELOADED_PLAYERS = 4
+    private const val MAX_WARM_PRELOADED_PLAYERS = 2
+    private const val MAX_FEED_PLAYER_CACHE_SIZE = 10
+    private const val MEMORY_PRESSURE_PLAYER_CACHE_SIZE = 6
+    private const val MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES = 64L * 1024L * 1024L
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -234,6 +236,7 @@ object VideoManager {
     fun markVideoVisible(videoMid: MimeiId) {
         visibleVideoCounts[videoMid] = visibleVideoCounts.getOrDefault(videoMid, 0) + 1
         visibleVideos.add(videoMid)
+        touchPlayer(videoMid)
         markVideoActive(videoMid)
     }
 
@@ -261,9 +264,15 @@ object VideoManager {
         if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
-            // Stop the player to release codec and HTTP connection resources.
-            // In Media3, stop() does NOT clear media items — the playlist is retained
-            // and the player can be re-prepared when visible again.
+            val shouldKeepAsDirectionalPreload = isCurrentDirectionalPreload(videoMid)
+            if (!shouldKeepAsDirectionalPreload) {
+                releasePlayer(videoMid)
+                cleanupInactivePlayers()
+                return
+            }
+
+            // Current directional preloads may stay warm. Stop the player to release
+            // active loading work while keeping it available for near-immediate reuse.
             videoPlayers[videoMid]?.let { player ->
                 try {
                     // Save position BEFORE stopping so scroll-back can resume from here.
@@ -340,6 +349,9 @@ object VideoManager {
         cancelStaleVideoPreloads()
 
         if (!startPreloading || direction == PreloadDirection.NONE) return
+
+        cleanupInactivePlayers()
+        enforcePlayerCacheLimit()
 
         preloadTargets.forEach { video ->
             if (!isVideoPreloaded(video.mid) &&
@@ -465,20 +477,66 @@ object VideoManager {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
-        if (isPreloadedPlayerGraceProtected(videoMid)) return true
         if (isVideoProtectedForFullScreen(videoMid)) return true
         if (currentFullScreenVideoMid == videoMid) return true
         val player = videoPlayers[videoMid]
         return player?.isPlaying == true || player?.playWhenReady == true
     }
 
-    private fun isPreloadedPlayerGraceProtected(videoMid: MimeiId): Boolean {
-        val preloadedAt = preloadedVideoTimestamps[videoMid] ?: return false
-        if (System.currentTimeMillis() - preloadedAt <= PRELOADED_PLAYER_GRACE_MS) {
-            return true
+    private fun isCurrentDirectionalPreload(videoMid: MimeiId): Boolean {
+        return synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.contains(videoMid)
         }
-        preloadedVideoTimestamps.remove(videoMid)
-        return false
+    }
+
+    private fun touchPlayer(videoMid: MimeiId) {
+        playerAccessTimestamps[videoMid] = System.currentTimeMillis()
+    }
+
+    private fun isPlayerReleaseProtected(videoMid: MimeiId, protectDirectionalPreloads: Boolean = true): Boolean {
+        if (activeVideos.containsKey(videoMid)) return true
+        if (visibleVideos.contains(videoMid)) return true
+        if (protectDirectionalPreloads && isCurrentDirectionalPreload(videoMid)) return true
+        if (isVideoInFullScreen(videoMid)) return true
+        if (isVideoProtectedForFullScreen(videoMid)) return true
+        val player = videoPlayers[videoMid]
+        return player?.isPlaying == true || player?.playWhenReady == true
+    }
+
+    private fun enforcePlayerCacheLimit(reserveSlots: Int = 0) {
+        val targetSize = if (isHeapTightForWarmPreload()) {
+            MEMORY_PRESSURE_PLAYER_CACHE_SIZE
+        } else {
+            MAX_FEED_PLAYER_CACHE_SIZE
+        }
+        val allowedSize = (targetSize - reserveSlots).coerceAtLeast(0)
+        if (videoPlayers.size <= allowedSize) return
+
+        val releaseCount = videoPlayers.size - allowedSize
+        val releaseCandidates = videoPlayers.keys
+            .filterNot { isPlayerReleaseProtected(it) }
+            .sortedBy { playerAccessTimestamps[it] ?: 0L }
+            .take(releaseCount)
+
+        if (releaseCandidates.isNotEmpty()) {
+            Timber.tag("VideoManager").d(
+                "🧹 CACHE LIMIT: Releasing ${releaseCandidates.size} players, size=${videoPlayers.size}, target=$allowedSize"
+            )
+            releaseCandidates.forEach { releasePlayer(it) }
+        }
+    }
+
+    private fun releasePlayersForMemoryPressure() {
+        val releaseCandidates = videoPlayers.keys
+            .filterNot { isPlayerReleaseProtected(it, protectDirectionalPreloads = false) }
+            .sortedBy { playerAccessTimestamps[it] ?: 0L }
+
+        if (releaseCandidates.isNotEmpty()) {
+            Timber.tag("VideoManager").w(
+                "🧹 MEMORY PRESSURE: Releasing ${releaseCandidates.size} invisible players"
+            )
+            releaseCandidates.forEach { releasePlayer(it) }
+        }
     }
 
     /**
@@ -571,9 +629,23 @@ object VideoManager {
 
         return videoPlayers.getOrPut(videoMid) {
             try {
+                if (isHeapTightForWarmPreload()) {
+                    releasePlayersForMemoryPressure()
+                }
+                enforcePlayerCacheLimit(reserveSlots = 1)
                 Timber.tag("VideoPlaybackDebug").d(
                     "Creating player videoMid=$videoMid type=$videoType resolvedHls=${resolvedHlsUrl != null}"
                 )
+                val player = createExoPlayer(
+                    context,
+                    videoUrl,
+                    videoType ?: MediaType.Video,
+                    resolvedHlsUrl = resolvedHlsUrl
+                )
+                player
+            } catch (oom: OutOfMemoryError) {
+                Timber.tag("VideoManager").e("Player creation OOM for $videoMid; releasing unprotected feed players and retrying once")
+                releasePlayersForMemoryPressure()
                 val player = createExoPlayer(
                     context,
                     videoUrl,
@@ -587,6 +659,7 @@ object VideoManager {
                 throw e
             }
         }.also { player ->
+            touchPlayer(videoMid)
             // Pop saved position before resetPlayerState can overwrite with seekTo(0)
             val savedPos = savedPositions.remove(videoMid)
             Timber.tag("VideoPlaybackDebug").d(
@@ -665,6 +738,7 @@ object VideoManager {
         if (videoPlayers.size > 10 && videoPlayers.size % 5 == 0) {
             cleanupInactivePlayers()
         }
+        enforcePlayerCacheLimit()
     }
 
     /**
@@ -732,7 +806,7 @@ object VideoManager {
         visibleVideos.clear()
         visibleVideoCounts.clear()
         preloadedVideos.clear()
-        preloadedVideoTimestamps.clear()
+        playerAccessTimestamps.clear()
         preloadGenerations.clear()
         preloadJobs.values.forEach { it.cancel() }
         preloadJobs.clear()
@@ -818,8 +892,8 @@ object VideoManager {
                         }
                         player.playWhenReady = false
                         videoPlayers[videoMid] = player
+                        touchPlayer(videoMid)
                         preloadedVideos.add(videoMid)
-                        preloadedVideoTimestamps[videoMid] = System.currentTimeMillis()
                         preloadGenerations[videoMid] = (preloadGenerations[videoMid] ?: 0) + 1
                         ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
                         Timber.tag("preloadVideo").d("Prepared warm player for $videoMid")
@@ -828,6 +902,10 @@ object VideoManager {
                     }
 
                     preloadQueue.remove(videoMid)
+                } catch (oom: OutOfMemoryError) {
+                    preloadQueue.remove(videoMid)
+                    Timber.tag("VideoManager").e("Warm video preload ran out of memory for $videoMid; releasing unprotected feed players")
+                    releasePlayersForMemoryPressure()
                 } catch (e: Exception) {
                     preloadQueue.remove(videoMid)
                     Timber.e("VideoManager - Failed to warm video preload: $videoMid, error: ${e.message}")
@@ -843,8 +921,20 @@ object VideoManager {
 
     private fun canCreateWarmPreload(videoMid: MimeiId): Boolean {
         if (videoPlayers.containsKey(videoMid)) return false
+        if (isHeapTightForWarmPreload()) {
+            releasePlayersForMemoryPressure()
+            return false
+        }
+        enforcePlayerCacheLimit(reserveSlots = 1)
         val warmPreloadCount = preloadedVideos.count { videoPlayers.containsKey(it) }
         return warmPreloadCount < MAX_WARM_PRELOADED_PLAYERS
+    }
+
+    private fun isHeapTightForWarmPreload(): Boolean {
+        val runtime = Runtime.getRuntime()
+        val usedBytes = runtime.totalMemory() - runtime.freeMemory()
+        val remainingBytes = runtime.maxMemory() - usedBytes
+        return remainingBytes < MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES
     }
 
     /**
@@ -870,7 +960,7 @@ object VideoManager {
         if (videoUrl.isNullOrBlank()) return
         if (posterBitmaps.containsKey(videoMid)) return
         if (posterJobs[videoMid]?.isActive == true) return
-        if (isRemoteProgressiveVideo(videoUrl, videoType, resolvedHlsUrl)) {
+        if (isRemotePosterGenerationUnsupported(videoUrl, videoType, resolvedHlsUrl)) {
             return
         }
 
@@ -902,7 +992,7 @@ object VideoManager {
                 else -> videoUrl
             }
 
-            if (isRemoteProgressiveVideo(sourceUrl, videoType, resolvedHlsUrl)) {
+            if (isRemotePosterGenerationUnsupported(sourceUrl, videoType, resolvedHlsUrl)) {
                 return null
             }
 
@@ -1261,7 +1351,7 @@ object VideoManager {
                 !visibleVideos.contains(videoMid) &&
                 !isVideoInFullScreen(videoMid) &&
                 !isVideoProtectedForFullScreen(videoMid) &&
-                !isPreloadedPlayerGraceProtected(videoMid)
+                !isCurrentDirectionalPreload(videoMid)
         }
 
         if (inactivePlayers.isNotEmpty()) {
@@ -1331,7 +1421,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
-        preloadedVideoTimestamps.remove(videoMid)
+        playerAccessTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
         preloadQueue.remove(videoMid)
         preloadingVideos.remove(videoMid)
@@ -1372,7 +1462,7 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
-            preloadedVideoTimestamps.remove(videoMid)
+            playerAccessTimestamps.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
@@ -1387,6 +1477,7 @@ object VideoManager {
             // Create a completely new player with software decoder to avoid MediaCodec failures
             val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
             videoPlayers[videoMid] = newPlayer
+            touchPlayer(videoMid)
             // Notify Compose that VideoPreview should re-read the player for this video.
             playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
 
@@ -1400,7 +1491,7 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
-            preloadedVideoTimestamps.remove(videoMid)
+            playerAccessTimestamps.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
@@ -1519,7 +1610,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
-        preloadedVideoTimestamps.remove(videoMid)
+        playerAccessTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.remove(videoMid)
@@ -1600,7 +1691,7 @@ object VideoManager {
         visibleVideoCounts.clear()
         preloadingVideos.clear()
         preloadedVideos.clear()
-        preloadedVideoTimestamps.clear()
+        playerAccessTimestamps.clear()
         preloadGenerations.clear()
         preloadQueue.clear()
         synchronized(currentDirectionalPreloadVideos) {
@@ -1832,14 +1923,15 @@ object VideoManager {
         }
     }
 
-    private fun isRemoteProgressiveVideo(
+    private fun isRemotePosterGenerationUnsupported(
         videoUrl: String,
         videoType: MediaType?,
         resolvedHlsUrl: String?
     ): Boolean {
         val isRemote = videoUrl.startsWith("http://") || videoUrl.startsWith("https://")
-        val isProgressive = resolvedHlsUrl.isNullOrBlank() && videoType != MediaType.HLS_VIDEO
-        return isRemote && isProgressive
+        val usesRemoteHls = videoType == MediaType.HLS_VIDEO || !resolvedHlsUrl.isNullOrBlank()
+        val usesRemoteProgressive = resolvedHlsUrl.isNullOrBlank() && videoType != MediaType.HLS_VIDEO
+        return isRemote && (usesRemoteHls || usesRemoteProgressive)
     }
 
     private fun playerStateName(state: Int): String = when (state) {
