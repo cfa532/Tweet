@@ -327,7 +327,7 @@ fun VideoPreview(
                 }
             }
 
-            val showPlayButton = !enableTapToShowControls && !state.isPlaying && !state.isLoading && !state.hasError
+            val showPlayButton = !enableTapToShowControls && !shouldPlay && !state.isPlaying && !state.hasError
             if (showPlayButton && playBtn.visibility != View.VISIBLE) {
                 playBtn.alpha = 1f
                 playBtn.visibility = View.VISIBLE
@@ -352,7 +352,7 @@ fun VideoPreview(
             }
 
             view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =
-                if (state.isLoading && shouldAcquirePlayer) View.VISIBLE else View.GONE
+                if (state.isLoading && shouldAcquirePlayer && shouldPlay) View.VISIBLE else View.GONE
 
             val errorView = view.findViewById<LinearLayout>(R.id.error_view)
             errorView.visibility = if (state.hasError) View.VISIBLE else View.GONE
