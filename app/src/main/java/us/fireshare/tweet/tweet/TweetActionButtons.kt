@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -49,6 +47,8 @@ import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.TweetViewModel
+
+private val TweetActionIconSize = 24.dp
 
 suspend fun guestWarning(context: Context, navController: NavController? = null, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -91,9 +91,9 @@ fun CommentButton(
     }) {
         Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
-                painter = painterResource(id = R.drawable.bubble_right),
+                painter = painterResource(id = R.drawable.ic_ms_comment),
                 contentDescription = stringResource(R.string.comments),
-                modifier = Modifier.size(ButtonDefaults.IconSize),
+                modifier = Modifier.size(TweetActionIconSize),
                 tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
@@ -118,6 +118,11 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val context = LocalContext.current
     val errorMessage = stringResource(R.string.tweet_failed)
     val guestReminderText = stringResource(R.string.guest_reminder)
+    val retweetContentColor = if (hasRetweeted) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        color ?: MaterialTheme.colorScheme.secondary
+    }
 
     IconButton(onClick = {
         if (appUser.isGuest()) {
@@ -142,16 +147,16 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     }) {
         Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
-                painter = painterResource(id = if (hasRetweeted) R.drawable.ic_squarepath_prim else R.drawable.ic_squarepath),
+                painter = painterResource(id = R.drawable.ic_ms_retweet),
                 contentDescription = stringResource(R.string.forward),
-                modifier = Modifier.size(ButtonDefaults.IconSize * 1.15f),
-                tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                modifier = Modifier.size(TweetActionIconSize),
+                tint = retweetContentColor
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = if (count > 0) CountFormatUtils.formatCount(count) else "",
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                color = color ?: if (hasRetweeted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                color = retweetContentColor,
                 modifier = Modifier.width(28.dp)
             )
         }
@@ -183,9 +188,9 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     } ) {
         Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
-                painter = painterResource(id = if (isFavorite) R.drawable.ic_heart_fill else R.drawable.ic_heart),
+                painter = painterResource(id = R.drawable.ic_ms_heart),
                 contentDescription = stringResource(R.string.like),
-                modifier = Modifier.size(ButtonDefaults.IconSize),
+                modifier = Modifier.size(TweetActionIconSize),
                 tint = if (isFavorite) Color(0xFFBB5555) else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
@@ -226,9 +231,9 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     {
         Row(horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
             Icon(
-                painter = painterResource(id = if (hasBookmarked) R.drawable.ic_bookmark_fill else R.drawable.ic_bookmark),
+                painter = painterResource(id = R.drawable.ic_ms_bookmark),
                 contentDescription = stringResource(R.string.like),
-                modifier = Modifier.size(ButtonDefaults.IconSize)
+                modifier = Modifier.size(TweetActionIconSize)
                     .padding(bottom = 1.dp),
                 tint = if (hasBookmarked) color ?: Color(0xFF4477BB) else color ?: MaterialTheme.colorScheme.secondary
             )
@@ -271,17 +276,17 @@ fun ShareButton(
         },
         enabled = !isSharing
     ) {
-        Box(modifier = Modifier.size(ButtonDefaults.IconSize)) {
+        Box(modifier = Modifier.size(TweetActionIconSize)) {
             Row(horizontalArrangement = Arrangement.Center) {
                 Icon(
-                    imageVector = Icons.Default.Share,
+                    painter = painterResource(id = R.drawable.ic_ms_share),
                     contentDescription = stringResource(R.string.share),
-                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                    modifier = Modifier.size(TweetActionIconSize)
                         .padding(1.dp),
                     tint = if (isSharing) {
-                        (color ?: MaterialTheme.colorScheme.outline).copy(alpha = 0.5f)
+                        (color ?: MaterialTheme.colorScheme.secondary).copy(alpha = 0.5f)
                     } else {
-                        color ?: MaterialTheme.colorScheme.outline
+                        color ?: MaterialTheme.colorScheme.secondary
                     }
                 )
             }
@@ -289,7 +294,7 @@ fun ShareButton(
             if (isSharing) {
                 CircularProgressIndicator(
                     modifier = Modifier
-                        .size(ButtonDefaults.IconSize * 2)
+                        .size(TweetActionIconSize * 2)
                         .padding(0.dp),
                     strokeWidth = 3.dp
                 )
@@ -297,4 +302,3 @@ fun ShareButton(
         }
     }
 }
-

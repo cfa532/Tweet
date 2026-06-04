@@ -41,3 +41,5 @@
 #     public static *** w(...);
 #     public static *** e(...);
 # }
+
+-dontwarn com.arthenica.smartexception.java.Exceptions

@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 126    // Full release version code. Must be increased each time,
+        versionCode = 127    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
         versionName = "61"  // compared with App Mimei version to check for upgrade.
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 126  // Play version code increased for release
+            versionCode = 127  // Play version code increased for release
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
@@ -203,7 +203,6 @@ dependencies {
     // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
     // Included in full and play versions, excluded in mini version
     "fullImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
-    "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
     "playImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
     "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
@@ -221,7 +220,6 @@ dependencies {
     implementation(libs.androidx.material)
     implementation(libs.firebase.crashlytics)
     implementation(libs.ui.graphics)
-    implementation(libs.androidx.exifinterface)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)
@@ -238,14 +236,12 @@ dependencies {
 
     implementation(libs.assisted.inject.annotations.dagger2)
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.espresso.core)
     implementation(libs.androidx.constraintlayout.compose)
     ksp(libs.assisted.inject.processor.dagger2)
     implementation(libs.gson)
     implementation(libs.hprose.java)
     api(libs.androidx.navigation.fragment.ktx)
     ksp(libs.hilt.compiler)
-    implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     // Coil removed - using custom ImageCacheManager instead
     implementation(libs.androidx.media3.media3.exoplayer)
