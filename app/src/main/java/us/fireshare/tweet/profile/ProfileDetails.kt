@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,6 +23,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,7 +131,7 @@ fun ProfileDetail(
                 )
                 if (isCurrentUserProfile) {
                     ProfileIconStatItem(
-                        icon = Icons.Default.BookmarkBorder,
+                        iconRes = R.drawable.ic_ms_bookmark,
                         contentDescription = stringResource(R.string.user_bookmarks),
                         count = bookmarksCount.toString(),
                         modifier = Modifier
@@ -143,7 +141,7 @@ fun ProfileDetail(
                             }
                     )
                     ProfileIconStatItem(
-                        icon = Icons.Default.FavoriteBorder,
+                        iconRes = R.drawable.ic_ms_heart,
                         contentDescription = stringResource(R.string.your_favorites),
                         count = favoritesCount.toString(),
                         modifier = Modifier
@@ -190,7 +188,7 @@ private fun ProfileTextStatItem(
 
 @Composable
 private fun ProfileIconStatItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     contentDescription: String,
     count: String,
     modifier: Modifier = Modifier
@@ -201,7 +199,7 @@ private fun ProfileIconStatItem(
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Icon(
-            imageVector = icon,
+            painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
             tint = Color.Gray,
             modifier = Modifier.size(20.dp)

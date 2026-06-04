@@ -379,8 +379,9 @@ fun VideoPreview(
                 posterView.visibility = View.GONE
             }
 
+            val playTarget = view.findViewById<View>(R.id.play_button_touch_target)
             val playBtn = view.findViewById<ImageView>(R.id.play_button)
-            playBtn.setOnClickListener {
+            playTarget.setOnClickListener {
                 if (exoPlayer?.playbackState == Player.STATE_ENDED) {
                     exoPlayer.seekTo(0)
                 }
@@ -392,12 +393,12 @@ fun VideoPreview(
             }
 
             val showPlayButton = !enableTapToShowControls && !shouldPlay && !state.isPlaying && !state.hasError
-            if (showPlayButton && playBtn.visibility != View.VISIBLE) {
-                playBtn.alpha = 1f
-                playBtn.visibility = View.VISIBLE
-            } else if (!showPlayButton && playBtn.visibility == View.VISIBLE) {
-                playBtn.animate().alpha(0f).setDuration(300).withEndAction {
-                    playBtn.visibility = View.GONE
+            if (showPlayButton && playTarget.visibility != View.VISIBLE) {
+                playTarget.alpha = 1f
+                playTarget.visibility = View.VISIBLE
+            } else if (!showPlayButton && playTarget.visibility == View.VISIBLE) {
+                playTarget.animate().alpha(0f).setDuration(300).withEndAction {
+                    playTarget.visibility = View.GONE
                 }.start()
             }
             if (showPlayButton) {

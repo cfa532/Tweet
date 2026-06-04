@@ -23,22 +23,31 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
-    <ImageView
-        android:id="@+id/play_button"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:minWidth="44dp"
-        android:minHeight="44dp"
+    <FrameLayout
+        android:id="@+id/play_button_touch_target"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:layout_gravity="center"
-        android:src="@android:drawable/ic_media_play"
-        android:scaleType="centerInside"
-        android:paddingStart="12dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="11dp"
-        android:paddingBottom="11dp"
-        android:background="@android:color/transparent"
-        android:visibility="gone"
-        android:contentDescription="@string/play" />
+        android:clickable="true"
+        android:contentDescription="@string/play"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/play_button"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center"
+            android:src="@android:drawable/ic_media_play"
+            android:scaleType="centerInside"
+            android:paddingStart="12dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="11dp"
+            android:paddingBottom="11dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/play" />
+
+    </FrameLayout>
 
     <ProgressBar
         android:id="@+id/loading_spinner"
