@@ -213,7 +213,6 @@ class VideoPlaybackCoordinator(
             }
             if (added > 0) {
                 sortAllVideosByFeedOrder()
-                Timber.d("VideoPlaybackCoordinator: Added $added $source video(s) for tweet $parentTweetId (total: ${allVideos.size})")
                 // If newly-added retweet/quote videos already have viewport data, reconcile
                 // immediately. This mirrors iOS' atomic viewport snapshot and avoids waiting
                 // for a later scroll/layout pass before a visible video can become primary.
@@ -284,9 +283,6 @@ class VideoPlaybackCoordinator(
                         }
                     }
 
-                    if (originalTweet == null) {
-                        Timber.d("VideoPlaybackCoordinator: Original tweet ${tweet.originalTweetId} not cached yet for retweet ${tweet.mid}, will be added later when fetched by TweetItem")
-                    }
                 }
             } else {
                 tweet.attachments?.forEachIndexed { index, attachment ->
@@ -344,8 +340,6 @@ class VideoPlaybackCoordinator(
             val videoListForFullScreen = videos.map { Pair(it.videoMid, it.mediaType) }
             FullScreenPlayerManager.updateVideoList(videoListForFullScreen, tweets)
         }
-
-        Timber.d("VideoPlaybackCoordinator: Built video list with ${videos.size} videos")
 
         // Protect auto-play from premature stopAllVideos caused by layout instability
         // during screen transitions (visibility can temporarily drop below threshold).
@@ -626,17 +620,14 @@ class VideoPlaybackCoordinator(
         val now = System.currentTimeMillis()
         val timeSinceUserRequest = now - userRequestedPlayAt
         if (timeSinceUserRequest < 500L) {
-            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — user requested play ${timeSinceUserRequest}ms ago")
             return
         }
         val timeSinceListBuilt = now - videoListBuiltAt
         if (timeSinceListBuilt < 500L) {
-            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — video list built ${timeSinceListBuilt}ms ago")
             return
         }
         val timeSinceHostResumed = now - hostResumedAt
         if (timeSinceHostResumed < 500L) {
-            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — host resumed ${timeSinceHostResumed}ms ago")
             return
         }
         stopAllVideos()
@@ -710,7 +701,6 @@ class VideoPlaybackCoordinator(
     private fun startPrimaryVideoPlayback() {
         if (isPaused) return
         if (visibleVideos.isEmpty()) {
-            Timber.w("VideoPlaybackCoordinator: No visible videos to play")
             return
         }
 
@@ -722,7 +712,6 @@ class VideoPlaybackCoordinator(
             if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
                 val previousPrimary = videoMetaMap[previousPrimaryId]
                 if (previousPrimary != null) {
-                    Timber.d("VideoPlaybackCoordinator: Stopping previous primary video: ${previousPrimary.videoMid}")
                     _playbackCommands.emit(
                         VideoPlaybackCommand.ShouldStopVideo(previousPrimary.identifier, previousPrimary.videoMid)
                     )
@@ -850,7 +839,6 @@ class VideoPlaybackCoordinator(
         scope.launch {
             _playbackCommands.emit(VideoPlaybackCommand.ShouldStopAllVideos)
         }
-        Timber.d("VideoPlaybackCoordinator: Stopped all videos")
     }
 
     fun onHostPaused() {

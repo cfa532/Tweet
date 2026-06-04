@@ -208,25 +208,15 @@ fun createExoPlayer(
                                     HproseInstance.recordReliabilitySuccessMedia(reliabilityMediaId)
                                 }
                             }
-                            Timber.tag("createExoPlayer").d("Player ready for URL: $url (type: $mediaType, software: $forceSoftwareDecoder)")
                         }
-                        Player.STATE_BUFFERING -> {
-                            Timber.tag("createExoPlayer").d("Player buffering for URL: $url")
-                        }
-                        Player.STATE_IDLE -> {
-                            Timber.tag("createExoPlayer").d("Player idle for URL: $url")
-                        }
+                        Player.STATE_BUFFERING -> Unit
+                        Player.STATE_IDLE -> Unit
                         Player.STATE_ENDED -> {
                             // Auto-rewind when video ends - applies to all videos (fullscreen, MediaItemView, DetailView, etc.)
-                            Timber.tag("createExoPlayer").d("Player ended for URL: $url, rewinding to beginning")
                             this@apply.seekTo(0)
                             this@apply.playWhenReady = false
                         }
                     }
-                }
-
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    Timber.tag("createExoPlayer").d("Player playing state changed: $isPlaying for URL: $url")
                 }
 
                 override fun onPositionDiscontinuity(
@@ -243,8 +233,6 @@ fun createExoPlayer(
                         "isPlaying=$isPlaying buffered=${bufferedPosition}ms duration=${duration}ms"
                     if (isLargeRollback) {
                         tag.w(message)
-                    } else {
-                        tag.d(message)
                     }
                 }
             })
@@ -258,17 +246,14 @@ fun createExoPlayer(
                 val baseUrl = if (url.endsWith("/")) url else "$url/"
                 "${baseUrl}master.m3u8"
             }
-            Timber.tag("createExoPlayer").d("Creating HLS media source: $hlsUrl (pre-resolved=${resolvedHlsUrl != null})")
             mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(hlsUrl))
         }
         MediaType.Video -> {
             // For progressive videos: play URL directly
-            Timber.tag("createExoPlayer").d("Creating progressive media source with URL: $url")
             mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
         }
         else -> {
             // Default to progressive video for unknown types
-            Timber.tag("createExoPlayer").d("Unknown media type '$mediaType', defaulting to progressive video: $url")
             mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(url))
         }
     }

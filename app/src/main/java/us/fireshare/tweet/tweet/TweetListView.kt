@@ -1012,11 +1012,15 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
                     mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
                 } == true
                 
-                // Fetch original tweet if this is a pure retweet without videos
+                // Read original tweet if this is a pure retweet without videos. The feed
+                // only needs attachment metadata for indexing; avoid refreshTweet here
+                // because it triggers the heavier cross-node sync path used by detail view.
                 val tweetToCheck = if (!hasVideo && tweet.originalTweetId != null && tweet.originalAuthorId != null && 
                     tweet.content.isNullOrEmpty() && tweet.attachments.isNullOrEmpty()) {
                     try {
-                        HproseInstance.refreshTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!) ?: tweet
+                        TweetCacheManager.getCachedTweet(tweet.originalTweetId!!)
+                            ?: HproseInstance.fetchTweet(tweet.originalTweetId!!, tweet.originalAuthorId!!)
+                            ?: tweet
                     } catch (e: Exception) {
                         Timber.tag("TweetListView").e(e, "Failed to fetch retweet")
                         tweet
@@ -1083,13 +1087,7 @@ private suspend fun createVideoIndexedListAsync(tweets: List<Tweet>): List<Pair<
                             feedIndex = feedIndex,  // Use quoting tweet's position
                             tweetTimestamp = originalTweet.timestamp  // Use quoting tweet's timestamp
                         ))
-                        Timber.tag("TweetListView").d("Added embedded tweet video: mid=${attachment.mid}, quotingTweetId=${originalTweet.mid}, embeddedTweetId=${originalTweet.originalTweetId}, feedIndex=$feedIndex")
                     }
-                }
-                
-                // If embedded tweet is not cached, log that we'll add it later when it's fetched
-                if (embeddedTweet == null) {
-                    Timber.tag("TweetListView").d("Embedded tweet ${originalTweet.originalTweetId} not cached yet for quoting tweet ${originalTweet.mid}, will be added later when fetched by TweetItem")
                 }
             }
         }

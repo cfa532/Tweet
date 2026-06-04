@@ -676,9 +676,6 @@ object VideoManager {
                     releasePlayersForMemoryPressure()
                 }
                 enforcePlayerCacheLimit(reserveSlots = 1)
-                Timber.tag("VideoPlaybackDebug").d(
-                    "Creating player videoMid=$videoMid type=$videoType resolvedHls=${resolvedHlsUrl != null}"
-                )
                 val player = createExoPlayer(
                     context,
                     videoUrl,
@@ -705,11 +702,6 @@ object VideoManager {
             touchPlayer(videoMid)
             // Pop saved position before resetPlayerState can overwrite with seekTo(0)
             val savedPos = savedPositions.remove(videoMid)
-            Timber.tag("VideoPlaybackDebug").d(
-                "Acquire player videoMid=$videoMid reused=$isReusing state=${playerStateName(player.playbackState)} " +
-                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms duration=${player.duration}ms " +
-                    "playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} savedPos=${savedPos ?: -1L}"
-            )
             if (isReusing) {
                 resetPlayerState(videoMid, player)
             }
@@ -754,10 +746,6 @@ object VideoManager {
      */
     private fun resetPlayerState(videoMid: MimeiId, player: ExoPlayer) {
         try {
-            Timber.tag("VideoPlaybackDebug").d(
-                "Reset player videoMid=$videoMid before state=${playerStateName(player.playbackState)} " +
-                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms playWhenReady=${player.playWhenReady}"
-            )
             when (player.playbackState) {
                 Player.STATE_READY, Player.STATE_BUFFERING -> {
                     // Don't stop — just pause to preserve already-buffered data
@@ -774,10 +762,6 @@ object VideoManager {
                     player.seekTo(0)
                 }
             }
-            Timber.tag("VideoPlaybackDebug").d(
-                "Reset player videoMid=$videoMid after state=${playerStateName(player.playbackState)} " +
-                    "pos=${player.currentPosition}ms buffered=${player.bufferedPosition}ms playWhenReady=${player.playWhenReady}"
-            )
         } catch (e: Exception) {
             Timber.e("VideoManager - Error resetting player state: $e")
         }
@@ -972,9 +956,6 @@ object VideoManager {
                         preloadedVideos.add(videoMid)
                         preloadGenerations[videoMid] = (preloadGenerations[videoMid] ?: 0) + 1
                         ensureVideoPoster(context, videoMid, videoUrl, videoType, resolvedHlsUrl)
-                        Timber.tag("preloadVideo").d("Prepared warm player for $videoMid")
-                    } else {
-                        Timber.tag("preloadVideo").d("Warmed video metadata for $videoMid")
                     }
 
                     preloadQueue.remove(videoMid)
@@ -1245,17 +1226,14 @@ object VideoManager {
                     // For HLS videos: start with master.m3u8
                     val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
                     val masterUrl = "${baseUrl}master.m3u8"
-                    Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
                 }
                 MediaType.Video -> {
                     // For progressive videos: play URL directly
-                    Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
                 }
                 else -> {
                     // Default to progressive video for unknown types
-                    Timber.d("VideoManager - Unknown media type '$videoType', defaulting to progressive video: $videoUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
                 }
             }
@@ -1441,17 +1419,14 @@ object VideoManager {
                     // For HLS videos: try master.m3u8 first
                     val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
                     val masterUrl = "${baseUrl}master.m3u8"
-                    Timber.d("VideoManager - Creating HLS media source with master URL: $masterUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
                 }
                 MediaType.Video -> {
                     // For progressive videos: play the URL directly
-                    Timber.d("VideoManager - Creating progressive media source with URL: $videoUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
                 }
                 else -> {
                     // Default to progressive video for unknown types
-                    Timber.d("VideoManager - Unknown media type '$videoType', defaulting to progressive video: $videoUrl")
                     mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(videoUrl))
                 }
             }
@@ -1542,7 +1517,6 @@ object VideoManager {
                 // Release the player completely
                 player.release()
 
-                Timber.tag("VideoManager").d("✅ PLAYER RELEASED: videoMid: $videoMid")
             } catch (e: Exception) {
                 Timber.tag("VideoManager").w("⚠️ Error releasing player for $videoMid: ${e.message}")
             }

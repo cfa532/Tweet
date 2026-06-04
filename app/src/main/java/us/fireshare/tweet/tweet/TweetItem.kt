@@ -333,15 +333,11 @@ private fun RetweetContent(
                     try {
                         val originalAuthorId = tweet.originalAuthorId ?: ""
 
-                        Timber.tag("TweetItem")
-                            .d("Fetching original tweet: $originalTweetId from author: $originalAuthorId")
                         originalTweet = HproseInstance.fetchTweet(
                             originalTweetId,
                             originalAuthorId
                         )
                         if (originalTweet != null) {
-                            Timber.tag("TweetItem")
-                                .d("Original tweet loaded successfully: ${originalTweet!!.mid}")
                             // Notify VideoPlaybackCoordinator about the loaded original tweet for retweet
                             coordinator.addRetweetVideos(tweet.mid, originalTweet!!)
                         } else {
