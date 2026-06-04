@@ -619,7 +619,6 @@ private fun RetweetWithContent(
                     RetweetButton(viewModel)
                     LikeButton(viewModel)
                     BookmarkButton(viewModel)
-                    Spacer(modifier = Modifier.width(40.dp))
                     ShareButton(viewModel)
                 }
             }

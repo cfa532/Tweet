@@ -28,6 +28,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,7 +49,8 @@ import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
 private val TweetActionIconSize = 21.dp
-private val TweetActionButtonWidth = 64.dp
+private val TweetActionButtonWidth = 54.dp
+private val TweetActionShareButtonWidth = 48.dp
 
 suspend fun guestWarning(context: Context, navController: NavController? = null, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -67,7 +69,7 @@ fun CommentButton(
     val count by remember {
         derivedStateOf { tweet.commentCount }
     }
-    val countText = if (count > 0) CountFormatUtils.formatCount(count) else null
+    val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel: SharedViewModel = hiltViewModel()
@@ -93,22 +95,26 @@ fun CommentButton(
             }
         }
     ) {
-        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.width(TweetActionButtonWidth),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_ms_comment),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(TweetActionIconSize),
                 tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
-            countText?.let {
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                    color = color ?: MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.width(28.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
+                color = color ?: MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -119,7 +125,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     val count by remember {
         derivedStateOf { tweet.retweetCount }
     }
-    val countText = if (count > 0) CountFormatUtils.formatCount(count) else null
+    val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
     val hasRetweeted = tweet.favorites?.get(UserActions.RETWEET) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -155,22 +161,26 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             }
         }
     ) {
-        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.width(TweetActionButtonWidth),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_ms_retweet),
                 contentDescription = stringResource(R.string.forward),
                 modifier = Modifier.size(TweetActionIconSize),
                 tint = retweetContentColor
             )
-            countText?.let {
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                    color = retweetContentColor,
-                    modifier = Modifier.width(28.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
+                color = retweetContentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -179,7 +189,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
 fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.favoriteCount
-    val countText = if (count > 0) CountFormatUtils.formatCount(count) else null
+    val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
     val isFavorite = tweet.favorites?.get(UserActions.FAVORITE) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -202,7 +212,11 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 }
         }
     ) {
-        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.width(TweetActionButtonWidth),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 painter = painterResource(
                     id = if (isFavorite) R.drawable.ic_ms_heart_filled else R.drawable.ic_ms_heart
@@ -211,16 +225,16 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 modifier = Modifier.size(TweetActionIconSize),
                 tint = if (isFavorite) Color(0xFFBB5555) else color ?: MaterialTheme.colorScheme.secondary
             )
-            countText?.let {
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                    color = if (isFavorite) Color(0xFFBB5555) else color
-                        ?: MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.width(28.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
+                color = if (isFavorite) Color(0xFFBB5555) else color
+                    ?: MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -229,7 +243,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
 fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
-    val countText = if (count > 0) CountFormatUtils.formatCount(count) else null
+    val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
     val hasBookmarked = tweet.favorites?.get(UserActions.BOOKMARK) ?: false
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -252,7 +266,11 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                 }
         }
     ) {
-        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.width(TweetActionButtonWidth),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 painter = painterResource(
                     id = if (hasBookmarked) R.drawable.ic_ms_bookmark_filled else R.drawable.ic_ms_bookmark
@@ -262,16 +280,16 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                     .padding(bottom = 1.dp),
                 tint = if (hasBookmarked) color ?: Color(0xFF4477BB) else color ?: MaterialTheme.colorScheme.secondary
             )
-            countText?.let {
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                    color = if (hasBookmarked) color ?: Color(0xFF4477BB) else color
-                        ?: MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.width(28.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
+                color = if (hasBookmarked) color ?: Color(0xFF4477BB) else color
+                    ?: MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }
@@ -291,7 +309,7 @@ fun ShareButton(
     val guestReminderText = stringResource(R.string.guest_reminder)
 
     IconButton(
-        modifier = Modifier.width(TweetActionButtonWidth),
+        modifier = Modifier.width(TweetActionShareButtonWidth),
         onClick = {
             if (appUser.isGuest()) {
                 viewModel.viewModelScope.launch {

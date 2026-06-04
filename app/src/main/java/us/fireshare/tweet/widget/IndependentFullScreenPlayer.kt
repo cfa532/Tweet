@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -427,7 +426,6 @@ private fun VideoInfoOverlay(
             RetweetButton(viewModel, color = actionColor)
             LikeButton(viewModel, color = actionColor)
             BookmarkButton(viewModel, color = actionColor)
-            Spacer(modifier = Modifier.width(20.dp))
             ShareButton(viewModel, color = actionColor)
         }
     }

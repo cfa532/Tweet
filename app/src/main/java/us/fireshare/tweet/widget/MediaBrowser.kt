@@ -544,7 +544,6 @@ fun MediaBrowser(
                         RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        Spacer(modifier = Modifier.width(20.dp))
                         ShareButton(viewModel)
                     }
                 }
