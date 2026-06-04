@@ -232,7 +232,15 @@ fun VideoPreview(
         } else {
             exoPlayer.addListener(playerListener)
             when (exoPlayer.playbackState) {
-                Player.STATE_READY -> state.isLoading = false
+                Player.STATE_READY -> state.observePlaybackProgress(
+                    exoPlayer,
+                    shouldPlay,
+                    effectivelyVisible,
+                    context,
+                    url,
+                    videoType,
+                    retryScope
+                )
                 Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
             }
             onDispose { exoPlayer.removeListener(playerListener) }
@@ -243,6 +251,22 @@ fun VideoPreview(
     LaunchedEffect(state.isVideoVisible, shouldPlay, exoPlayer) {
         exoPlayer?.let {
             state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, context, url, videoType, playerKey)
+        }
+    }
+
+    LaunchedEffect(exoPlayer, shouldPlay, effectivelyVisible, url, videoType) {
+        val player = exoPlayer ?: return@LaunchedEffect
+        while (true) {
+            state.observePlaybackProgress(
+                player,
+                shouldPlay,
+                effectivelyVisible,
+                context,
+                url,
+                videoType,
+                retryScope
+            )
+            delay(500L)
         }
     }
 

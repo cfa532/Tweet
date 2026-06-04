@@ -46,6 +46,12 @@ class VideoPreviewState(
     var showControls by mutableStateOf(false)
     var coordinatorWantsToPlay by mutableStateOf(false)
     var isPlaying by mutableStateOf(false)
+    private var hasVisiblePlaybackProgress by mutableStateOf(false)
+    private var lastObservedPositionMs by mutableLongStateOf(0L)
+    private var lastObservedBufferedMs by mutableLongStateOf(0L)
+    private var stagnantPlaybackTicks by mutableIntStateOf(0)
+    private var stagnantBufferTicks by mutableIntStateOf(0)
+    private var stillFrameRecoveryAttempts by mutableIntStateOf(0)
 
     val maxRetries = 3
     val visibilityUpdateThrottleMs = 100L
@@ -74,11 +80,11 @@ class VideoPreviewState(
             Player.STATE_READY -> {
                 retryCount = 0
                 blockAutoPrepareAfterError = false
-                isLoading = false
                 val currentShouldPlay = if (shouldUseCoordinator) coordinatorWantsToPlay else autoPlay
                 if (currentShouldPlay && isVisible && !player.isPlaying) {
                     player.playWhenReady = true
                 }
+                isLoading = currentShouldPlay && isVisible && !hasVisiblePlaybackProgress
                 onLoadComplete?.invoke()
             }
             Player.STATE_BUFFERING -> {
@@ -185,7 +191,7 @@ class VideoPreviewState(
                     retryCount = 0
                     blockAutoPrepareAfterError = false
                     player.playWhenReady = shouldPlay
-                    isLoading = false
+                    isLoading = shouldPlay && !hasVisiblePlaybackProgress
                     hasError = false
                 }
                 Player.STATE_IDLE -> {
@@ -237,6 +243,96 @@ class VideoPreviewState(
                 player.playWhenReady = false
             }
         }
+    }
+
+    /**
+     * ExoPlayer can report READY/playing while the rendered frame is still frozen on a slow
+     * source. Keep the loading affordance until playback time actually advances, then try a
+     * light same-player nudge before escalating to source recovery.
+     */
+    fun observePlaybackProgress(
+        player: Player,
+        shouldPlay: Boolean,
+        effectivelyVisible: Boolean,
+        context: Context,
+        url: String?,
+        videoType: MediaType?,
+        scope: CoroutineScope
+    ) {
+        if (!effectivelyVisible || !shouldPlay || hasError) {
+            resetPlaybackObservation(player.currentPosition, player.bufferedPosition)
+            isLoading = false
+            return
+        }
+
+        val positionMs = player.currentPosition.coerceAtLeast(0L)
+        val bufferedMs = player.bufferedPosition.coerceAtLeast(positionMs)
+        val positionAdvanced = positionMs > lastObservedPositionMs + 150L
+        val bufferAdvanced = bufferedMs > lastObservedBufferedMs + 250L
+
+        if (positionAdvanced) {
+            hasVisiblePlaybackProgress = true
+            stagnantPlaybackTicks = 0
+            stagnantBufferTicks = 0
+            stillFrameRecoveryAttempts = 0
+            isLoading = player.playbackState == Player.STATE_BUFFERING
+        } else if (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING) {
+            stagnantPlaybackTicks++
+            stagnantBufferTicks = if (bufferAdvanced) 0 else stagnantBufferTicks + 1
+            isLoading = true
+
+            if (player.playbackState == Player.STATE_READY && player.playWhenReady) {
+                when {
+                    stagnantPlaybackTicks == 3 -> nudgeStuckPlayer(player, positionMs)
+                    stagnantPlaybackTicks >= 10 &&
+                        stagnantBufferTicks >= 6 &&
+                        stillFrameRecoveryAttempts < 2 &&
+                        videoMid != null &&
+                        url != null -> {
+                        stillFrameRecoveryAttempts++
+                        stagnantPlaybackTicks = 0
+                        stagnantBufferTicks = 0
+                        Timber.tag("VideoPreview").w(
+                            "Playback stuck for $videoMid at ${positionMs}ms; recovering player"
+                        )
+                        scope.launch(Dispatchers.Main) {
+                            VideoManager.attemptVideoRecovery(
+                                context,
+                                videoMid,
+                                url,
+                                videoType,
+                                forceSoftwareDecoder = false
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (player.playbackState == Player.STATE_ENDED) {
+            isLoading = false
+        }
+
+        lastObservedPositionMs = positionMs
+        lastObservedBufferedMs = bufferedMs
+    }
+
+    private fun nudgeStuckPlayer(player: Player, positionMs: Long) {
+        try {
+            Timber.tag("VideoPreview").d("Nudging stuck player for $videoMid at ${positionMs}ms")
+            player.playWhenReady = false
+            player.seekTo(positionMs)
+            player.playWhenReady = true
+        } catch (e: RuntimeException) {
+            Timber.tag("VideoPreview").w("Stuck-player nudge failed for $videoMid: ${e.message}")
+        }
+    }
+
+    private fun resetPlaybackObservation(positionMs: Long = 0L, bufferedMs: Long = 0L) {
+        hasVisiblePlaybackProgress = false
+        lastObservedPositionMs = positionMs.coerceAtLeast(0L)
+        lastObservedBufferedMs = bufferedMs.coerceAtLeast(lastObservedPositionMs)
+        stagnantPlaybackTicks = 0
+        stagnantBufferTicks = 0
+        stillFrameRecoveryAttempts = 0
     }
 
     /**
