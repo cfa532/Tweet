@@ -351,7 +351,10 @@ object FullScreenPlayerManager {
                     minBufferMs = FULLSCREEN_MIN_BUFFER_MS,
                     maxBufferMs = FULLSCREEN_MAX_BUFFER_MS,
                     bufferForPlaybackMs = FULLSCREEN_BUFFER_FOR_PLAYBACK_MS,
-                    bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS
+                    bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS,
+                    maxVideoWidth = null,
+                    maxVideoHeight = null,
+                    maxVideoBitrate = null
                 )
                 // Don't start playback — just let it buffer
                 player.playWhenReady = false
@@ -485,7 +488,10 @@ object FullScreenPlayerManager {
                 minBufferMs = FULLSCREEN_MIN_BUFFER_MS,
                 maxBufferMs = FULLSCREEN_MAX_BUFFER_MS,
                 bufferForPlaybackMs = FULLSCREEN_BUFFER_FOR_PLAYBACK_MS,
-                bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS
+                bufferForPlaybackAfterRebufferMs = FULLSCREEN_BUFFER_AFTER_REBUFFER_MS,
+                maxVideoWidth = null,
+                maxVideoHeight = null,
+                maxVideoBitrate = null
             )
 
             if (generation != loadGeneration || loadingVideoMid != videoMid) {

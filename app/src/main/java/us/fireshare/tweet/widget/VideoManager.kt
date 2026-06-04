@@ -556,20 +556,24 @@ object VideoManager {
         }
     }
 
-    private fun releasePlayersForMemoryPressure() {
-        val releaseCandidates = videoPlayers.keys
-            .filterNot {
-                isPlayerReleaseProtected(
-                    it,
-                    protectDirectionalPreloads = false,
-                    protectRecentlyInactive = false
-                )
+    private fun releasePlayersForMemoryPressure(releaseVisibleFeedPlayers: Boolean = false) {
+        val releaseCandidates = videoPlayers.keys.toList()
+            .filterNot { videoMid ->
+                if (releaseVisibleFeedPlayers) {
+                    isVideoInFullScreen(videoMid) || isVideoProtectedForFullScreen(videoMid)
+                } else {
+                    isPlayerReleaseProtected(
+                        videoMid,
+                        protectDirectionalPreloads = false,
+                        protectRecentlyInactive = false
+                    )
+                }
             }
             .sortedBy { playerAccessTimestamps[it] ?: 0L }
 
         if (releaseCandidates.isNotEmpty()) {
             Timber.tag("VideoManager").w(
-                "🧹 MEMORY PRESSURE: Releasing ${releaseCandidates.size} invisible players"
+                "🧹 MEMORY PRESSURE: Releasing ${releaseCandidates.size} feed players"
             )
             releaseCandidates.forEach { releasePlayer(it) }
         }
@@ -1316,6 +1320,31 @@ object VideoManager {
     }
 
     // ===== MEMORY MANAGEMENT =====
+
+    /**
+     * Release video players that are safe to drop under memory pressure.
+     *
+     * When the app UI is hidden, feed composables can still be marked active/visible until
+     * Compose disposes or resumes. In that case [releaseVisibleFeedPlayers] intentionally
+     * drops those feed players too; fullscreen-protected playback is left alone.
+     */
+    fun handleMemoryPressure(level: Int, releaseVisibleFeedPlayers: Boolean = false) {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                handleMemoryPressure(level, releaseVisibleFeedPlayers)
+            }
+            return
+        }
+
+        val beforeCount = videoPlayers.size
+        stopAllPreloading()
+        releasePlayersForMemoryPressure(releaseVisibleFeedPlayers)
+        cleanupInactivePlayers()
+        Timber.tag("VideoManager").w(
+            "Handled memory pressure level=$level releaseVisibleFeedPlayers=$releaseVisibleFeedPlayers " +
+                "playersBefore=$beforeCount playersAfter=${videoPlayers.size}"
+        )
+    }
 
     /**
      * Get the number of cached video players

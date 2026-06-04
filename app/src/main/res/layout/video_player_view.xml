@@ -2,7 +2,9 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:clipChildren="true"
+    android:clipToPadding="true">
 
     <androidx.media3.ui.PlayerView
         android:id="@+id/player_view"
@@ -83,28 +85,5 @@
             android:textSize="10sp"
             android:visibility="gone" />
     </LinearLayout>
-
-    <ImageView
-        android:id="@+id/mute_button"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="8dp"
-        android:background="@android:color/transparent"
-        android:padding="4dp"
-        android:src="@android:drawable/ic_lock_silent_mode"
-        android:contentDescription="@string/mute" />
-
-    <TextView
-        android:id="@+id/time_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="8dp"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="4dp"
-        android:textColor="#99FFFFFF"
-        android:textSize="12sp"
-        android:visibility="gone" />
 
 </FrameLayout>

@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,6 +20,10 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+
+private const val FEED_MAX_VIDEO_WIDTH = 1280
+private const val FEED_MAX_VIDEO_HEIGHT = 1280
+private const val FEED_MAX_VIDEO_BITRATE = 2_500_000
 
 /**
  * Creates an ExoPlayer instance with type-specific video handling:
@@ -45,10 +50,13 @@ fun createExoPlayer(
     mediaType: MediaType? = null,
     forceSoftwareDecoder: Boolean = false,
     resolvedHlsUrl: String? = null,
-    minBufferMs: Int = 15_000,
-    maxBufferMs: Int = 50_000,
-    bufferForPlaybackMs: Int = 1_000,
-    bufferForPlaybackAfterRebufferMs: Int = 2_000
+    minBufferMs: Int = 3_000,
+    maxBufferMs: Int = 12_000,
+    bufferForPlaybackMs: Int = 500,
+    bufferForPlaybackAfterRebufferMs: Int = 1_000,
+    maxVideoWidth: Int? = FEED_MAX_VIDEO_WIDTH,
+    maxVideoHeight: Int? = FEED_MAX_VIDEO_HEIGHT,
+    maxVideoBitrate: Int? = FEED_MAX_VIDEO_BITRATE
 ): ExoPlayer {
     val reliabilityMediaId = extractMediaMidFromUrl(url)
 
@@ -106,10 +114,22 @@ fun createExoPlayer(
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 
+    val trackSelector = DefaultTrackSelector(context).apply {
+        val parameterBuilder = buildUponParameters()
+        if (maxVideoWidth != null && maxVideoHeight != null) {
+            parameterBuilder.setMaxVideoSize(maxVideoWidth, maxVideoHeight)
+        }
+        if (maxVideoBitrate != null) {
+            parameterBuilder.setMaxVideoBitrate(maxVideoBitrate)
+        }
+        parameters = parameterBuilder.build()
+    }
+
     val player = ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
         .setRenderersFactory(renderersFactory)
         .setLoadControl(loadControl)
+        .setTrackSelector(trackSelector)
         .build()
         .apply {
             // Add listener for HLS fallback logic.

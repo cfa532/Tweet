@@ -86,6 +86,7 @@ fun VideoPreview(
     } else {
         state.isVideoVisible
     }
+    val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val preloadGeneration = VideoManager.preloadGenerations[playerKey] ?: 0
     val hasWarmPlayer = playerKey?.let { VideoManager.hasWarmVideoPlayer(it) } == true
     val shouldAcquirePlayer = !isInFullScreen && (
@@ -132,7 +133,7 @@ fun VideoPreview(
     }
 
     // --- Visibility tracking via VideoLoadingManager ---
-    DisposableEffect(playerKey, shouldAcquirePlayer) {
+    DisposableEffect(playerKey, shouldAcquirePlayer, playerGeneration) {
         if (playerKey != null && shouldAcquirePlayer) {
             VideoManager.markVideoActive(playerKey)
         }
@@ -145,11 +146,10 @@ fun VideoPreview(
     }
 
     playerKey?.let { key ->
-        rememberVideoLoadingManager(videoMid = key, isVisible = effectivelyVisible)
+        rememberVideoLoadingManager(videoMid = key, isVisible = effectivelyVisible, generation = playerGeneration)
     }
 
     // --- ExoPlayer (regenerated on force-recreate) ---
-    val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
     val exoPlayer = remember(playerKey, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType) {
         if (!shouldAcquirePlayer || url == null) return@remember null
@@ -288,24 +288,6 @@ fun VideoPreview(
         }
     }
 
-    // --- Time label auto-show/hide ---
-    LaunchedEffect(state.isPlaying, exoPlayer) {
-        if (exoPlayer != null && state.isPlaying) {
-            state.showTimeLabel = true
-            delay(5000)
-            state.showTimeLabel = false
-        }
-    }
-
-    LaunchedEffect(state.showTimeLabel) {
-        while (state.showTimeLabel) {
-            if (exoPlayer != null) {
-                state.remainingTime = exoPlayer.duration - exoPlayer.currentPosition
-            }
-            delay(1000)
-        }
-    }
-
     // --- Auto-hide controls ---
     LaunchedEffect(state.showControls) {
         if (state.showControls && enableTapToShowControls) {
@@ -320,9 +302,6 @@ fun VideoPreview(
             LayoutInflater.from(ctx).inflate(R.layout.video_player_view, null).apply {
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
-                findViewById<ImageView>(R.id.mute_button).setOnClickListener {
-                    state.toggleMute()
-                }
                 findViewById<Button>(R.id.retry_button).setOnClickListener {
                     state.manualRetry(ctx, url, videoType, retryScope)
                 }
@@ -400,31 +379,6 @@ fun VideoPreview(
                 retryLabel.text = "Attempts: ${state.retryCount}"
                 view.findViewById<Button>(R.id.retry_button).text =
                     if (state.retryCount > 0) "Retry Again" else "Retry"
-            }
-
-            val muteBtn = view.findViewById<ImageView>(R.id.mute_button)
-            muteBtn.setImageResource(
-                if (state.isMuted) android.R.drawable.ic_lock_silent_mode
-                else android.R.drawable.ic_lock_silent_mode_off
-            )
-            muteBtn.setColorFilter(android.graphics.Color.argb(153, 255, 255, 255))
-            muteBtn.alpha = if (state.isMuted) 0.6f else 0.8f
-            muteBtn.setBackgroundResource(0)
-            muteBtn.background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(android.graphics.Color.argb(51, 0, 0, 0))
-            }
-
-            val timeLabel = view.findViewById<TextView>(R.id.time_label)
-            if (state.showTimeLabel) {
-                timeLabel.visibility = View.VISIBLE
-                timeLabel.text = VideoPreviewState.formatTime(state.remainingTime)
-                timeLabel.background = android.graphics.drawable.GradientDrawable().apply {
-                    cornerRadius = 4f * view.resources.displayMetrics.density
-                    setColor(android.graphics.Color.argb(51, 0, 0, 0))
-                }
-            } else {
-                timeLabel.visibility = View.GONE
             }
         },
         modifier = modifier

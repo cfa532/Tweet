@@ -56,6 +56,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -238,6 +241,27 @@ fun TweetListView(
     // Use the coordinator from CompositionLocal (main feed = shared, profile = per-screen instance)
     // so clearing on dispose only affects this list and does not stop the other screen's playback.
     val coordinator = LocalVideoCoordinator.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, coordinator) {
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> coordinator.onHostPaused()
+                Lifecycle.Event.ON_START,
+                Lifecycle.Event.ON_RESUME -> coordinator.onHostResumed()
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            coordinator.onHostResumed()
+        }
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
+    }
 
     // Create video-indexed list that maintains feed order and handles retweets properly
     var videoIndexedList by remember { mutableStateOf<List<Pair<MimeiId, MediaType>>>(emptyList()) }

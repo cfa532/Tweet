@@ -139,19 +139,16 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         // All other TRIM_MEMORY_* constants are deprecated and no longer sent
         when {
             level >= TRIM_MEMORY_BACKGROUND -> {
-                // App is in background and may be killed - preserve cache for quick return
-                // This is the highest level we'll receive in modern Android
-                Timber.d("Memory warning: BACKGROUND (level $level) - Preserving cache for potential return")
-                // Do not clear cache when app goes to background to maintain good UX
+                Timber.w("Memory warning: BACKGROUND (level $level) - Releasing background video players")
+                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = true)
             }
             level >= TRIM_MEMORY_UI_HIDDEN -> {
-                // App UI is hidden, but user might return quickly - preserve ALL cache
-                Timber.d("Memory warning: UI_HIDDEN (level $level) - Preserving ALL cache for quick return")
-                // Do not clear any cache when UI is hidden
+                Timber.w("Memory warning: UI_HIDDEN (level $level) - Releasing hidden feed video players")
+                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = true)
             }
             else -> {
-                // Any other levels (shouldn't happen in modern Android, but handle gracefully)
-                Timber.d("Memory warning: Unknown level $level - Preserving cache")
+                Timber.w("Memory warning: Unknown level $level - Releasing inactive video players")
+                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = false)
             }
         }
     }
@@ -166,8 +163,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         // This is called when the system is running very low on memory
         // and is about to kill background processes
         // Match iOS behavior: clear image cache on low memory (similar to iOS emergency cleanup)
-        Timber.w("Memory warning: onLowMemory - Clearing image cache to free memory")
+        Timber.w("Memory warning: onLowMemory - Clearing image cache and releasing video players")
         ImageCacheManager.clearMemoryCache()
+        VideoManager.handleMemoryPressure(level = -1, releaseVisibleFeedPlayers = true)
     }
 
     // Note: Cache clearing methods removed as modern Android (API 34+) 

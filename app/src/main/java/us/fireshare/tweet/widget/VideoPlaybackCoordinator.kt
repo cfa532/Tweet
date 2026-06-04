@@ -78,11 +78,11 @@ val LocalVideoCoordinator = compositionLocalOf<VideoPlaybackCoordinator> { Video
  * The main feed uses [shared]; detail screens create per-instance coordinators.
  *
  * Behavior:
- * 1. Tracks visible videos in the feed (only videos with >= 50% visibility)
+ * 1. Tracks visible videos in the feed (loadable, playable, and continue-playing sets)
  * 2. Manages playback state for videos
  * 3. Coordinates video playback via notifications/events
  * 4. Starts videos at 50% visible and stops the current video below 70% visible
- * 5. Selects primary video based on scroll direction (bottommost when scrolling down, topmost when scrolling up)
+ * 5. Selects primary video based on scroll direction (topmost when scrolling down, bottommost when scrolling up)
  */
 class VideoPlaybackCoordinator(
     /** When true, buildVideoList syncs with FullScreenPlayerManager. Only the shared instance should do this. */
@@ -96,6 +96,7 @@ class VideoPlaybackCoordinator(
         private const val VISIBILITY_THRESHOLD = 0.5f
         private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = 0.7f
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
+        private const val FOREGROUND_RECONCILE_DELAY_MS = 120L
     }
 
     // Single reusable coroutine scope to avoid allocating a new CoroutineScope on every event
@@ -108,6 +109,10 @@ class VideoPlaybackCoordinator(
     private val tweetCellBoundsMap = mutableMapOf<String, android.graphics.RectF>()
     private val tweetVisibilityMap = mutableMapOf<String, Boolean>()
     private val videoVisibilityMap = mutableMapOf<String, Float>()
+    private var loadVisibleVideoIds = emptySet<String>()
+    private var continuePlaybackVideoIds = emptySet<String>()
+    private var playableVideoIds = emptySet<String>()
+    private var visibleTweetIds = emptySet<String>()
     // Videos that have finished playing — excluded from auto-play selection
     private val finishedVideoIds = mutableSetOf<String>()
     // Current primary excluded after it drops below the continue threshold.
@@ -136,6 +141,9 @@ class VideoPlaybackCoordinator(
     private var userRequestedPlayAt: Long = 0L
     /** Set by [buildVideoList] to protect auto-play from visibility fluctuations during screen load. */
     private var videoListBuiltAt: Long = 0L
+    private var hostResumedAt: Long = 0L
+    var isFeedVisible: Boolean = true
+        private set
 
     private var scrollDirection: Boolean = true
     private var previousContentOffset: Float = 0f
@@ -207,10 +215,7 @@ class VideoPlaybackCoordinator(
                         (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
                     }
                     if (nowVisible.isNotEmpty()) {
-                        visibleVideos = nowVisible.sortedBy { videoInfo ->
-                            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
-                        }.toMutableList()
-                        startPlaybackWithDebounce()
+                        rebuildVisibilitySetsFromRatios()
                     }
                 }
             }
@@ -318,6 +323,11 @@ class VideoPlaybackCoordinator(
         if (primaryVideoId != null && !videoMetaMap.containsKey(primaryVideoId)) {
             primaryVideoId = null
         }
+        val validIds = videoMetaMap.keys
+        loadVisibleVideoIds = loadVisibleVideoIds.filter { it in validIds }.toSet()
+        continuePlaybackVideoIds = continuePlaybackVideoIds.filter { it in validIds }.toSet()
+        playableVideoIds = playableVideoIds.filter { it in validIds }.toSet()
+        videoVisibilityMap.keys.retainAll(validIds)
 
         if (syncWithFullScreenPlayer) {
             val videoListForFullScreen = videos.map { Pair(it.videoMid, it.mediaType) }
@@ -337,10 +347,7 @@ class VideoPlaybackCoordinator(
                 (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
             }
             if (nowVisible.isNotEmpty()) {
-                visibleVideos = nowVisible.sortedBy { videoInfo ->
-                    tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
-                }.toMutableList()
-                startPlaybackWithDebounce()
+                rebuildVisibilitySetsFromRatios()
             }
         }
     }
@@ -369,7 +376,6 @@ class VideoPlaybackCoordinator(
      */
     fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, playbackVideoId: String, visibilityRatio: Float) {
         val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
-        val previousRatio = videoVisibilityMap[identifier] ?: 0f
         videoVisibilityMap[identifier] = visibilityRatio
         if (identifier == primaryBelowContinueIdentifier &&
             (visibilityRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD || visibilityRatio < VISIBILITY_THRESHOLD)
@@ -377,90 +383,51 @@ class VideoPlaybackCoordinator(
             primaryBelowContinueIdentifier = null
         }
 
-        val crossesStartThreshold = (previousRatio < VISIBILITY_THRESHOLD && visibilityRatio >= VISIBILITY_THRESHOLD) ||
-            (previousRatio >= VISIBILITY_THRESHOLD && visibilityRatio < VISIBILITY_THRESHOLD)
-        val crossesContinueThreshold = identifier == primaryVideoId &&
-            ((previousRatio < KEEP_PLAYING_VISIBILITY_THRESHOLD && visibilityRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD) ||
-                (previousRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD && visibilityRatio < KEEP_PLAYING_VISIBILITY_THRESHOLD))
-
-        if (crossesStartThreshold || crossesContinueThreshold) {
-            checkPrimaryVideoDuringScroll()
-        }
-
         visibilityUpdateDebounceJob?.cancel()
         visibilityUpdateDebounceJob = scope.launch {
             delay(VISIBILITY_UPDATE_DEBOUNCE_MS)
-            updateVisibleVideos()
-            checkAndSwitchVideoIfNeeded()
+            rebuildVisibilitySetsFromRatios()
         }
     }
 
-    private fun checkPrimaryVideoDuringScroll() {
-        if (isPaused) return
-        // New videos can start at 50%, but the active primary must stay 70% visible.
-        val outgoingPrimaryId = primaryVideoId
-        if (outgoingPrimaryId != null) {
-            val currentVisibility = videoVisibilityMap[outgoingPrimaryId] ?: 0f
-            if (currentVisibility >= KEEP_PLAYING_VISIBILITY_THRESHOLD || isProtectedUserRequestedPrimary(outgoingPrimaryId)) {
-                return
+    /**
+     * iOS-style viewport update: callers may provide a complete snapshot of the videos that
+     * are load-visible, continue-visible, and playable-visible. Android VideoPreview still
+     * reports individual ratios, so [updateVideoVisibility] rebuilds and feeds the same path.
+     */
+    fun updateViewportVisibility(
+        loadVisibleIdentifiers: Set<String>,
+        continuePlaybackIdentifiers: Set<String>,
+        playableIdentifiers: Set<String>,
+        visibleTweetIdentifiers: Set<String> = emptySet()
+    ) {
+        val knownIds = videoMetaMap.keys
+        val nextLoadVisible = loadVisibleIdentifiers.filter { it in knownIds }.toSet()
+        val nextContinue = continuePlaybackIdentifiers.filter { it in knownIds }.toSet()
+        val nextPlayable = playableIdentifiers.filter { it in knownIds }.toSet()
+        val previousLoadVisible = loadVisibleVideoIds
+
+        loadVisibleVideoIds = nextLoadVisible
+        continuePlaybackVideoIds = nextContinue
+        playableVideoIds = nextPlayable
+        visibleTweetIds = visibleTweetIdentifiers
+
+        (previousLoadVisible - nextLoadVisible).forEach { identifier ->
+            finishedVideoIds.remove(identifier)
+            if (identifier == primaryBelowContinueIdentifier) {
+                primaryBelowContinueIdentifier = null
             }
-
-            stopPrimaryVideo(outgoingPrimaryId)
-            if (currentVisibility >= VISIBILITY_THRESHOLD) {
-                primaryBelowContinueIdentifier = outgoingPrimaryId
-            }
-            primaryVideoId = null
-        }
-
-        val source = if (visibleVideos.isNotEmpty()) visibleVideos else allVideos
-        val currentVisible = source.filter { videoInfo ->
-            videoInfo.identifier !in finishedVideoIds &&
-            videoInfo.identifier != primaryBelowContinueIdentifier &&
-            (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
-        }
-
-        val sortedVisible = if (currentVisible.isNotEmpty()) {
-            currentVisible.sortedBy { videoInfo ->
-                tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
-            }
-        } else {
-            emptyList()
-        }
-
-        if (sortedVisible.isNotEmpty()) {
-            val correctPrimary = if (scrollDirection) {
-                sortedVisible.firstOrNull()
-            } else {
-                sortedVisible.lastOrNull()
-            }
-
-            if (correctPrimary != null && correctPrimary.identifier != primaryVideoId) {
-                Timber.d("VideoPlaybackCoordinator: Detected primary video change during scroll to: ${correctPrimary.videoMid}")
-                val previousPrimaryId = primaryVideoId
-                primaryVideoId = correctPrimary.identifier
-
-                scope.launch {
-                    if (previousPrimaryId != null && previousPrimaryId != correctPrimary.identifier) {
-                        val previousPrimary = videoMetaMap[previousPrimaryId]
-                        if (previousPrimary != null) {
-                            _playbackCommands.emit(
-                                VideoPlaybackCommand.ShouldStopVideo(previousPrimary.identifier, previousPrimary.videoMid)
-                            )
-                        }
-                    }
-
-                    _playbackCommands.emit(
-                        VideoPlaybackCommand.ShouldPlayVideo(
-                            tweetId = correctPrimary.tweetId,
-                            videoMid = correctPrimary.videoMid,
-                            playbackVideoId = correctPrimary.identifier,
-                            videoIndex = correctPrimary.index,
-                            isPrimary = true
-                        )
-                    )
-                }
+            val info = videoMetaMap[identifier] ?: return@forEach
+            scope.launch {
+                _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.identifier, info.videoMid))
             }
         }
+
+        visibleVideos = allVideos.filter { it.identifier in playableVideoIds }
+            .sortedByFeedPosition()
+            .toMutableList()
+
+        reconcilePlaybackForCurrentVisibility()
     }
 
     /**
@@ -482,64 +449,74 @@ class VideoPlaybackCoordinator(
         tweetVisibilityMap[tweetId] = isVisible
     }
 
-    private fun updateVisibleVideos() {
-        val previousVisibleIds = visibleVideos.map { it.identifier }.toSet()
+    private fun rebuildVisibilitySetsFromRatios() {
+        updateViewportVisibility(
+            loadVisibleIdentifiers = videoVisibilityMap
+                .filterValues { it > 0f }
+                .keys
+                .toSet(),
+            continuePlaybackIdentifiers = videoVisibilityMap
+                .filterValues { it >= KEEP_PLAYING_VISIBILITY_THRESHOLD }
+                .keys
+                .toSet(),
+            playableIdentifiers = videoVisibilityMap
+                .filterValues { it >= VISIBILITY_THRESHOLD }
+                .keys
+                .toSet(),
+            visibleTweetIdentifiers = tweetVisibilityMap
+                .filterValues { it }
+                .keys
+                .toSet()
+        )
+    }
 
-        visibleVideos = allVideos.filter { videoInfo ->
-            val visibilityRatio = videoVisibilityMap[videoInfo.identifier] ?: 0f
-            visibilityRatio >= VISIBILITY_THRESHOLD
-        }.sortedBy { videoInfo ->
-            tweetCellBoundsMap[videoInfo.tweetId]?.top ?: Float.MAX_VALUE
-        }.toMutableList()
+    private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
+        if (isPaused || !isFeedVisible) return
 
         if (visibleVideos.isEmpty()) {
-            val now = System.currentTimeMillis()
-            // Don't stop a user-initiated play within 500ms of the request
-            val timeSinceUserRequest = now - userRequestedPlayAt
-            if (timeSinceUserRequest < 500L) {
-                Timber.d("VideoPlaybackCoordinator: Skipping stopAll — user requested play ${timeSinceUserRequest}ms ago")
-                return
-            }
-            // Don't stop auto-play within 500ms of building the video list — layout
-            // settling during screen transitions can temporarily report 0% visibility.
-            val timeSinceListBuilt = now - videoListBuiltAt
-            if (timeSinceListBuilt < 500L) {
-                Timber.d("VideoPlaybackCoordinator: Skipping stopAll — video list built ${timeSinceListBuilt}ms ago")
-                return
-            }
-            stopAllVideos()
+            stopAllVideosIfLayoutIsStable()
             return
         }
 
-        val currentVisibleIds = visibleVideos.map { it.identifier }.toSet()
-        val videosToStop = previousVisibleIds - currentVisibleIds
-        videosToStop.forEach { identifier ->
-            // Reset finished state so the video can play again when scrolled back
-            finishedVideoIds.remove(identifier)
-            val info = videoMetaMap[identifier]
-            if (info != null) {
-                scope.launch {
-                    _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.identifier, info.videoMid))
-                }
-            }
-        }
-
         primaryVideoId?.let { primaryId ->
-            val primaryVisibility = videoVisibilityMap[primaryId] ?: 0f
-            if (primaryVisibility < KEEP_PLAYING_VISIBILITY_THRESHOLD && !isProtectedUserRequestedPrimary(primaryId)) {
-                stopPrimaryVideo(primaryId)
-                if (primaryId in currentVisibleIds) {
-                    primaryBelowContinueIdentifier = primaryId
+            if (primaryId in continuePlaybackVideoIds || isProtectedUserRequestedPrimary(primaryId)) {
+                if (replayCurrentPrimary && primaryId in playableVideoIds) {
+                    emitPlayForPrimary(videoMetaMap[primaryId] ?: return@let)
                 }
-                primaryVideoId = null
+                return
             }
+
+            val primaryVisibility = videoVisibilityMap[primaryId] ?: 0f
+            stopPrimaryVideo(primaryId)
+            if (primaryId in playableVideoIds || primaryVisibility >= VISIBILITY_THRESHOLD) {
+                primaryBelowContinueIdentifier = primaryId
+            }
+            primaryVideoId = null
         }
 
-        // Only pick a new primary when there isn't one.
-        // Don't switch away from a playing primary that is still visible.
         if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
             startPlaybackWithDebounce()
         }
+    }
+
+    private fun stopAllVideosIfLayoutIsStable() {
+        val now = System.currentTimeMillis()
+        val timeSinceUserRequest = now - userRequestedPlayAt
+        if (timeSinceUserRequest < 500L) {
+            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — user requested play ${timeSinceUserRequest}ms ago")
+            return
+        }
+        val timeSinceListBuilt = now - videoListBuiltAt
+        if (timeSinceListBuilt < 500L) {
+            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — video list built ${timeSinceListBuilt}ms ago")
+            return
+        }
+        val timeSinceHostResumed = now - hostResumedAt
+        if (timeSinceHostResumed < 500L) {
+            Timber.d("VideoPlaybackCoordinator: Skipping stopAll — host resumed ${timeSinceHostResumed}ms ago")
+            return
+        }
+        stopAllVideos()
     }
 
     private fun identifyPrimaryVideo(): VideoPlaybackInfo? {
@@ -556,59 +533,15 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun checkAndSwitchVideoIfNeeded() {
-        val primaryId = primaryVideoId ?: return
-        val primaryVideo = videoMetaMap[primaryId] ?: visibleVideos.find { it.identifier == primaryId } ?: return
-
-        val visibilityRatio = videoVisibilityMap[primaryId] ?: 0f
-
-        if (visibilityRatio < KEEP_PLAYING_VISIBILITY_THRESHOLD && !isProtectedUserRequestedPrimary(primaryId)) {
-            if (visibilityRatio >= VISIBILITY_THRESHOLD) {
-                primaryBelowContinueIdentifier = primaryId
-            }
-            val newPrimary = identifyPrimaryVideo()
-            scope.launch {
-                _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(primaryVideo.identifier, primaryVideo.videoMid))
-
-                if (newPrimary != null && newPrimary.identifier != primaryId) {
-                    visibleVideos.forEach { videoInfo ->
-                        if (videoInfo.identifier != newPrimary.identifier) {
-                            _playbackCommands.emit(
-                                VideoPlaybackCommand.ShouldPauseVideo(videoInfo.identifier, videoInfo.videoMid)
-                            )
-                        }
-                    }
-
-                    delay(50L)
-
-                    if (primaryVideoId != newPrimary.identifier ||
-                        (videoVisibilityMap[newPrimary.identifier] ?: 0f) < VISIBILITY_THRESHOLD
-                    ) {
-                        return@launch
-                    }
-
-                    primaryVideoId = newPrimary.identifier
-                    _playbackCommands.emit(
-                        VideoPlaybackCommand.ShouldPlayVideo(
-                            tweetId = newPrimary.tweetId,
-                            videoMid = newPrimary.videoMid,
-                            playbackVideoId = newPrimary.identifier,
-                            videoIndex = newPrimary.index,
-                            isPrimary = true
-                        )
-                    )
-                }
-            }
-
-            if (newPrimary != null && newPrimary.identifier != primaryId) {
-                val direction = if (scrollDirection) "next (scrolling DOWN)" else "previous (scrolling UP)"
-                Timber.d("VideoPlaybackCoordinator: Switched from ${primaryVideo.videoMid} to ${newPrimary.videoMid} ($direction, MediaGrid visibility: ${(visibilityRatio * 100).toInt()}%)")
-            }
-            primaryVideoId = newPrimary?.identifier
-            if (newPrimary == null) {
-                Timber.d("VideoPlaybackCoordinator: Stopped ${primaryVideo.videoMid}; below keep-playing visibility (${(visibilityRatio * 100).toInt()}%)")
-            }
-        }
+    private fun List<VideoPlaybackInfo>.sortedByFeedPosition(): List<VideoPlaybackInfo> {
+        val feedOrder = allVideos.mapIndexed { index, videoInfo -> videoInfo.identifier to index }.toMap()
+        return sortedWith(
+            compareBy<VideoPlaybackInfo>(
+                { tweetCellBoundsMap[it.tweetId]?.top ?: Float.MAX_VALUE },
+                { feedOrder[it.identifier] ?: Int.MAX_VALUE },
+                { it.index }
+            )
+        )
     }
 
     private fun stopPrimaryVideo(identifier: String) {
@@ -672,21 +605,32 @@ class VideoPlaybackCoordinator(
             delay(50L)
 
             if (primaryVideoId != primary.identifier ||
+                primary.identifier !in playableVideoIds ||
                 (videoVisibilityMap[primary.identifier] ?: 0f) < VISIBILITY_THRESHOLD
             ) {
                 return@launch
             }
 
-            _playbackCommands.emit(
-                VideoPlaybackCommand.ShouldPlayVideo(
-                    tweetId = primary.tweetId,
-                    videoMid = primary.videoMid,
-                    playbackVideoId = primary.identifier,
-                    videoIndex = primary.index,
-                    isPrimary = true
-                )
-            )
+            emitPlayCommand(primary)
         }
+    }
+
+    private fun emitPlayForPrimary(primary: VideoPlaybackInfo) {
+        scope.launch {
+            emitPlayCommand(primary)
+        }
+    }
+
+    private suspend fun emitPlayCommand(primary: VideoPlaybackInfo) {
+        _playbackCommands.emit(
+            VideoPlaybackCommand.ShouldPlayVideo(
+                tweetId = primary.tweetId,
+                videoMid = primary.videoMid,
+                playbackVideoId = primary.identifier,
+                videoIndex = primary.index,
+                isPrimary = true
+            )
+        )
     }
 
     /**
@@ -773,6 +717,36 @@ class VideoPlaybackCoordinator(
         Timber.d("VideoPlaybackCoordinator: Stopped all videos")
     }
 
+    fun onHostPaused() {
+        if (!isFeedVisible) return
+        isFeedVisible = false
+        playbackDebounceJob?.cancel()
+        playbackDebounceJob = null
+        visibilityUpdateDebounceJob?.cancel()
+        visibilityUpdateDebounceJob = null
+
+        val idsToPause = (visibleVideos.map { it.identifier } + listOfNotNull(primaryVideoId)).toSet()
+        scope.launch {
+            idsToPause.forEach { identifier ->
+                val info = videoMetaMap[identifier] ?: return@forEach
+                _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(info.identifier, info.videoMid))
+            }
+        }
+        Timber.d("VideoPlaybackCoordinator: Host paused; preserved primary=$primaryVideoId")
+    }
+
+    fun onHostResumed() {
+        isFeedVisible = true
+        hostResumedAt = System.currentTimeMillis()
+        visibilityUpdateDebounceJob?.cancel()
+        visibilityUpdateDebounceJob = scope.launch {
+            delay(FOREGROUND_RECONCILE_DELAY_MS)
+            rebuildVisibilitySetsFromRatios()
+            reconcilePlaybackForCurrentVisibility(replayCurrentPrimary = true)
+        }
+        Timber.d("VideoPlaybackCoordinator: Host resumed; scheduling foreground reconciliation")
+    }
+
     /**
      * Sync this coordinator's video list to FullScreenPlayerManager.
      * Called when the user taps a video for full-screen playback, so the full-screen player
@@ -805,10 +779,16 @@ class VideoPlaybackCoordinator(
         finishedVideoIds.clear()
         primaryBelowContinueIdentifier = null
         userRequestedPrimaryIdentifier = null
+        loadVisibleVideoIds = emptySet()
+        continuePlaybackVideoIds = emptySet()
+        playableVideoIds = emptySet()
+        visibleTweetIds = emptySet()
         previousContentOffset = 0f
         scrollDirection = true
         userRequestedPlayAt = 0L
         videoListBuiltAt = 0L
+        hostResumedAt = 0L
+        isFeedVisible = false
 
         Timber.d("VideoPlaybackCoordinator: Cleared all state")
     }

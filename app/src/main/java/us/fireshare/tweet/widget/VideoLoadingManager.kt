@@ -100,12 +100,13 @@ object VideoLoadingManager {
 fun rememberVideoLoadingManager(
     videoMid: MimeiId,
     isVisible: Boolean,
+    generation: Int = 0,
     onVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
     // Track previous visibility state
-    var wasVisible by remember(videoMid) { mutableStateOf(false) }
+    var wasVisible by remember(videoMid, generation) { mutableStateOf(false) }
 
-    LaunchedEffect(isVisible) {
+    LaunchedEffect(videoMid, generation, isVisible) {
         if (isVisible != wasVisible) {
             if (isVisible) {
                 VideoLoadingManager.markVideoVisible(videoMid)
@@ -118,7 +119,7 @@ fun rememberVideoLoadingManager(
     }
 
     // Cleanup when component is disposed
-    DisposableEffect(videoMid) {
+    DisposableEffect(videoMid, generation) {
         onDispose {
             VideoLoadingManager.markVideoNotVisible(videoMid)
         }

@@ -939,16 +939,27 @@ fun MediaGrid(
                 ?.takeIf { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
                 ?.mid
             if (soleVideoMid != null) {
-                var remainingMs by remember(soleVideoMid) { mutableLongStateOf(0L) }
-                LaunchedEffect(soleVideoMid) {
+                val soleVideoPlaybackId = if (enableCoordinator) {
+                    videoPlaybackIdentifier(
+                        videoMid = soleVideoMid,
+                        parentTweetId = parentTweetId?.takeIf { it.isNotEmpty() } ?: tweet.mid
+                    )
+                } else {
+                    soleVideoMid
+                }
+                var remainingMs by remember(soleVideoPlaybackId, soleVideoMid) { mutableLongStateOf(0L) }
+                LaunchedEffect(soleVideoPlaybackId, soleVideoMid) {
                     while (true) {
-                        val player = VideoManager.getCachedVideoPlayer(soleVideoMid)
+                        val player = VideoManager.getCachedVideoPlayer(soleVideoPlaybackId)
+                            ?: VideoManager.getCachedVideoPlayer(soleVideoMid)
                         if (player != null) {
                             val dur = player.duration
                             val pos = player.currentPosition
                             if (dur > 0) {
                                 remainingMs = (dur - pos).coerceAtLeast(0)
                             }
+                        } else {
+                            remainingMs = 0L
                         }
                         delay(1000)
                     }
