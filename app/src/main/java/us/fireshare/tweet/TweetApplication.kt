@@ -139,12 +139,12 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         // All other TRIM_MEMORY_* constants are deprecated and no longer sent
         when {
             level >= TRIM_MEMORY_BACKGROUND -> {
-                Timber.w("Memory warning: BACKGROUND (level $level) - Releasing background video players")
-                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = true)
+                Timber.w("Memory warning: BACKGROUND (level $level) - Releasing inactive video players")
+                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = false)
             }
             level >= TRIM_MEMORY_UI_HIDDEN -> {
-                Timber.w("Memory warning: UI_HIDDEN (level $level) - Releasing hidden feed video players")
-                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = true)
+                Timber.w("Memory warning: UI_HIDDEN (level $level) - Preserving visible feed video players")
+                VideoManager.handleMemoryPressure(level, releaseVisibleFeedPlayers = false)
             }
             else -> {
                 Timber.w("Memory warning: Unknown level $level - Releasing inactive video players")
@@ -162,7 +162,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         super.onLowMemory()
         // This is called when the system is running very low on memory
         // and is about to kill background processes
-        // Match iOS behavior: clear image cache on low memory (similar to iOS emergency cleanup)
+        // Match iOS behavior: clear image cache on low memory (similar to iOS emergency cleanup).
+        // This is the truly aggressive path; normal UI_HIDDEN/BACKGROUND trims preserve
+        // visible feed players so foreground resume does not return to cleared black surfaces.
         Timber.w("Memory warning: onLowMemory - Clearing image cache and releasing video players")
         ImageCacheManager.clearMemoryCache()
         VideoManager.handleMemoryPressure(level = -1, releaseVisibleFeedPlayers = true)

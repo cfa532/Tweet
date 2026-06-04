@@ -34,6 +34,12 @@ class VideoPreviewState(
 ) {
     var isVideoVisible by mutableStateOf(false)
     var lastVisibilityUpdate by mutableLongStateOf(0L)
+    var lastVisibilityRatio by mutableStateOf(0f)
+    var hasLastGeometry by mutableStateOf(false)
+    var lastVideoTop by mutableStateOf(0f)
+    var lastVideoBottom by mutableStateOf(0f)
+    var lastViewportTop by mutableStateOf(0f)
+    var lastViewportBottom by mutableStateOf(0f)
     var isMuted by mutableStateOf(initialMuted)
     var isLoading by mutableStateOf(initialLoading)
     var hasError by mutableStateOf(false)

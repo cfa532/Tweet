@@ -109,6 +109,7 @@ class VideoPlaybackCoordinator(
     private val tweetCellBoundsMap = mutableMapOf<String, android.graphics.RectF>()
     private val tweetVisibilityMap = mutableMapOf<String, Boolean>()
     private val videoVisibilityMap = mutableMapOf<String, Float>()
+    private val videoGeometryMap = mutableMapOf<String, android.graphics.RectF>()
     private var loadVisibleVideoIds = emptySet<String>()
     private var continuePlaybackVideoIds = emptySet<String>()
     private var playableVideoIds = emptySet<String>()
@@ -122,6 +123,8 @@ class VideoPlaybackCoordinator(
 
     private var viewportWidth = 1080f
     private var viewportHeight = 2340f
+    private var viewportVisibleTop = 0f
+    private var viewportVisibleBottom = viewportHeight
 
     /** When true, the coordinator suppresses auto-play selection.
      *  Used in TweetDetailScreen to prevent comment videos from playing
@@ -137,6 +140,7 @@ class VideoPlaybackCoordinator(
         }
 
     private var primaryVideoId: String? = null
+    private var pendingResumePrimaryId: String? = null
     /** Set by [requestPlay] to prevent debounced visibility updates from immediately stopping a user-initiated play. */
     private var userRequestedPlayAt: Long = 0L
     /** Set by [buildVideoList] to protect auto-play from visibility fluctuations during screen load. */
@@ -150,6 +154,7 @@ class VideoPlaybackCoordinator(
 
     private var playbackDebounceJob: Job? = null
     private var visibilityUpdateDebounceJob: Job? = null
+    private var geometryReconcileJob: Job? = null
 
     // Command flow - similar to iOS NotificationCenter
     private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 0, extraBufferCapacity = 64)
@@ -207,10 +212,12 @@ class VideoPlaybackCoordinator(
                 }
             }
             if (added > 0) {
+                sortAllVideosByFeedOrder()
                 Timber.d("VideoPlaybackCoordinator: Added $added $source video(s) for tweet $parentTweetId (total: ${allVideos.size})")
-                // If nothing is playing yet, check whether any of the newly-added videos
-                // are already visible and should auto-play.
-                if (primaryVideoId == null && videoVisibilityMap.isNotEmpty()) {
+                // If newly-added retweet/quote videos already have viewport data, reconcile
+                // immediately. This mirrors iOS' atomic viewport snapshot and avoids waiting
+                // for a later scroll/layout pass before a visible video can become primary.
+                if (videoVisibilityMap.isNotEmpty()) {
                     val nowVisible = allVideos.filter { videoInfo ->
                         (videoVisibilityMap[videoInfo.identifier] ?: 0f) >= VISIBILITY_THRESHOLD
                     }
@@ -227,7 +234,7 @@ class VideoPlaybackCoordinator(
      * Similar to iOS buildVideoList(from:tweets:pinnedTweets:)
      */
     fun buildVideoList(tweets: List<Tweet>, pinnedTweets: List<Tweet> = emptyList()) {
-        currentTweets = tweets + pinnedTweets
+        currentTweets = pinnedTweets + tweets
         primaryBelowContinueIdentifier = null
 
         val videos = mutableListOf<VideoPlaybackInfo>()
@@ -323,11 +330,15 @@ class VideoPlaybackCoordinator(
         if (primaryVideoId != null && !videoMetaMap.containsKey(primaryVideoId)) {
             primaryVideoId = null
         }
+        if (pendingResumePrimaryId != null && !videoMetaMap.containsKey(pendingResumePrimaryId)) {
+            pendingResumePrimaryId = null
+        }
         val validIds = videoMetaMap.keys
         loadVisibleVideoIds = loadVisibleVideoIds.filter { it in validIds }.toSet()
         continuePlaybackVideoIds = continuePlaybackVideoIds.filter { it in validIds }.toSet()
         playableVideoIds = playableVideoIds.filter { it in validIds }.toSet()
         videoVisibilityMap.keys.retainAll(validIds)
+        videoGeometryMap.keys.retainAll(validIds)
 
         if (syncWithFullScreenPlayer) {
             val videoListForFullScreen = videos.map { Pair(it.videoMid, it.mediaType) }
@@ -339,6 +350,9 @@ class VideoPlaybackCoordinator(
         // Protect auto-play from premature stopAllVideos caused by layout instability
         // during screen transitions (visibility can temporarily drop below threshold).
         videoListBuiltAt = System.currentTimeMillis()
+
+        resumePendingPrimaryIfPossible()
+        refreshViewportVisibilityFromGeometry()
 
         // Try to start playback using visibility data that arrived before the list was built.
         // Only attempt to start — never stop, since VideoPreview may not have reported yet.
@@ -368,6 +382,78 @@ class VideoPlaybackCoordinator(
     fun updateViewportSize(width: Float, height: Float) {
         viewportWidth = width
         viewportHeight = height
+        refreshViewportVisibilityFromGeometry()
+    }
+
+    /**
+     * Register the latest on-screen video bounds. Playback is decided from a full
+     * geometry snapshot in [refreshViewportVisibilityFromGeometry], matching the iOS
+     * table-view coordinator pattern more closely than per-video play decisions.
+     */
+    fun updateVideoGeometry(
+        videoMid: MimeiId,
+        playbackVideoId: String,
+        videoTop: Float,
+        videoBottom: Float,
+        visibleViewportTop: Float,
+        visibleViewportBottom: Float
+    ) {
+        val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
+        videoGeometryMap[identifier] = android.graphics.RectF(
+            0f,
+            videoTop,
+            viewportWidth,
+            videoBottom
+        )
+        viewportVisibleTop = visibleViewportTop
+        viewportVisibleBottom = visibleViewportBottom
+        scheduleGeometryReconcile()
+    }
+
+    fun removeVideoGeometry(videoMid: MimeiId, playbackVideoId: String) {
+        val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
+        videoGeometryMap.remove(identifier)
+        videoVisibilityMap.remove(identifier)
+        scheduleGeometryReconcile()
+    }
+
+    fun refreshViewportVisibilityFromGeometry() {
+        if (videoGeometryMap.isEmpty()) return
+
+        val loadVisibleIdentifiers = mutableSetOf<String>()
+        val continuePlaybackIdentifiers = mutableSetOf<String>()
+        val playableIdentifiers = mutableSetOf<String>()
+
+        videoGeometryMap.forEach { (identifier, bounds) ->
+            val visibleTop = kotlin.math.max(viewportVisibleTop, bounds.top)
+            val visibleBottom = kotlin.math.min(viewportVisibleBottom, bounds.bottom)
+            val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
+            val totalHeight = kotlin.math.max(0f, bounds.height())
+            val ratio = if (totalHeight > 0f) (visibleHeight / totalHeight).coerceIn(0f, 1f) else 0f
+
+            videoVisibilityMap[identifier] = ratio
+            if (ratio > 0f) loadVisibleIdentifiers.add(identifier)
+            if (ratio >= KEEP_PLAYING_VISIBILITY_THRESHOLD) continuePlaybackIdentifiers.add(identifier)
+            if (ratio >= VISIBILITY_THRESHOLD) playableIdentifiers.add(identifier)
+        }
+
+        updateViewportVisibility(
+            loadVisibleIdentifiers = loadVisibleIdentifiers,
+            continuePlaybackIdentifiers = continuePlaybackIdentifiers,
+            playableIdentifiers = playableIdentifiers,
+            visibleTweetIdentifiers = tweetVisibilityMap
+                .filterValues { it }
+                .keys
+                .toSet()
+        )
+    }
+
+    private fun scheduleGeometryReconcile() {
+        geometryReconcileJob?.cancel()
+        geometryReconcileJob = scope.launch {
+            delay(16L)
+            refreshViewportVisibilityFromGeometry()
+        }
     }
 
     /**
@@ -376,11 +462,36 @@ class VideoPlaybackCoordinator(
      */
     fun updateVideoVisibility(videoMid: MimeiId, tweetId: String, playbackVideoId: String, visibilityRatio: Float) {
         val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
+        val previousRatio = videoVisibilityMap[identifier] ?: 0f
         videoVisibilityMap[identifier] = visibilityRatio
         if (identifier == primaryBelowContinueIdentifier &&
             (visibilityRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD || visibilityRatio < VISIBILITY_THRESHOLD)
         ) {
             primaryBelowContinueIdentifier = null
+        }
+
+        val crossedLoadThreshold = (previousRatio > 0f) != (visibilityRatio > 0f)
+        val crossedPlayableThreshold =
+            (previousRatio >= VISIBILITY_THRESHOLD) != (visibilityRatio >= VISIBILITY_THRESHOLD)
+        val crossedContinueThreshold =
+            (previousRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD) !=
+                (visibilityRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD)
+        val currentPrimaryCrossedContinue =
+            identifier == primaryVideoId && crossedContinueThreshold
+        val noPrimaryBecamePlayable =
+            primaryVideoId == null &&
+                previousRatio < VISIBILITY_THRESHOLD &&
+                visibilityRatio >= VISIBILITY_THRESHOLD
+
+        if (crossedLoadThreshold ||
+            crossedPlayableThreshold ||
+            currentPrimaryCrossedContinue ||
+            noPrimaryBecamePlayable
+        ) {
+            visibilityUpdateDebounceJob?.cancel()
+            visibilityUpdateDebounceJob = null
+            rebuildVisibilitySetsFromRatios()
+            return
         }
 
         visibilityUpdateDebounceJob?.cancel()
@@ -473,6 +584,10 @@ class VideoPlaybackCoordinator(
     private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
         if (isPaused || !isFeedVisible) return
 
+        if (replayCurrentPrimary && resumePendingPrimaryIfPossible()) {
+            return
+        }
+
         if (visibleVideos.isEmpty()) {
             stopAllVideosIfLayoutIsStable()
             return
@@ -483,6 +598,14 @@ class VideoPlaybackCoordinator(
                 if (replayCurrentPrimary && primaryId in playableVideoIds) {
                     emitPlayForPrimary(videoMetaMap[primaryId] ?: return@let)
                 }
+                return
+            }
+
+            if (replayCurrentPrimary && primaryId in playableVideoIds) {
+                if (primaryBelowContinueIdentifier == primaryId) {
+                    primaryBelowContinueIdentifier = null
+                }
+                emitPlayForPrimary(videoMetaMap[primaryId] ?: return@let)
                 return
             }
 
@@ -540,6 +663,18 @@ class VideoPlaybackCoordinator(
                 { tweetCellBoundsMap[it.tweetId]?.top ?: Float.MAX_VALUE },
                 { feedOrder[it.identifier] ?: Int.MAX_VALUE },
                 { it.index }
+            )
+        )
+    }
+
+    private fun sortAllVideosByFeedOrder() {
+        if (allVideos.size <= 1) return
+        val tweetOrder = currentTweets.mapIndexed { index, tweet -> tweet.mid to index }.toMap()
+        allVideos.sortWith(
+            compareBy<VideoPlaybackInfo>(
+                { tweetOrder[it.tweetId] ?: Int.MAX_VALUE },
+                { it.index },
+                { it.identifier }
             )
         )
     }
@@ -709,6 +844,7 @@ class VideoPlaybackCoordinator(
         playbackDebounceJob?.cancel()
         playbackDebounceJob = null
         primaryVideoId = null
+        pendingResumePrimaryId = null
         primaryBelowContinueIdentifier = null
         userRequestedPrimaryIdentifier = null
         scope.launch {
@@ -724,6 +860,9 @@ class VideoPlaybackCoordinator(
         playbackDebounceJob = null
         visibilityUpdateDebounceJob?.cancel()
         visibilityUpdateDebounceJob = null
+        geometryReconcileJob?.cancel()
+        geometryReconcileJob = null
+        pendingResumePrimaryId = primaryVideoId
 
         val idsToPause = (visibleVideos.map { it.identifier } + listOfNotNull(primaryVideoId)).toSet()
         scope.launch {
@@ -741,10 +880,24 @@ class VideoPlaybackCoordinator(
         visibilityUpdateDebounceJob?.cancel()
         visibilityUpdateDebounceJob = scope.launch {
             delay(FOREGROUND_RECONCILE_DELAY_MS)
+            refreshViewportVisibilityFromGeometry()
             rebuildVisibilitySetsFromRatios()
             reconcilePlaybackForCurrentVisibility(replayCurrentPrimary = true)
         }
         Timber.d("VideoPlaybackCoordinator: Host resumed; scheduling foreground reconciliation")
+    }
+
+    private fun resumePendingPrimaryIfPossible(): Boolean {
+        if (isPaused || !isFeedVisible) return false
+        val resumeId = pendingResumePrimaryId ?: primaryVideoId ?: return false
+        val info = videoMetaMap[resumeId] ?: return false
+
+        pendingResumePrimaryId = null
+        primaryBelowContinueIdentifier = null
+        primaryVideoId = resumeId
+        emitPlayForPrimary(info)
+        Timber.d("VideoPlaybackCoordinator: Replaying foreground primary ${info.videoMid}")
+        return true
     }
 
     /**
@@ -766,6 +919,8 @@ class VideoPlaybackCoordinator(
         playbackDebounceJob = null
         visibilityUpdateDebounceJob?.cancel()
         visibilityUpdateDebounceJob = null
+        geometryReconcileJob?.cancel()
+        geometryReconcileJob = null
 
         stopAllVideos()
 
@@ -776,6 +931,7 @@ class VideoPlaybackCoordinator(
         tweetCellBoundsMap.clear()
         tweetVisibilityMap.clear()
         videoVisibilityMap.clear()
+        videoGeometryMap.clear()
         finishedVideoIds.clear()
         primaryBelowContinueIdentifier = null
         userRequestedPrimaryIdentifier = null

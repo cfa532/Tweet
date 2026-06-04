@@ -1324,9 +1324,9 @@ object VideoManager {
     /**
      * Release video players that are safe to drop under memory pressure.
      *
-     * When the app UI is hidden, feed composables can still be marked active/visible until
-     * Compose disposes or resumes. In that case [releaseVisibleFeedPlayers] intentionally
-     * drops those feed players too; fullscreen-protected playback is left alone.
+     * Normal background/UI-hidden trims should keep visible feed players so their surfaces
+     * can resume on foreground. Set [releaseVisibleFeedPlayers] only for truly aggressive
+     * low-memory cleanup, where dropping visible feed players is preferable to process death.
      */
     fun handleMemoryPressure(level: Int, releaseVisibleFeedPlayers: Boolean = false) {
         if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {

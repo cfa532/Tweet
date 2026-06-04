@@ -177,14 +177,60 @@ fun VideoPreview(
     val currentShouldPlay by rememberUpdatedState(shouldPlay)
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    DisposableEffect(Unit) {
+    DisposableEffect(
+        lifecycleOwner,
+        shouldUseCoordinator,
+        videoMid,
+        playbackTweetId,
+        resolvedPlaybackVideoId,
+        coordinator
+    ) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP ->
                     currentExoPlayer?.playWhenReady = false
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
-                    val vis = if (shouldUseCoordinator) (state.isVideoVisible || currentShouldPlay) else state.isVideoVisible
-                    if (vis && currentShouldPlay) currentExoPlayer?.playWhenReady = true
+                    var resumeShouldPlay = currentShouldPlay
+                    if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                        if (state.hasLastGeometry) {
+                            val displayFrame = android.graphics.Rect()
+                            rootView.getWindowVisibleDisplayFrame(displayFrame)
+                            val visibleViewportTop = if (displayFrame.height() > 0) {
+                                displayFrame.top.toFloat()
+                            } else {
+                                state.lastViewportTop
+                            }
+                            val visibleViewportBottom = if (displayFrame.height() > 0) {
+                                displayFrame.bottom.toFloat()
+                            } else {
+                                state.lastViewportBottom
+                            }
+                            coordinator.updateVideoGeometry(
+                                videoMid = videoMid,
+                                playbackVideoId = resolvedPlaybackVideoId,
+                                videoTop = state.lastVideoTop,
+                                videoBottom = state.lastVideoBottom,
+                                visibleViewportTop = visibleViewportTop,
+                                visibleViewportBottom = visibleViewportBottom
+                            )
+                            coordinator.refreshViewportVisibilityFromGeometry()
+                        } else {
+                            coordinator.updateVideoVisibility(
+                                videoMid,
+                                playbackTweetId,
+                                resolvedPlaybackVideoId,
+                                state.lastVisibilityRatio
+                            )
+                        }
+                        resumeShouldPlay = coordinator.shouldAutoPlay(
+                            videoMid,
+                            playbackTweetId,
+                            resolvedPlaybackVideoId
+                        )
+                        state.coordinatorWantsToPlay = resumeShouldPlay
+                    }
+                    val vis = if (shouldUseCoordinator) (state.isVideoVisible || resumeShouldPlay) else state.isVideoVisible
+                    if (vis && resumeShouldPlay) currentExoPlayer?.playWhenReady = true
                 }
                 else -> {}
             }
@@ -193,6 +239,7 @@ fun VideoPreview(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             if (videoMid != null && playbackTweetId != null) {
+                coordinator.removeVideoGeometry(videoMid, resolvedPlaybackVideoId)
                 coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, 0f)
             }
         }
@@ -386,15 +433,15 @@ fun VideoPreview(
             .onGloballyPositioned { layoutCoordinates ->
                 val now = System.currentTimeMillis()
                 val timeSinceLastUpdate = now - state.lastVisibilityUpdate
-                if (timeSinceLastUpdate < 200L) return@onGloballyPositioned
+                if (timeSinceLastUpdate < state.visibilityUpdateThrottleMs) return@onGloballyPositioned
                 state.lastVisibilityUpdate = now
                 val totalHeight = layoutCoordinates.size.height.toFloat()
+                val displayFrame = android.graphics.Rect()
+                rootView.getWindowVisibleDisplayFrame(displayFrame)
                 val measuredVisibilityRatio = if (totalHeight > 0) {
                     val windowPos = layoutCoordinates.positionInWindow()
                     val videoTop = windowPos.y
                     val videoBottom = videoTop + totalHeight
-                    val displayFrame = android.graphics.Rect()
-                    rootView.getWindowVisibleDisplayFrame(displayFrame)
                     val visibleTop = kotlin.math.max(displayFrame.top.toFloat(), videoTop)
                     val visibleBottom = kotlin.math.min(displayFrame.bottom.toFloat(), videoBottom)
                     val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
@@ -404,8 +451,22 @@ fun VideoPreview(
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
                 }
+                state.lastVisibilityRatio = measuredVisibilityRatio
                 if (videoMid != null && playbackTweetId != null) {
-                    coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, measuredVisibilityRatio)
+                    val windowPos = layoutCoordinates.positionInWindow()
+                    state.hasLastGeometry = true
+                    state.lastVideoTop = windowPos.y
+                    state.lastVideoBottom = windowPos.y + totalHeight
+                    state.lastViewportTop = displayFrame.top.toFloat()
+                    state.lastViewportBottom = displayFrame.bottom.toFloat()
+                    coordinator.updateVideoGeometry(
+                        videoMid = videoMid,
+                        playbackVideoId = resolvedPlaybackVideoId,
+                        videoTop = state.lastVideoTop,
+                        videoBottom = state.lastVideoBottom,
+                        visibleViewportTop = state.lastViewportTop,
+                        visibleViewportBottom = state.lastViewportBottom
+                    )
                 }
             }
             .then(if (enableTapToShowControls) Modifier else Modifier.clickable { callback(index) })

@@ -329,8 +329,6 @@ private fun RetweetContent(
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
             if (originalTweetId != null && tweet.originalAuthorId != null) {
-                // Delay fetch so fast-scrolling cancels the coroutine before hitting the network
-                kotlinx.coroutines.delay(200L)
                 withContext(IO) {
                     try {
                         val originalAuthorId = tweet.originalAuthorId ?: ""
@@ -650,8 +648,6 @@ private fun QuotedTweetContent(
 
     LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
         if (originalTweetId != null && tweet.originalAuthorId != null) {
-            // Delay fetch so fast-scrolling cancels the coroutine before hitting the network
-            kotlinx.coroutines.delay(200L)
             try {
                 withContext(IO) {
                     originalTweet = HproseInstance.fetchTweet(

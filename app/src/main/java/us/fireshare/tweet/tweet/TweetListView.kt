@@ -364,9 +364,10 @@ fun TweetListView(
             )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
-            // Clear only this list's coordinator (from LocalVideoCoordinator) so main feed and
-            // profile coordinators do not clear each other when switching screens.
-            coordinator.clear()
+            // Preserve coordinator state across detail navigation so returning to the list can
+            // resume the same visible video immediately. The coordinator is still scoped by
+            // LocalVideoCoordinator, so other lists do not share this state.
+            coordinator.onHostPaused()
             // Defer inactive player cleanup so the incoming screen has time to mark its
             // players as active/visible. Synchronous cleanup here races with navigation
             // and releases players that the next screen just created but hasn't registered yet.
@@ -417,6 +418,11 @@ fun TweetListView(
         
         // Create or update video list when loading is complete
         if (!isInitialLoading && !isInitializingData && tweets.isNotEmpty()) {
+            // Keep autoplay coordination ready immediately. The video-indexed list below is
+            // for fullscreen/navigation and may wait on retweet fetches; visible regular
+            // tweet videos should not wait for that slower work before they can autoplay.
+            coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+
             // Detect if this is a user change (need full rebuild)
             val needsFullRebuild = currentUserId != null && 
                                    (processedTweetIds.isEmpty() || lastProcessedTweetCount > tweets.size)
@@ -643,6 +649,10 @@ fun TweetListView(
                     lastMediaPreloadTime = now
                 }
 
+                // iOS-style playback coordination: after each list geometry/scroll pass,
+                // reconcile video playback once from the registered media-cell bounds.
+                coordinator.refreshViewportVisibilityFromGeometry()
+
                 // Detect when list arrives at the absolute top.
                 // Index 0 alone is not enough when headerContent is tall (e.g. profile + pinned tweets),
                 // because we can still be scrolled within that first item.
@@ -853,6 +863,7 @@ fun TweetListView(
                             size.width.toFloat(),
                             size.height.toFloat()
                         )
+                        coordinator.refreshViewportVisibilityFromGeometry()
                     }
                 },
             state = listState,
