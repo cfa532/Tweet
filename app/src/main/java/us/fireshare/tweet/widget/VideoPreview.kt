@@ -13,9 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -343,6 +345,17 @@ fun VideoPreview(
         }
     }
 
+    var showLoadingSpinner by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isLoading, shouldAcquirePlayer, shouldPlay) {
+        val shouldShowSpinner = state.isLoading && shouldAcquirePlayer && shouldPlay
+        if (shouldShowSpinner) {
+            delay(500)
+            showLoadingSpinner = true
+        } else {
+            showLoadingSpinner = false
+        }
+    }
+
     // --- XML PlayerView layout ---
     AndroidView(
         factory = { ctx ->
@@ -417,7 +430,7 @@ fun VideoPreview(
             }
 
             view.findViewById<ProgressBar>(R.id.loading_spinner).visibility =
-                if (state.isLoading && shouldAcquirePlayer && shouldPlay) View.VISIBLE else View.GONE
+                if (showLoadingSpinner) View.VISIBLE else View.GONE
 
             val errorView = view.findViewById<LinearLayout>(R.id.error_view)
             errorView.visibility = if (state.hasError) View.VISIBLE else View.GONE

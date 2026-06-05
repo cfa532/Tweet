@@ -33,7 +33,7 @@ android {
         versionCode = 127    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "61"  // compared with App Mimei version to check for upgrade.
+        versionName = "62"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
