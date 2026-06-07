@@ -271,6 +271,7 @@ fun MediaGrid(
                             val params = MediaViewerParams(
                                 visualMediaList.map {
                                     MediaItem(
+                                        it.mid,
                                         getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                                         it.type
                                     )

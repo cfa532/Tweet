@@ -135,6 +135,9 @@ object ImageCacheManager {
     private var resumerJob: kotlinx.coroutines.Job? = null
     private val scheduledPauseJobs = ConcurrentHashMap<String, Job>()
     private val visibleImageMids = ConcurrentHashMap.newKeySet<String>()
+    private val viewportVisibleImageMids = ConcurrentHashMap.newKeySet<String>()
+    private val visibleImageRefCounts = ConcurrentHashMap<String, AtomicInteger>()
+    private val visibleImageMutex = Any()
     private val directionalPreloadImageMids = ConcurrentHashMap.newKeySet<String>()
     private val imagePreloadJobs = ConcurrentHashMap<String, Job>()
 
@@ -203,6 +206,16 @@ object ImageCacheManager {
     private fun notifyImageCached(mid: String) {
         imageCacheVersionFlows[mid]?.let { flow ->
             flow.value = flow.value + 1
+        }
+    }
+
+    private fun rebuildVisibleImageMidsLocked() {
+        visibleImageMids.clear()
+        visibleImageMids.addAll(viewportVisibleImageMids)
+        visibleImageRefCounts.forEach { (baseMid, count) ->
+            if (count.get() > 0) {
+                visibleImageMids.add(baseMid)
+            }
         }
     }
 
@@ -913,6 +926,7 @@ object ImageCacheManager {
                                 addToMemoryCache(originalMid, bitmap)
                                 // FIX P1-4: Store result with size limit enforcement
                                 storeDownloadResult(originalMid, bitmap)
+                                notifyImageCached(originalMid)
                                 us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
                                 
                                 return@withContext bitmap
@@ -1538,13 +1552,26 @@ object ImageCacheManager {
     }
 
     fun markImageVisible(mid: String) {
-        visibleImageMids.add(baseImageMid(mid))
+        val baseMid = baseImageMid(mid)
+        synchronized(visibleImageMutex) {
+            visibleImageRefCounts
+                .computeIfAbsent(baseMid) { AtomicInteger(0) }
+                .incrementAndGet()
+            visibleImageMids.add(baseMid)
+        }
         resumeDownload(mid)
-        resumeDownload("${baseImageMid(mid)}_original")
+        resumeDownload("${baseMid}_original")
     }
 
     fun markImageNotVisible(mid: String) {
-        visibleImageMids.remove(baseImageMid(mid))
+        val baseMid = baseImageMid(mid)
+        synchronized(visibleImageMutex) {
+            val count = visibleImageRefCounts[baseMid]?.decrementAndGet() ?: 0
+            if (count <= 0) {
+                visibleImageRefCounts.remove(baseMid)
+            }
+            rebuildVisibleImageMidsLocked()
+        }
         if (!isImageProtected(mid)) {
             cancelImageLoad(mid)
         }
@@ -1614,8 +1641,11 @@ object ImageCacheManager {
         val preloadTargets = (directionalTargets + oppositeTargets).distinctBy { it.mid }
         val preloadIds = preloadTargets.map { it.mid }.toSet()
 
-        visibleImageMids.clear()
-        visibleImageMids.addAll(visibleImageIds)
+        synchronized(visibleImageMutex) {
+            viewportVisibleImageMids.clear()
+            viewportVisibleImageMids.addAll(visibleImageIds)
+            rebuildVisibleImageMidsLocked()
+        }
         directionalPreloadImageMids.clear()
         directionalPreloadImageMids.addAll(preloadIds)
 
@@ -1646,7 +1676,10 @@ object ImageCacheManager {
 
     fun clearDirectionalImagePreloads() {
         directionalPreloadImageMids.clear()
-        visibleImageMids.clear()
+        synchronized(visibleImageMutex) {
+            viewportVisibleImageMids.clear()
+            rebuildVisibleImageMidsLocked()
+        }
         imagePreloadJobs.keys.forEach { cancelImageLoad(it) }
     }
 

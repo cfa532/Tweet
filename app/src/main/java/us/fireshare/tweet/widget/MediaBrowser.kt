@@ -76,7 +76,6 @@ import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
@@ -118,13 +117,13 @@ fun MediaBrowser(
         val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
         val inferredType = inferMediaTypeFromAttachment(it)
         Timber.d("MediaBrowser - Creating MediaItem from tweet: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
-        MediaItem(mediaUrl, inferredType)
+        MediaItem(it.mid, mediaUrl, inferredType)
     }
 
     val mediaItems = if (routeMediaItems.isNotEmpty()) routeMediaItems else tweetMediaItems
     val tappedVideoMid = mediaItems?.getOrNull(startIndex)?.takeIf {
         it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO
-    }?.url?.getMimeiKeyFromUrl()
+    }?.mid
 
     // Use the video list from FullScreenPlayerManager when it matches the tapped media.
     // Otherwise fall back to the explicit media payload carried by navigation.
@@ -132,7 +131,7 @@ fun MediaBrowser(
     val managerHasTappedVideo = tappedVideoMid != null && FullScreenPlayerManager.hasVideo(tappedVideoMid)
     val fallbackVideoList = mediaItems.orEmpty()
         .filter { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
-        .map { it.url.getMimeiKeyFromUrl() }
+        .map { it.mid }
     val videoList = if (managerHasTappedVideo) {
         fullScreenVideoList?.map { it.first } ?: emptyList()
     } else {
@@ -191,8 +190,7 @@ fun MediaBrowser(
         Timber.d("MediaBrowser - Page changed to: ${pagerState.currentPage}")
         mediaItems.forEachIndexed { index, mediaItem ->
             if (mediaItem.type == MediaType.Video || mediaItem.type == MediaType.HLS_VIDEO) {
-                val videoMid = mediaItem.url.getMimeiKeyFromUrl()
-                VideoManager.pauseVideo(videoMid)
+                VideoManager.pauseVideo(mediaItem.mid)
             }
         }
     }
@@ -412,6 +410,7 @@ fun MediaBrowser(
                 else -> {
                     AdvancedImageViewer(
                         imageUrl = mediaItem.url,
+                        imageMid = mediaItem.mid,
                         onClose = { navController.popBackStack() },
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), 0) }

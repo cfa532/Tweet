@@ -460,19 +460,19 @@ fun ChatScreen(
                 val imageAttachments = allAttachments.mapIndexedNotNull { idx, item ->
                     val inferredType = us.fireshare.tweet.widget.inferMediaTypeFromAttachment(item)
                     if (inferredType == MediaType.Image) {
-                        idx to us.fireshare.tweet.HproseInstance.getMediaUrl(item.mid, appUser.baseUrl).toString()
+                        Triple(idx, item.mid, us.fireshare.tweet.HproseInstance.getMediaUrl(item.mid, appUser.baseUrl).toString())
                     } else {
                         null
                     }
                 }
                 
                 // Find current image index
-                val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+                val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _, _) ->
                     allAttachments[idx].mid == attachment.mid
                 }
                 
                 // Get list of image URLs
-                val imageUrls = imageAttachments.map { (_, url) -> url }
+                val imageUrls = imageAttachments.map { (_, _, url) -> url }
                 
                 Dialog(
                     onDismissRequest = { 
@@ -494,6 +494,7 @@ fun ChatScreen(
                     ) {
                         us.fireshare.tweet.widget.AdvancedImageViewer(
                             imageUrl = mediaUrl,
+                            imageMid = attachment.mid,
                             enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
                             onClose = { 
@@ -512,7 +513,7 @@ fun ChatScreen(
                                     } else {
                                         currentImageIndexInList + 1
                                     }
-                                    val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                    val (nextMediaIndex, _, _) = imageAttachments[nextIndex]
                                     fullScreenAttachment = message.attachments!![nextMediaIndex]
                                     fullScreenBitmap = null // Reset bitmap to load new image
                                 }
@@ -525,7 +526,7 @@ fun ChatScreen(
                                     } else {
                                         currentImageIndexInList - 1
                                     }
-                                    val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                    val (prevMediaIndex, _, _) = imageAttachments[prevIndex]
                                     fullScreenAttachment = message.attachments!![prevMediaIndex]
                                     fullScreenBitmap = null // Reset bitmap to load new image
                                 }
@@ -1250,6 +1251,7 @@ fun ChatMediaPreview(
                 ) {
                     us.fireshare.tweet.widget.ImageViewer(
                         imageUrl = mediaUrl,
+                        imageMid = attachment.mid,
                         modifier = Modifier.fillMaxSize(),
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = true, // Use preview grid mode like MediaCell

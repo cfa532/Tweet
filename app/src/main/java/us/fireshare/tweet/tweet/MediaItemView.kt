@@ -94,7 +94,7 @@ fun MediaItemView(
     val attachments = mediaItems.map {
         val inferredType = inferMediaTypeFromAttachment(it)
         val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
-        MediaItem(mediaUrl, inferredType)
+        MediaItem(it.mid, mediaUrl, inferredType)
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
@@ -130,6 +130,7 @@ fun MediaItemView(
                 val params = MediaViewerParams(
                     fullScreenMediaItems.map {
                         MediaItem(
+                            it.mid,
                             getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
                             it.type
                         )
@@ -227,6 +228,7 @@ fun MediaItemView(
                 ) {
                     ImageViewer(
                         attachment.url,
+                        imageMid = mediaItems[index].mid,
                         modifier = Modifier.fillMaxSize(), // Always fill parent in preview grid
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = inPreviewGrid,
@@ -331,26 +333,26 @@ fun MediaItemView(
         val imageAttachments = itemsForNavigation.mapIndexedNotNull { idx, item ->
             val inferredType = inferMediaTypeFromAttachment(item)
             if (inferredType == MediaType.Image) {
-                idx to getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                Triple(idx, item.mid, getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString())
             } else {
                 null
             }
         }
         
         // Find current image index in the filtered list
-        val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _) ->
+        val currentImageIndexInList = imageAttachments.indexOfFirst { (idx, _, _) ->
             itemsForNavigation[idx].mid == imageMid
         }
         
         // Get current media URL based on current imageMid
         val mediaUrl = if (currentImageIndexInList >= 0) {
-            imageAttachments[currentImageIndexInList].second
+            imageAttachments[currentImageIndexInList].third
         } else {
             getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
         }
         
         // Get list of image URLs
-        val imageUrls = imageAttachments.map { (_, url) -> url }
+        val imageUrls = imageAttachments.map { (_, _, url) -> url }
         
         Dialog(
             onDismissRequest = { },
@@ -369,6 +371,7 @@ fun MediaItemView(
                 key(imageMid) {
                     AdvancedImageViewer(
                         imageUrl = mediaUrl,
+                        imageMid = imageMid,
                         enableLongPress = true,
                         initialBitmap = null, // Always start fresh for smooth animation
                         onClose = { showFullScreenImage = false },
@@ -382,7 +385,7 @@ fun MediaItemView(
                                 } else {
                                     currentImageIndexInList + 1
                                 }
-                                val (nextMediaIndex, _) = imageAttachments[nextIndex]
+                                val (nextMediaIndex, _, _) = imageAttachments[nextIndex]
                                 fullScreenImageMid = itemsForNavigation[nextMediaIndex].mid
                             }
                         },
@@ -394,7 +397,7 @@ fun MediaItemView(
                                 } else {
                                     currentImageIndexInList - 1
                                 }
-                                val (prevMediaIndex, _) = imageAttachments[prevIndex]
+                                val (prevMediaIndex, _, _) = imageAttachments[prevIndex]
                                 fullScreenImageMid = itemsForNavigation[prevMediaIndex].mid
                             }
                         }

@@ -198,8 +198,13 @@ fun ImageModalDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray
                 )
-                getMediaUrl(user.avatar, currentBaseUrl)?.let {
-                    AdvancedImageViewer(it)
+                user.avatar?.let { avatarMid ->
+                    getMediaUrl(avatarMid, currentBaseUrl)?.let {
+                        AdvancedImageViewer(
+                            imageUrl = it,
+                            imageMid = avatarMid
+                        )
+                    }
                 }
             }
 

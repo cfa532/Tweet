@@ -20,7 +20,6 @@ import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 
 /**
  * Singleton manager for the independent fullscreen video player.
@@ -85,13 +84,12 @@ object FullScreenPlayerManager {
         val videoItems = mutableListOf<Pair<MimeiId, MediaType>>()
         val urlMap = mutableMapOf<MimeiId, String>()
         val tappedVideoMid = mediaItems.getOrNull(startMediaIndex)?.takeIf { isVideoType(it.type) }
-            ?.url
-            ?.getMimeiKeyFromUrl()
+            ?.mid
 
         mediaItems.forEach { mediaItem ->
             val mediaType = mediaItem.type ?: MediaType.Unknown
             if (isVideoType(mediaType)) {
-                val videoMid = mediaItem.url.getMimeiKeyFromUrl()
+                val videoMid = mediaItem.mid
                 videoItems.add(videoMid to mediaType)
                 urlMap[videoMid] = mediaItem.url
             }

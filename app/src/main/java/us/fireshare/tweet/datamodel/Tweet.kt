@@ -330,12 +330,11 @@ enum class MediaType {
 }
 
 @Serializable
-// url is in the format of http://ip/mm/mimei_id
-data class MediaItem(val url: String, var type: MediaType? = MediaType.Unknown)
-
-fun String.getMimeiKeyFromUrl(): String {
-    return this.substringAfterLast('/')
-}
+data class MediaItem(
+    val mid: MimeiId,
+    val url: String,
+    var type: MediaType? = MediaType.Unknown
+)
 
 typealias MimeiId = String      // 27 or 64 character long string
 

@@ -67,10 +67,12 @@ import androidx.core.graphics.scale
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.min
@@ -109,6 +111,7 @@ fun AnimatedLoadingText(
 @Composable
 fun AdvancedImageViewer(
     imageUrl: String,
+    imageMid: String,
     modifier: Modifier = Modifier,
     enableLongPress: Boolean = true,
     initialBitmap: android.graphics.Bitmap? = null,
@@ -121,7 +124,7 @@ fun AdvancedImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    val mid = remember(imageUrl) { imageUrl.getMimeiKeyFromUrl() }
+    val mid = imageMid
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
     val imageFailedMessage = stringResource(R.string.failed_to_save_image)
     var loadState by remember(mid) { 
@@ -344,7 +347,7 @@ fun AdvancedImageViewer(
     }
 
     // Update visibility state when it changes and retry if needed
-    LaunchedEffect(isVisible) {
+    LaunchedEffect(mid, isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
         
         if (isVisible) {
@@ -741,6 +744,7 @@ fun AdvancedImageViewer(
 @Composable
 fun ImageViewer(
     imageUrl: String?,
+    imageMid: String?,
     modifier: Modifier = Modifier,
     isFullScreen: Boolean = false,
     enableLongPress: Boolean = true,
@@ -755,7 +759,7 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    val mid = remember(imageUrl) { imageUrl?.getMimeiKeyFromUrl() }
+    val mid = imageMid
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
     val imageFailedMessage = stringResource(R.string.failed_to_save_image)
     // Synchronous cache lookup (memory + disk) to avoid blank frames during LazyColumn scroll.
@@ -787,6 +791,44 @@ fun ImageViewer(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var retryCount by remember { mutableIntStateOf(0) }
     var lastRetryTime by remember { mutableLongStateOf(0L) }
+
+    suspend fun applyCachedBitmapIfAvailable(reason: String): Boolean {
+        val currentMid = mid ?: return false
+        val cacheKeys = if (loadOriginalImage) {
+            listOf("${currentMid}_original", currentMid)
+        } else {
+            listOf(currentMid)
+        }
+
+        for (cacheKey in cacheKeys) {
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, cacheKey)
+            if (cachedBitmap != null && !cachedBitmap.isRecycled) {
+                val hadReadyBitmap = loadState.bitmap?.let { !it.isRecycled } == true &&
+                    !loadState.isLoading &&
+                    !loadState.hasError
+
+                loadState = loadState.copy(
+                    bitmap = cachedBitmap,
+                    isLoading = false,
+                    hasError = false
+                )
+                onBitmapLoaded?.invoke(cachedBitmap)
+
+                val cachedFile = ImageCacheManager.getCachedImageFile(context, cacheKey)
+                if (cachedFile != null && cachedFile.exists()) {
+                    imageFile = cachedFile
+                }
+
+                if (!hadReadyBitmap) {
+                    onLoadComplete?.invoke()
+                }
+                MediaLog.d("ImageViewer") { "Applied cached image for $currentMid after $reason (cacheKey=$cacheKey)" }
+                return true
+            }
+        }
+
+        return false
+    }
 
     // Function to check if retry should be attempted (debounced and with available slots)
     fun shouldRetry(): Boolean {
@@ -821,6 +863,8 @@ fun ImageViewer(
                 // If image becomes visible again, resume any paused download
                 ImageCacheManager.resumeDownload(mid)
 
+                applyCachedBitmapIfAvailable("visible")
+
                 // If previous load failed, retry
                 if (loadState.hasError && retryCount <= 3) {
                     MediaLog.d("ImageViewer") { "Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount" }
@@ -829,6 +873,26 @@ fun ImageViewer(
             } else {
                 ImageCacheManager.markImageNotVisible(mid)
                 MediaLog.d("ImageViewer") { "Image became invisible, paused download: $imageUrl" }
+            }
+        }
+    }
+
+    LaunchedEffect(mid, loadOriginalImage) {
+        val currentMid = mid ?: return@LaunchedEffect
+        val cacheKeys = if (loadOriginalImage) {
+            listOf("${currentMid}_original", currentMid)
+        } else {
+            listOf(currentMid)
+        }
+
+        applyCachedBitmapIfAvailable("cache-observer-start")
+        coroutineScope {
+            cacheKeys.forEach { cacheKey ->
+                launch {
+                    ImageCacheManager.getImageCacheVersionFlow(cacheKey).collect {
+                        applyCachedBitmapIfAvailable("cache-update")
+                    }
+                }
             }
         }
     }

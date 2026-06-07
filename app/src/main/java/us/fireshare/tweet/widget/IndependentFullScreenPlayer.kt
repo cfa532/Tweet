@@ -51,7 +51,6 @@ import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
-import us.fireshare.tweet.datamodel.getMimeiKeyFromUrl
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.BookmarkButton
@@ -96,7 +95,7 @@ fun IndependentFullScreenPlayer(
     val fallbackVideoList = remember(fallbackMediaItems) {
         fallbackMediaItems
             .filter { it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO }
-            .map { it.url.getMimeiKeyFromUrl() to (it.type ?: MediaType.Video) }
+            .map { it.mid to (it.type ?: MediaType.Video) }
     }
     val managerHasRequestedVideo = requestedVideoMid != null &&
         fullScreenVideoList?.any { it.first == requestedVideoMid } == true
