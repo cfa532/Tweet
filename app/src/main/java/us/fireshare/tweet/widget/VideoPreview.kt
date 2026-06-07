@@ -464,14 +464,11 @@ fun VideoPreview(
             .clipToBounds()
             .onGloballyPositioned { layoutCoordinates ->
                 val now = System.currentTimeMillis()
-                val timeSinceLastUpdate = now - state.lastVisibilityUpdate
-                if (timeSinceLastUpdate < state.visibilityUpdateThrottleMs) return@onGloballyPositioned
-                state.lastVisibilityUpdate = now
                 val totalHeight = layoutCoordinates.size.height.toFloat()
                 val displayFrame = android.graphics.Rect()
                 rootView.getWindowVisibleDisplayFrame(displayFrame)
+                val windowPos = layoutCoordinates.positionInWindow()
                 val measuredVisibilityRatio = if (totalHeight > 0) {
-                    val windowPos = layoutCoordinates.positionInWindow()
                     val videoTop = windowPos.y
                     val videoBottom = videoTop + totalHeight
                     val visibleTop = kotlin.math.max(displayFrame.top.toFloat(), videoTop)
@@ -479,13 +476,27 @@ fun VideoPreview(
                     val visibleHeight = kotlin.math.max(0f, visibleBottom - visibleTop)
                     (visibleHeight / totalHeight).coerceIn(0f, 1f)
                 } else 0f
+                val previousVisibilityRatio = state.lastVisibilityRatio
                 val newVisibility = measuredVisibilityRatio > 0f
+                val crossedAutoplayThreshold =
+                    (previousVisibilityRatio >= 0.5f) != (measuredVisibilityRatio >= 0.5f)
+                val crossedContinueThreshold =
+                    (previousVisibilityRatio >= 0.7f) != (measuredVisibilityRatio >= 0.7f)
+                val shouldReportImmediately =
+                    !state.hasLastGeometry ||
+                        state.isVideoVisible != newVisibility ||
+                        crossedAutoplayThreshold ||
+                        crossedContinueThreshold
+                val timeSinceLastUpdate = now - state.lastVisibilityUpdate
+                if (!shouldReportImmediately && timeSinceLastUpdate < state.visibilityUpdateThrottleMs) {
+                    return@onGloballyPositioned
+                }
+                state.lastVisibilityUpdate = now
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
                 }
                 state.lastVisibilityRatio = measuredVisibilityRatio
                 if (videoMid != null && playbackTweetId != null) {
-                    val windowPos = layoutCoordinates.positionInWindow()
                     state.hasLastGeometry = true
                     state.lastVideoTop = windowPos.y
                     state.lastVideoBottom = windowPos.y + totalHeight
