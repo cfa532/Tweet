@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -65,6 +66,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.scale
 import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import timber.log.Timber
 import us.fireshare.tweet.R
@@ -288,6 +290,8 @@ fun AdvancedImageViewer(
                             Timber.tag("ImageViewer").w("Failed to load original image from server, keeping compressed version: $imageUrl")
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag("ImageViewer").e(e, "Error loading original image from server: $imageUrl")
                     if (compressedBitmap == null) {
@@ -312,20 +316,17 @@ fun AdvancedImageViewer(
                 // We have an initialBitmap, so skip loading original to prevent flicker
                 MediaLog.d("ImageViewer") { "Skipping original image load because initialBitmap is provided: $imageUrl" }
             }
-        } catch (e: Exception) {
-            // Handle cancellation gracefully - don't retry on cancellation
-            if (e is kotlinx.coroutines.CancellationException) {
-                MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
-                // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
-                loadState = loadState.copy(isLoading = false)
-                if (ImageCacheManager.isImageProtected(mid)) {
-                    ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
-                } else {
-                    ImageCacheManager.cancelImageLoad(mid)
-                }
-                return@LaunchedEffect
+        } catch (e: CancellationException) {
+            MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
+            // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
+            loadState = loadState.copy(isLoading = false)
+            if (ImageCacheManager.isImageProtected(mid)) {
+                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+            } else {
+                ImageCacheManager.cancelImageLoad(mid)
             }
-            
+            return@LaunchedEffect
+        } catch (e: Exception) {
             loadState = loadState.copy(
                 isLoading = false,
                 hasError = true
@@ -359,6 +360,12 @@ fun AdvancedImageViewer(
         } else {
             ImageCacheManager.markImageNotVisible(mid)
             MediaLog.d("ImageViewer") { "AdvancedImageViewer became invisible, paused download: $imageUrl" }
+        }
+    }
+
+    DisposableEffect(mid) {
+        onDispose {
+            ImageCacheManager.markImageNotVisible(mid)
         }
     }
 
@@ -826,6 +833,12 @@ fun ImageViewer(
         }
     }
 
+    DisposableEffect(mid) {
+        onDispose {
+            mid?.let { ImageCacheManager.markImageNotVisible(it) }
+        }
+    }
+
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, retryCount) {
         // Early return if imageUrl or mid is null
@@ -992,6 +1005,8 @@ fun ImageViewer(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.tag("ImageViewer").e(e, "Error loading image from server: $imageUrl")
                 if (initialBitmap == null) {
@@ -1012,21 +1027,18 @@ fun ImageViewer(
                     Timber.tag("ImageViewer").w("Error loading image from server, keeping initial bitmap: $imageUrl")
                 }
             }
-        } catch (e: Exception) {
-            // Handle cancellation gracefully - don't retry on cancellation
-            if (e is kotlinx.coroutines.CancellationException) {
-                MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
-                // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
-                loadState = loadState.copy(isLoading = false)
-                if (ImageCacheManager.isImageProtected(mid)) {
-                    ImageCacheManager.schedulePauseDownload(mid, 3000L)
-                    ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
-                } else {
-                    ImageCacheManager.cancelImageLoad(mid)
-                }
-                return@LaunchedEffect
+        } catch (e: CancellationException) {
+            MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
+            // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
+            loadState = loadState.copy(isLoading = false)
+            if (ImageCacheManager.isImageProtected(mid)) {
+                ImageCacheManager.schedulePauseDownload(mid, 3000L)
+                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
+            } else {
+                ImageCacheManager.cancelImageLoad(mid)
             }
-            
+            return@LaunchedEffect
+        } catch (e: Exception) {
             loadState = loadState.copy(
                 isLoading = false,
                 hasError = true

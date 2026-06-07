@@ -133,6 +133,7 @@ object ImageCacheManager {
     private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
     private val pausedDownloadMutex = Any()
     private var resumerJob: kotlinx.coroutines.Job? = null
+    private val scheduledPauseJobs = ConcurrentHashMap<String, Job>()
     private val visibleImageMids = ConcurrentHashMap.newKeySet<String>()
     private val directionalPreloadImageMids = ConcurrentHashMap.newKeySet<String>()
     private val imagePreloadJobs = ConcurrentHashMap<String, Job>()
@@ -1032,8 +1033,19 @@ object ImageCacheManager {
      * @param pauseKey The key used for the download (e.g. mid for compressed, "${mid}_original" for original)
      */
     fun schedulePauseDownload(pauseKey: String, delayMs: Long = 3000L) {
-        imageLoadingScope.launch {
+        scheduledPauseJobs.remove(pauseKey)?.cancel()
+        scheduledPauseJobs[pauseKey] = imageLoadingScope.launch {
             delay(delayMs)
+            scheduledPauseJobs.remove(pauseKey)
+
+            val isStillActive = synchronized(downloadQueueMutex) {
+                downloadQueue.containsKey(pauseKey) || ongoingDownloads.containsKey(pauseKey)
+            }
+            if (!isStillActive || isImageProtected(pauseKey)) {
+                Timber.tag("ImageCacheManager").d("Scheduled pause skipped for $pauseKey after ${delayMs}ms")
+                return@launch
+            }
+
             pauseDownload(pauseKey)
             Timber.tag("ImageCacheManager").d("Scheduled pause applied for $pauseKey after ${delayMs}ms")
         }
@@ -1075,6 +1087,7 @@ object ImageCacheManager {
      * Resume a download by removing it from paused state
      */
     fun resumeDownload(mid: String) {
+        scheduledPauseJobs.remove(mid)?.cancel()
         synchronized(pausedDownloadMutex) {
             pausedDownloads.remove(mid)
         }
@@ -1551,6 +1564,7 @@ object ImageCacheManager {
         val keys = listOf(baseMid, "${baseMid}_original")
         keys.forEach { key ->
             if (hasMemoryCachedImage(key)) return@forEach
+            scheduledPauseJobs.remove(key)?.cancel()
             imagePreloadJobs.remove(key)?.cancel()
             synchronized(downloadQueueMutex) {
                 downloadQueue.remove(key)
