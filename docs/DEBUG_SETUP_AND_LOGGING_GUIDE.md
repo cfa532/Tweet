@@ -143,7 +143,6 @@ adb logcat "TweetItem:D TweetCacheManager:D" "*:S"
 #### Successful Tweet Loading
 ```
 D TweetItem: Fetching original tweet: G2gBzYoO_qK75ZQh5DSe1iD3QhX from author: yBlnmA15ho3EBISaHw7AYN0tvVP
-D TweetCacheManager: ✅ MEMORY CACHE HIT: userId: yBlnmA15ho3EBISaHw7AYN0tvVP, username: mini
 D TweetItem: Original tweet loaded successfully: G2gBzYoO_qK75ZQh5DSe1iD3QhX
 ```
 

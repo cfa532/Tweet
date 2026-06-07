@@ -276,7 +276,7 @@ fun TweetDetailScreen(
 
     // Initial comment load when tweet is available - only load once per tweet
     LaunchedEffect(tweet.mid) {
-        if (tweet.mid != null && !hasLoadedPage0) {
+        if (!hasLoadedPage0) {
             hasLoadedPage0 = true
             isInitialLoading = true
             withContext(Dispatchers.IO) {

@@ -478,7 +478,7 @@ interface ChatSessionDao {
     suspend fun deleteSession(userId: String, receiptId: String)
 }
 
-@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 9)
+@Database(entities = [ChatMessageEntity::class, ChatSessionEntity::class], version = 9, exportSchema = false)
 @TypeConverters(MimeiFileTypeListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao

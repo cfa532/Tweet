@@ -228,6 +228,7 @@ object NodePool {
 }
 
 // Encapsulate Hprose client and related operations in a singleton object.
+@Suppress("UNCHECKED_CAST")
 object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
     const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
@@ -246,6 +247,7 @@ object HproseInstance {
      * v2 responses are wrapped as: {success: true, data: result} or {success: false, message: "..."}
      * @return The unwrapped data if success is true, null otherwise
      */
+    @Suppress("UNCHECKED_CAST")
     private fun <T> unwrapV2Response(response: Any?, logErrors: Boolean = true): T? {
         if (response == null) return null
         
@@ -551,20 +553,22 @@ object HproseInstance {
                 val cache = entryResolveCache
                 val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
 
-                if (isFailureBackoffActive && failureCache != null) {
-                    val age = now - failureCache.timestampMs
+                if (isFailureBackoffActive) {
+                    val failureCacheNotNull = failureCache!!
+                    val age = now - failureCacheNotNull.timestampMs
                     Timber.tag("findEntryIP").w(
-                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCache.message}"
+                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCacheNotNull.message}"
                     )
                     cachedFailure = IllegalStateException(
-                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCache.message}"
+                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCacheNotNull.message}"
                     )
-                } else if (isCacheValid && cache != null) {
+                } else if (isCacheValid) {
+                    val cacheNotNull = cache!!
                     // Keep appId aligned with the cached entry resolution metadata.
-                    _appId = cache.appId
-                    cachedResult = cache.ip
+                    _appId = cacheNotNull.appId
+                    cachedResult = cacheNotNull.ip
                     Timber.tag("findEntryIP").d(
-                        "Using cached entry IP ${cache.ip} (age=${now - cache.timestampMs}ms)"
+                        "Using cached entry IP ${cacheNotNull.ip} (age=${now - cacheNotNull.timestampMs}ms)"
                     )
                 } else {
                     inFlightResolve = CompletableDeferred()

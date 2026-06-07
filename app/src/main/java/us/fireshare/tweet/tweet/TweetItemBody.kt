@@ -85,9 +85,7 @@ fun TweetItemBody(
         derivedStateOf { !tweet.attachments.isNullOrEmpty() }
     }
 
-    val canNavigate by remember(tweet.authorId, tweet.mid) {
-        derivedStateOf { tweet.authorId != null && tweet.mid != null }
-    }
+    val canNavigate = true
 
     // fold text content up to 9 lines. Open it upon user click.
     Surface(

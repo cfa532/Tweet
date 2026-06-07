@@ -45,3 +45,4 @@ build.log
 /.kotlin
 build.log
 build.log
+/.gradle_home

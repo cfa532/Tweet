@@ -187,7 +187,7 @@ interface CachedTweetDao {
     fun deleteCachedTweet(tweetId: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 13)
+@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 13, exportSchema = false)
 @TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao

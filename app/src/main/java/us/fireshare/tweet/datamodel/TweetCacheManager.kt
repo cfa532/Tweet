@@ -338,7 +338,6 @@ object TweetCacheManager {
 
             memoryUser?.let { user ->
                 if (!isUserExpired(user)) {
-                    Timber.tag("TweetCacheManager").d("✅ MEMORY CACHE HIT: userId: $userId, username: ${user.username}")
                     return user
                 } else {
                     // User is expired but still return it (stale data is better than no data)
