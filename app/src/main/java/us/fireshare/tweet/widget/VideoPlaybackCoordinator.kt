@@ -120,6 +120,15 @@ class VideoPlaybackCoordinator(
     private var primaryBelowContinueIdentifier: String? = null
     private var userRequestedPrimaryIdentifier: String? = null
 
+    private fun setPrimaryVideoId(identifier: String?) {
+        val previous = primaryVideoId
+        if (previous == identifier) return
+
+        previous?.let { VideoManager.clearCoordinatorPrimaryVideo(it) }
+        primaryVideoId = identifier
+        identifier?.let { VideoManager.markCoordinatorPrimaryVideo(it) }
+    }
+
     private var viewportWidth = 1080f
     private var viewportHeight = 2340f
     private var viewportVisibleTop = 0f
@@ -323,7 +332,7 @@ class VideoPlaybackCoordinator(
             videoMetaMap[videoInfo.identifier] = videoInfo
         }
         if (primaryVideoId != null && !videoMetaMap.containsKey(primaryVideoId)) {
-            primaryVideoId = null
+            setPrimaryVideoId(null)
         }
         if (pendingResumePrimaryId != null && !videoMetaMap.containsKey(pendingResumePrimaryId)) {
             pendingResumePrimaryId = null
@@ -607,7 +616,7 @@ class VideoPlaybackCoordinator(
             if (primaryId in playableVideoIds || primaryVisibility >= VISIBILITY_THRESHOLD) {
                 primaryBelowContinueIdentifier = primaryId
             }
-            primaryVideoId = null
+            setPrimaryVideoId(null)
         }
 
         if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
@@ -705,7 +714,7 @@ class VideoPlaybackCoordinator(
 
         val primary = identifyPrimaryVideo() ?: return
         val previousPrimaryId = primaryVideoId
-        primaryVideoId = primary.identifier
+        setPrimaryVideoId(primary.identifier)
 
         scope.launch {
             if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
@@ -786,7 +795,7 @@ class VideoPlaybackCoordinator(
 
         val previousPrimaryId = primaryVideoId
         val primaryIdentifier = info.identifier
-        primaryVideoId = primaryIdentifier
+        setPrimaryVideoId(primaryIdentifier)
         userRequestedPrimaryIdentifier = primaryIdentifier
 
         scope.launch {
@@ -819,7 +828,7 @@ class VideoPlaybackCoordinator(
         finishedVideoIds.add(identifier)
 
         if (primaryVideoId == identifier) {
-            primaryVideoId = null
+            setPrimaryVideoId(null)
             // Emit stop so VideoPreview clears coordinatorWantsToPlay
             scope.launch {
                 _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(identifier, videoMid))
@@ -831,7 +840,7 @@ class VideoPlaybackCoordinator(
     fun stopAllVideos() {
         playbackDebounceJob?.cancel()
         playbackDebounceJob = null
-        primaryVideoId = null
+        setPrimaryVideoId(null)
         pendingResumePrimaryId = null
         primaryBelowContinueIdentifier = null
         userRequestedPrimaryIdentifier = null
@@ -881,7 +890,7 @@ class VideoPlaybackCoordinator(
 
         pendingResumePrimaryId = null
         primaryBelowContinueIdentifier = null
-        primaryVideoId = resumeId
+        setPrimaryVideoId(resumeId)
         emitPlayForPrimary(info)
         MediaLog.d { "VideoPlaybackCoordinator: Replaying foreground primary ${info.videoMid}" }
         return true

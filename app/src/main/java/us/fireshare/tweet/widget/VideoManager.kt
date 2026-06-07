@@ -62,6 +62,7 @@ object VideoManager {
 
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
+    private val coordinatorPrimaryVideos = mutableSetOf<MimeiId>()
     
     // ===== MEMORY MANAGEMENT =====
     // Cache access synchronization to prevent concurrent access issues
@@ -525,12 +526,27 @@ object VideoManager {
     ): Boolean {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
+        if (coordinatorPrimaryVideos.contains(videoMid)) return true
         if (protectDirectionalPreloads && isCurrentDirectionalPreload(videoMid)) return true
         if (protectRecentlyInactive && isRecentlyInactive(videoMid)) return true
         if (isVideoInFullScreen(videoMid)) return true
         if (isVideoProtectedForFullScreen(videoMid)) return true
         val player = videoPlayers[videoMid]
         return player?.isPlaying == true || player?.playWhenReady == true
+    }
+
+    fun markCoordinatorPrimaryVideo(videoMid: MimeiId) {
+        coordinatorPrimaryVideos.add(videoMid)
+        inactiveSinceTimestamps.remove(videoMid)
+        touchPlayer(videoMid)
+    }
+
+    fun clearCoordinatorPrimaryVideo(videoMid: MimeiId) {
+        coordinatorPrimaryVideos.remove(videoMid)
+    }
+
+    fun clearCoordinatorPrimaryVideos() {
+        coordinatorPrimaryVideos.clear()
     }
 
     private fun enforcePlayerCacheLimit(reserveSlots: Int = 0) {
@@ -1459,12 +1475,7 @@ object VideoManager {
      */
     fun cleanupInactivePlayers() {
         val inactivePlayers = videoPlayers.keys.filter { videoMid ->
-            !activeVideos.containsKey(videoMid) &&
-                !visibleVideos.contains(videoMid) &&
-                !isVideoInFullScreen(videoMid) &&
-                !isVideoProtectedForFullScreen(videoMid) &&
-                !isCurrentDirectionalPreload(videoMid) &&
-                !isRecentlyInactive(videoMid)
+            !isPlayerReleaseProtected(videoMid)
         }
 
         if (inactivePlayers.isNotEmpty()) {
@@ -1533,6 +1544,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        coordinatorPrimaryVideos.remove(videoMid)
         playerAccessTimestamps.remove(videoMid)
         inactiveSinceTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
