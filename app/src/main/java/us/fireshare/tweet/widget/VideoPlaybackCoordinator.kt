@@ -96,10 +96,12 @@ class VideoPlaybackCoordinator(
         private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = 0.7f
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
         private const val FOREGROUND_RECONCILE_DELAY_MS = 120L
+        private const val VISIBILITY_LOSS_STOP_GRACE_MS = 750L
     }
 
     // Single reusable coroutine scope to avoid allocating a new CoroutineScope on every event
     private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private val managerPlaybackOwnerKey = System.identityHashCode(this)
 
     private var visibleVideos = mutableListOf<VideoPlaybackInfo>()
     private var allVideos = mutableListOf<VideoPlaybackInfo>()
@@ -126,7 +128,11 @@ class VideoPlaybackCoordinator(
 
         previous?.let { VideoManager.clearCoordinatorPrimaryVideo(it) }
         primaryVideoId = identifier
-        identifier?.let { VideoManager.markCoordinatorPrimaryVideo(it) }
+        identifier?.let {
+            cancelPendingVisibilityLossStop(it)
+            VideoManager.markCoordinatorPrimaryVideo(it)
+        }
+        updateManagerRetainedVideos()
     }
 
     private var viewportWidth = 1080f
@@ -163,6 +169,7 @@ class VideoPlaybackCoordinator(
     private var playbackDebounceJob: Job? = null
     private var visibilityUpdateDebounceJob: Job? = null
     private var geometryReconcileJob: Job? = null
+    private val pendingVisibilityLossStopJobs = mutableMapOf<String, Job>()
 
     // Command flow - similar to iOS NotificationCenter
     private val _playbackCommands = MutableSharedFlow<VideoPlaybackCommand>(replay = 0, extraBufferCapacity = 64)
@@ -401,6 +408,7 @@ class VideoPlaybackCoordinator(
         visibleViewportBottom: Float
     ) {
         val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
+        cancelPendingVisibilityLossStop(identifier)
         videoGeometryMap[identifier] = android.graphics.RectF(
             0f,
             videoTop,
@@ -420,7 +428,18 @@ class VideoPlaybackCoordinator(
     }
 
     fun refreshViewportVisibilityFromGeometry() {
-        if (videoGeometryMap.isEmpty()) return
+        if (videoGeometryMap.isEmpty()) {
+            updateViewportVisibility(
+                loadVisibleIdentifiers = emptySet(),
+                continuePlaybackIdentifiers = emptySet(),
+                playableIdentifiers = emptySet(),
+                visibleTweetIdentifiers = tweetVisibilityMap
+                    .filterValues { it }
+                    .keys
+                    .toSet()
+            )
+            return
+        }
 
         val loadVisibleIdentifiers = mutableSetOf<String>()
         val continuePlaybackIdentifiers = mutableSetOf<String>()
@@ -466,6 +485,9 @@ class VideoPlaybackCoordinator(
         val identifier = playbackVideoId.ifBlank { videoPlaybackIdentifier(videoMid) }
         val previousRatio = videoVisibilityMap[identifier] ?: 0f
         videoVisibilityMap[identifier] = visibilityRatio
+        if (visibilityRatio > 0f) {
+            cancelPendingVisibilityLossStop(identifier)
+        }
         if (identifier == primaryBelowContinueIdentifier &&
             (visibilityRatio >= KEEP_PLAYING_VISIBILITY_THRESHOLD || visibilityRatio < VISIBILITY_THRESHOLD)
         ) {
@@ -524,17 +546,12 @@ class VideoPlaybackCoordinator(
         continuePlaybackVideoIds = nextContinue
         playableVideoIds = nextPlayable
         visibleTweetIds = visibleTweetIdentifiers
+        nextLoadVisible.forEach { cancelPendingVisibilityLossStop(it) }
 
         (previousLoadVisible - nextLoadVisible).forEach { identifier ->
-            finishedVideoIds.remove(identifier)
-            if (identifier == primaryBelowContinueIdentifier) {
-                primaryBelowContinueIdentifier = null
-            }
-            val info = videoMetaMap[identifier] ?: return@forEach
-            scope.launch {
-                _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.identifier, info.videoMid))
-            }
+            scheduleStopAfterVisibilityLoss(identifier)
         }
+        updateManagerRetainedVideos()
 
         visibleVideos = allVideos.filter { it.identifier in playableVideoIds }
             .sortedByFeedPosition()
@@ -591,6 +608,9 @@ class VideoPlaybackCoordinator(
         }
 
         if (visibleVideos.isEmpty()) {
+            if (pendingVisibilityLossStopJobs.isNotEmpty()) {
+                return
+            }
             stopAllVideosIfLayoutIsStable()
             return
         }
@@ -680,9 +700,64 @@ class VideoPlaybackCoordinator(
 
     private fun stopPrimaryVideo(identifier: String) {
         val info = videoMetaMap[identifier] ?: return
+        cancelPendingVisibilityLossStop(identifier)
         scope.launch {
             _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.identifier, info.videoMid))
         }
+    }
+
+    private fun scheduleStopAfterVisibilityLoss(identifier: String) {
+        if (pendingVisibilityLossStopJobs.containsKey(identifier)) return
+        val info = videoMetaMap[identifier] ?: return
+        pendingVisibilityLossStopJobs[identifier] = scope.launch {
+            MediaLog.d {
+                "VideoPlaybackCoordinator: Delaying visibility-loss stop for ${info.videoMid}"
+            }
+            delay(VISIBILITY_LOSS_STOP_GRACE_MS)
+            pendingVisibilityLossStopJobs.remove(identifier)
+            if (identifier in loadVisibleVideoIds || (videoVisibilityMap[identifier] ?: 0f) > 0f) {
+                updateManagerRetainedVideos()
+                MediaLog.d {
+                    "VideoPlaybackCoordinator: Canceled visibility-loss stop for ${info.videoMid}; visible again"
+                }
+                return@launch
+            }
+
+            finishedVideoIds.remove(identifier)
+            if (identifier == primaryBelowContinueIdentifier) {
+                primaryBelowContinueIdentifier = null
+            }
+            if (identifier == primaryVideoId) {
+                setPrimaryVideoId(null)
+            }
+            _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(info.identifier, info.videoMid))
+            updateManagerRetainedVideos()
+            MediaLog.d {
+                "VideoPlaybackCoordinator: Visibility-loss stop emitted for ${info.videoMid}"
+            }
+        }
+        updateManagerRetainedVideos()
+    }
+
+    private fun cancelPendingVisibilityLossStop(identifier: String) {
+        pendingVisibilityLossStopJobs.remove(identifier)?.cancel()
+        updateManagerRetainedVideos()
+    }
+
+    private fun clearPendingVisibilityLossStops() {
+        pendingVisibilityLossStopJobs.values.forEach { it.cancel() }
+        pendingVisibilityLossStopJobs.clear()
+        updateManagerRetainedVideos()
+    }
+
+    private fun updateManagerRetainedVideos() {
+        val retainedIdentifiers = loadVisibleVideoIds +
+            pendingVisibilityLossStopJobs.keys +
+            listOfNotNull(primaryVideoId)
+        val retainedMids = retainedIdentifiers.mapNotNull { identifier ->
+            videoMetaMap[identifier]?.videoMid
+        }.toSet()
+        VideoManager.setCoordinatorRetainedVideos(managerPlaybackOwnerKey, retainedMids)
     }
 
     private fun isProtectedUserRequestedPrimary(identifier: String): Boolean {
@@ -840,10 +915,12 @@ class VideoPlaybackCoordinator(
     fun stopAllVideos() {
         playbackDebounceJob?.cancel()
         playbackDebounceJob = null
+        clearPendingVisibilityLossStops()
         setPrimaryVideoId(null)
         pendingResumePrimaryId = null
         primaryBelowContinueIdentifier = null
         userRequestedPrimaryIdentifier = null
+        VideoManager.clearCoordinatorRetainedVideos(managerPlaybackOwnerKey)
         scope.launch {
             _playbackCommands.emit(VideoPlaybackCommand.ShouldStopAllVideos)
         }
@@ -917,6 +994,7 @@ class VideoPlaybackCoordinator(
         visibilityUpdateDebounceJob = null
         geometryReconcileJob?.cancel()
         geometryReconcileJob = null
+        clearPendingVisibilityLossStops()
 
         stopAllVideos()
 

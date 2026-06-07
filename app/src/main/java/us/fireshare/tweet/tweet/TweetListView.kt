@@ -81,7 +81,6 @@ import us.fireshare.tweet.viewmodel.TweetListViewModel
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.PreloadDirection
-import us.fireshare.tweet.widget.VideoLoadingManager
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
@@ -635,7 +634,7 @@ fun TweetListView(
                         tweets = visibleTweets,
                         includeOppositeOnStop = !isScrolling
                     )
-                    VideoLoadingManager.updateDirectionalVideoPreloads(
+                    VideoManager.updateDirectionalVideoPreloads(
                         context = androidContext,
                         visibleTweetIndexes = visibleTweetIndexes,
                         direction = mediaPreloadDirection,

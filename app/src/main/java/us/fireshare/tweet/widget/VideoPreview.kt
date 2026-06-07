@@ -134,7 +134,7 @@ fun VideoPreview(
         }
     }
 
-    // --- Visibility tracking via VideoLoadingManager ---
+    // --- Player acquisition and visibility ownership ---
     DisposableEffect(playerKey, shouldAcquirePlayer, playerGeneration) {
         if (playerKey != null && shouldAcquirePlayer) {
             VideoManager.markVideoActive(playerKey)
@@ -147,8 +147,26 @@ fun VideoPreview(
         }
     }
 
-    playerKey?.let { key ->
-        rememberVideoLoadingManager(videoMid = key, isVisible = effectivelyVisible, generation = playerGeneration)
+    var wasManagerVisible by remember(playerKey, playerGeneration) { mutableStateOf(false) }
+    LaunchedEffect(playerKey, playerGeneration, effectivelyVisible) {
+        val key = playerKey ?: return@LaunchedEffect
+        if (effectivelyVisible == wasManagerVisible) return@LaunchedEffect
+        if (effectivelyVisible) {
+            VideoManager.markVideoVisible(key)
+        } else {
+            VideoManager.markVideoNotVisible(key)
+        }
+        wasManagerVisible = effectivelyVisible
+    }
+
+    DisposableEffect(playerKey, playerGeneration) {
+        onDispose {
+            val key = playerKey
+            if (key != null && wasManagerVisible) {
+                VideoManager.markVideoNotVisible(key)
+                wasManagerVisible = false
+            }
+        }
     }
 
     // --- ExoPlayer (regenerated on force-recreate) ---
@@ -193,7 +211,7 @@ fun VideoPreview(
                     currentExoPlayer?.playWhenReady = false
                 Lifecycle.Event.ON_RESUME, Lifecycle.Event.ON_START -> {
                     var resumeShouldPlay = currentShouldPlay
-                    if (shouldUseCoordinator && videoMid != null && playbackTweetId != null) {
+                    if (shouldUseCoordinator) {
                         if (state.hasLastGeometry) {
                             val displayFrame = android.graphics.Rect()
                             rootView.getWindowVisibleDisplayFrame(displayFrame)
@@ -240,7 +258,7 @@ fun VideoPreview(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            if (videoMid != null && playbackTweetId != null) {
+            if (shouldUseCoordinator) {
                 coordinator.removeVideoGeometry(videoMid, resolvedPlaybackVideoId)
                 coordinator.updateVideoVisibility(videoMid, playbackTweetId, resolvedPlaybackVideoId, 0f)
             }

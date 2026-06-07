@@ -29,6 +29,10 @@ import us.fireshare.tweet.datamodel.Tweet
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+enum class PreloadDirection {
+    UP, DOWN, NONE
+}
+
 /**
  * Unified VideoManager handles all video-related functionality:
  * - ExoPlayer instance management and lifecycle
@@ -63,6 +67,7 @@ object VideoManager {
     // Track which videos are currently being used
     private val activeVideos = ConcurrentHashMap<MimeiId, Int>()
     private val coordinatorPrimaryVideos = mutableSetOf<MimeiId>()
+    private val coordinatorRetainedVideosByOwner = mutableMapOf<Int, Set<MimeiId>>()
     
     // ===== MEMORY MANAGEMENT =====
     // Cache access synchronization to prevent concurrent access issues
@@ -242,7 +247,6 @@ object VideoManager {
         preloadedVideos.remove(videoMid)
         inactiveSinceTimestamps.remove(videoMid)
         touchPlayer(videoMid)
-        markVideoActive(videoMid)
     }
 
     /**
@@ -260,13 +264,13 @@ object VideoManager {
         } else {
             visibleVideoCounts[videoMid] = newVisibleCount
         }
-        markVideoInactive(videoMid)
 
         // Don't stop the video if it's currently in full-screen mode
         // or if another composable is still actively using this player
         val stillVisible = visibleVideoCounts.getOrDefault(videoMid, 0) > 0
         val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
-        if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive) {
+        val retainedByPlaybackOwner = isPlaybackOwnerProtected(videoMid)
+        if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive && !retainedByPlaybackOwner) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
             videoPlayers[videoMid]?.let { player ->
@@ -284,6 +288,8 @@ object VideoManager {
                 }
             }
             enforcePlayerCacheLimit()
+        } else if (!stillVisible && !stillActive && retainedByPlaybackOwner) {
+            MediaLog.d("VideoManager") { "Preserving coordinator-owned player while view is detached: $videoMid" }
         }
     }
 
@@ -485,6 +491,7 @@ object VideoManager {
     ): Boolean {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
+        if (isCoordinatorRetainedVideo(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
         if (isVideoProtectedForFullScreen(videoMid)) return true
         if (currentFullScreenVideoMid == videoMid) return true
@@ -527,6 +534,7 @@ object VideoManager {
         if (activeVideos.containsKey(videoMid)) return true
         if (visibleVideos.contains(videoMid)) return true
         if (coordinatorPrimaryVideos.contains(videoMid)) return true
+        if (isCoordinatorRetainedVideo(videoMid)) return true
         if (protectDirectionalPreloads && isCurrentDirectionalPreload(videoMid)) return true
         if (protectRecentlyInactive && isRecentlyInactive(videoMid)) return true
         if (isVideoInFullScreen(videoMid)) return true
@@ -547,6 +555,43 @@ object VideoManager {
 
     fun clearCoordinatorPrimaryVideos() {
         coordinatorPrimaryVideos.clear()
+    }
+
+    fun setCoordinatorRetainedVideos(ownerKey: Int, videoMids: Set<MimeiId>) {
+        if (videoMids.isEmpty()) {
+            coordinatorRetainedVideosByOwner.remove(ownerKey)
+        } else {
+            coordinatorRetainedVideosByOwner[ownerKey] = videoMids
+            videoMids.forEach { videoMid ->
+                inactiveSinceTimestamps.remove(videoMid)
+                touchPlayer(videoMid)
+            }
+        }
+    }
+
+    fun clearCoordinatorRetainedVideos(ownerKey: Int) {
+        coordinatorRetainedVideosByOwner.remove(ownerKey)
+    }
+
+    private fun isCoordinatorRetainedVideo(videoMid: MimeiId): Boolean {
+        return coordinatorRetainedVideosByOwner.values.any { videoMid in it }
+    }
+
+    private fun isPlaybackOwnerProtected(videoMid: MimeiId): Boolean {
+        return coordinatorPrimaryVideos.contains(videoMid) ||
+            isCoordinatorRetainedVideo(videoMid) ||
+            isVideoProtectedForFullScreen(videoMid)
+    }
+
+    private fun clearCoordinatorTrackingForVideo(videoMid: MimeiId) {
+        coordinatorPrimaryVideos.remove(videoMid)
+        coordinatorRetainedVideosByOwner.keys.toList().forEach { ownerKey ->
+            coordinatorRetainedVideosByOwner[ownerKey] =
+                coordinatorRetainedVideosByOwner[ownerKey].orEmpty() - videoMid
+            if (coordinatorRetainedVideosByOwner[ownerKey].isNullOrEmpty()) {
+                coordinatorRetainedVideosByOwner.remove(ownerKey)
+            }
+        }
     }
 
     private fun enforcePlayerCacheLimit(reserveSlots: Int = 0) {
@@ -741,7 +786,8 @@ object VideoManager {
                 preloadedVideos.contains(existingKey) &&
                 keyMatchesMedia(existingKey, mediaMid) &&
                 !activeVideos.containsKey(existingKey) &&
-                !visibleVideos.contains(existingKey)
+                !visibleVideos.contains(existingKey) &&
+                !isPlaybackOwnerProtected(existingKey)
         } ?: return
 
         val player = videoPlayers.remove(preloadKey) ?: return
@@ -1014,6 +1060,7 @@ object VideoManager {
         if (!preloadedVideos.contains(videoMid)) return false
         if (activeVideos.containsKey(videoMid)) return false
         if (visibleVideos.contains(videoMid)) return false
+        if (isPlaybackOwnerProtected(videoMid)) return false
         if (isVideoInFullScreen(videoMid)) return false
         if (isVideoProtectedForFullScreen(videoMid)) return false
         return !player.isPlaying && !player.playWhenReady
@@ -1544,7 +1591,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
-        coordinatorPrimaryVideos.remove(videoMid)
+        clearCoordinatorTrackingForVideo(videoMid)
         playerAccessTimestamps.remove(videoMid)
         inactiveSinceTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
@@ -1587,6 +1634,7 @@ object VideoManager {
             visibleVideos.remove(videoMid)
             visibleVideoCounts.remove(videoMid)
             preloadedVideos.remove(videoMid)
+            clearCoordinatorTrackingForVideo(videoMid)
             playerAccessTimestamps.remove(videoMid)
             preloadGenerations.remove(videoMid)
             preloadQueue.remove(videoMid)
@@ -1735,6 +1783,7 @@ object VideoManager {
         visibleVideos.remove(videoMid)
         visibleVideoCounts.remove(videoMid)
         preloadedVideos.remove(videoMid)
+        clearCoordinatorTrackingForVideo(videoMid)
         playerAccessTimestamps.remove(videoMid)
         preloadGenerations.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
@@ -1816,6 +1865,8 @@ object VideoManager {
         visibleVideoCounts.clear()
         preloadingVideos.clear()
         preloadedVideos.clear()
+        coordinatorPrimaryVideos.clear()
+        coordinatorRetainedVideosByOwner.clear()
         playerAccessTimestamps.clear()
         preloadGenerations.clear()
         preloadQueue.clear()
