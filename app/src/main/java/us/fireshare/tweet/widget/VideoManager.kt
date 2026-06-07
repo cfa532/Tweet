@@ -105,14 +105,14 @@ object VideoManager {
     private val inactiveSinceTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
     // ===== CONFIGURATION =====
-    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
+    private const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 1
     private const val DIRECTIONAL_VIDEO_PRELOAD_SCAN_TWEETS = 25
     private const val MAX_CONCURRENT_PRELOADS = 2
     private const val PRELOAD_MIN_BUFFER_MS = 3_000
     private const val PRELOAD_MAX_BUFFER_MS = 12_000
     private const val PRELOAD_BUFFER_FOR_PLAYBACK_MS = 500
     private const val PRELOAD_BUFFER_FOR_REBUFFER_MS = 1_000
-    private const val MAX_WARM_PRELOADED_PLAYERS = 2
+    private const val MAX_WARM_PRELOADED_PLAYERS = 1
     private const val MAX_FEED_PLAYER_CACHE_SIZE = 10
     private const val MEMORY_PRESSURE_PLAYER_CACHE_SIZE = 6
     private const val MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES = 64L * 1024L * 1024L
