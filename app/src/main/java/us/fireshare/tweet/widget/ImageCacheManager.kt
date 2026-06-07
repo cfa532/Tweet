@@ -1546,6 +1546,8 @@ object ImageCacheManager {
             
             // Start downloading in background
             downloadAndCacheImage(context, imageUrl, mid, isVisible = false)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error preloading image: $e")
         }

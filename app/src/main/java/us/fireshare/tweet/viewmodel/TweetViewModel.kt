@@ -377,6 +377,8 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag("TweetViewModel").e(e, "doResyncTweet failed for ${currentTweet.mid}")
         }

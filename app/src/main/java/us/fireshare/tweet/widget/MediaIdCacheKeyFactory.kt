@@ -61,7 +61,6 @@ class MediaIdCacheKeyFactory : CacheKeyFactory {
                 // Remove any query parameters if present
                 val cleanCacheKey = cacheKey.substringBefore('?')
                 
-                MediaLog.d("MediaIdCacheKeyFactory") { "Extracted cache key: $cleanCacheKey from URL: $url" }
                 cleanCacheKey
             } else {
                 // Fallback to URL if we can't extract media ID

@@ -821,8 +821,8 @@ fun ImageViewer(
 
                 if (!hadReadyBitmap) {
                     onLoadComplete?.invoke()
+                    MediaLog.d("ImageViewer") { "Applied cached image for $currentMid after $reason (cacheKey=$cacheKey)" }
                 }
-                MediaLog.d("ImageViewer") { "Applied cached image for $currentMid after $reason (cacheKey=$cacheKey)" }
                 return true
             }
         }
@@ -854,7 +854,7 @@ fun ImageViewer(
     }
 
     // Update visibility state when it changes and retry if needed
-    LaunchedEffect(isVisible) {
+    LaunchedEffect(mid, isVisible) {
         loadState = loadState.copy(isVisible = isVisible)
 
         if (mid != null) {
