@@ -21,9 +21,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 
-private const val FEED_MAX_VIDEO_WIDTH = 1280
-private const val FEED_MAX_VIDEO_HEIGHT = 1280
-private const val FEED_MAX_VIDEO_BITRATE = 2_500_000
+private const val FEED_MAX_VIDEO_DIMENSION = 2560
 
 /**
  * Creates an ExoPlayer instance with type-specific video handling:
@@ -54,9 +52,9 @@ fun createExoPlayer(
     maxBufferMs: Int = 12_000,
     bufferForPlaybackMs: Int = 500,
     bufferForPlaybackAfterRebufferMs: Int = 1_000,
-    maxVideoWidth: Int? = FEED_MAX_VIDEO_WIDTH,
-    maxVideoHeight: Int? = FEED_MAX_VIDEO_HEIGHT,
-    maxVideoBitrate: Int? = FEED_MAX_VIDEO_BITRATE
+    maxVideoWidth: Int? = FEED_MAX_VIDEO_DIMENSION,
+    maxVideoHeight: Int? = FEED_MAX_VIDEO_DIMENSION,
+    maxVideoBitrate: Int? = null
 ): ExoPlayer {
     val reliabilityMediaId = extractMediaMidFromUrl(url)
 
@@ -118,6 +116,10 @@ fun createExoPlayer(
         val parameterBuilder = buildUponParameters()
         if (maxVideoWidth != null && maxVideoHeight != null) {
             parameterBuilder.setMaxVideoSize(maxVideoWidth, maxVideoHeight)
+            // Feed players have a hard decode budget. Allow 1080p/QHD inline, but do
+            // not let ExoPlayer pick a 4K-class single track just because no smaller
+            // track exists. Fullscreen callers pass null caps when they want full quality.
+            parameterBuilder.setExceedVideoConstraintsIfNecessary(false)
         }
         if (maxVideoBitrate != null) {
             parameterBuilder.setMaxVideoBitrate(maxVideoBitrate)
