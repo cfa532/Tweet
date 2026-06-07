@@ -4125,8 +4125,10 @@ object HproseInstance {
         }
 
         if (!skipRetryAndBlacklist && isReliabilityBlacklistedUser(userId)) {
-            Timber.tag("getUser").d("User $userId is blacklisted, returning null")
-            return null
+            val cachedUser = TweetCacheManager.getCachedUser(userId)
+                ?.takeIf { it.username != null }
+            Timber.tag("getUser").d("User $userId is blacklisted, returning cached=${cachedUser != null}")
+            return cachedUser
         }
 
         // When offline, return cached user only

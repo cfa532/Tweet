@@ -61,7 +61,7 @@ class MediaIdCacheKeyFactory : CacheKeyFactory {
                 // Remove any query parameters if present
                 val cleanCacheKey = cacheKey.substringBefore('?')
                 
-                Timber.tag("MediaIdCacheKeyFactory").d("Extracted cache key: $cleanCacheKey from URL: $url")
+                MediaLog.d("MediaIdCacheKeyFactory") { "Extracted cache key: $cleanCacheKey from URL: $url" }
                 cleanCacheKey
             } else {
                 // Fallback to URL if we can't extract media ID
@@ -75,4 +75,3 @@ class MediaIdCacheKeyFactory : CacheKeyFactory {
         }
     }
 }
-

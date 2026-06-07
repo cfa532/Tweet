@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
@@ -776,7 +775,7 @@ class VideoPlaybackCoordinator(
             )
             allVideos.add(info)
             videoMetaMap[identifier] = info
-            Timber.d("VideoPlaybackCoordinator: requestPlay registered missing video '$identifier' on the fly")
+            MediaLog.d { "VideoPlaybackCoordinator: requestPlay registered missing video '$identifier' on the fly" }
         }
 
         // Remove from finished set so it can play again
@@ -807,7 +806,7 @@ class VideoPlaybackCoordinator(
                 )
             )
         }
-        Timber.d("VideoPlaybackCoordinator: User requested play for $videoMid")
+        MediaLog.d { "VideoPlaybackCoordinator: User requested play for $videoMid" }
     }
 
     fun shouldAutoPlay(videoMid: MimeiId, tweetId: String, playbackVideoId: String): Boolean {
@@ -825,7 +824,7 @@ class VideoPlaybackCoordinator(
             scope.launch {
                 _playbackCommands.emit(VideoPlaybackCommand.ShouldStopVideo(identifier, videoMid))
             }
-            Timber.d("VideoPlaybackCoordinator: Video finished: $videoMid — stopping")
+            MediaLog.d { "VideoPlaybackCoordinator: Video finished: $videoMid — stopping" }
         }
     }
 
@@ -859,7 +858,7 @@ class VideoPlaybackCoordinator(
                 _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(info.identifier, info.videoMid))
             }
         }
-        Timber.d("VideoPlaybackCoordinator: Host paused; preserved primary=$primaryVideoId")
+        MediaLog.d { "VideoPlaybackCoordinator: Host paused; preserved primary=$primaryVideoId" }
     }
 
     fun onHostResumed() {
@@ -872,7 +871,7 @@ class VideoPlaybackCoordinator(
             rebuildVisibilitySetsFromRatios()
             reconcilePlaybackForCurrentVisibility(replayCurrentPrimary = true)
         }
-        Timber.d("VideoPlaybackCoordinator: Host resumed; scheduling foreground reconciliation")
+        MediaLog.d { "VideoPlaybackCoordinator: Host resumed; scheduling foreground reconciliation" }
     }
 
     private fun resumePendingPrimaryIfPossible(): Boolean {
@@ -884,7 +883,7 @@ class VideoPlaybackCoordinator(
         primaryBelowContinueIdentifier = null
         primaryVideoId = resumeId
         emitPlayForPrimary(info)
-        Timber.d("VideoPlaybackCoordinator: Replaying foreground primary ${info.videoMid}")
+        MediaLog.d { "VideoPlaybackCoordinator: Replaying foreground primary ${info.videoMid}" }
         return true
     }
 
@@ -896,7 +895,7 @@ class VideoPlaybackCoordinator(
     fun syncToFullScreenPlayer() {
         val videoListForFullScreen = allVideos.map { Pair(it.videoMid, it.mediaType) }
         FullScreenPlayerManager.updateVideoList(videoListForFullScreen, currentTweets)
-        Timber.d("VideoPlaybackCoordinator: Synced ${videoListForFullScreen.size} videos to FullScreenPlayerManager")
+        MediaLog.d { "VideoPlaybackCoordinator: Synced ${videoListForFullScreen.size} videos to FullScreenPlayerManager" }
     }
 
     /**
@@ -934,6 +933,6 @@ class VideoPlaybackCoordinator(
         hostResumedAt = 0L
         isFeedVisible = false
 
-        Timber.d("VideoPlaybackCoordinator: Cleared all state")
+        MediaLog.d { "VideoPlaybackCoordinator: Cleared all state" }
     }
 }

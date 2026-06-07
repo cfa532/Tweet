@@ -133,7 +133,7 @@ class VideoPreviewState(
         scope: CoroutineScope
     ) {
         if (isMediaCodecRecoveryInProgress) {
-            Timber.tag("VideoPreview").d("Ignoring transient error during recovery for $videoMid: ${error.message}")
+            MediaLog.d("VideoPreview") { "Ignoring transient error during recovery for $videoMid: ${error.message}" }
             return
         }
         val errorSummary = "Video loading issue for $videoMid code=${error.errorCodeName}/${error.errorCode} " +
@@ -150,7 +150,7 @@ class VideoPreviewState(
 
         when {
             errorType == ErrorType.STREAM_PARSING -> {
-                Timber.tag("VideoPreview").d("Ignoring stream parsing error for video: $videoMid")
+                MediaLog.d("VideoPreview") { "Ignoring stream parsing error for video: $videoMid" }
                 blockAutoPrepareAfterError = false
                 isLoading = false
                 hasError = false
@@ -323,7 +323,7 @@ class VideoPreviewState(
 
     private fun nudgeStuckPlayer(player: Player, positionMs: Long) {
         try {
-            Timber.tag("VideoPreview").d("Nudging stuck player for $videoMid at ${positionMs}ms")
+            MediaLog.d("VideoPreview") { "Nudging stuck player for $videoMid at ${positionMs}ms" }
             player.playWhenReady = false
             player.seekTo(positionMs)
             player.playWhenReady = true
@@ -357,7 +357,7 @@ class VideoPreviewState(
         retryCount++
         hasError = false
         isLoading = true
-        Timber.tag("VideoPreview").d("Manual retry attempt $retryCount for video: $videoMid")
+        MediaLog.d("VideoPreview") { "Manual retry attempt $retryCount for video: $videoMid" }
 
         scope.launch(Dispatchers.Main) {
             try {
@@ -365,13 +365,13 @@ class VideoPreviewState(
                     VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
                 } else false
                 if (success) {
-                    Timber.tag("VideoPreview").d("Manual retry successful for video: $videoMid")
+                    MediaLog.d("VideoPreview") { "Manual retry successful for video: $videoMid" }
                 } else {
                     hasError = true
                     isLoading = false
                 }
             } catch (e: Exception) {
-                Timber.d("VideoPreview - Manual retry failed: ${e.message}")
+                MediaLog.d { "VideoPreview - Manual retry failed: ${e.message}" }
                 hasError = true
                 isLoading = false
             }
@@ -422,9 +422,9 @@ class VideoPreviewState(
     ) {
         if (videoMid == null || url == null) return
         retryCount++
-        Timber.tag("VideoPlaybackDebug").w(
+        MediaLog.d("VideoPlaybackDebug") {
             "Automatic recovery retry $retryCount/1 for videoMid=$videoMid type=$videoType"
-        )
+        }
         isLoading = true
         hasError = false
         isNetworkRecoveryInProgress = true

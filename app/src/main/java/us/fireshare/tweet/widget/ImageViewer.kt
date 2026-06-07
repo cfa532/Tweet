@@ -152,18 +152,18 @@ fun AdvancedImageViewer(
         
         // Check if enough time has passed since last retry
         if (timeSinceLastRetry < minRetryInterval) {
-            Timber.tag("ImageViewer").d("Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining")
+            MediaLog.d("ImageViewer") { "Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining" }
             return false
         }
         
         // Check if there are available download slots
         val hasSlots = ImageCacheManager.hasAvailableDownloadSlots()
         if (!hasSlots) {
-            Timber.tag("ImageViewer").d("Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}")
+            MediaLog.d("ImageViewer") { "Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}" }
             return false
         }
         
-        Timber.tag("ImageViewer").d("Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}")
+        MediaLog.d("ImageViewer") { "Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}" }
         return true
     }
 
@@ -180,7 +180,7 @@ fun AdvancedImageViewer(
             
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
-                Timber.tag("ImageViewer").d("Using initial bitmap from preview: $imageUrl")
+                MediaLog.d("ImageViewer") { "Using initial bitmap from preview: $imageUrl" }
                 loadState = loadState.copy(bitmap = initialBitmap, isLoading = false, hasError = false)
                 
                 // Try to get the cached file for the compressed image to avoid creating temp file
@@ -215,7 +215,7 @@ fun AdvancedImageViewer(
                                 loadState = loadState.copy(bitmap = originalBitmap, isLoading = false, hasError = false)
                                 imageFile = originalCachedFile
                                 onLoadComplete?.invoke()
-                                Timber.tag("ImageViewer").d("Using cached original image: $imageUrl")
+                                MediaLog.d("ImageViewer") { "Using cached original image: $imageUrl" }
                                 return@LaunchedEffect
                             }
                         } catch (e: Exception) {
@@ -248,7 +248,7 @@ fun AdvancedImageViewer(
                         } else {
                             ImageCacheManager.cancelImageLoad(originalMid)
                         }
-                        Timber.tag("ImageViewer").d("Image loading cancelled: $imageUrl")
+                        MediaLog.d("ImageViewer") { "Image loading cancelled: $imageUrl" }
                         return@LaunchedEffect
                     }
                     
@@ -266,7 +266,7 @@ fun AdvancedImageViewer(
                         }
                         
                         onLoadComplete?.invoke()
-                        Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl")
+                        MediaLog.d("ImageViewer") { "Successfully loaded original image from server: $imageUrl" }
                     } else {
                         // Server load failed - show error or fallback to compressed
                         if (compressedBitmap == null) {
@@ -310,12 +310,12 @@ fun AdvancedImageViewer(
                 }
             } else {
                 // We have an initialBitmap, so skip loading original to prevent flicker
-                Timber.tag("ImageViewer").d("Skipping original image load because initialBitmap is provided: $imageUrl")
+                MediaLog.d("ImageViewer") { "Skipping original image load because initialBitmap is provided: $imageUrl" }
             }
         } catch (e: Exception) {
             // Handle cancellation gracefully - don't retry on cancellation
             if (e is kotlinx.coroutines.CancellationException) {
-                Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
                 // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
                 loadState = loadState.copy(isLoading = false)
                 if (ImageCacheManager.isImageProtected(mid)) {
@@ -353,12 +353,12 @@ fun AdvancedImageViewer(
             
             // If previous load failed, retry
             if (loadState.hasError && retryCount <= 3) {
-                Timber.tag("ImageViewer").d("AdvancedImageViewer reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+                MediaLog.d("ImageViewer") { "AdvancedImageViewer reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount" }
                 retryCount++
             }
         } else {
             ImageCacheManager.markImageNotVisible(mid)
-            Timber.tag("ImageViewer").d("AdvancedImageViewer became invisible, paused download: $imageUrl")
+            MediaLog.d("ImageViewer") { "AdvancedImageViewer became invisible, paused download: $imageUrl" }
         }
     }
 
@@ -411,12 +411,12 @@ fun AdvancedImageViewer(
                         if (abs(horizontalDragOffset) > 150f && !isClosing && imageUrls != null && imageUrls.size > 1) {
                             if (horizontalDragOffset > 150f) {
                                 // Swipe right - previous image
-                                Timber.d("AdvancedImageViewer - Swipe right detected, loading previous image")
+                                MediaLog.d { "AdvancedImageViewer - Swipe right detected, loading previous image" }
                                 navigationDirection = -1 // Track direction for animation
                                 onPreviousImage?.invoke()
                             } else if (horizontalDragOffset < -150f) {
                                 // Swipe left - next image
-                                Timber.d("AdvancedImageViewer - Swipe left detected, loading next image")
+                                MediaLog.d { "AdvancedImageViewer - Swipe left detected, loading next image" }
                                 navigationDirection = 1 // Track direction for animation
                                 onNextImage?.invoke()
                             }
@@ -424,7 +424,7 @@ fun AdvancedImageViewer(
                         // Check for vertical drag down to exit
                         if (verticalDragOffset > 300f && !isClosing) {
                             // Large drag down - exit image viewer
-                            Timber.d("AdvancedImageViewer - Large drag down detected, closing viewer")
+                            MediaLog.d { "AdvancedImageViewer - Large drag down detected, closing viewer" }
                             onClose?.invoke()
                         }
                         // Reset all gesture states
@@ -547,14 +547,14 @@ fun AdvancedImageViewer(
                                         currentImageUri = imageUri
                                         imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(imageUri))
                                         imageSetInView = true
-                                        Timber.tag("ImageViewer").d("Setting image in SubsamplingScaleImageView: $imageUri")
+                                        MediaLog.d("ImageViewer") { "Setting image in SubsamplingScaleImageView: $imageUri" }
                                     } else {
                                         currentImageUri = imageUri
-                                        Timber.tag("ImageViewer").d("Skipping image reload to prevent flicker - image already loaded")
+                                        MediaLog.d("ImageViewer") { "Skipping image reload to prevent flicker - image already loaded" }
                                     }
                                 }
                             } catch (e: Exception) {
-                                Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
+                                MediaLog.d("ImageViewer") { "Failed to load image in SubsamplingScaleImageView: $e" }
                                 loadState = loadState.copy(hasError = true)
                             }
                         }
@@ -789,18 +789,18 @@ fun ImageViewer(
         
         // Check if enough time has passed since last retry
         if (timeSinceLastRetry < minRetryInterval) {
-            Timber.tag("ImageViewer").d("Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining")
+            MediaLog.d("ImageViewer") { "Retry debounced: ${minRetryInterval - timeSinceLastRetry}ms remaining" }
             return false
         }
         
         // Check if there are available download slots
         val hasSlots = ImageCacheManager.hasAvailableDownloadSlots()
         if (!hasSlots) {
-            Timber.tag("ImageViewer").d("Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}")
+            MediaLog.d("ImageViewer") { "Retry blocked: no available download slots. Status: ${ImageCacheManager.getDownloadStatus()}" }
             return false
         }
         
-        Timber.tag("ImageViewer").d("Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}")
+        MediaLog.d("ImageViewer") { "Retry allowed: debounced and slots available. Status: ${ImageCacheManager.getDownloadStatus()}" }
         return true
     }
 
@@ -816,12 +816,12 @@ fun ImageViewer(
 
                 // If previous load failed, retry
                 if (loadState.hasError && retryCount <= 3) {
-                    Timber.tag("ImageViewer").d("Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount")
+                    MediaLog.d("ImageViewer") { "Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount" }
                     retryCount++
                 }
             } else {
                 ImageCacheManager.markImageNotVisible(mid)
-                Timber.tag("ImageViewer").d("Image became invisible, paused download: $imageUrl")
+                MediaLog.d("ImageViewer") { "Image became invisible, paused download: $imageUrl" }
             }
         }
     }
@@ -837,7 +837,7 @@ fun ImageViewer(
         try {
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
-                Timber.tag("ImageViewer").d("Using initial bitmap from preview: $imageUrl")
+                MediaLog.d("ImageViewer") { "Using initial bitmap from preview: $imageUrl" }
                 loadState = loadState.copy(bitmap = initialBitmap, isLoading = false, hasError = false)
                 onLoadComplete?.invoke()
             } else {
@@ -854,7 +854,7 @@ fun ImageViewer(
                                 onBitmapLoaded?.invoke(originalBitmap)
                                 imageFile = originalCachedFile
                                 onLoadComplete?.invoke()
-                                Timber.tag("ImageViewer").d("Using cached original image (forced): $imageUrl")
+                                MediaLog.d("ImageViewer") { "Using cached original image (forced): $imageUrl" }
                                 return@LaunchedEffect
                             }
                         } catch (e: Exception) {
@@ -905,7 +905,7 @@ fun ImageViewer(
                         } else {
                             ImageCacheManager.cancelImageLoad(originalMid)
                         }
-                        Timber.tag("ImageViewer").d("Image loading cancelled: $imageUrl")
+                        MediaLog.d("ImageViewer") { "Image loading cancelled: $imageUrl" }
                         return@LaunchedEffect
                     }
                     
@@ -924,7 +924,7 @@ fun ImageViewer(
                         }
                         
                         onLoadComplete?.invoke()
-                        Timber.tag("ImageViewer").d("Successfully loaded original image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false")
+                        MediaLog.d("ImageViewer") { "Successfully loaded original image from server: $imageUrl - bitmap: ${downloadedBitmap.width}x${downloadedBitmap.height}, hasError: false" }
                     } else {
                         // Server load failed - show error or fallback
                         if (initialBitmap == null) {
@@ -1015,7 +1015,7 @@ fun ImageViewer(
         } catch (e: Exception) {
             // Handle cancellation gracefully - don't retry on cancellation
             if (e is kotlinx.coroutines.CancellationException) {
-                Timber.tag("ImageViewer").d("Image loading cancelled due to composition change: $imageUrl")
+                MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
                 // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
                 loadState = loadState.copy(isLoading = false)
                 if (ImageCacheManager.isImageProtected(mid)) {
@@ -1031,7 +1031,7 @@ fun ImageViewer(
                 isLoading = false,
                 hasError = true
             )
-            Timber.tag("ImageViewer").d("Error loading image: $e")
+            MediaLog.d("ImageViewer") { "Error loading image: $e" }
             
             // Auto-retry if within limit, visible, and debounced
             if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
@@ -1127,7 +1127,7 @@ fun ImageViewer(
                                     }
                                     imageView.setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(fileToUse.toUri()))
                                 } catch (e: Exception) {
-                                    Timber.tag("ImageViewer").d("Failed to load image in SubsamplingScaleImageView: $e")
+                                    MediaLog.d("ImageViewer") { "Failed to load image in SubsamplingScaleImageView: $e" }
                                     loadState = loadState.copy(hasError = true)
                                 }
                             }
@@ -1198,7 +1198,7 @@ fun ImageViewer(
                         }
                     }
                 } ?: run {
-                    Timber.tag("ImageViewer").d("No bitmap available for preview: $imageUrl, isLoading: ${loadState.isLoading}, hasError: ${loadState.hasError}")
+                    MediaLog.d("ImageViewer") { "No bitmap available for preview: $imageUrl, isLoading: ${loadState.isLoading}, hasError: ${loadState.hasError}" }
                 }
             }
         } else if (loadState.isLoading) {

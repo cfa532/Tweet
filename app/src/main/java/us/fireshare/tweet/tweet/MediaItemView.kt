@@ -62,6 +62,7 @@ import us.fireshare.tweet.widget.AudioPreview
 import us.fireshare.tweet.widget.FullScreenPlayerManager
 import us.fireshare.tweet.widget.ImageViewer
 import us.fireshare.tweet.widget.LocalVideoCoordinator
+import us.fireshare.tweet.widget.MediaLog
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.VideoPreview
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
@@ -191,7 +192,7 @@ fun MediaItemView(
     ) {
             // Log only when processing video attachments
     if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-        Timber.d("MediaItemView: Processing video attachment for index: $index")
+        MediaLog.d { "MediaItemView: Processing video attachment for index: $index" }
     }
         when (attachment.type) {
             MediaType.Image -> {

@@ -26,6 +26,11 @@ object BlackList {
     // Constants
     private const val WEEK_IN_MILLIS = 7 * 24 * 60 * 60 * 1000L
     private const val MAX_FAILURE_COUNT = 14
+    private const val SESSION_BLOCK_FAILURE_COUNT = 2
+
+    // Process-local failure guard. This resets when the app process restarts.
+    private val sessionFailureCounts = mutableMapOf<String, Int>()
+    private val sessionBlockedResources = mutableSetOf<String>()
     
     /**
      * Initialize the blacklist with database access
@@ -48,6 +53,14 @@ object BlackList {
             }
             
             val now = System.currentTimeMillis()
+            val sessionFailureCount = (sessionFailureCounts[resourceId] ?: 0) + 1
+            sessionFailureCounts[resourceId] = sessionFailureCount
+            if (sessionFailureCount >= SESSION_BLOCK_FAILURE_COUNT &&
+                sessionBlockedResources.add(resourceId)
+            ) {
+                Timber.tag("BlackList").w("Temporarily blocked $resourceId for this session after $sessionFailureCount failures")
+            }
+
             val existing = dao.get(resourceId)
             
             if (existing != null) {
@@ -98,6 +111,9 @@ object BlackList {
             
             // Remove from candidates if present (but keep blacklisted entries)
             val existing = dao.get(resourceId)
+            sessionFailureCounts.remove(resourceId)
+            sessionBlockedResources.remove(resourceId)
+
             if (existing != null && !existing.isBlacklisted) {
                 dao.delete(resourceId)
                 Timber.tag("BlackList").d("Removed candidate $resourceId after successful access (had ${existing.failureCount} failures)")
@@ -113,6 +129,10 @@ object BlackList {
      */
     suspend fun isBlacklisted(resourceId: String): Boolean {
         return mutex.withLock {
+            if (sessionBlockedResources.contains(resourceId)) {
+                return@withLock true
+            }
+
             val dao = blacklistDao ?: run {
                 Timber.tag("BlackList").e("BlackList not initialized")
                 return@withLock false
@@ -134,6 +154,8 @@ object BlackList {
             }
             
             dao.clearAll()
+            sessionFailureCounts.clear()
+            sessionBlockedResources.clear()
             Timber.tag("BlackList").d("Cleared all blacklist data")
         }
     }

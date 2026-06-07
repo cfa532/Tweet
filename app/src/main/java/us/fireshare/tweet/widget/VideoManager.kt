@@ -165,7 +165,7 @@ object VideoManager {
                     videoCacheDir.deleteRecursively()
                 }
 
-                Timber.d("VideoManager - Video cache cleared")
+                MediaLog.d { "VideoManager - Video cache cleared" }
             } catch (e: Exception) {
                 Timber.e("VideoManager - Error clearing video cache. ${e.message}")
             }
@@ -209,7 +209,7 @@ object VideoManager {
                     }
                 }
                 
-                Timber.d("VideoManager - Cached local video file for mid: $mid")
+                MediaLog.d { "VideoManager - Cached local video file for mid: $mid" }
             } catch (e: Exception) {
                 Timber.e("VideoManager - Error caching local video file: ${e.message}")
             }
@@ -549,9 +549,9 @@ object VideoManager {
             .take(releaseCount)
 
         if (releaseCandidates.isNotEmpty()) {
-            Timber.tag("VideoManager").d(
+            MediaLog.d("VideoManager") {
                 "🧹 CACHE LIMIT: Releasing ${releaseCandidates.size} players, size=${videoPlayers.size}, target=$allowedSize"
-            )
+            }
             releaseCandidates.forEach { releasePlayer(it) }
         }
     }
@@ -594,7 +594,7 @@ object VideoManager {
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
         }
-        Timber.d("VideoManager - Stopped all preloading")
+        MediaLog.d { "VideoManager - Stopped all preloading" }
     }
 
     /**
@@ -630,9 +630,9 @@ object VideoManager {
             }
         }
 
-        Timber.tag("VideoManager").d(
+        MediaLog.d("VideoManager") {
             "Suspended feed activity for fullscreen $protecting; released ${stalePreloadedPlayers.size} preloaded players"
-        )
+        }
     }
 
     // ===== PLAYER MANAGEMENT =====
@@ -664,7 +664,7 @@ object VideoManager {
 
         // When offline, only reuse existing players — don't create new ones that trigger network
         if (!us.fireshare.tweet.HproseInstance.isOnline.value && !isReusing) {
-            Timber.tag("VideoManager").d("Offline: creating placeholder player for $videoMid (no network fetch)")
+            MediaLog.d("VideoManager") { "Offline: creating placeholder player for $videoMid (no network fetch)" }
             val player = ExoPlayer.Builder(context).build()
             videoPlayers[videoMid] = player
             return player
@@ -708,7 +708,7 @@ object VideoManager {
             if (savedPos != null && savedPos > 0 && player.playbackState == Player.STATE_READY) {
                 try {
                     player.seekTo(savedPos)
-                    Timber.tag("VideoManager").d("Restored position ${savedPos}ms for $videoMid")
+                    MediaLog.d("VideoManager") { "Restored position ${savedPos}ms for $videoMid" }
                 } catch (e: RuntimeException) {
                     Timber.tag("VideoManager").w(
                         "Skipped saved position restore for $videoMid at ${savedPos}ms: ${e.message}"
@@ -736,9 +736,9 @@ object VideoManager {
         touchPlayer(playerKey)
         preloadGenerations[playerKey] = (preloadGenerations[playerKey] ?: 0) + 1
 
-        Timber.tag("VideoManager").d(
+        MediaLog.d("VideoManager") {
             "Adopted warm player $preloadKey for appearance $playerKey"
-        )
+        }
     }
 
     /**
@@ -824,7 +824,7 @@ object VideoManager {
      * Players are kept alive so they can resume when back online.
      */
     fun stopAllVideos() {
-        Timber.tag("VideoManager").d("Stopping all ${videoPlayers.size} video players (offline)")
+        MediaLog.d("VideoManager") { "Stopping all ${videoPlayers.size} video players (offline)" }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             videoPlayers.values.forEach { player ->
                 try {
@@ -842,7 +842,7 @@ object VideoManager {
      * Note: This method must be called on the main thread
      */
     fun releaseAllVideos() {
-        Timber.tag("VideoManager").d("🧹 RELEASING ALL VIDEOS: playerCount: ${videoPlayers.size}, activeCount: ${activeVideos.size}")
+        MediaLog.d("VideoManager") { "🧹 RELEASING ALL VIDEOS: playerCount: ${videoPlayers.size}, activeCount: ${activeVideos.size}" }
         
         // Ensure we're on the main thread
         if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
@@ -855,7 +855,7 @@ object VideoManager {
                 player.clearVideoSurface()
                 player.stop()
                 player.release()
-                Timber.tag("VideoManager").d("✅ PLAYER RELEASED: Successfully released player")
+                MediaLog.d("VideoManager") { "✅ PLAYER RELEASED: Successfully released player" }
             } catch (e: Exception) {
                 Timber.tag("VideoManager").e("❌ PLAYER RELEASE ERROR: $e")
             }
@@ -882,7 +882,7 @@ object VideoManager {
         synchronized(fullScreenProtectedVideos) {
             fullScreenProtectedVideos.clear()
         }
-        Timber.tag("VideoManager").d("✅ ALL VIDEOS RELEASED: Cleared all video collections")
+        MediaLog.d("VideoManager") { "✅ ALL VIDEOS RELEASED: Cleared all video collections" }
     }
 
     // ===== PRELOADING =====
@@ -918,7 +918,7 @@ object VideoManager {
                 var semaphoreAcquired = false
                 try {
                     if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(videoMid)) {
-                        Timber.tag("preloadVideo").d("Skip blacklisted media preload: $videoMid")
+                        MediaLog.d("preloadVideo") { "Skip blacklisted media preload: $videoMid" }
                         preloadQueue.remove(videoMid)
                         return@launch
                     }
@@ -1009,9 +1009,9 @@ object VideoManager {
             .minByOrNull { playerAccessTimestamps[it] ?: 0L }
             ?: return
 
-        Timber.tag("VideoManager").d(
+        MediaLog.d("VideoManager") {
             "🧹 WARM PRELOAD SLOT: Releasing oldest hidden warm player $releaseCandidate"
-        )
+        }
         releasePlayer(releaseCandidate)
     }
 
@@ -1105,7 +1105,7 @@ object VideoManager {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("VideoManager").d("Poster generation failed for $videoUrl: ${e.message}")
+            MediaLog.d("VideoManager") { "Poster generation failed for $videoUrl: ${e.message}" }
             null
         } finally {
             try {
@@ -1137,7 +1137,7 @@ object VideoManager {
     @OptIn(UnstableApi::class)
     fun getFullScreenPlayer(context: Context): ExoPlayer {
         if (fullScreenPlayer == null) {
-            Timber.d("VideoManager - Creating dedicated full screen player")
+            MediaLog.d { "VideoManager - Creating dedicated full screen player" }
             // Use cache-aware data source and aggressive buffering for smooth fullscreen playback
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(30000)
@@ -1262,7 +1262,7 @@ object VideoManager {
                 when (playbackState) {
                     Player.STATE_ENDED -> {
                         if (autoReplay) {
-                            Timber.d("VideoManager - Video ended, auto-replaying")
+                            MediaLog.d { "VideoManager - Video ended, auto-replaying" }
                             player.seekTo(0)
                             player.playWhenReady = true
                         }
@@ -1363,12 +1363,12 @@ object VideoManager {
 
         val resumePosition = player.currentPosition.coerceAtLeast(0L)
         val wasPlayWhenReady = player.playWhenReady
-        Timber.tag("VideoPlaybackDebug").d(
+        MediaLog.d("VideoPlaybackDebug") {
             "Attempting recovery videoMid=$videoMid type=$videoType software=$forceSoftwareDecoder " +
                 "state=${playerStateName(player.playbackState)} pos=${resumePosition}ms buffered=${player.bufferedPosition}ms " +
                 "duration=${player.duration}ms playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying} " +
                 "mediaItems=${player.mediaItemCount}"
-        )
+        }
 
         try {
             // Keep the last known position for progressive streams. Restarting from zero
@@ -1379,7 +1379,7 @@ object VideoManager {
             // If we need to force software decoder, we need to recreate the entire player
             // because we can't change the renderer factory of an existing player
             if (forceSoftwareDecoder) {
-                Timber.d("VideoManager - Force software decoder requested, recreating player for video: $videoMid")
+                MediaLog.d { "VideoManager - Force software decoder requested, recreating player for video: $videoMid" }
                 return forceRecreatePlayer(context, videoMid, videoUrl, videoType)
             }
 
@@ -1440,10 +1440,10 @@ object VideoManager {
             player.prepare()
             player.playWhenReady = wasPlayWhenReady
 
-            Timber.tag("VideoPlaybackDebug").d(
+            MediaLog.d("VideoPlaybackDebug") {
                 "Recovery prepared videoMid=$videoMid resume=${resumePosition}ms state=${playerStateName(player.playbackState)} " +
                     "playWhenReady=${player.playWhenReady}"
-            )
+            }
 
             return true
         } catch (e: Exception) {
@@ -1468,7 +1468,7 @@ object VideoManager {
         }
 
         if (inactivePlayers.isNotEmpty()) {
-            Timber.tag("VideoManager").d("🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players")
+            MediaLog.d("VideoManager") { "🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players" }
             inactivePlayers.forEach { videoMid ->
                 releasePlayer(videoMid)
             }
@@ -1594,7 +1594,7 @@ object VideoManager {
             // Notify Compose that VideoPreview should re-read the player for this video.
             playerGenerations[videoMid] = (playerGenerations[videoMid] ?: 0) + 1
 
-            Timber.tag("VideoManager").d("✅ PLAYER FORCE RECREATED WITH SOFTWARE DECODER: videoMid: $videoMid")
+            MediaLog.d("VideoManager") { "✅ PLAYER FORCE RECREATED WITH SOFTWARE DECODER: videoMid: $videoMid" }
             return true
             
         } catch (e: Exception) {
@@ -1651,8 +1651,8 @@ object VideoManager {
         currentPlaylistIndex = if (videoMids.isNotEmpty()) 0 else -1
         isSequentialPlaybackEnabled = videoMids.isNotEmpty()
 
-        Timber.d("VideoManager - Sequential playback setup: ${videoMids.size} videos")
-        Timber.d("VideoManager - Playlist: $videoMids")
+        MediaLog.d { "VideoManager - Sequential playback setup: ${videoMids.size} videos" }
+        MediaLog.d { "VideoManager - Playlist: $videoMids" }
 
         // Start playing the first video if available
         if (currentPlaylistIndex >= 0) {
@@ -1705,7 +1705,7 @@ object VideoManager {
      */
     fun transferToFullScreen(videoMid: MimeiId): ExoPlayer? {
         return videoPlayers[videoMid]?.also {
-            Timber.tag("transferToFullScreen").d("Transferring player for $videoMid to full-screen")
+            MediaLog.d("transferToFullScreen") { "Transferring player for $videoMid to full-screen" }
             currentFullScreenVideoMid = videoMid
         }
     }
@@ -1736,7 +1736,7 @@ object VideoManager {
         } catch (e: Exception) {
             Timber.tag("takePlayerForFullScreen").w("Error detaching player for $videoMid: ${e.message}")
         }
-        Timber.tag("takePlayerForFullScreen").d("Handed off prepared player for $videoMid to full-screen")
+        MediaLog.d("takePlayerForFullScreen") { "Handed off prepared player for $videoMid to full-screen" }
         return player
     }
 
@@ -1774,7 +1774,7 @@ object VideoManager {
      */
     fun returnFromFullScreen(videoMid: MimeiId) {
         videoPlayers[videoMid]?.let {
-            Timber.tag("returnFromFullScreen").d("Returning player for $videoMid from full-screen")
+            MediaLog.d("returnFromFullScreen") { "Returning player for $videoMid from full-screen" }
             clearVideoInFullScreen(videoMid)
         }
     }
@@ -1817,7 +1817,7 @@ object VideoManager {
         preloadJobs.clear()
         posterJobs.values.forEach { it.cancel() }
         posterJobs.clear()
-        Timber.d("VideoManager - Cleared all tracking data")
+        MediaLog.d { "VideoManager - Cleared all tracking data" }
     }
 
     // ===== VIDEO METADATA UTILITIES =====
@@ -1855,7 +1855,7 @@ object VideoManager {
                     }
                 }
                 
-                Timber.tag("VideoManager").d("Video aspect ratio calculated: $aspectRatio (${width}x${height}, rotation: ${rotation}°) for URI: $uri")
+                MediaLog.d("VideoManager") { "Video aspect ratio calculated: $aspectRatio (${width}x${height}, rotation: ${rotation}°) for URI: $uri" }
                 aspectRatio
             } else {
                 Timber.tag("VideoManager").w("Could not determine video dimensions for URI: $uri, using default 16:9")
@@ -1901,7 +1901,7 @@ object VideoManager {
                     }
                 }
                 
-                Timber.tag("VideoManager").d("Video resolution: ${finalWidth}x${finalHeight} (original: ${width}x${height}, rotation: ${rotation}°) for URI: $uri")
+                MediaLog.d("VideoManager") { "Video resolution: ${finalWidth}x${finalHeight} (original: ${width}x${height}, rotation: ${rotation}°) for URI: $uri" }
                 Pair(finalWidth, finalHeight)
             } else {
                 Timber.tag("VideoManager").w("Could not determine video resolution for URI: $uri")
@@ -1930,7 +1930,7 @@ object VideoManager {
             retriever.release()
 
             durationMs?.let {
-                Timber.tag("VideoManager").d("Video duration: ${it}ms (${it / 1000}s) for URI: $uri")
+                MediaLog.d("VideoManager") { "Video duration: ${it}ms (${it / 1000}s) for URI: $uri" }
                 it
             } ?: run {
                 Timber.tag("VideoManager").w("Could not extract video duration from URI: $uri")
@@ -1957,7 +1957,7 @@ object VideoManager {
             retriever.release()
 
             bitrate?.let {
-                Timber.tag("VideoManager").d("Video bitrate: ${it}bps (${it / 1000}k) for URI: $uri")
+                MediaLog.d("VideoManager") { "Video bitrate: ${it}bps (${it / 1000}k) for URI: $uri" }
                 it
             } ?: run {
                 Timber.tag("VideoManager").w("Could not extract video bitrate from URI: $uri")
@@ -2008,7 +2008,7 @@ object VideoManager {
             // Only handle HLS fallback once
             if (!hasTriedPlaylist) {
                 hasTriedPlaylist = true
-                Timber.d("VideoManager - HLS master.m3u8 failed, trying playlist.m3u8 fallback for URL: $videoUrl")
+                MediaLog.d { "VideoManager - HLS master.m3u8 failed, trying playlist.m3u8 fallback for URL: $videoUrl" }
 
                 // Construct playlist URL
                 val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
@@ -2023,7 +2023,7 @@ object VideoManager {
                 player.setMediaSource(fallbackMediaSource)
                 player.prepare()
                 
-                Timber.d("VideoManager - Set fallback media source for playlist.m3u8: $playlistUrl")
+                MediaLog.d { "VideoManager - Set fallback media source for playlist.m3u8: $playlistUrl" }
             } else {
                 // Final failure - no more fallbacks
                 if (error.isExpectedNetworkPlaybackIssue()) {

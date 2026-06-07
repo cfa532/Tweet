@@ -158,7 +158,7 @@ fun createExoPlayer(
                     }
                     // Only handle HLS fallback for HLS_VIDEO type
                     if (mediaType != MediaType.HLS_VIDEO) {
-                        Timber.tag("createExoPlayer").d("Progressive video error (no fallback): ${error.message}")
+                        MediaLog.d("createExoPlayer") { "Progressive video error (no fallback): ${error.message}" }
                         return
                     }
 
@@ -178,7 +178,7 @@ fun createExoPlayer(
                     // For HLS videos: try playlist.m3u8 fallback only once
                     if (!hasTriedPlaylist) {
                         hasTriedPlaylist = true
-                        Timber.tag("createExoPlayer").d("HLS master.m3u8 failed, trying playlist.m3u8 fallback")
+                        MediaLog.d("createExoPlayer") { "HLS master.m3u8 failed, trying playlist.m3u8 fallback" }
 
                         // Construct playlist URL
                         val baseUrl = if (url.endsWith("/")) url else "$url/"
@@ -228,13 +228,12 @@ fun createExoPlayer(
                 ) {
                     val delta = newPosition.positionMs - oldPosition.positionMs
                     val isLargeRollback = delta < -1_000
-                    val tag = Timber.tag("VideoPlaybackDebug")
                     val message = "Position discontinuity mediaId=$reliabilityMediaId type=$mediaType " +
                         "reason=${discontinuityReasonName(reason)} old=${oldPosition.positionMs}ms new=${newPosition.positionMs}ms " +
                         "delta=${delta}ms state=${playerStateName(playbackState)} playWhenReady=$playWhenReady " +
                         "isPlaying=$isPlaying buffered=${bufferedPosition}ms duration=${duration}ms"
                     if (isLargeRollback) {
-                        tag.w(message)
+                        MediaLog.d("VideoPlaybackDebug") { message }
                     }
                 }
             })
