@@ -302,11 +302,7 @@ fun VideoPreview(
                 Player.STATE_READY -> state.observePlaybackProgress(
                     exoPlayer,
                     shouldPlay,
-                    effectivelyVisible,
-                    context,
-                    url,
-                    videoType,
-                    retryScope
+                    effectivelyVisible
                 )
                 Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
             }
@@ -317,7 +313,7 @@ fun VideoPreview(
     // --- Playback state changes ---
     LaunchedEffect(state.isVideoVisible, shouldPlay, exoPlayer) {
         exoPlayer?.let {
-            state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, context, url, videoType, playerKey)
+            state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, playerKey)
         }
     }
 
@@ -327,11 +323,7 @@ fun VideoPreview(
             state.observePlaybackProgress(
                 player,
                 shouldPlay,
-                effectivelyVisible,
-                context,
-                url,
-                videoType,
-                retryScope
+                effectivelyVisible
             )
             delay(500L)
         }

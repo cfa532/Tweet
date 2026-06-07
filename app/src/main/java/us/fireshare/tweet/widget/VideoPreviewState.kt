@@ -55,9 +55,6 @@ class VideoPreviewState(
     private var hasVisiblePlaybackProgress by mutableStateOf(false)
     private var lastObservedPositionMs by mutableLongStateOf(0L)
     private var lastObservedBufferedMs by mutableLongStateOf(0L)
-    private var stagnantPlaybackTicks by mutableIntStateOf(0)
-    private var stagnantBufferTicks by mutableIntStateOf(0)
-    private var stillFrameRecoveryAttempts by mutableIntStateOf(0)
 
     val maxRetries = 3
     val visibilityUpdateThrottleMs = 100L
@@ -185,9 +182,6 @@ class VideoPreviewState(
         player: Player,
         shouldPlay: Boolean,
         effectivelyVisible: Boolean,
-        context: Context,
-        url: String?,
-        videoType: MediaType?,
         playerKey: MimeiId? = videoMid
     ) {
         if (effectivelyVisible) {
@@ -207,13 +201,11 @@ class VideoPreviewState(
                         return
                     }
 
-                    isLoading = true
                     hasError = false
                     if (player.mediaItemCount == 0) {
-                        if (videoMid != null && url != null) {
-                            VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
-                        }
+                        isLoading = false
                     } else {
+                        isLoading = true
                         player.prepare()
                         player.playWhenReady = shouldPlay
                     }
@@ -233,9 +225,6 @@ class VideoPreviewState(
                 else -> {
                     isLoading = true
                     hasError = false
-                    if (videoMid != null && url != null) {
-                        VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
-                    }
                 }
             }
         } else {
@@ -252,18 +241,14 @@ class VideoPreviewState(
     }
 
     /**
-     * ExoPlayer can report READY/playing while the rendered frame is still frozen on a slow
-     * source. Keep the loading affordance until playback time actually advances, then try a
-     * light same-player nudge before escalating to source recovery.
+     * Keep the preview UI in sync with ExoPlayer progress. This intentionally does not
+     * seek, pause/play, or recreate the player on stagnant progress; slow buffering is
+     * ExoPlayer's job, while explicit player errors and manual retry own recovery.
      */
     fun observePlaybackProgress(
         player: Player,
         shouldPlay: Boolean,
-        effectivelyVisible: Boolean,
-        context: Context,
-        url: String?,
-        videoType: MediaType?,
-        scope: CoroutineScope
+        effectivelyVisible: Boolean
     ) {
         if (!effectivelyVisible || !shouldPlay || hasError) {
             resetPlaybackObservation(player.currentPosition, player.bufferedPosition)
@@ -274,45 +259,14 @@ class VideoPreviewState(
         val positionMs = player.currentPosition.coerceAtLeast(0L)
         val bufferedMs = player.bufferedPosition.coerceAtLeast(positionMs)
         val positionAdvanced = positionMs > lastObservedPositionMs + 150L
-        val bufferAdvanced = bufferedMs > lastObservedBufferedMs + 250L
 
         if (positionAdvanced) {
             hasVisiblePlaybackProgress = true
-            stagnantPlaybackTicks = 0
-            stagnantBufferTicks = 0
-            stillFrameRecoveryAttempts = 0
             isLoading = player.playbackState == Player.STATE_BUFFERING
-        } else if (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING) {
-            stagnantPlaybackTicks++
-            stagnantBufferTicks = if (bufferAdvanced) 0 else stagnantBufferTicks + 1
+        } else if (player.playbackState == Player.STATE_BUFFERING) {
             isLoading = true
-
-            if (player.playbackState == Player.STATE_READY && player.playWhenReady) {
-                when {
-                    stagnantPlaybackTicks == 3 -> nudgeStuckPlayer(player, positionMs)
-                    stagnantPlaybackTicks >= 10 &&
-                        stagnantBufferTicks >= 6 &&
-                        stillFrameRecoveryAttempts < 2 &&
-                        videoMid != null &&
-                        url != null -> {
-                        stillFrameRecoveryAttempts++
-                        stagnantPlaybackTicks = 0
-                        stagnantBufferTicks = 0
-                        Timber.tag("VideoPreview").w(
-                            "Playback stuck for $videoMid at ${positionMs}ms; recovering player"
-                        )
-                        scope.launch(Dispatchers.Main) {
-                            VideoManager.attemptVideoRecovery(
-                                context,
-                                videoMid,
-                                url,
-                                videoType,
-                                forceSoftwareDecoder = false
-                            )
-                        }
-                    }
-                }
-            }
+        } else if (player.playbackState == Player.STATE_READY) {
+            isLoading = !hasVisiblePlaybackProgress && !player.isPlaying
         } else if (player.playbackState == Player.STATE_ENDED) {
             isLoading = false
         }
@@ -321,24 +275,10 @@ class VideoPreviewState(
         lastObservedBufferedMs = bufferedMs
     }
 
-    private fun nudgeStuckPlayer(player: Player, positionMs: Long) {
-        try {
-            MediaLog.d("VideoPreview") { "Nudging stuck player for $videoMid at ${positionMs}ms" }
-            player.playWhenReady = false
-            player.seekTo(positionMs)
-            player.playWhenReady = true
-        } catch (e: RuntimeException) {
-            Timber.tag("VideoPreview").w("Stuck-player nudge failed for $videoMid: ${e.message}")
-        }
-    }
-
     private fun resetPlaybackObservation(positionMs: Long = 0L, bufferedMs: Long = 0L) {
         hasVisiblePlaybackProgress = false
         lastObservedPositionMs = positionMs.coerceAtLeast(0L)
         lastObservedBufferedMs = bufferedMs.coerceAtLeast(lastObservedPositionMs)
-        stagnantPlaybackTicks = 0
-        stagnantBufferTicks = 0
-        stillFrameRecoveryAttempts = 0
     }
 
     /**
