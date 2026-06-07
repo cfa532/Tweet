@@ -133,6 +133,8 @@ object VideoManager {
     // Track active preload jobs by video mid for cancellation
     private val preloadJobs = ConcurrentHashMap<MimeiId, Job>()
     private val posterJobs = ConcurrentHashMap<MimeiId, Job>()
+    private var inactiveCleanupJob: Job? = null
+    private var playerCacheLimitJob: Job? = null
     val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
 
     // Saved playback positions so videos resume from where they were left
@@ -287,7 +289,7 @@ object VideoManager {
                     Timber.e("VideoManager - Error stopping video: $e")
                 }
             }
-            enforcePlayerCacheLimit()
+            enforcePlayerCacheLimitDeferred()
         } else if (!stillVisible && !stillActive && retainedByPlaybackOwner) {
             MediaLog.d("VideoManager") { "Preserving coordinator-owned player while view is detached: $videoMid" }
         }
@@ -355,8 +357,8 @@ object VideoManager {
 
         if (!startPreloading || direction == PreloadDirection.NONE) return
 
-        cleanupInactivePlayers()
-        enforcePlayerCacheLimit()
+        cleanupInactivePlayersDeferred()
+        enforcePlayerCacheLimitDeferred()
 
         loadVisibleVideos.forEach { video ->
             if (videoPlayers.containsKey(video.mid)) {
@@ -617,6 +619,15 @@ object VideoManager {
         }
     }
 
+    private fun enforcePlayerCacheLimitDeferred(reserveSlots: Int = 0) {
+        playerCacheLimitJob?.cancel()
+        playerCacheLimitJob = videoLoadingScope.launch {
+            delay(1_500L)
+            enforcePlayerCacheLimit(reserveSlots)
+            playerCacheLimitJob = null
+        }
+    }
+
     private fun releasePlayersForMemoryPressure(releaseVisibleFeedPlayers: Boolean = false) {
         val releaseCandidates = videoPlayers.keys.toList()
             .filterNot { videoMid ->
@@ -857,9 +868,9 @@ object VideoManager {
         // Clean up inactive players periodically to prevent leaks
         // Only do this occasionally to avoid performance impact
         if (videoPlayers.size > 10 && videoPlayers.size % 5 == 0) {
-            cleanupInactivePlayers()
+            cleanupInactivePlayersDeferred()
         }
-        enforcePlayerCacheLimit()
+        enforcePlayerCacheLimitDeferred()
     }
 
     /**
@@ -1540,9 +1551,11 @@ object VideoManager {
      * onDispose releases players that the incoming screen just created.
      */
     fun cleanupInactivePlayersDeferred() {
-        videoLoadingScope.launch {
+        inactiveCleanupJob?.cancel()
+        inactiveCleanupJob = videoLoadingScope.launch {
             delay(2_000L)
             cleanupInactivePlayers()
+            inactiveCleanupJob = null
         }
     }
     

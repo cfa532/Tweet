@@ -324,10 +324,22 @@ private fun RetweetContent(
     ) {
         // Use remember with a stable key based on originalTweetId to maintain state across recompositions
         val originalTweetId = tweet.originalTweetId
-        var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
-        var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
+        val cachedOriginalTweet = remember(originalTweetId) {
+            originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
+        }
+        var originalTweet by remember(originalTweetId) {
+            mutableStateOf(cachedOriginalTweet)
+        }
+        var isLoadingOriginal by remember(originalTweetId) {
+            mutableStateOf(cachedOriginalTweet == null)
+        }
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+            originalTweet?.let {
+                coordinator.addRetweetVideos(tweet.mid, it)
+                isLoadingOriginal = false
+                return@LaunchedEffect
+            }
             if (originalTweetId != null && tweet.originalAuthorId != null) {
                 withContext(IO) {
                     try {
@@ -637,11 +649,23 @@ private fun QuotedTweetContent(
 ) {
     // Use remember with a stable key based on originalTweetId to maintain state across recompositions
     val originalTweetId = tweet.originalTweetId
-    var originalTweet by remember(originalTweetId) { mutableStateOf<Tweet?>(null) }
-    var isLoadingOriginal by remember(originalTweetId) { mutableStateOf(true) }
+    val cachedOriginalTweet = remember(originalTweetId) {
+        originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
+    }
+    var originalTweet by remember(originalTweetId) {
+        mutableStateOf(cachedOriginalTweet)
+    }
+    var isLoadingOriginal by remember(originalTweetId) {
+        mutableStateOf(cachedOriginalTweet == null)
+    }
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
 
     LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+        originalTweet?.let {
+            coordinator.addEmbeddedTweetVideos(tweet.mid, it)
+            isLoadingOriginal = false
+            return@LaunchedEffect
+        }
         if (originalTweetId != null && tweet.originalAuthorId != null) {
             try {
                 withContext(IO) {

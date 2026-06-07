@@ -21,10 +21,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -160,8 +156,6 @@ fun MediaGrid(
     val limitedMediaList by remember(visualMediaList, maxItems) {
         derivedStateOf { visualMediaList.take(maxItems) }
     }
-
-    val gridState = rememberLazyGridState()
 
     // Optimize: Pre-compute aspect ratios once instead of on every recomposition
     // This function is NOT @Composable to avoid unnecessary recomposition checks
@@ -302,7 +296,7 @@ fun MediaGrid(
                     numOfHiddenItems = if (visualMediaList.size > maxItems) visualMediaList.size - maxItems else 0,
                     autoPlay = isAutoPlayForGridIndex(0),
                     inPreviewGrid = true,
-                    loadOriginalImage = true, // Load original high-res image for single image
+                    loadOriginalImage = false,
                     viewModel = viewModel,
                     parentTweetId = parentTweetId,
                     enableCoordinator = enableCoordinator,
@@ -838,64 +832,44 @@ fun MediaGrid(
                     else -> 1f
                 }
                 
-                // Use improved lazy grid method for 4+ items with better loading optimization
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    state = gridState,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(gridAspectRatio)
-                        .wrapContentWidth(Alignment.CenterHorizontally),
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                        .aspectRatio(gridAspectRatio),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    itemsIndexed(
-                        items = limitedMediaList,
-                        key = { index, item -> "${item.mid}_$index" } // Stable key for better performance
-                    ) { index, mediaItem ->
-                        // Use grid aspect ratio for items when all have same orientation, otherwise use square
-                        val itemAspectRatio = gridAspectRatio
-                        MediaItemView(
-                            limitedMediaList,
+                    repeat(2) { row ->
+                        Row(
                             modifier = Modifier
-                                .aspectRatio(itemAspectRatio)
-                                .clipToBounds()
-                                .clickable {
-                                    val params = MediaViewerParams(
-                                        visualMediaList.map {
-                                            MediaItem(
-                                                getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
-                                                it.type
-                                            )
-                                        }, index, tweet.mid, tweet.authorId
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            repeat(2) { column ->
+                                val index = row * 2 + column
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = index,
+                                        numOfHiddenItems = if (index == limitedMediaList.size - 1 && visualMediaList.size > maxItems)
+                                            visualMediaList.size - maxItems else 0,
+                                        autoPlay = isAutoPlayForGridIndex(index),
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        parentTweetId = parentTweetId,
+                                        enableCoordinator = enableCoordinator,
+                                        containerTopY = containerTopY,
+                                        allMediaItems = visualMediaList
                                     )
-                                    if (params.mediaItems.getOrNull(index)?.type == MediaType.Video ||
-                                        params.mediaItems.getOrNull(index)?.type == MediaType.HLS_VIDEO
-                                    ) {
-                                        if (enableCoordinator) {
-                                            videoCoordinator.syncToFullScreenPlayer()
-                                            videoCoordinator.stopAllVideos()
-                                        } else {
-                                            FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
-                                        }
-                                        visualMediaList.getOrNull(index)?.mid?.let { tappedVideoMid ->
-                                            VideoManager.suspendFeedActivityForFullScreen(tappedVideoMid)
-                                            VideoManager.pauseVideo(tappedVideoMid)
-                                        }
-                                    }
-                                    navController.navigate(NavTweet.MediaViewer(params))
-                                },
-                            index = index,
-                            numOfHiddenItems = if (index == limitedMediaList.size - 1 && visualMediaList.size > maxItems)
-                                visualMediaList.size - maxItems else 0,
-                            autoPlay = isAutoPlayForGridIndex(index),
-                            inPreviewGrid = true,
-                            viewModel = viewModel,
-                            parentTweetId = parentTweetId,
-                            enableCoordinator = enableCoordinator,
-                            containerTopY = containerTopY,
-                            allMediaItems = visualMediaList // Pass all visual items for full screen navigation
-                        )
+                                }
+                            }
+                        }
                     }
                 }
             }
