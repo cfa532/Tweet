@@ -2947,10 +2947,10 @@ object HproseInstance {
                 Timber.tag("loadCachedTweetsByAuthor").d("Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username ?: tweet.authorId}")
                 tweet
             }
-            .distinctBy { it.mid }
-            .sortedByDescending { it.timestamp }
-            .drop(startRank)
-            .take(count)
+                .distinctBy { it.mid }
+                .sortedByDescending { it.timestamp }
+                .drop(startRank)
+                .take(count)
         } catch (e: Exception) {
             Timber.tag("loadCachedTweetsByAuthor").e("Error loading cached tweets by author: $e")
             emptyList()

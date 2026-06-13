@@ -27,10 +27,12 @@ object BlackList {
     private const val WEEK_IN_MILLIS = 7 * 24 * 60 * 60 * 1000L
     private const val MAX_FAILURE_COUNT = 14
     private const val SESSION_BLOCK_FAILURE_COUNT = 2
+    private const val FAILURE_DEDUP_WINDOW_MILLIS = 20_000L
 
     // Process-local failure guard. This resets when the app process restarts.
     private val sessionFailureCounts = mutableMapOf<String, Int>()
     private val sessionBlockedResources = mutableSetOf<String>()
+    private val lastFailureRecordedAt = mutableMapOf<String, Long>()
     
     /**
      * Initialize the blacklist with database access
@@ -53,6 +55,12 @@ object BlackList {
             }
             
             val now = System.currentTimeMillis()
+            val lastFailure = lastFailureRecordedAt[resourceId]
+            if (lastFailure != null && now - lastFailure < FAILURE_DEDUP_WINDOW_MILLIS) {
+                return@withLock
+            }
+            lastFailureRecordedAt[resourceId] = now
+
             val sessionFailureCount = (sessionFailureCounts[resourceId] ?: 0) + 1
             sessionFailureCounts[resourceId] = sessionFailureCount
             if (sessionFailureCount >= SESSION_BLOCK_FAILURE_COUNT &&
@@ -77,6 +85,9 @@ object BlackList {
                         isBlacklisted = true,
                         blacklistedTime = now
                     )
+                    sessionFailureCounts.remove(resourceId)
+                    sessionBlockedResources.remove(resourceId)
+                    lastFailureRecordedAt.remove(resourceId)
                     dao.insert(blacklistedEntry)
                     Timber.tag("BlackList").w("Moved $resourceId to blacklist after $updatedFailureCount failures over ${now - updatedEntry.firstFailureTime}ms")
                 } else {
@@ -113,6 +124,7 @@ object BlackList {
             val existing = dao.get(resourceId)
             sessionFailureCounts.remove(resourceId)
             sessionBlockedResources.remove(resourceId)
+            lastFailureRecordedAt.remove(resourceId)
 
             if (existing != null && !existing.isBlacklisted) {
                 dao.delete(resourceId)
@@ -156,6 +168,7 @@ object BlackList {
             dao.clearAll()
             sessionFailureCounts.clear()
             sessionBlockedResources.clear()
+            lastFailureRecordedAt.clear()
             Timber.tag("BlackList").d("Cleared all blacklist data")
         }
     }
