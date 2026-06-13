@@ -66,12 +66,12 @@ import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
-import us.fireshare.tweet.widget.Gadget
 import us.fireshare.tweet.widget.Gadget.filterIpAddresses
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import kotlin.time.Duration.Companion.milliseconds
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 /**
@@ -123,18 +123,7 @@ object NodePool {
     
     private val nodes = mutableMapOf<MimeiId, NodeInfo>()
     private val nodeMutex = Mutex()
-    
-    /**
-     * Check if user's current IP is in the pool
-     */
-    suspend fun isUserIPValid(user: User): Boolean = nodeMutex.withLock {
-        val accessNodeMid = user.hostIds?.getOrNull(1) ?: return@withLock false
-        val nodeInfo = nodes[accessNodeMid] ?: return@withLock false
-        val userIP = user.baseUrl ?: return@withLock false
-        
-        nodeInfo.hasIP(userIP)
-    }
-    
+
     /**
      * Get IP from user's access node in pool
      * Uses hostIds[1] (access node for READ operations)
@@ -308,10 +297,10 @@ object HproseInstance {
         val message: String,
         val timestampMs: Long
     )
-    private val entryResolveCacheTtlMs = 30_000L
+    private const val entryResolveCacheTtlMs = 30_000L
     // Keep this short: prevent retry storms, but still allow fast recovery
     // when DNS/network stabilizes a moment later during app startup.
-    private val entryResolveFailureBackoffMs = 1_500L
+    private const val entryResolveFailureBackoffMs = 1_500L
     private val entryIPResolveMutex = Mutex()
     private var entryIPResolveInFlight: CompletableDeferred<String>? = null
     private var entryResolveCache: EntryResolveCache? = null
@@ -372,13 +361,13 @@ object HproseInstance {
             try {
                 // Ensure the singleton instance is updated with all fields from value,
                 // so that User.getInstance(mid) and appUser stay in sync.
-                if (value !== User.getInstance(value.mid)) {
-                    User.getInstance(value.mid).from(value)
+                if (value !== getInstance(value.mid)) {
+                    getInstance(value.mid).from(value)
                 }
             } finally {
                 _isInsideAppUserSetter = false
             }
-            val instance = User.getInstance(value.mid)
+            val instance = getInstance(value.mid)
 
             _appUserState.value = instance
             _appUserAvatar.value = instance.avatar  // Always emit avatar separately
@@ -499,7 +488,7 @@ object HproseInstance {
                 
                 // Use cached data to populate appUser immediately
                 User.updateUserInstance(cachedUser, true)
-                appUser = User.getInstance(initialUserId)
+                appUser = getInstance(initialUserId)
                 Timber.tag("HproseInstance").d("✅ Loaded cached appUser at startup: userId=${appUser.mid}, username=${appUser.username}, baseUrl=${appUser.baseUrl}")
             } else {
                 // No cached data, create skeleton user
@@ -554,21 +543,19 @@ object HproseInstance {
                 val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
 
                 if (isFailureBackoffActive) {
-                    val failureCacheNotNull = failureCache!!
-                    val age = now - failureCacheNotNull.timestampMs
+                    val age = now - failureCache.timestampMs
                     Timber.tag("findEntryIP").w(
-                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCacheNotNull.message}"
+                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCache.message}"
                     )
                     cachedFailure = IllegalStateException(
-                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCacheNotNull.message}"
+                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCache.message}"
                     )
                 } else if (isCacheValid) {
-                    val cacheNotNull = cache!!
                     // Keep appId aligned with the cached entry resolution metadata.
-                    _appId = cacheNotNull.appId
-                    cachedResult = cacheNotNull.ip
+                    _appId = cache.appId
+                    cachedResult = cache.ip
                     Timber.tag("findEntryIP").d(
-                        "Using cached entry IP ${cacheNotNull.ip} (age=${now - cacheNotNull.timestampMs}ms)"
+                        "Using cached entry IP ${cache.ip} (age=${now - cache.timestampMs}ms)"
                     )
                 } else {
                     inFlightResolve = CompletableDeferred()
@@ -742,7 +729,7 @@ object HproseInstance {
                             val entryIP = findEntryIP()
                             appUser.baseUrl = "http://$entryIP"
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         val entryIP = findEntryIP()
                         appUser.baseUrl = "http://$entryIP"
                     }
@@ -776,7 +763,7 @@ object HproseInstance {
                     Timber.tag("initAppEntry").d("User fetch attempt $attempt/$maxFetchAttempts for userId: $userId")
 
                     refreshedUser = withContext(Dispatchers.IO) {
-                        withTimeoutOrNull(20_000) {
+                        withTimeoutOrNull(20_000.milliseconds) {
                             val baseUrlParam = if (attempt == 1) {
                                 appUser.baseUrl ?: ""
                             } else {
@@ -795,7 +782,7 @@ object HproseInstance {
                     if (attempt < maxFetchAttempts) {
                         val delayMs = 2000L * attempt  // 2s, 4s, 6s
                         Timber.tag("initAppEntry").w("User fetch failed on attempt $attempt, retrying after ${delayMs}ms...")
-                        delay(delayMs)
+                        delay(delayMs.milliseconds)
                     } else {
                         Timber.tag("initAppEntry").e("❌ User fetch failed after $maxFetchAttempts attempts")
                     }
@@ -806,7 +793,7 @@ object HproseInstance {
                     withContext(Dispatchers.Main) {
                         // Update singleton first, THEN set appUser to the singleton instance
                         User.updateUserInstance(refreshedUser, true)
-                        appUser = User.getInstance(refreshedUser.mid)
+                        appUser = getInstance(refreshedUser.mid)
                         
                         // Mark appUser as fully initialized (not just entry IP)
                         _isAppUserInitialized.value = true
@@ -960,7 +947,7 @@ object HproseInstance {
                 val errorMsg = "Failed to create client for sender node"
                 Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${appUser.baseUrl}")
                 if (attempt < maxRetries) {
-                    delay((attempt + 1) * 1000L)
+                    delay(((attempt + 1) * 1000L).milliseconds)
                     continue
                 }
                 return Pair(false, errorMsg)
@@ -990,12 +977,12 @@ object HproseInstance {
                     return Pair(true, null)
                 } else {
                     lastError = lastError ?: applicationContext.getString(R.string.error_send_outgoing_message)
-                    Timber.tag("sendMessage").e("❌ Failed to send to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${lastError?.takeIf { it != applicationContext.getString(R.string.error_send_outgoing_message) } ?: "Failed to send outgoing message"}")
+                    Timber.tag("sendMessage").e("❌ Failed to send to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${lastError.takeIf { it != applicationContext.getString(R.string.error_send_outgoing_message) } ?: "Failed to send outgoing message"}")
                     
                     if (attempt < maxRetries) {
                         val delay = (attempt + 1) * 2000L // 2, 4 seconds
                         Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
-                        delay(delay)
+                        delay(delay.milliseconds)
                         continue
                     }
                 }
@@ -1004,7 +991,7 @@ object HproseInstance {
                 Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message ?: "Network error"}")
                 
                 if (attempt < maxRetries) {
-                    delay((attempt + 1) * 2000L)
+                    delay(((attempt + 1) * 2000L).milliseconds)
                     continue
                 }
             }
@@ -1057,7 +1044,7 @@ object HproseInstance {
                 val errorMsg = "Failed to create client for recipient node"
                 Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${receiptUser.baseUrl}")
                 if (attempt < maxRetries) {
-                    delay((attempt + 1) * 1000L)
+                    delay(((attempt + 1) * 1000L).milliseconds)
                     continue
                 }
                 return Pair(false, errorMsg)
@@ -1092,7 +1079,7 @@ object HproseInstance {
                     if (attempt < maxRetries) {
                         val delay = (attempt + 1) * 2000L // 2, 4 seconds
                         Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
-                        delay(delay)
+                        delay(delay.milliseconds)
                         continue
                     }
                 }
@@ -1101,7 +1088,7 @@ object HproseInstance {
                 Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
                 
                 if (attempt < maxRetries) {
-                    delay((attempt + 1) * 2000L)
+                    delay(((attempt + 1) * 2000L).milliseconds)
                     continue
                 }
             }
@@ -1330,7 +1317,7 @@ object HproseInstance {
             "username" to username,
             "v4only" to v4Only.toString()
         )
-        Timber.tag("getUserId").d("🔍 v4Only global = $v4Only, sending v4only = ${v4Only.toString()}")
+        Timber.tag("getUserId").d("🔍 v4Only global = $v4Only, sending v4only = $v4Only")
         return try {
             val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
             unwrapV2Response<String>(rawResponse)
@@ -1374,7 +1361,7 @@ object HproseInstance {
                     if (attempt < maxRetries - 1) {
                         val delayMs = minOf(5000L, 1000L * (1 shl attempt))
                         Timber.tag("Login").d("Retrying login after getUserId failure in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                        delay(delayMs)
+                        delay(delayMs.milliseconds)
                     }
                     return@repeat // Continue to next attempt
                 }
@@ -1392,7 +1379,7 @@ object HproseInstance {
                     if (attempt < maxRetries - 1) {
                         val delayMs = minOf(5000L, 1000L * (1 shl attempt))
                         Timber.tag("Login").d("Retrying login after fetchUser failure in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                        delay(delayMs)
+                        delay(delayMs.milliseconds)
                     }
                     return@repeat // Continue to next attempt
                 }
@@ -1446,7 +1433,7 @@ object HproseInstance {
                 // Wait before retrying
                 val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                 Timber.tag("Login").d("Retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                delay(delayMs)
+                delay(delayMs.milliseconds)
             } catch (e: Exception) {
                 lastError = ErrorMessageUtils.getNetworkErrorMessage(context, e)
                 Timber.tag("Login").e(e, "Login attempt ${attempt + 1}/$maxRetries failed with exception")
@@ -1468,7 +1455,7 @@ object HproseInstance {
                 // Wait before retrying
                 val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                 Timber.tag("Login").d("Network error detected, retrying login in ${delayMs}ms (attempt ${attempt + 2}/$maxRetries)")
-                delay(delayMs)
+                delay(delayMs.milliseconds)
             }
         }
         
@@ -1579,7 +1566,7 @@ object HproseInstance {
         val ipArray = unwrapV2Response<List<String>>(rawResponse)
         
         // If ipArray is valid, try each IP and return the best one
-        if (ipArray != null && ipArray.isNotEmpty()) {
+        if (!ipArray.isNullOrEmpty()) {
             val ipCount = ipArray.size
             val ipList = ipArray.joinToString(", ")
             Timber.tag("getHostIP").d("Received $ipCount IP(s) for node $nodeId: [$ipList]")
@@ -2061,7 +2048,7 @@ object HproseInstance {
             return rows
         }
 
-        return rows.sortedWith(compareByDescending<Map<String, Any>?> {
+        return rows.sortedWith(compareByDescending {
             tweetRowTimestamp(it) ?: Long.MIN_VALUE
         })
     }
@@ -2250,7 +2237,7 @@ object HproseInstance {
                 if (isNetworkError && attempt < maxRetries) {
                     val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                     Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
-                    delay(delayMs)
+                    delay(delayMs.milliseconds)
                     continue
                 }
                 
@@ -2829,7 +2816,7 @@ object HproseInstance {
     }
 
     private fun registerNetworkCallback() {
-        val cm = applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+        val cm = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE)
                 as android.net.ConnectivityManager
         // Set initial state
         val network = cm.activeNetwork
@@ -2941,7 +2928,7 @@ object HproseInstance {
                 if (tweet.isPrivate && authorId != appUser.mid) {
                     return@mapNotNull null
                 }
-                
+
                 // Always populate author from user cache (author field is not serialized with tweet)
                 // For appUser's tweets, use appUser directly since it's always the most up-to-date singleton
                 if (tweet.authorId == appUser.mid) {
@@ -2956,7 +2943,7 @@ object HproseInstance {
                         Timber.tag("loadCachedTweetsByAuthor").d("Created skeleton user placeholder for tweet ${tweet.mid} - authorId ${tweet.authorId}")
                     }
                 }
-                
+
                 Timber.tag("loadCachedTweetsByAuthor").d("Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username ?: tweet.authorId}")
                 tweet
             }
@@ -3146,7 +3133,7 @@ object HproseInstance {
                         if (refreshedUser != null && !refreshedUser.isGuest()) {
                             // Update singleton and set appUser to it
                             User.updateUserInstance(refreshedUser, true)
-                            appUser = User.getInstance(refreshedUser.mid)
+                            appUser = getInstance(refreshedUser.mid)
                             
                             // Notify other ViewModels that user data has been updated
                             TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
@@ -3226,7 +3213,7 @@ object HproseInstance {
         val entry = "toggle_following"
         // followingid_hostid hints the target's primary host so the call routes
         // to the right shard (matches iOS cachedFollowing.hostIds?.first).
-        val cachedFollowing = User.getInstance(followedId)
+        val cachedFollowing = getInstance(followedId)
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -3661,7 +3648,7 @@ object HproseInstance {
                 if (refreshedUser != null && !refreshedUser.isGuest()) {
                     // Update singleton and set appUser to it
                     User.updateUserInstance(refreshedUser, true)
-                    appUser = User.getInstance(refreshedUser.mid)
+                    appUser = getInstance(refreshedUser.mid)
 
                     // Notify other ViewModels that user data has been updated
                     TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
@@ -3697,8 +3684,6 @@ object HproseInstance {
     /**
      * Load all comments of a tweet.
      * @param pageNumber
-     * */
-    /**
      * Page-by-page comment fetch that mirrors iOS `fetchComments`.
      *
      * Returns `Pair(comments, failedIds)`:
@@ -3838,8 +3823,7 @@ object HproseInstance {
             }.getOrNull()
             val retryPayload = unwrapV2Response<Map<String, Any>>(rawRetry, logErrors = false)
             if (retryPayload == null) {
-                val retryMessage = (rawRetry as? Map<*, *>)?.get("message") as? String
-                when (retryMessage) {
+                when (val retryMessage = (rawRetry as? Map<*, *>)?.get("message") as? String) {
                     "Tweet not found", "User not found" -> {
                         Timber.tag("syncComment").d(
                             "Retry get_tweet returned expected miss for $commentId: $retryMessage"
@@ -3987,7 +3971,7 @@ object HproseInstance {
 
     /**
      * Given userId, get baseUrl where user data can be accessed.
-     * An user mimei may be stored on many nodes.
+     * A user mimei may be stored on many nodes.
      *
      * Algorithm based on iOS implementation:
      * 1. Check user cache first (if baseUrl matches appUser.baseUrl)
@@ -3999,7 +3983,6 @@ object HproseInstance {
      * Cache expiration: Users are cached for 30 minutes. Expired users are refreshed from backend.
      * Includes retry logic with exponential backoff for network-related failures.
      */
-    @Suppress("SENSELESS_COMPARISON")
     /**
      * Performs user update and cache save, handling success and error cases
      * @param userId User ID being fetched
@@ -4009,7 +3992,8 @@ object HproseInstance {
      * @param logContext Logging context
      * @param baseUrlHint Hint for cache logic ("" forces refresh, null uses defaults)
      * @return User if successful, null otherwise
-     */
+     **/
+    @Suppress("SENSELESS_COMPARISON")
     private suspend fun performUserUpdate(
         userId: MimeiId,
         user: User,
@@ -4043,9 +4027,8 @@ object HproseInstance {
      * Starts background refresh for expired cached user
      */
     private fun startBackgroundRefresh(
-        userId: MimeiId, 
-        cachedUser: User, 
-        maxRetries: Int, 
+        userId: MimeiId,
+        maxRetries: Int,
         skipRetryAndBlacklist: Boolean,
         baseUrlHint: String?
     ) {
@@ -4076,7 +4059,7 @@ object HproseInstance {
         val startTime = System.currentTimeMillis()
         
         while (true) {
-            delay(50)
+            delay(50.milliseconds)
             
             if (System.currentTimeMillis() - startTime > maxWaitTime) {
                 Timber.tag("getUser").w("Timeout waiting for concurrent update to complete for userId: $userId")
@@ -4157,7 +4140,6 @@ object HproseInstance {
                     if (shouldStartBackgroundRefresh) {
                         startBackgroundRefresh(
                             userId,
-                            cachedUser,
                             maxRetries,
                             skipRetryAndBlacklist,
                             if (needsRouteRefresh) "" else baseUrl
@@ -4617,7 +4599,7 @@ object HproseInstance {
         // Process IPs in pairs (2 at a time)
         val pairSize = 2
         var firstHealthy: String? = null
-        val activeJobs = mutableListOf<kotlinx.coroutines.Deferred<String?>>()
+        val activeJobs = mutableListOf<Deferred<String?>>()
 
         for (i in ipAddresses.indices step pairSize) {
             // Check if we already found a healthy IP
@@ -4729,7 +4711,7 @@ object HproseInstance {
      * This triggers a backend operation to refresh the user's data on the server side.
      * Should be called each time a user profile is opened.
      * 
-     * @param userId The user ID to resync
+     * @param user The user to resync
      * @return The updated User object and synced tweets from server, or null if failed
      */
     data class ResyncUserResult(
@@ -4809,7 +4791,7 @@ object HproseInstance {
                 .orEmpty()
             
             // Validate response: must have userData and username (required field)
-            if (userData == null || userData.isEmpty()) {
+            if (userData.isNullOrEmpty()) {
                 Timber.tag("resyncUser").e("Null or empty user data for user $userId, ignoring result")
                 return null
             }
@@ -4949,7 +4931,7 @@ object HproseInstance {
             "mid" to mid,
             "v4only" to v4Only.toString()
         )
-        Timber.tag("_getProviderIP").d("🔍 v4Only global = $v4Only, sending v4only = ${v4Only.toString()}")
+        Timber.tag("_getProviderIP").d("🔍 v4Only global = $v4Only, sending v4only = $v4Only")
 
         // Let exceptions propagate - caller will decide whether to retry
         val rawResponse = hproseService?.runMApp<Any>(entry, params)
@@ -5235,11 +5217,11 @@ object HproseInstance {
                     }
                     "uploading", "processing" -> {
                         // Continue polling
-                        delay(3000) // Poll every 3 seconds
+                        delay(3000.milliseconds) // Poll every 3 seconds
                     }
                     else -> {
                         Timber.tag("pollVideoConversionStatus").w("Unknown status: $status")
-                        delay(3000)
+                        delay(3000.milliseconds)
                     }
                 }
             } catch (e: Exception) {
@@ -5255,7 +5237,7 @@ object HproseInstance {
                 // Exponential backoff for retries, but cap at reasonable maximum
                 val retryDelay = minOf(60000L, 2000L * (1 shl minOf(consecutiveFailures - 1, 5))) // Max 60 seconds
                 Timber.tag("pollVideoConversionStatus").d("Retrying in ${retryDelay}ms...")
-                delay(retryDelay)
+                delay(retryDelay.milliseconds)
             }
         }
     }

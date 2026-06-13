@@ -4,9 +4,9 @@ plugins {
 
     id("com.google.dagger.hilt.android") version "2.59.2" apply false
     alias(libs.plugins.compose.compiler) apply false
-    kotlin("jvm") version "2.1.21"
-    kotlin("plugin.serialization") version "2.1.21" apply false
-    id("com.google.devtools.ksp") version "2.3.2"  // Matches Kotlin 2.1.21
+    kotlin("jvm") version "2.4.0" apply false
+    kotlin("plugin.serialization") version "2.4.0" apply false
+    alias(libs.plugins.ksp) apply false
     id("com.google.gms.google-services") version "4.4.4" apply false
     id("androidx.room") version "2.8.4" apply false
 }

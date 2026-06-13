@@ -54,6 +54,7 @@ import kotlinx.coroutines.delay
 import us.fireshare.tweet.R
 import us.fireshare.tweet.utils.CameraXManager
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Format duration in seconds to MM:SS format
@@ -126,7 +127,7 @@ fun CameraXPreview(
         activity.actionBar?.hide()
         
         // Additional delay to ensure keyboard is fully hidden
-        delay(100)
+        delay(100.milliseconds)
         inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
     }
     
@@ -134,7 +135,7 @@ fun CameraXPreview(
     LaunchedEffect(isRecording) {
         if (isRecording) {
             while (isRecording) {
-                delay(1000) // Update every second
+                delay(1000.milliseconds) // Update every second
                 recordingDuration++
             }
         } else {

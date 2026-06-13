@@ -473,7 +473,7 @@ object ImageCacheManager {
 
                 permit = acquireDownloadPermit(mid, imageUrl, isVisible, isAvatar)
                 downloadQueue[mid] = true
-                if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                if (permit.priority == ImageDownloadPriority.BACKGROUND) {
                     activeInvisibleDownloads++
                 } else {
                     activeVisibleDownloads++
@@ -509,7 +509,7 @@ object ImageCacheManager {
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
                     }
-                    if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                    if (permit.priority == ImageDownloadPriority.BACKGROUND) {
                         activeInvisibleDownloads--
                     } else {
                         activeVisibleDownloads--
@@ -899,7 +899,7 @@ object ImageCacheManager {
                 permit = acquireDownloadPermit(originalMid, imageUrl, isVisible, isAvatar)
                 
                 // Track priority for monitoring
-                if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                if (permit.priority == ImageDownloadPriority.BACKGROUND) {
                     activeInvisibleDownloads++
                 } else {
                     activeVisibleDownloads++
@@ -951,7 +951,7 @@ object ImageCacheManager {
                 } finally {
                     // Always release the download slot and clean up
                     // Update priority counters
-                    if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
+                    if (permit.priority == ImageDownloadPriority.BACKGROUND) {
                         activeInvisibleDownloads--
                     } else {
                         activeVisibleDownloads--

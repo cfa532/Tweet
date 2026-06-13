@@ -8,7 +8,7 @@ plugins {
     id("com.google.dagger.hilt.android")
     alias(libs.plugins.compose.compiler)
     kotlin("plugin.serialization")
-    id("com.google.devtools.ksp")
+    alias(libs.plugins.ksp)
     id("com.google.gms.google-services")
     alias(libs.plugins.firebase.crashlytics)
     id("kotlin-parcelize")
@@ -268,6 +268,8 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+
+    ksp(libs.kotlin.metadata.jvm)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
