@@ -1611,8 +1611,6 @@ object VideoManager {
         preloadQueue.remove(videoMid)
         preloadingVideos.remove(videoMid)
         preloadJobs.remove(videoMid)?.cancel()
-        posterJobs.remove(videoMid)?.cancel()
-        posterBitmaps.remove(videoMid)
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.remove(videoMid)
         }
@@ -1653,8 +1651,6 @@ object VideoManager {
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
             preloadJobs.remove(videoMid)?.cancel()
-            posterJobs.remove(videoMid)?.cancel()
-            posterBitmaps.remove(videoMid)
             savedPositions.remove(videoMid)
             synchronized(currentDirectionalPreloadVideos) {
                 currentDirectionalPreloadVideos.remove(videoMid)
@@ -1682,8 +1678,6 @@ object VideoManager {
             preloadQueue.remove(videoMid)
             preloadingVideos.remove(videoMid)
             preloadJobs.remove(videoMid)?.cancel()
-            posterJobs.remove(videoMid)?.cancel()
-            posterBitmaps.remove(videoMid)
             synchronized(currentDirectionalPreloadVideos) {
                 currentDirectionalPreloadVideos.remove(videoMid)
             }

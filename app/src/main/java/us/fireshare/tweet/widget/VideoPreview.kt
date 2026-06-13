@@ -393,8 +393,7 @@ fun VideoPreview(
             val posterView = view.findViewById<ImageView>(R.id.video_poster)
             val showPoster = cachedPoster != null &&
                 !state.isPlaying &&
-                !state.hasError &&
-                (state.isLoading || !shouldPlay)
+                (state.hasError || state.isLoading || !shouldPlay)
             if (showPoster) {
                 posterView.setImageBitmap(cachedPoster)
                 posterView.visibility = View.VISIBLE
