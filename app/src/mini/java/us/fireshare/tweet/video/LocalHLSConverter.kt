@@ -9,11 +9,11 @@ import java.io.File
  * Mini version doesn't use local HLS conversion - uses backend instead
  */
 class LocalHLSConverter(private val context: Context) {
-    
+
     companion object {
         private const val TAG = "LocalHLSConverter"
     }
-    
+
     suspend fun convertToHLS(
         inputUri: Uri,
         outputDir: File,
@@ -27,7 +27,7 @@ class LocalHLSConverter(private val context: Context) {
         // Mini version should never call this
         return HLSConversionResult.Error("FFmpeg not available in mini version")
     }
-    
+
     /**
      * Result of HLS conversion
      */
@@ -36,4 +36,3 @@ class LocalHLSConverter(private val context: Context) {
         data class Error(val message: String) : HLSConversionResult()
     }
 }
-

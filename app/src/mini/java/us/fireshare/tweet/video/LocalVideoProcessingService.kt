@@ -40,4 +40,3 @@ class LocalVideoProcessingService(
         data class Error(val message: String) : VideoProcessingResult()
     }
 }
-

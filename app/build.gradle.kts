@@ -40,10 +40,7 @@ android {
             useSupportLibrary = true
         }
 
-        // Enable 16 KB page size compatibility
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-        }
+        // ABI filters are set per flavor so the Play build can stay arm64-only.
         
         // Default APP_ID (will be overridden by buildTypes)
         // This ensures APP_ID is always defined and prevents any inheritance issues
@@ -123,6 +120,9 @@ android {
             versionNameSuffix = ""
             // Full version uses default versionCode from defaultConfig (currently 70)
             // No override - will use defaultConfig versionCode
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
@@ -132,6 +132,9 @@ android {
             dimension = "version"
             versionNameSuffix = "-mini"
             versionCode = 87  // Mini version code. Must be smaller than full version's code
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            }
             buildConfigField("Boolean", "IS_MINI_VERSION", "true")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
@@ -141,6 +144,9 @@ android {
             dimension = "version"
             versionNameSuffix = "-play"
             versionCode = 129  // Play version code increased for release
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
             buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
@@ -200,10 +206,11 @@ kotlin {
 }
 
 dependencies {
-    // FFmpeg Kit for local video processing - minimal 16KB build (ARM only)
+    // FFmpeg Kit for local video processing.
     // Included in full and play versions, excluded in mini version
-    "fullImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
-    "playImplementation"(files("libs/ffmpeg-kit-16kb-minimal.aar"))
+    "fullImplementation"(files("libs/ffmpeg-kit-16kb-play-arm64.aar"))
+    "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
+    "playImplementation"(files("libs/ffmpeg-kit-16kb-play-arm64.aar"))
     "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)

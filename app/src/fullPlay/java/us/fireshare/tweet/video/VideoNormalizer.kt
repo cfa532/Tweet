@@ -27,9 +27,9 @@ class VideoNormalizer(private val context: Context) {
         private const val TAG = "VideoNormalizer"
         
         // Bitrate constants for video normalization
-        private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
+        private const val REFERENCE_720P_BITRATE = 2500  // Matches iOS 720p reference bitrate in kbps
         private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
-        private const val MIN_BITRATE = 500  // Minimum bitrate in kbps for quality (matches LocalHLSConverter)
+        private const val MIN_BITRATE = 600  // Matches iOS minimum bitrate in kbps
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 5 * 60 * 1000L   // 5 minutes minimum
@@ -104,8 +104,8 @@ class VideoNormalizer(private val context: Context) {
 
     /**
      * Normalize video with proportional bitrate calculation:
-     * - If resolution > 720p: Normalize to 720p with 1000k bitrate
-     * - If resolution ≤ 720p: Keep original resolution with proportional bitrate (1000k × resolution/720)
+     * - If resolution > 720p: Normalize to 720p with the iOS reference bitrate
+     * - If resolution ≤ 720p: Keep original resolution with iOS pixel-based proportional bitrate
      * 
      * Resolution detection:
      * - Landscape (width >= height): Resolution = HEIGHT
@@ -148,8 +148,8 @@ class VideoNormalizer(private val context: Context) {
             val sourceBitrateK = VideoManager.getVideoBitrate(context, inputUri)?.let { it / 1000 }
             
             // Calculate target bitrate based on pixel count
-            // Formula: bitrate = (pixel_count / REFERENCE_720P_PIXELS) * 1000k
-            // If resolution > 720p, normalize to 720p with 1000k
+            // Formula: bitrate = (pixel_count / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE
+            // If resolution > 720p, normalize to 720p with the iOS reference bitrate
             // If resolution ≤ 720p, keep original resolution with proportional bitrate
             val calculatedTargetBitrateK = if (resolutionValue != null && resolutionValue > 720) {
                 // Resolution > 720p: normalize to 720p with reference bitrate
@@ -217,7 +217,7 @@ class VideoNormalizer(private val context: Context) {
                     Timber.tag(TAG).d("Normalized to ${outputWidth}×${outputHeight} (${outputResolutionValue}p) with ${targetBitrateK}k bitrate")
                     NormalizationResult.Success(outputFile)
                 } else {
-                    Timber.tag(TAG).e("Video normalization to 720p/1000k failed")
+                    Timber.tag(TAG).e("Video normalization to 720p/reference bitrate failed")
                     NormalizationResult.Error("FFmpeg normalization failed")
                 }
             } finally {
@@ -227,14 +227,14 @@ class VideoNormalizer(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error during video normalization to 720p/1000k")
+            Timber.tag(TAG).e(e, "Error during video normalization to 720p/reference bitrate")
             NormalizationResult.Error("Normalization error: ${e.message}")
         }
     }
 
     /**
      * Build FFmpeg command for normalizing video:
-     * - If resolution > 720p: Scale to 720p with 1000k bitrate
+     * - If resolution > 720p: Scale to 720p with the iOS reference bitrate
      * - If resolution ≤ 720p: Keep original resolution with proportional bitrate
      * 
      * @param videoResolution Pair of (width, height)
@@ -493,8 +493,8 @@ class VideoNormalizer(private val context: Context) {
 
     /**
      * Get bitrate for a given resolution
-     * Calculates bitrate proportionally based on pixel count (720p = 921,600 pixels = 1000k)
-     * Minimum bitrate: 500k for quality
+     * Calculates bitrate proportionally based on pixel count (720p = 921,600 pixels = 2500k)
+     * Minimum bitrate: 600k to match iOS
      */
     private fun getBitrateForResolution(width: Int, height: Int): String {
         val pixelCount = width * height
@@ -556,4 +556,3 @@ class VideoNormalizer(private val context: Context) {
         data class Error(val message: String) : NormalizationResult()
     }
 }
-

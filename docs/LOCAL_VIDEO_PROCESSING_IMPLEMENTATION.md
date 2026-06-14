@@ -106,8 +106,8 @@ ffmpeg -i input.mp4 \
   -max_interleave_delta 0 \
   -max_muxing_queue_size 1024 \
   -hls_time 10 \
-  -hls_list_size 3 \
-  -hls_flags delete_segments+independent_segments+split_by_time \
+  -hls_list_size 0 \
+  -hls_flags independent_segments \
   -hls_segment_type mpegts \
   -hls_segment_filename "segment%03d.ts" \
   -f hls playlist.m3u8
@@ -122,14 +122,14 @@ ffmpeg -i input.mp4 \
   -c:v libx264 \
   -c:a aac \
   -vf "scale=W:720:force_original_aspect_ratio=decrease:force_divisible_by=2" \
-  -b:v 1000k \
+  -b:v 2500k \
   -b:a 128k \
-  -preset fast \
+  -preset veryfast \
   -tune zerolatency \
-  -threads 2 \
+  -threads 4 \
   -hls_time 10 \
-  -hls_list_size 3 \
-  -hls_flags delete_segments+independent_segments+split_by_time \
+  -hls_list_size 0 \
+  -hls_flags independent_segments \
   -hls_segment_type mpegts \
   -hls_segment_filename "segment%03d.ts" \
   -f hls 720/playlist.m3u8
@@ -141,14 +141,14 @@ ffmpeg -i input.mp4 \
   -c:v libx264 \
   -c:a aac \
   -vf "scale=W:480:force_original_aspect_ratio=decrease:force_divisible_by=2" \
-  -b:v 500k \
-  -b:a 96k \
-  -preset fast \
+  -b:v "<pixel-proportional bitrate, minimum 600k>" \
+  -b:a 128k \
+  -preset veryfast \
   -tune zerolatency \
-  -threads 2 \
+  -threads 4 \
   -hls_time 10 \
-  -hls_list_size 3 \
-  -hls_flags delete_segments+independent_segments+split_by_time \
+  -hls_list_size 0 \
+  -hls_flags independent_segments \
   -hls_segment_type mpegts \
   -hls_segment_filename "segment%03d.ts" \
   -f hls 480/playlist.m3u8
@@ -158,10 +158,10 @@ ffmpeg -i input.mp4 \
 ```m3u8
 #EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:BANDWIDTH=1128000,RESOLUTION=1280x720
-720/playlist.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=596000,RESOLUTION=854x480
-480/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
+720p/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1111000,RESOLUTION=854x480
+480p/playlist.m3u8
 ```
 
 ## Error Handling
@@ -203,14 +203,14 @@ The system uses configurable parameters:
 - **Video Resolutions**: 
   - 720p: 1280x720 (landscape) or 720x1280 (portrait)
   - 480p: 854x480 (landscape) or 480x854 (portrait)
-- **Video Bitrates**: 
-  - 720p: 1000k
-  - 480p: 500k
+- **Video Bitrates**:
+  - 720p reference: 2500k
+  - Below 720p: pixel-proportional to 2500k at 1280x720, minimum 600k
 - **Audio Bitrates**:
   - 720p: 128k
-  - 480p: 96k
+  - 480p: 128k
 - **Codec Selection**: Automatic (COPY for ≤720p videos, libx264 otherwise)
-- **Threads**: 2 (for encoding)
+- **Threads**: 4 (Android libx264 encoding)
 
 ## Recent Updates (October 2025)
 

@@ -130,11 +130,8 @@ class MediaUploadService(
             }
         }
 
-        // For video files, implement routing logic with consistent proportional bitrates:
-        // 1. Normalize with proportional bitrate algorithm (>720p: 1500k, =720p: 1000k, <720p: proportional)
-        // 2. Route based on normalized video size:
-        //    - ≤ 32MB: progressive video route
-        //    - > 32MB: HLS dual-variant (high quality + 480p with proportional bitrates)
+        // For non-mini video files, route through local HLS conversion using the iOS bitrate formula:
+        // 2500k at 720p, pixel-proportional below 720p, 600k floor, 128k audio.
         if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
             return if (mediaType == MediaType.Video) {
                 processVideoWithRouting(uri, fileName, fileTimestamp, referenceId)
@@ -200,15 +197,8 @@ class MediaUploadService(
     }
 
     /**
-     * Process video with new routing logic:
-     * 1. Check video resolution:
-     *    - If > 720p: Normalize to 720p/1500k first, then use normalized size for routing
-     *    - If = 720p: Use base bitrate (1000k)
-     *    - If < 720p: Use proportional bitrate (resolution/720 * 1000k, min 500k)
-     * 2. Route based on video size:
-     *    - ≤ 32MB: progressive video route (normalize if > 720p, or use original if ≤ 720p)
-     *    - > 32MB: HLS conversion based on resolution
-     *       - Dual variant (high quality + 480p with proportional bitrates)
+     * Temporarily route every full/play video upload through local HLS processing.
+     * Mini still uploads directly because it does not include FFmpeg.
      */
     private suspend fun processVideoWithRouting(
         uri: Uri,
@@ -222,25 +212,14 @@ class MediaUploadService(
                 Timber.tag(TAG).d("Mini version detected: Uploading video directly without local processing")
                 return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
+
+            Timber.tag(TAG).d("Starting video processing through forced HLS path")
             
-            Timber.tag(TAG).d("Starting video processing with new normalization and routing algorithm")
-            
-            // Server implements the complete algorithm:
-            // 1. Resolution Detection: Landscape (width ≥ height) = HEIGHT, Portrait (width < height) = WIDTH
-            // 2. Video Normalization with consistent proportional bitrates:
-            //    - >720p: normalize to 720p @ 1500k
-            //    - =720p: 720p @ 1000k (base reference)
-            //    - <720p: original resolution @ (resolution/720 * 1000k, min 500k)
-            // 3. Routing After Normalization: ≤32MB → progressive, >32MB → HLS
-            // 4. HLS Variant Selection: Automatic based on resolution (>480p → dual, ≤480p → single)
-            // 5. HLS Segment Creation: optimized encoding with quality preservation
             processVideoLocally(uri, fileName, fileTimestamp, referenceId)
             
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error in video processing with routing")
-            // Fall back to direct IPFS upload as progressive video
-            Timber.tag(TAG).d("Falling back to direct IPFS upload due to processing error")
-            uploadToIPFSOriginal(uri, fileName ?: "video", fileTimestamp, referenceId, MediaType.Video)
+            Timber.tag(TAG).e(e, "Error in forced HLS video processing")
+            null
         }
     }
 
@@ -249,7 +228,7 @@ class MediaUploadService(
      * Strategy:
      * 1. Check if cloudDrivePort is valid and conversion server is available
      * 2. If available: convert to HLS, compress, and upload to /process-zip
-     * 3. If not available: normalize to mp4 (resample to 720p if > 720p) and upload to IPFS
+     * 3. If not available: fail the upload instead of falling back to progressive video
      */
     private suspend fun processVideoLocally(
         uri: Uri,
@@ -263,7 +242,7 @@ class MediaUploadService(
                 Timber.tag(TAG).w("Mini version attempted to call processVideoLocally - uploading directly")
                 return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
-            
+
             // Check if conversion server is available
             val serverAvailable = isConversionServerAvailable()
             
@@ -285,21 +264,16 @@ class MediaUploadService(
                     }
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
                         Timber.tag(TAG).e("HLS processing failed: ${result.message}")
-                        // Fall back to normalization and IPFS upload
-                        Timber.tag(TAG).d("Falling back to MP4 normalization for IPFS upload")
-                        normalizeAndUploadVideo(uri, fileName, fileTimestamp, referenceId)
+                        null
                     }
                 }
             } else {
-                // Normalize to mp4 and upload via IPFS
-                Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
-                return normalizeAndUploadVideo(uri, fileName, fileTimestamp, referenceId)
+                Timber.tag(TAG).e("Conversion server unavailable; forced HLS video upload cannot continue")
+                null
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in local video processing")
-            // Fall back to direct IPFS upload as progressive video
-            Timber.tag(TAG).d("Falling back to direct IPFS upload due to processing error")
-            uploadToIPFSOriginal(uri, fileName ?: "video", fileTimestamp, referenceId, MediaType.Video)
+            null
         }
     }
 
@@ -322,7 +296,7 @@ class MediaUploadService(
                 Timber.tag(TAG).w("Mini version attempted to call normalizeAndUploadVideo - uploading directly")
                 return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
-            
+
             Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
             
             // Check if video resolution is > 720p
@@ -587,4 +561,3 @@ class MediaUploadService(
             }
         }
 }
-

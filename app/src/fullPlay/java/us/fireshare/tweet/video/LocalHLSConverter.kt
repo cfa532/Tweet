@@ -31,9 +31,11 @@ class LocalHLSConverter(private val context: Context) {
         // 0 = keep all segments for VOD playlists; we don't want sliding-window/live behavior here.
         private const val HLS_PLAYLIST_SIZE = 0
 
-        // Base bitrate for 720p video (in kbps) - used for proportional bitrate calculations
-        private const val REFERENCE_720P_BITRATE = 1000
-        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps (reduced from 500k)
+        // Matches iOS VideoConversionService: 720p reference bitrate with a minimum floor.
+        private const val REFERENCE_720P_BITRATE = 2500
+        private const val REFERENCE_720P_PIXELS = 921600
+        private const val MIN_BITRATE = 600
+        private const val HLS_AUDIO_BITRATE = "128k"
 
         // Dynamic timeout constants (in milliseconds)
         private const val MIN_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes minimum
@@ -103,42 +105,33 @@ class LocalHLSConverter(private val context: Context) {
             // Use standard configuration for all video sizes
             val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
 
-            // Calculate bitrates using proportional algorithm (consistent with server and iOS)
-            // High quality bitrate depends on source resolution:
-            // - >720p: normalize to 720p @ 1000k
-            // - =720p: 720p @ 1000k (base reference)
-            // - <720p: original resolution @ proportional bitrate based on pixel count
+            // Calculate bitrates using the same pixel-based formula as iOS.
             val highQualityBitrate = when {
-                videoResolutionValue != null && videoResolutionValue > 720 -> 1000
-                videoResolutionValue == 720 -> REFERENCE_720P_BITRATE
-                videoResolutionValue != null && videoResolutionValue < 720 && videoResolution != null -> {
+                videoResolutionValue != null && videoResolutionValue >= 720 -> REFERENCE_720P_BITRATE
+                videoResolution != null -> {
                     val (width, height) = videoResolution
                     val pixelCount = width * height
-                    val REFERENCE_720P_PIXELS = 921600
                     maxOf(
                         MIN_BITRATE,
                         ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
                     )
                 }
-
-                else -> REFERENCE_720P_BITRATE  // fallback if resolution unknown
+                else -> maxOf(
+                    MIN_BITRATE,
+                    (REFERENCE_720P_BITRATE * ((videoResolutionValue ?: 720).coerceAtMost(720)) / 720)
+                )
             }
 
             // Lower variant: always 480p (matches iOS)
             val lowerResolution = 480
-            // Lower variant bitrate: proportional to REFERENCE_720P_BITRATE based on actual pixel count (min 500k)
-            // Calculate actual dimensions based on aspect ratio, then use pixel count
-            val REFERENCE_720P_PIXELS = 921600
             val lowerResolutionBitrate = if (videoResolution != null) {
                 val (width, height) = videoResolution
                 val aspectRatio = width.toFloat() / height.toFloat()
                 val (lowerWidth, lowerHeight) = if (aspectRatio < 1.0f) {
-                    // Portrait: scale to target width
                     val targetWidth = minOf(width, lowerResolution)
                     val targetHeight = (targetWidth / aspectRatio).toInt()
                     Pair(targetWidth, targetHeight)
                 } else {
-                    // Landscape: scale to target height
                     val targetHeight = minOf(height, lowerResolution)
                     val targetWidth = (targetHeight * aspectRatio).toInt()
                     Pair(targetWidth, targetHeight)
@@ -147,13 +140,12 @@ class LocalHLSConverter(private val context: Context) {
                 val calculatedBitrate =
                     ((lowerPixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
                 Timber.tag(TAG)
-                    .d("Lower variant pixel-based calculation: ${lowerWidth}×${lowerHeight} (${lowerPixelCount} pixels) = ${calculatedBitrate}k")
+                    .d("Lower variant pixel calculation: ${lowerWidth}x${lowerHeight} (${lowerPixelCount} pixels) = ${calculatedBitrate}k")
                 maxOf(MIN_BITRATE, calculatedBitrate)
             } else {
-                // Fallback if resolution unknown
                 maxOf(
                     MIN_BITRATE,
-                    ((lowerResolution * lowerResolution).toDouble() / REFERENCE_720P_PIXELS * REFERENCE_720P_BITRATE).toInt()
+                    (REFERENCE_720P_BITRATE * lowerResolution / 720)
                 )
             }
 
@@ -244,7 +236,7 @@ class LocalHLSConverter(private val context: Context) {
                 finalWidth720 = w720
                 finalHeight720 = h720
 
-                // Use calculated high quality bitrate (proportional algorithm)
+                // Use the iOS pixel-based high-quality bitrate.
                 val target720pBitrate = "${highQualityBitrate}k"
 
                 // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
@@ -280,7 +272,7 @@ class LocalHLSConverter(private val context: Context) {
                         width = finalWidth720,
                         height = finalHeight720,
                         bitrate = target720pBitrate,
-                        audioBitrate = "128k",
+                        audioBitrate = HLS_AUDIO_BITRATE,
                         shouldUseCopyCodec = shouldUseCopyFor720p,
                         resolution = "720p"
                     )
@@ -314,7 +306,7 @@ class LocalHLSConverter(private val context: Context) {
                 }
             } ?: Pair(targetWidthLower, targetHeightLower)
 
-            // Use calculated lower bitrate (proportional algorithm)
+            // Use the iOS pixel-based lower-variant bitrate.
             val targetLowerBitrate = "${lowerResolutionBitrate}k"
 
             // For 480p HLS stream: Use COPY codec if normalized resolution is ≤480p
@@ -347,7 +339,7 @@ class LocalHLSConverter(private val context: Context) {
                     width = finalWidthLower,
                     height = finalHeightLower,
                     bitrate = targetLowerBitrate,
-                    audioBitrate = "128k",
+                    audioBitrate = HLS_AUDIO_BITRATE,
                     shouldUseCopyCodec = shouldUseCopyForLower,
                     resolution = "480p",
                     segmentsAtRoot = !shouldCreate720p // For single variant, segments go at root level
@@ -650,7 +642,7 @@ class LocalHLSConverter(private val context: Context) {
         resolution720pBitrate: String,
         resolution480pBitrate: String
     ) {
-        // Convert bitrate strings (e.g., "1000k") to bandwidth integers (e.g., 1000000)
+        // Convert bitrate strings (e.g., "2500k") to bandwidth integers (e.g., 2500000)
         val bandwidth720p = resolution720pBitrate.replace("k", "").toIntOrNull() ?: 1000
         val bandwidth480p = resolution480pBitrate.replace("k", "").toIntOrNull() ?: 500
         
@@ -682,7 +674,7 @@ class LocalHLSConverter(private val context: Context) {
         height480: Int,
         resolution480pBitrate: String
     ) {
-        // Convert bitrate string (e.g., "500k") to bandwidth integer (e.g., 500000)
+        // Convert bitrate string (e.g., "1111k") to bandwidth integer (e.g., 1111000)
         val bandwidth480p = resolution480pBitrate.replace("k", "").toIntOrNull() ?: 500
         
         // Create master.m3u8 pointing to root-level playlist.m3u8

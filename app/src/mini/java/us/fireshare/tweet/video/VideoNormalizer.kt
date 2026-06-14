@@ -9,11 +9,11 @@ import java.io.File
  * Mini version doesn't use local video normalization - uses backend instead
  */
 class VideoNormalizer(private val context: Context) {
-    
+
     companion object {
         private const val TAG = "VideoNormalizer"
     }
-    
+
     suspend fun normalizeVideo(
         inputUri: Uri,
         outputFile: File,
@@ -22,7 +22,7 @@ class VideoNormalizer(private val context: Context) {
         // Mini version should never call this
         return NormalizationResult.Error("FFmpeg not available in mini version")
     }
-    
+
     suspend fun normalizeTo720p1000k(
         inputUri: Uri,
         outputFile: File
@@ -30,7 +30,7 @@ class VideoNormalizer(private val context: Context) {
         // Mini version should never call this
         return NormalizationResult.Error("FFmpeg not available in mini version")
     }
-    
+
     /**
      * Result of video normalization
      */
@@ -39,4 +39,3 @@ class VideoNormalizer(private val context: Context) {
         data class Error(val message: String) : NormalizationResult()
     }
 }
-

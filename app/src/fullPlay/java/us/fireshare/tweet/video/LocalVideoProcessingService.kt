@@ -32,15 +32,14 @@ class LocalVideoProcessingService(
         private const val TAG = "LocalVideoProcessingService"
         private const val TEMP_DIR_PREFIX = "hls_conversion_"
         
-        // Bitrate constants
-        private const val REFERENCE_720P_BITRATE = 1000  // Base bitrate for 720p in kbps
-        private const val REFERENCE_720P_PIXELS = 921600  // 1280 × 720 pixels
-        private const val MIN_BITRATE = 300  // Minimum bitrate in kbps (reduced from 500k to avoid inflating low-bitrate videos)
+        // Matches iOS VideoConversionService: 720p reference bitrate with a minimum floor.
+        private const val REFERENCE_720P_BITRATE = 2500
+        private const val REFERENCE_720P_PIXELS = 921600
+        private const val MIN_BITRATE = 600
+        private const val AUDIO_BITRATE = "128k"
         
         // Normalization constants
         private const val NORMALIZATION_THRESHOLD = 720 // Videos >720p get normalized to 720p
-        private const val NORMALIZATION_HIGH_BITRATE = "1500k" // For videos >720p
-        private const val HLS_SIZE_THRESHOLD = 32 * 1024 * 1024L // 32MB in bytes
     }
 
     private val hlsConverter = LocalHLSConverter(context)
@@ -48,7 +47,7 @@ class LocalVideoProcessingService(
     private val zipUploadService = ZipUploadService(context, httpClient, appUser)
 
     /**
-     * Process video locally: normalize, route to progressive or HLS, compress, and upload
+     * Process video locally: normalize, convert to HLS, compress, and upload
      * Matches iOS behavior: automatically decides between dual variant (720p + 480p) or single variant (480p)
      * 
      * @param uri Input video URI
@@ -120,18 +119,9 @@ class LocalVideoProcessingService(
                         }
                     }
                     
-                    // Step 2: Route based on normalized size
-                    if (normalizedSize <= HLS_SIZE_THRESHOLD) {
-                        // Progressive route: video ≤32MB
-                        Timber.tag(TAG).d("Routing to progressive video (size ≤32MB)")
-                        // TODO: Implement progressive video upload
-                        // For now, continue with HLS route
-                        Timber.tag(TAG).w("Progressive route not yet implemented, continuing with HLS")
-                    } else {
-                        Timber.tag(TAG).d("Routing to HLS conversion (size >32MB)")
-                    }
+                    Timber.tag(TAG).d("Forced HLS route for video upload; normalized size=${normalizedSize / (1024 * 1024)}MB")
                     
-                    // Step 3: Convert video to HLS format
+                    // Step 2: Convert video to HLS format
                     // Variant selection (dual vs single) is automatically determined based on resolution
                     // Matches iOS logic: >480p → dual variant (720p + 480p), ≤480p → single variant (480p)
                     val hlsResult = hlsConverter.convertToHLS(
@@ -258,23 +248,19 @@ class LocalVideoProcessingService(
 
     /**
      * Calculate normalization parameters based on video resolution
-     * Returns: Pair(targetResolution, targetBitrate)
-     * Uses pixel-based proportional bitrate calculation for consistency
+     * Returns: Pair(targetResolution, targetVideoBitrate)
+     * Uses the same pixel-based bitrate formula as the iOS normalization code.
      */
     private fun calculateNormalizationParams(resolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, String> {
         return if (resolution > NORMALIZATION_THRESHOLD) {
-            // Videos >720p: normalize to 720p @ 1500k bitrate
-            Pair(NORMALIZATION_THRESHOLD, NORMALIZATION_HIGH_BITRATE)
+            Pair(NORMALIZATION_THRESHOLD, "${REFERENCE_720P_BITRATE}k")
         } else {
-            // Videos ≤720p: normalize at original resolution @ proportional bitrate based on pixel count
             val proportionalBitrate = if (videoResolution != null) {
                 val (width, height) = videoResolution
                 val pixelCount = width * height
-                // Pixel-based calculation: bitrate = (pixelCount / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE
                 val calculatedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
                 maxOf(MIN_BITRATE, calculatedBitrate)
             } else {
-                // Fallback to resolution-based if dimensions unknown
                 maxOf(MIN_BITRATE, (REFERENCE_720P_BITRATE * resolution / 720))
             }
             Pair(resolution, "${proportionalBitrate}k")
@@ -324,16 +310,16 @@ class LocalVideoProcessingService(
             
             Timber.tag(TAG).d("Detected resolution: ${resolution}p (${videoResolution?.first}x${videoResolution?.second})")
             
-            // Calculate normalization parameters with pixel-based bitrate
+            // Calculate normalization parameters with the iOS pixel-based bitrate formula.
             val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution)
             
-            Timber.tag(TAG).d("Standardization target: ${targetResolution}p @ $targetBitrate (pixel-based proportional bitrate)")
+            Timber.tag(TAG).d("Standardization target: ${targetResolution}p @ $targetBitrate video / $AUDIO_BITRATE audio")
             
             // If already at target resolution, check if we need to normalize bitrate
             if (resolution <= NORMALIZATION_THRESHOLD && resolution == targetResolution) {
                 // For videos ≤720p, we still normalize to ensure consistent bitrate and format
-                // This is necessary for fair 32MB size comparison later
-                Timber.tag(TAG).d("Video ≤720p at target resolution, standardizing format/bitrate for 32MB comparison")
+                // before the HLS pass decides whether to copy or re-encode the variant.
+                Timber.tag(TAG).d("Video ≤720p at target resolution, standardizing format/bitrate for HLS")
             } else if (resolution > NORMALIZATION_THRESHOLD) {
                 Timber.tag(TAG).d("Video >720p, downscaling to 720p for standardization")
             }
@@ -372,7 +358,7 @@ class LocalVideoProcessingService(
                 -c:a aac
                 -vf "scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2"
                 -b:v $targetBitrate
-                -b:a 128k
+                -b:a $AUDIO_BITRATE
                 -preset veryfast
                 -profile:v baseline
                 -pix_fmt yuv420p
