@@ -212,9 +212,9 @@ kotlin {
 dependencies {
     // FFmpeg Kit for local video processing.
     // Included in full and play versions, excluded in mini version
-    "fullImplementation"(files("libs/ffmpeg-kit-16kb-play-arm64.aar"))
+    "fullImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
     "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
-    "playImplementation"(files("libs/ffmpeg-kit-16kb-play-arm64.aar"))
+    "playImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
     "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)

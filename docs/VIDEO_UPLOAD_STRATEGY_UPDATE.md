@@ -94,7 +94,7 @@ The new `VideoNormalizer` class provides:
 - Converts videos to standard MP4 format
 - Optional resolution downsampling to 720p
 - Maintains aspect ratio
-- Uses FFmpeg libx264 codec with AAC audio
+- Uses FFmpeg h264_mediacodec with AAC audio
 - Optimizes for streaming with `faststart` flag
 
 **Small Video Processing (< 50MB):**
@@ -109,10 +109,12 @@ The new `VideoNormalizer` class provides:
 **Without Resampling:**
 ```bash
 ffmpeg -i input.mp4 \
-  -c:v libx264 \
+  -c:v h264_mediacodec \
   -c:a aac \
-  -preset fast \
-  -crf 23 \
+  -ar 44100 \
+  -b:v "<pixel-proportional bitrate, minimum 600k>" \
+  -b:a 128k \
+  -pix_fmt yuv420p \
   -movflags +faststart \
   -metadata:s:v:0 rotate=0 \
   output.mp4
@@ -121,11 +123,13 @@ ffmpeg -i input.mp4 \
 **With 720p Resampling:**
 ```bash
 ffmpeg -i input.mp4 \
-  -c:v libx264 \
+  -c:v h264_mediacodec \
   -c:a aac \
+  -ar 44100 \
   -vf "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2" \
-  -preset fast \
-  -crf 23 \
+  -b:v 2500k \
+  -b:a 128k \
+  -pix_fmt yuv420p \
   -movflags +faststart \
   -metadata:s:v:0 rotate=0 \
   output.mp4
@@ -290,4 +294,3 @@ Potential improvements:
 - [ ] IPFS upload of normalized videos
 - [ ] HLS conversion when server is available
 - [ ] Cleanup of temporary files
-

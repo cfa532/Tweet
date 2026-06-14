@@ -3,7 +3,7 @@
 
 ## Overview
 
-This implementation integrates the ffmpeg-kit-16KB library to enable local video processing in the Tweet app. The system converts uploaded videos to multi-resolution HLS format locally, with automatic fallback between COPY and libx264 codecs for optimal performance.
+This implementation integrates the ffmpeg-kit-16KB library to enable local video processing in the Tweet app. The system converts uploaded videos to multi-resolution HLS format locally, with automatic fallback between COPY and MediaCodec H.264 encoding for optimal performance.
 
 ## Architecture
 
@@ -14,8 +14,8 @@ The implementation consists of four main components:
 - **Purpose**: Converts uploaded videos to multi-resolution HLS format using FFmpeg Kit
 - **Key Features**:
   - **Multi-resolution support**: Generates 720p and 480p versions
-  - **Smart codec selection**: COPY codec for compatible videos, libx264 for others
-  - **Automatic fallback**: Falls back to libx264 if COPY fails
+  - **Smart codec selection**: COPY codec for compatible videos, h264_mediacodec for others
+  - **Automatic fallback**: Falls back to h264_mediacodec if COPY fails
   - **Aspect ratio preservation**: Maintains original aspect ratio for portrait/landscape
   - **10-second segments**: HLS segments with standard naming (segment000.ts, segment001.ts)
   - **Master playlist**: HLS master playlist for adaptive bitrate streaming
@@ -100,7 +100,11 @@ Used when video is already ≤720p resolution (no re-encoding needed):
 
 ```bash
 ffmpeg -i input.mp4 \
-  -c copy \
+  -c:v copy \
+  -c:a aac \
+  -ar 44100 \
+  -b:a 128k \
+  -bsf:v h264_mp4toannexb \
   -fflags +genpts+igndts+flush_packets \
   -avoid_negative_ts make_zero \
   -max_interleave_delta 0 \
@@ -113,20 +117,20 @@ ffmpeg -i input.mp4 \
   -f hls playlist.m3u8
 ```
 
-### libx264 Codec (For Encoding)
+### MediaCodec H.264 (For Encoding)
 Used when video needs scaling or re-encoding:
 
 **720p Version:**
 ```bash
 ffmpeg -i input.mp4 \
-  -c:v libx264 \
+  -c:v h264_mediacodec \
   -c:a aac \
+  -ar 44100 \
   -vf "scale=W:720:force_original_aspect_ratio=decrease:force_divisible_by=2" \
   -b:v 2500k \
   -b:a 128k \
-  -preset veryfast \
-  -tune zerolatency \
-  -threads 4 \
+  -pix_fmt yuv420p \
+  -bsf:v h264_mp4toannexb \
   -hls_time 10 \
   -hls_list_size 0 \
   -hls_flags independent_segments \
@@ -138,14 +142,14 @@ ffmpeg -i input.mp4 \
 **480p Version:**
 ```bash
 ffmpeg -i input.mp4 \
-  -c:v libx264 \
+  -c:v h264_mediacodec \
   -c:a aac \
+  -ar 44100 \
   -vf "scale=W:480:force_original_aspect_ratio=decrease:force_divisible_by=2" \
   -b:v "<pixel-proportional bitrate, minimum 600k>" \
   -b:a 128k \
-  -preset veryfast \
-  -tune zerolatency \
-  -threads 4 \
+  -pix_fmt yuv420p \
+  -bsf:v h264_mp4toannexb \
   -hls_time 10 \
   -hls_list_size 0 \
   -hls_flags independent_segments \
@@ -209,8 +213,8 @@ The system uses configurable parameters:
 - **Audio Bitrates**:
   - 720p: 128k
   - 480p: 128k
-- **Codec Selection**: Automatic (COPY for ≤720p videos, libx264 otherwise)
-- **Threads**: 4 (Android libx264 encoding)
+- **Codec Selection**: Automatic (COPY for compatible videos, h264_mediacodec otherwise)
+- **Encoder**: Android MediaCodec H.264
 
 ## Recent Updates (October 2025)
 
@@ -221,7 +225,7 @@ The system uses configurable parameters:
 
 ### Codec Optimization
 - ✅ Implemented automatic COPY codec detection for ≤720p videos
-- ✅ Falls back to libx264 if COPY fails
+- ✅ Falls back to h264_mediacodec if COPY fails
 - ✅ Significantly faster processing for compatible videos
 
 ### Aspect Ratio Support

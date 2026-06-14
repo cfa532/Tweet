@@ -12,21 +12,15 @@ The Play flavor needs local FFmpeg for the same narrow video path as iOS:
 
 ## Current Checked-In State
 
-The app now uses a smaller Play-only AAR:
+The app now uses a smaller full/play AAR:
 
-- `app/libs/ffmpeg-kit-16kb-play-arm64.aar`
-- compressed size: about 7.4 MB
+- `app/libs/ffmpeg-kit-16kb-mediacodec-arm64.aar`
+- compressed size: about 6.8 MB
 - ABI: `arm64-v8a` only
-- source: repacked from `app/libs/ffmpeg-kit-16kb-minimal.aar`
+- source: FFmpegKit v6.0 Android main build with Android MediaCodec enabled
 - 16 KB ELF LOAD segment alignment: verified as `2**14`
-
-The full sideload flavor still uses:
-
-- `app/libs/ffmpeg-kit-16kb-minimal.aar`
-- compressed size: about 22 MB
-- ABIs: `arm64-v8a` and `armeabi-v7a`
-
-Important caveat: the current checked-in FFmpeg binary is size-reduced and 16 KB-aligned, but it was built with `--enable-libx264`, `--enable-gpl`, and `--disable-mediacodec`. Do not change runtime FFmpeg commands from `libx264` to `h264_mediacodec` until this AAR is replaced by a real MediaCodec build.
+- configured without `--enable-gpl` or `--enable-libx264`
+- verified encoder strings include `h264_mediacodec`
 
 ## Active Command Contract
 
@@ -34,12 +28,12 @@ The Android code currently requires the active FFmpegKit AAR to support:
 
 | Code path | Required FFmpeg pieces |
 | --- | --- |
-| `LocalHLSConverter` copy/remux path | `-c copy`, file protocol, HLS muxer, MPEG-TS segments |
-| `LocalHLSConverter` re-encode path | `libx264`, FFmpeg AAC encoder, `scale` filter, `yuv420p`, HLS muxer, MPEG-TS segments |
-| `VideoNormalizer` | `libx264`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
-| `LocalVideoProcessingService` legacy normalization | `libx264`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
+| `LocalHLSConverter` copy/remux path | `-c:v copy`, FFmpeg AAC encoder, file protocol, `h264_mp4toannexb` bitstream filter, HLS muxer, MPEG-TS segments |
+| `LocalHLSConverter` re-encode path | `h264_mediacodec`, FFmpeg AAC encoder, `scale` filter, `yuv420p`, `h264_mp4toannexb` bitstream filter, HLS muxer, MPEG-TS segments |
+| `VideoNormalizer` | `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
+| `LocalVideoProcessingService` legacy normalization | `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
 
-The checked-in Play AAR meets this contract because it still contains `libx264` and the normal FFmpeg muxers, filters, and codecs. A no-GPL/MediaCodec rebuild does **not** meet the current code until every `-c:v libx264` command is changed to a supported encoder such as `h264_mediacodec` and revalidated on real devices.
+The checked-in full/play AAR meets this contract without GPL/x264 by using Android's platform H.264 encoder through `h264_mediacodec`. Revalidate on real devices because MediaCodec behavior depends on the device encoder.
 
 ## Target Rebuild
 
@@ -51,7 +45,7 @@ cd ffmpeg-kit
 git checkout v6.0
 ```
 
-Build Android main release, arm64 only, no GPL, no `--full`, with Android platform codecs and zlib:
+Build Android main release, arm64 only, no GPL, no `--full`, with Android platform codecs:
 
 ```bash
 export ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
@@ -59,7 +53,6 @@ export ANDROID_NDK_ROOT="/path/to/android-ndk-r25b-or-compatible"
 
 ./android.sh \
   --enable-android-media-codec \
-  --enable-android-zlib \
   --disable-arm-v7a \
   --disable-arm-v7a-neon \
   --disable-x86 \
@@ -78,12 +71,10 @@ Do not pass:
 After the rebuild, replace:
 
 ```text
-app/libs/ffmpeg-kit-16kb-play-arm64.aar
+app/libs/ffmpeg-kit-16kb-mediacodec-arm64.aar
 ```
 
-Then update Android video commands to use `h264_mediacodec` where re-encoding is required. Keep the copy/remux fast path.
-
-Do not ship this rebuilt AAR with the current code unchanged, because the current code explicitly calls `-c:v libx264`.
+Android video commands must use `h264_mediacodec` where re-encoding is required. Keep the copy/remux fast path. HLS outputs must pass H.264 through `h264_mp4toannexb`; MP4 normalization outputs must not.
 
 ## 16 KB Alignment Checks
 
@@ -92,7 +83,7 @@ Google's current Android guidance requires apps submitted to Play and targeting 
 Check ELF LOAD alignment:
 
 ```bash
-unzip -q app/libs/ffmpeg-kit-16kb-play-arm64.aar -d /tmp/ffmpeg-kit-aar
+unzip -q app/libs/ffmpeg-kit-16kb-mediacodec-arm64.aar -d /tmp/ffmpeg-kit-aar
 llvm-objdump -p /tmp/ffmpeg-kit-aar/jni/arm64-v8a/libavcodec.so | grep LOAD
 ```
 

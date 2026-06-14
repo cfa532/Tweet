@@ -256,10 +256,10 @@ class LocalHLSConverter(private val context: Context) {
                     Timber.tag(TAG)
                         .d("==============================================================")
                 } else {
-                    Timber.tag(TAG).d("========== 720p VARIANT: RE-ENCODING (libx264) ==========")
+                    Timber.tag(TAG).d("========== 720p VARIANT: RE-ENCODING (MediaCodec H.264) ==========")
                     Timber.tag(TAG).d("  Source: ${videoResolution} (${videoResolutionValue}p)")
                     Timber.tag(TAG).d("  Target: ${finalWidth720}x${finalHeight720}")
-                    Timber.tag(TAG).d("  Method: libx264 re-encoding")
+                    Timber.tag(TAG).d("  Method: h264_mediacodec re-encoding")
                     Timber.tag(TAG).d("  Bitrate: ${target720pBitrate}")
                     Timber.tag(TAG).d("==========================================================")
                 }
@@ -280,7 +280,7 @@ class LocalHLSConverter(private val context: Context) {
 
                 if (!success720) {
                     tempInputFile.delete()
-                    return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed with both COPY and libx264")
+                    return@withContext HLSConversionResult.Error("FFmpeg 720p conversion failed with both COPY and MediaCodec H.264")
                 }
             }
 
@@ -323,10 +323,10 @@ class LocalHLSConverter(private val context: Context) {
                 Timber.tag(TAG).d("  No second normalization - just segmenting for HLS")
                 Timber.tag(TAG).d("==============================================================")
             } else {
-                Timber.tag(TAG).d("========== 480p VARIANT: RE-ENCODING (libx264) ==========")
+                Timber.tag(TAG).d("========== 480p VARIANT: RE-ENCODING (MediaCodec H.264) ==========")
                 Timber.tag(TAG).d("  Source: ${videoResolution} (${videoResolutionValue}p)")
                 Timber.tag(TAG).d("  Target: ${finalWidthLower}x${finalHeightLower}")
-                Timber.tag(TAG).d("  Method: libx264 re-encoding")
+                Timber.tag(TAG).d("  Method: h264_mediacodec re-encoding")
                 Timber.tag(TAG).d("  Bitrate: ${targetLowerBitrate}")
                 Timber.tag(TAG).d("==========================================================")
             }
@@ -348,7 +348,7 @@ class LocalHLSConverter(private val context: Context) {
 
             if (!successLower) {
                 tempInputFile.delete()
-                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed with both COPY and libx264")
+                return@withContext HLSConversionResult.Error("FFmpeg 480p conversion failed with both COPY and MediaCodec H.264")
             }
 
             // Clean up temporary input file
@@ -459,8 +459,8 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Execute FFmpeg command with fallback from COPY codec to libx264
-     * If COPY codec fails, automatically retry with libx264 encoding
+     * Execute FFmpeg command with fallback from COPY codec to MediaCodec H.264.
+     * If COPY codec fails, automatically retry with h264_mediacodec encoding.
      */
     private suspend fun executeFFmpegWithFallback(
         inputPath: String,
@@ -473,7 +473,7 @@ class LocalHLSConverter(private val context: Context) {
         resolution: String,
         segmentsAtRoot: Boolean = false
     ): Boolean {
-        // First, try with the recommended codec (COPY if applicable, libx264 otherwise)
+        // First, try with the recommended codec (COPY if applicable, MediaCodec H.264 otherwise)
         val firstCommand = buildSingleResolutionFFmpegCommand(
             inputPath = inputPath,
             outputPath = outputPath,
@@ -494,9 +494,9 @@ class LocalHLSConverter(private val context: Context) {
             return true
         }
 
-        // If COPY codec failed and we should have used it, try libx264 fallback
+        // If COPY codec failed and we should have used it, try MediaCodec H.264 fallback
         if (shouldUseCopyCodec) {
-            Timber.tag(TAG).w("COPY codec failed for $resolution, falling back to libx264")
+            Timber.tag(TAG).w("COPY codec failed for $resolution, falling back to h264_mediacodec")
 
             val fallbackCommand = buildSingleResolutionFFmpegCommand(
                 inputPath = inputPath,
@@ -505,24 +505,24 @@ class LocalHLSConverter(private val context: Context) {
                 height = height,
                 bitrate = bitrate,
                 audioBitrate = audioBitrate,
-                useCopyPreset = false, // Force libx264
+                useCopyPreset = false, // Force h264_mediacodec
                 segmentsAtRoot = segmentsAtRoot
             )
 
             Timber.tag(TAG).d("FFmpeg command for $resolution (fallback): $fallbackCommand")
 
-            val fallbackSuccess = executeFFmpegAsync(fallbackCommand, "$resolution (libx264 fallback)")
+            val fallbackSuccess = executeFFmpegAsync(fallbackCommand, "$resolution (MediaCodec fallback)")
 
             if (fallbackSuccess) {
-                Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with libx264 fallback")
+                Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with MediaCodec H.264 fallback")
                 return true
             } else {
-                Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 fallback")
+                Timber.tag(TAG).e("FFmpeg $resolution conversion failed with MediaCodec H.264 fallback")
                 return false
             }
         } else {
-            // If libx264 failed, no fallback available
-            Timber.tag(TAG).e("FFmpeg $resolution conversion failed with libx264 (no fallback available)")
+            // If MediaCodec H.264 failed, no fallback available
+            Timber.tag(TAG).e("FFmpeg $resolution conversion failed with MediaCodec H.264 (no fallback available)")
             return false
         }
     }
@@ -582,10 +582,15 @@ class LocalHLSConverter(private val context: Context) {
         val segmentPath = "$outputDir/segment%03d.ts"
         
         return if (useCopyPreset) {
-            // Use COPY codec - no re-encoding, just copy streams with improved formatting
+            // Use COPY for video, but still normalize audio to AAC like the iOS HLS path.
+            // MPEG-TS HLS segments need Annex B H.264 packets.
             """
                 -i "$inputPath" 
-                -c copy 
+                -c:v copy
+                -c:a aac
+                -ar 44100
+                -b:a $audioBitrate
+                -bsf:v h264_mp4toannexb
                 -fflags +genpts+igndts+flush_packets
                 -avoid_negative_ts make_zero
                 -max_interleave_delta 0
@@ -597,22 +602,19 @@ class LocalHLSConverter(private val context: Context) {
                 -f hls "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
-            // Use normal conversion with scaling and encoding, enhanced for better stream compatibility
-            // Added iOS/VideoJs compatibility: profile baseline, yuv420p pixel format, keyframe interval, level
+            // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
+            // MPEG-TS HLS segments need Annex B H.264 packets.
             """
                 -i "$inputPath" 
-                -c:v libx264
+                -c:v h264_mediacodec
                 -c:a aac
+                -ar 44100
                 -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
                 -b:v $bitrate
                 -b:a $audioBitrate
-                -preset veryfast
-                -tune zerolatency
-                -profile:v baseline
                 -pix_fmt yuv420p
                 -g 30
-                -level 3.1
-                -threads 4
+                -bsf:v h264_mp4toannexb
                 -max_muxing_queue_size 1024
                 -fflags +genpts+igndts+flush_packets
                 -avoid_negative_ts make_zero

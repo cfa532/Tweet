@@ -354,14 +354,14 @@ class LocalVideoProcessingService(
             // Build FFmpeg normalization command
             val command = """
                 -i "${tempInputFile.absolutePath}"
-                -c:v libx264
+                -c:v h264_mediacodec
                 -c:a aac
+                -ar 44100
                 -vf "scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2"
                 -b:v $targetBitrate
                 -b:a $AUDIO_BITRATE
-                -preset veryfast
-                -profile:v baseline
                 -pix_fmt yuv420p
+                -g 30
                 -movflags +faststart
                 -y
                 "${normalizedFile.absolutePath}"

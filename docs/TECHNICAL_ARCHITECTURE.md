@@ -290,7 +290,7 @@ const val MAX_CONCURRENT_PRELOADS = 3
 
 **Features:**
 - Multi-resolution (720p + 480p)
-- Smart codec selection (COPY vs libx264)
+- Smart codec selection (COPY vs h264_mediacodec)
 - Automatic fallback
 - Aspect ratio preservation
 - Standard segment naming (segment000.ts, segment001.ts, etc.)
@@ -1059,5 +1059,4 @@ upload = 3_000_000ms (50 min)
 ---
 
 **End of Technical Architecture Guide**
-
 

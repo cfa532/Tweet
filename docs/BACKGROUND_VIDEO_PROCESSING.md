@@ -107,7 +107,7 @@ processVideoLocally() Called
    - FFmpeg processing (CPU intensive)
    - Generates 720p and 480p HLS versions
    - Creates master playlist
-   - Smart codec selection (COPY or libx264)
+   - Smart codec selection (COPY or h264_mediacodec)
 
 3. **ZipCompressor.compressHLSDirectory()**
    - Compresses HLS files into zip archive
@@ -410,7 +410,7 @@ UploadTweetWorker: Starting upload for URI: content://...
 UploadTweetWorker: Calling uploadToIPFS for URI: content://...
 MediaUploadService: Processing video via HLS conversion server
 LocalVideoProcessingService: Starting multi-resolution HLS conversion
-LocalHLSConverter: Video resolution: 1920x1080, using libx264 codec
+LocalHLSConverter: Video resolution: 1920x1080, using h264_mediacodec codec
 LocalHLSConverter: 720p conversion completed successfully
 LocalHLSConverter: 480p conversion completed successfully
 ZipCompressor: Compressed HLS directory successfully
@@ -458,4 +458,3 @@ WorkManager.getInstance(context)
 - ✅ Comprehensive error handling
 
 The entire video upload pipeline operates independently of UI, ensuring reliable background processing for all video conversion scenarios.
-
