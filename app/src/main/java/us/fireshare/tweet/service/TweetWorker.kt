@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -231,7 +232,13 @@ class UploadTweetWorker @AssistedInject constructor(
 
             // Create foreground notification for long-running video processing
             val notification = createForegroundNotification(applicationContext)
-            setForeground(ForegroundInfo(1, notification))
+            setForeground(
+                ForegroundInfo(
+                    1,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            )
             try {
                 val attachments = mutableListOf<MimeiFileType>()
                 Timber.tag("UploadTweetWorker").d("Processing ${attachmentUris.size} attachments sequentially")
