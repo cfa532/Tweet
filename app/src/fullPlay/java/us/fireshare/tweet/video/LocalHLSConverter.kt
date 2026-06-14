@@ -30,6 +30,7 @@ class LocalHLSConverter(private val context: Context) {
         private const val HLS_SEGMENT_DURATION = 10 // 10 seconds per segment
         // 0 = keep all segments for VOD playlists; we don't want sliding-window/live behavior here.
         private const val HLS_PLAYLIST_SIZE = 0
+        private const val HLS_KEYFRAME_INTERVAL = 48
 
         // Matches iOS VideoConversionService: 720p reference bitrate with a minimum floor.
         private const val REFERENCE_720P_BITRATE = 2500
@@ -239,12 +240,10 @@ class LocalHLSConverter(private val context: Context) {
                 // Use the iOS pixel-based high-quality bitrate.
                 val target720pBitrate = "${highQualityBitrate}k"
 
-                // For 720p HLS stream: Use COPY codec if normalized resolution is >480p and ≤720p
-                // This preserves native quality without upscaling (matches iOS logic)
-                val shouldUseCopyFor720p = isNormalized &&
-                        normalizedResolution != null &&
-                        normalizedResolution > 480 &&
-                        normalizedResolution <= 720
+                // Do not use stream copy for HLS segments on Android uploads. COPY can cut MPEG-TS
+                // segments away from clean IDR boundaries; some players tolerate that, but Pixel
+                // devices can render a black video surface. Re-encoding gives keyframe-aligned HLS.
+                val shouldUseCopyFor720p = false
 
                 if (shouldUseCopyFor720p) {
                     Timber.tag(TAG)
@@ -309,11 +308,9 @@ class LocalHLSConverter(private val context: Context) {
             // Use the iOS pixel-based lower-variant bitrate.
             val targetLowerBitrate = "${lowerResolutionBitrate}k"
 
-            // For 480p HLS stream: Use COPY codec if normalized resolution is ≤480p
-            // This preserves native quality without upscaling (matches iOS logic)
-            val shouldUseCopyForLower = isNormalized &&
-                    normalizedResolution != null &&
-                    normalizedResolution <= 480
+            // Do not use stream copy for HLS segments on Android uploads. Re-encoding is larger/slower
+            // than COPY but produces cleaner HLS for Pixel/ExoPlayer playback.
+            val shouldUseCopyForLower = false
 
             if (shouldUseCopyForLower) {
                 Timber.tag(TAG).d("========== 480p VARIANT: COPY CODEC (No Re-encoding) ==========")
@@ -341,8 +338,7 @@ class LocalHLSConverter(private val context: Context) {
                     bitrate = targetLowerBitrate,
                     audioBitrate = HLS_AUDIO_BITRATE,
                     shouldUseCopyCodec = shouldUseCopyForLower,
-                    resolution = "480p",
-                    segmentsAtRoot = !shouldCreate720p // For single variant, segments go at root level
+                    resolution = "480p"
                 )
             }
 
@@ -470,24 +466,28 @@ class LocalHLSConverter(private val context: Context) {
         bitrate: String,
         audioBitrate: String,
         shouldUseCopyCodec: Boolean,
-        resolution: String,
-        segmentsAtRoot: Boolean = false
+        resolution: String
     ): Boolean {
-        // First, try with the recommended codec (COPY if applicable, MediaCodec H.264 otherwise)
-        val firstCommand = buildSingleResolutionFFmpegCommand(
-            inputPath = inputPath,
-            outputPath = outputPath,
-            width = width,
-            height = height,
-            bitrate = bitrate,
-            audioBitrate = audioBitrate,
-            useCopyPreset = shouldUseCopyCodec,
-            segmentsAtRoot = segmentsAtRoot
-        )
+        val firstSuccess = if (shouldUseCopyCodec) {
+            val firstCommand = buildCopyToHlsCommand(
+                inputPath = inputPath,
+                outputPath = outputPath,
+                audioBitrate = audioBitrate
+            )
 
-        Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
-
-        val firstSuccess = executeFFmpegAsync(firstCommand, "$resolution (first attempt)")
+            Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
+            executeFFmpegAsync(firstCommand, "$resolution (first attempt)")
+        } else {
+            encodeMp4ThenSegmentHls(
+                inputPath = inputPath,
+                outputPath = outputPath,
+                width = width,
+                height = height,
+                bitrate = bitrate,
+                audioBitrate = audioBitrate,
+                resolution = resolution
+            )
+        }
 
         if (firstSuccess) {
             Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with first attempt")
@@ -498,20 +498,15 @@ class LocalHLSConverter(private val context: Context) {
         if (shouldUseCopyCodec) {
             Timber.tag(TAG).w("COPY codec failed for $resolution, falling back to h264_mediacodec")
 
-            val fallbackCommand = buildSingleResolutionFFmpegCommand(
+            val fallbackSuccess = encodeMp4ThenSegmentHls(
                 inputPath = inputPath,
                 outputPath = outputPath,
                 width = width,
                 height = height,
                 bitrate = bitrate,
                 audioBitrate = audioBitrate,
-                useCopyPreset = false, // Force h264_mediacodec
-                segmentsAtRoot = segmentsAtRoot
+                resolution = "$resolution (MediaCodec fallback)"
             )
-
-            Timber.tag(TAG).d("FFmpeg command for $resolution (fallback): $fallbackCommand")
-
-            val fallbackSuccess = executeFFmpegAsync(fallbackCommand, "$resolution (MediaCodec fallback)")
 
             if (fallbackSuccess) {
                 Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded with MediaCodec H.264 fallback")
@@ -563,72 +558,114 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Build FFmpeg command for single resolution HLS conversion
-     * This method will be called twice - once for 720p and once for 480p
-     * Enhanced with better stream formatting to reduce PesReader errors
+     * Build FFmpeg command for direct MP4-to-HLS segmentation.
+     * MPEG-TS HLS requires Annex-B H.264 packets, even when the source MP4 is already normalized.
      */
-    private fun buildSingleResolutionFFmpegCommand(
+    private fun buildCopyToHlsCommand(
+        inputPath: String,
+        outputPath: String,
+        audioBitrate: String
+    ): String {
+        val outputDir = File(outputPath).parent ?: ""
+        val segmentPath = "$outputDir/segment%03d.ts"
+
+        return """
+            -fflags +genpts+igndts
+            -i "$inputPath"
+            -map 0:v:0
+            -map 0:a?
+            -c:v copy
+            -c:a aac
+            -ar 44100
+            -b:a $audioBitrate
+            -bsf:v h264_mp4toannexb
+            -avoid_negative_ts make_zero
+            -max_muxing_queue_size 1024
+            -f hls
+            -hls_time $HLS_SEGMENT_DURATION
+            -hls_list_size $HLS_PLAYLIST_SIZE
+            -hls_playlist_type vod
+            -start_number 0
+            -hls_segment_filename "$segmentPath"
+            "$outputPath"
+        """.trimIndent().replace(Regex("\\s+"), " ")
+    }
+
+    /**
+     * MediaCodec can emit packets that the HLS MPEG-TS muxer rejects when encoding directly
+     * into HLS. Write a normal MP4 first, then segment that MP4 with stream copy.
+     */
+    private suspend fun encodeMp4ThenSegmentHls(
         inputPath: String,
         outputPath: String,
         width: Int,
         height: Int,
         bitrate: String,
         audioBitrate: String,
-        useCopyPreset: Boolean = false,
-        segmentsAtRoot: Boolean = false
-    ): String {
-        // Extract directory from outputPath to create absolute path for segments
-        val outputDir = File(outputPath).parent ?: ""
-        val segmentPath = "$outputDir/segment%03d.ts"
-        
-        return if (useCopyPreset) {
-            // Use COPY for video, but still normalize audio to AAC like the iOS HLS path.
-            // MPEG-TS HLS segments need Annex B H.264 packets.
-            """
-                -i "$inputPath" 
-                -c:v copy
-                -c:a aac
-                -ar 44100
-                -b:a $audioBitrate
-                -bsf:v h264_mp4toannexb
-                -fflags +genpts+igndts+flush_packets
-                -avoid_negative_ts make_zero
-                -max_interleave_delta 0
-                -max_muxing_queue_size 1024
-                -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags independent_segments
-                -hls_segment_type mpegts
-                -hls_segment_filename "$segmentPath"
-                -f hls "$outputPath"
-            """.trimIndent().replace(Regex("\\s+"), " ")
-        } else {
-            // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
-            // MPEG-TS HLS segments need Annex B H.264 packets.
-            """
-                -i "$inputPath" 
-                -c:v h264_mediacodec
-                -c:a aac
-                -ar 44100
-                -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -b:v $bitrate
-                -b:a $audioBitrate
-                -pix_fmt yuv420p
-                -g 30
-                -bsf:v h264_mp4toannexb
-                -max_muxing_queue_size 1024
-                -fflags +genpts+igndts+flush_packets
-                -avoid_negative_ts make_zero
-                -max_interleave_delta 0
-                -bufsize $bitrate
-                -maxrate $bitrate
-                -metadata:s:v:0 rotate=0
-                -hls_time $HLS_SEGMENT_DURATION -hls_list_size $HLS_PLAYLIST_SIZE 
-                -hls_flags independent_segments
-                -hls_segment_type mpegts
-                -hls_segment_filename "$segmentPath"
-                -f hls "$outputPath"
-            """.trimIndent().replace(Regex("\\s+"), " ")
+        resolution: String
+    ): Boolean {
+        val outputDir = File(outputPath).parentFile ?: return false
+        val encodedMp4 = File(outputDir, "encoded_${resolution.replace(Regex("[^A-Za-z0-9]+"), "_")}.mp4")
+
+        val encodeCommand = buildEncodeToMp4Command(
+            inputPath = inputPath,
+            outputPath = encodedMp4.absolutePath,
+            width = width,
+            height = height,
+            bitrate = bitrate,
+            audioBitrate = audioBitrate
+        )
+
+        Timber.tag(TAG).d("FFmpeg command for $resolution MP4 encode: $encodeCommand")
+
+        return try {
+            if (!executeFFmpegAsync(encodeCommand, "$resolution MP4 encode")) {
+                Timber.tag(TAG).e("FFmpeg $resolution MP4 encode failed")
+                false
+            } else {
+                val hlsCommand = buildCopyToHlsCommand(
+                    inputPath = encodedMp4.absolutePath,
+                    outputPath = outputPath,
+                    audioBitrate = audioBitrate
+                )
+
+                Timber.tag(TAG).d("FFmpeg command for $resolution HLS segment: $hlsCommand")
+                executeFFmpegAsync(hlsCommand, "$resolution HLS segment")
+            }
+        } finally {
+            if (encodedMp4.exists()) {
+                encodedMp4.delete()
+            }
         }
+    }
+
+    private fun buildEncodeToMp4Command(
+        inputPath: String,
+        outputPath: String,
+        width: Int,
+        height: Int,
+        bitrate: String,
+        audioBitrate: String
+    ): String {
+        return """
+            -fflags +genpts+igndts
+            -i "$inputPath"
+            -map 0:v:0
+            -map 0:a?
+            -c:v h264_mediacodec
+            -pix_fmt yuv420p
+            -c:a aac
+            -ar 44100
+            -vf "scale=$width:$height:force_original_aspect_ratio=decrease:force_divisible_by=2"
+            -b:v $bitrate
+            -maxrate $bitrate
+            -bufsize $bitrate
+            -b:a $audioBitrate
+            -g $HLS_KEYFRAME_INTERVAL
+            -movflags +faststart
+            -metadata:s:v:0 rotate=0
+            "$outputPath"
+        """.trimIndent().replace(Regex("\\s+"), " ")
     }
 
     /**

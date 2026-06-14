@@ -3,10 +3,10 @@ package us.fireshare.tweet.service
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.annotation.OptIn
-import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import androidx.media3.common.util.UnstableApi
 import com.google.gson.Gson
@@ -55,6 +55,39 @@ class MediaUploadService(
         val resolutionValue: Int?
     )
 
+    private fun getFileTimestamp(uri: Uri): Long {
+        val fallback = System.currentTimeMillis()
+
+        try {
+            if (uri.scheme == "file") {
+                val lastModified = uri.path?.let { File(it).lastModified() } ?: 0L
+                return if (lastModified > 0L) lastModified else fallback
+            }
+
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.MediaColumns.DATE_MODIFIED),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                    if (index != -1) {
+                        val value = cursor.getLong(index)
+                        if (value > 0L) {
+                            return if (value < 10_000_000_000L) value * 1000L else value
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w("Failed to get file timestamp: ${e.message}")
+        }
+
+        return fallback
+    }
+
     /**
      * Upload media file to node and return its IPFS cid with its media type.
      * For videos, first tries to upload to net disk URL, then falls back to IPFS method.
@@ -82,16 +115,7 @@ class MediaUploadService(
             fileName = uri.lastPathSegment
         }
 
-        // Get file timestamp
-        val fileTimestamp: Long = try {
-            val documentFile = DocumentFile.fromSingleUri(context, uri)
-            documentFile?.lastModified()?.let {
-                if (it == 0L) System.currentTimeMillis() else it
-            } ?: System.currentTimeMillis()
-        } catch (e: Exception) {
-            Timber.tag(TAG).w("Failed to get file timestamp: ${e.message}")
-            System.currentTimeMillis()
-        }
+        val fileTimestamp = getFileTimestamp(uri)
 
         // Determine MediaType based on MIME type
         val mimeType = try {
