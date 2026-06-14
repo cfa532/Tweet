@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -321,6 +322,7 @@ fun AttachmentBrowser(
     }
     
     val pagerState = rememberPagerState(pageCount = { stableAttachments.size })
+    val attachmentShape = RoundedCornerShape(8.dp)
 
     // Hysteresis + only-notify-on-change to prevent shake when portrait video is ~50% visible during scroll
     var lastReportedVisible by remember { mutableStateOf<Boolean?>(null) }
@@ -359,29 +361,38 @@ fun AttachmentBrowser(
                 } else Modifier
             )
     ) {
-        HorizontalPager(
-            state = pagerState,
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            userScrollEnabled = stableAttachments.size > 1
-        ) { page ->
-            Box(
+            shape = attachmentShape,
+            tonalElevation = 4.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(fixedAspectRatio)
-            ) {
-                MediaItemView(
-                    mediaItems = stableAttachments,
-                    modifier = Modifier.fillMaxSize(),
-                    index = page,
-                    autoPlay = pagerState.currentPage == page,
-                    inPreviewGrid = false,
-                    loadOriginalImage = false,
-                    viewModel = viewModel,
-                    onVideoCompleted = null,
-                    useIndependentVideoMute = true,
-                    enableTapToShowControls = true,
-                    enableCoordinator = false
-                )
+                    .padding(1.dp),
+                userScrollEnabled = stableAttachments.size > 1
+            ) { page ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(fixedAspectRatio)
+                ) {
+                    MediaItemView(
+                        mediaItems = stableAttachments,
+                        modifier = Modifier.fillMaxSize(),
+                        index = page,
+                        autoPlay = pagerState.currentPage == page,
+                        inPreviewGrid = false,
+                        loadOriginalImage = false,
+                        viewModel = viewModel,
+                        onVideoCompleted = null,
+                        useIndependentVideoMute = true,
+                        enableTapToShowControls = true,
+                        enableCoordinator = false
+                    )
+                }
             }
         }
 
