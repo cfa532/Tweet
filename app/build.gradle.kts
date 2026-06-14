@@ -209,6 +209,14 @@ kotlin {
     }
 }
 
+tasks.configureEach {
+    val isNonPlayVariantTask = name.contains("Full") || name.contains("Mini")
+    val isFirebaseTask = name.contains("GoogleServices") || name.contains("Crashlytics")
+    if (isNonPlayVariantTask && isFirebaseTask) {
+        enabled = false
+    }
+}
+
 dependencies {
     // FFmpeg Kit for local video processing.
     // Included in full and play versions, excluded in mini version
@@ -221,15 +229,15 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.okhttp)
     implementation(libs.accompanist.systemuicontroller)
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
+    add("playImplementation", platform(libs.firebase.bom))
+    add("playImplementation", libs.firebase.analytics)
 
     implementation(libs.timber)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
-    implementation(libs.firebase.crashlytics)
+    add("playImplementation", libs.firebase.crashlytics)
     implementation(libs.ui.graphics)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
