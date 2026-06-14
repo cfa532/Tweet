@@ -119,10 +119,11 @@ object VideoManager {
     private const val PRELOAD_BUFFER_FOR_PLAYBACK_MS = 500
     private const val PRELOAD_BUFFER_FOR_REBUFFER_MS = 1_000
     private const val MAX_WARM_PRELOADED_PLAYERS = 1
-    private const val MAX_FEED_PLAYER_CACHE_SIZE = 10
-    private const val MEMORY_PRESSURE_PLAYER_CACHE_SIZE = 6
+    private const val MAX_FEED_PLAYER_CACHE_SIZE = 4
+    private const val MEMORY_PRESSURE_PLAYER_CACHE_SIZE = 2
+    private const val MAX_POSTER_BITMAPS = 24
     private const val MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES = 64L * 1024L * 1024L
-    private const val INACTIVE_PLAYER_RELEASE_GRACE_MS = 5_000L
+    private const val INACTIVE_PLAYER_RELEASE_GRACE_MS = 1_500L
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -136,6 +137,7 @@ object VideoManager {
     private var inactiveCleanupJob: Job? = null
     private var playerCacheLimitJob: Job? = null
     val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
+    private val posterAccessTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
     // Saved playback positions so videos resume from where they were left
     // (populated in releasePlayer before the ExoPlayer is destroyed)
@@ -947,7 +949,7 @@ object VideoManager {
         preloadQueue.clear()
         posterJobs.values.forEach { it.cancel() }
         posterJobs.clear()
-        posterBitmaps.clear()
+        clearPosterBitmaps()
         savedPositions.clear()
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
@@ -1117,7 +1119,10 @@ object VideoManager {
         resolvedHlsUrl: String?
     ) {
         if (videoUrl.isNullOrBlank()) return
-        if (posterBitmaps.containsKey(videoMid)) return
+        if (posterBitmaps.containsKey(videoMid)) {
+            posterAccessTimestamps[videoMid] = System.currentTimeMillis()
+            return
+        }
         if (posterJobs[videoMid]?.isActive == true) return
         if (isRemotePosterGenerationUnsupported(videoUrl, videoType, resolvedHlsUrl)) {
             return
@@ -1129,9 +1134,35 @@ object VideoManager {
             }
             if (poster != null && !poster.isRecycled) {
                 posterBitmaps[videoMid] = poster
+                posterAccessTimestamps[videoMid] = System.currentTimeMillis()
+                trimPosterBitmaps()
             }
             posterJobs.remove(videoMid)
         }
+    }
+
+    private fun trimPosterBitmaps() {
+        if (posterBitmaps.size <= MAX_POSTER_BITMAPS) return
+
+        val releaseCount = posterBitmaps.size - MAX_POSTER_BITMAPS
+        posterAccessTimestamps.keys
+            .filter { posterBitmaps.containsKey(it) }
+            .sortedBy { posterAccessTimestamps[it] ?: 0L }
+            .take(releaseCount)
+            .forEach { videoMid ->
+                posterBitmaps.remove(videoMid)?.let { bitmap ->
+                    if (!bitmap.isRecycled) bitmap.recycle()
+                }
+                posterAccessTimestamps.remove(videoMid)
+            }
+    }
+
+    private fun clearPosterBitmaps() {
+        posterBitmaps.values.forEach { bitmap ->
+            if (!bitmap.isRecycled) bitmap.recycle()
+        }
+        posterBitmaps.clear()
+        posterAccessTimestamps.clear()
     }
 
     private fun createPosterBitmap(

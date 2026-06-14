@@ -96,7 +96,7 @@ class VideoPlaybackCoordinator(
         private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = 0.7f
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
         private const val FOREGROUND_RECONCILE_DELAY_MS = 120L
-        private const val VISIBILITY_LOSS_STOP_GRACE_MS = 750L
+        private const val VISIBILITY_LOSS_STOP_GRACE_MS = 300L
     }
 
     // Single reusable coroutine scope to avoid allocating a new CoroutineScope on every event
