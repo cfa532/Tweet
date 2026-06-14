@@ -119,7 +119,7 @@ class LocalVideoProcessingService(
                         }
                     }
                     
-                    Timber.tag(TAG).d("Forced HLS route for video upload; normalized size=${normalizedSize / (1024 * 1024)}MB")
+                    Timber.tag(TAG).d("HLS route selected for video upload; normalized size=${normalizedSize / (1024 * 1024)}MB")
                     
                     // Step 2: Convert video to HLS format
                     // Variant selection (dual vs single) is automatically determined based on resolution
@@ -201,6 +201,100 @@ class LocalVideoProcessingService(
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during video processing")
+            VideoProcessingResult.Error("Processing error: ${e.message}")
+        }
+    }
+
+    /**
+     * Convert an already-normalized MP4 to HLS, compress it, and upload it.
+     * This mirrors the iOS flow where the normalized MP4 is reused for the HLS pass.
+     */
+    suspend fun processNormalizedVideo(
+        uri: Uri,
+        fileName: String,
+        fileTimestamp: Long,
+        referenceId: MimeiId?,
+        originalFileSize: Long,
+        normalizedSize: Long,
+        normalizedResolution: Int?
+    ): VideoProcessingResult = withContext(Dispatchers.IO) {
+        try {
+            val tempDir = createTempDirectory()
+
+            try {
+                Timber.tag(TAG).d("Converting normalized MP4 to HLS; size=${normalizedSize / (1024 * 1024)}MB")
+
+                val hlsResult = hlsConverter.convertToHLS(
+                    uri,
+                    tempDir,
+                    fileName,
+                    normalizedSize,
+                    true,
+                    normalizedResolution
+                )
+
+                when (hlsResult) {
+                    is LocalHLSConverter.HLSConversionResult.Success -> {
+                        val zipFile = File(tempDir.parent, "${fileName}_hls.zip")
+                        val zipResult = zipCompressor.compressHLSDirectory(hlsResult.outputDirectory, zipFile)
+
+                        when (zipResult) {
+                            is ZipCompressor.ZipCompressionResult.Success -> {
+                                try {
+                                    Timber.tag(TAG).d("Cleaning up HLS directory after ZIP creation: ${hlsResult.outputDirectory.absolutePath}")
+                                    hlsResult.outputDirectory.deleteRecursively()
+                                } catch (e: Exception) {
+                                    Timber.tag(TAG).w("Failed to clean up HLS directory: ${e.message}")
+                                }
+
+                                val processingResult = zipUploadService.uploadZipFile(
+                                    zipResult.zipFile,
+                                    fileName,
+                                    referenceId
+                                )
+
+                                when (processingResult) {
+                                    is ZipUploadService.ZipProcessingResult.Success -> {
+                                        try {
+                                            Timber.tag(TAG).d("Cleaning up ZIP file after successful processing: ${zipResult.zipFile.absolutePath}")
+                                            zipResult.zipFile.delete()
+                                        } catch (e: Exception) {
+                                            Timber.tag(TAG).w("Failed to clean up ZIP file: ${e.message}")
+                                        }
+
+                                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
+
+                                        Timber.tag(TAG).d("HLS video processed: ${processingResult.cid}")
+                                        VideoProcessingResult.Success(
+                                            MimeiFileType(
+                                                processingResult.cid,
+                                                MediaType.HLS_VIDEO,
+                                                originalFileSize,
+                                                fileName,
+                                                fileTimestamp,
+                                                aspectRatio
+                                            )
+                                        )
+                                    }
+                                    is ZipUploadService.ZipProcessingResult.Error -> {
+                                        VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
+                                    }
+                                }
+                            }
+                            is ZipCompressor.ZipCompressionResult.Error -> {
+                                VideoProcessingResult.Error("Compression failed: ${zipResult.message}")
+                            }
+                        }
+                    }
+                    is LocalHLSConverter.HLSConversionResult.Error -> {
+                        VideoProcessingResult.Error("HLS conversion failed: ${hlsResult.message}")
+                    }
+                }
+            } finally {
+                cleanupTempDirectory(tempDir)
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error during normalized video HLS processing")
             VideoProcessingResult.Error("Processing error: ${e.message}")
         }
     }

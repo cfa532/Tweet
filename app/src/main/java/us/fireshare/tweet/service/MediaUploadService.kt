@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
@@ -17,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.BuildConfig
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -43,8 +45,15 @@ class MediaUploadService(
 
     companion object {
         private const val TAG = "MediaUploadService"
-        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 32L * 1024 * 1024  // 32MB
+        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 32L * 1024L * 1024L
     }
+
+    private data class NormalizedVideo(
+        val uri: Uri,
+        val file: File,
+        val sizeBytes: Long,
+        val resolutionValue: Int?
+    )
 
     /**
      * Upload media file to node and return its IPFS cid with its media type.
@@ -130,8 +139,8 @@ class MediaUploadService(
             }
         }
 
-        // For non-mini video files, route through local HLS conversion using the iOS bitrate formula:
-        // 2500k at 720p, pixel-proportional below 720p, 600k floor, 128k audio.
+        // Regular videos are normalized first, then routed to progressive MP4 or HLS by size.
+        // HLS_VIDEO type is already processed and uploads directly.
         if (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) {
             return if (mediaType == MediaType.Video) {
                 processVideoWithRouting(uri, fileName, fileTimestamp, referenceId)
@@ -146,59 +155,11 @@ class MediaUploadService(
     }
 
     /**
-     * Check if TUS server is available at tusServerUrl
-     */
-    private suspend fun isConversionServerAvailable(): Boolean {
-        return try {
-            Timber.tag(TAG).d("Checking TUS server availability - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}")
-            
-            // First check if cloudDrivePort is valid (0 means not set)
-            if (appUser.cloudDrivePort == 0) {
-                Timber.tag(TAG).d("cloudDrivePort is not set (value: ${appUser.cloudDrivePort})")
-                return false
-            }
-            
-            // Ensure writableUrl is resolved
-            if (appUser.writableUrl.isNullOrEmpty()) {
-                val resolved = appUser.resolveWritableUrl()
-                Timber.tag(TAG).d("Resolved writableUrl: $resolved")
-                if (resolved.isNullOrEmpty()) {
-                    Timber.tag(TAG).d("Could not resolve writableUrl")
-                    return false
-                }
-            }
-            
-            val tusServerUrl = appUser.tusServerUrl
-            if (tusServerUrl.isNullOrEmpty()) {
-                Timber.tag(TAG).d("tusServerUrl is not available (cloudDrivePort=${appUser.cloudDrivePort}, writableUrl=${appUser.writableUrl})")
-                return false
-            }
-            
-            // Try to ping the /health endpoint
-            val healthCheckUrl = "$tusServerUrl/health"
-            Timber.tag(TAG).d("Checking server availability at: $healthCheckUrl")
-            
-            val response = withContext(Dispatchers.IO) {
-                try {
-                    httpClient.get(healthCheckUrl)
-                } catch (e: Exception) {
-                    Timber.tag(TAG).w("Health check request failed: ${e.message}")
-                    return@withContext null
-                }
-            }
-            
-            val isAvailable = response?.status == HttpStatusCode.OK
-            Timber.tag(TAG).d("TUS server available: $isAvailable")
-            isAvailable
-        } catch (e: Exception) {
-            Timber.tag(TAG).w("Error checking TUS server: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Temporarily route every full/play video upload through local HLS processing.
-     * Mini still uploads directly because it does not include FFmpeg.
+     * Route normal video uploads like iOS:
+     * - Mini uploads directly because it does not include FFmpeg.
+     * - Full/play normalize to MP4 first.
+     * - Normalized videos up to 32MB upload as progressive MP4.
+     * - Larger videos use HLS when the cloud drive service is configured.
      */
     private suspend fun processVideoWithRouting(
         uri: Uri,
@@ -213,67 +174,79 @@ class MediaUploadService(
                 return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
 
-            Timber.tag(TAG).d("Starting video processing through forced HLS path")
-            
-            processVideoLocally(uri, fileName, fileTimestamp, referenceId)
-            
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error in forced HLS video processing")
-            null
-        }
-    }
+            val originalFileSize = getFileSize(uri) ?: 0L
+            val normalizedVideo = normalizeVideoToFile(uri)
+                ?: return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
 
-    /**
-     * Process video locally using FFmpeg Kit
-     * Strategy:
-     * 1. Check if cloudDrivePort is valid and conversion server is available
-     * 2. If available: convert to HLS, compress, and upload to /process-zip
-     * 3. If not available: fail the upload instead of falling back to progressive video
-     */
-    private suspend fun processVideoLocally(
-        uri: Uri,
-        fileName: String?,
-        fileTimestamp: Long,
-        referenceId: MimeiId?
-    ): MimeiFileType? {
-        return try {
-            // Safety check: Mini version should never call this method
-            if (BuildConfig.IS_MINI_VERSION) {
-                Timber.tag(TAG).w("Mini version attempted to call processVideoLocally - uploading directly")
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
-            }
+            try {
+                Timber.tag(TAG).d("Normalized video size: ${normalizedVideo.sizeBytes / (1024 * 1024)}MB")
 
-            // Check if conversion server is available
-            val serverAvailable = isConversionServerAvailable()
-            
-            if (serverAvailable) {
-                // Use HLS conversion and upload to process-zip endpoint
-                // Variant selection (dual vs single) is automatic based on resolution (matches iOS)
-                Timber.tag(TAG).d("Processing video via HLS conversion")
-                val localProcessingService = LocalVideoProcessingService(context, httpClient, appUser)
-                val result = localProcessingService.processVideo(
-                    uri = uri,
+                if (normalizedVideo.sizeBytes <= PROGRESSIVE_VIDEO_THRESHOLD_BYTES) {
+                    Timber.tag(TAG).d("Normalized video <=32MB, uploading as progressive MP4")
+                    return uploadToIPFSOriginal(
+                        normalizedVideo.uri,
+                        fileName,
+                        fileTimestamp,
+                        referenceId,
+                        MediaType.Video
+                    )
+                }
+
+                if (appUser.cloudDrivePort <= 0) {
+                    Timber.tag(TAG).w("No valid cloudDrivePort; falling back from HLS to progressive video")
+                    showProgressiveVideoFallbackToast()
+                    return uploadToIPFSOriginal(
+                        normalizedVideo.uri,
+                        fileName,
+                        fileTimestamp,
+                        referenceId,
+                        MediaType.Video
+                    )
+                }
+
+                if (!isConversionServerAvailable()) {
+                    Timber.tag(TAG).w("HLS conversion server unavailable; falling back to progressive video")
+                    return uploadToIPFSOriginal(
+                        normalizedVideo.uri,
+                        fileName,
+                        fileTimestamp,
+                        referenceId,
+                        MediaType.Video
+                    )
+                }
+
+                Timber.tag(TAG).d("Normalized video >32MB, uploading through HLS path")
+                val processingService = LocalVideoProcessingService(context, httpClient, appUser)
+                when (val result = processingService.processNormalizedVideo(
+                    uri = normalizedVideo.uri,
                     fileName = fileName ?: "video",
                     fileTimestamp = fileTimestamp,
-                    referenceId = referenceId
-                )
-                
-                when (result) {
-                    is LocalVideoProcessingService.VideoProcessingResult.Success -> {
-                        result.mimeiFile
-                    }
+                    referenceId = referenceId,
+                    originalFileSize = originalFileSize,
+                    normalizedSize = normalizedVideo.sizeBytes,
+                    normalizedResolution = normalizedVideo.resolutionValue
+                )) {
+                    is LocalVideoProcessingService.VideoProcessingResult.Success -> result.mimeiFile
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
-                        Timber.tag(TAG).e("HLS processing failed: ${result.message}")
-                        null
+                        Timber.tag(TAG).w("HLS processing failed: ${result.message}; falling back to progressive video")
+                        uploadToIPFSOriginal(
+                            normalizedVideo.uri,
+                            fileName,
+                            fileTimestamp,
+                            referenceId,
+                            MediaType.Video
+                        )
                     }
                 }
-            } else {
-                Timber.tag(TAG).e("Conversion server unavailable; forced HLS video upload cannot continue")
-                null
+            } finally {
+                if (normalizedVideo.file.exists()) {
+                    normalizedVideo.file.delete()
+                }
             }
+            
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error in local video processing")
-            null
+            Timber.tag(TAG).e(e, "Error in video processing")
+            uploadToIPFSOriginal(uri, fileName ?: "video", fileTimestamp, referenceId, MediaType.Video)
         }
     }
 
@@ -297,69 +270,126 @@ class MediaUploadService(
                 return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
 
-            Timber.tag(TAG).d("Normalizing video to MP4 for IPFS upload")
-            
-            // Check if video resolution is > 720p
-            val videoResolution = VideoManager.getVideoResolution(context, uri)
-            val needsResampling = if (videoResolution != null) {
-                val (width, height) = videoResolution
-                width > 1280 || height > 720
-            } else {
-                false
+            val normalizedVideo = normalizeVideoToFile(uri)
+            if (normalizedVideo == null) {
+                Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
+                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
             }
-            
-            if (needsResampling) {
-                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
-            } else {
-                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will keep original resolution")
-            }
-            
-            // Normalize video to mp4
-            val normalizer = VideoNormalizer(context)
-            val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
-            
+
             try {
-                val normalizationResult = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)
-                
-                when (normalizationResult) {
-                    is VideoNormalizer.NormalizationResult.Success -> {
-                        // Upload normalized video via IPFS
-                        val normalizedUri = Uri.fromFile(normalizedFile)
-                        val result = uploadToIPFSOriginal(
-                            normalizedUri,
-                            fileName,
-                            fileTimestamp,
-                            referenceId,
-                            MediaType.Video
-                        )
-                        
-                        if (result != null) {
-                            Timber.tag(TAG).d("Video uploaded: ${result.mid}")
-                        }
-                        result
-                    }
-                    is VideoNormalizer.NormalizationResult.Error -> {
-                        Timber.tag(TAG).e("Video normalization failed: ${normalizationResult.message}")
-                        // Fall back to uploading original video as progressive video
-                        Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
-                        uploadToIPFSOriginal(
-                            uri,
-                            fileName,
-                            fileTimestamp,
-                            referenceId,
-                            MediaType.Video
-                        )
-                    }
+                val result = uploadToIPFSOriginal(
+                    normalizedVideo.uri,
+                    fileName,
+                    fileTimestamp,
+                    referenceId,
+                    MediaType.Video
+                )
+                if (result != null) {
+                    Timber.tag(TAG).d("Video uploaded: ${result.mid}")
                 }
+                result
             } finally {
-                // Clean up normalized file
-                if (normalizedFile.exists()) {
-                    normalizedFile.delete()
+                if (normalizedVideo.file.exists()) {
+                    normalizedVideo.file.delete()
                 }
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error in video normalization and upload")
             null
+        }
+    }
+
+    private suspend fun normalizeVideoToFile(uri: Uri): NormalizedVideo? = withContext(Dispatchers.IO) {
+        try {
+            Timber.tag(TAG).d("Normalizing video to MP4 before upload routing")
+
+            val videoResolution = VideoManager.getVideoResolution(context, uri)
+            val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
+            val needsResampling = (resolutionValue ?: 0) > 720
+
+            if (needsResampling) {
+                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will be resampled to 720p")
+            } else {
+                Timber.tag(TAG).d("Video ${videoResolution?.first}x${videoResolution?.second} will keep original resolution")
+            }
+
+            val normalizer = VideoNormalizer(context)
+            val normalizedFile = File(context.cacheDir, "normalized_${System.currentTimeMillis()}.mp4")
+
+            when (val result = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)) {
+                is VideoNormalizer.NormalizationResult.Success -> {
+                    val normalizedUri = Uri.fromFile(result.outputFile)
+                    val normalizedResolution = VideoManager.getVideoResolutionValue(
+                        VideoManager.getVideoResolution(context, normalizedUri)
+                    )
+                    NormalizedVideo(
+                        uri = normalizedUri,
+                        file = result.outputFile,
+                        sizeBytes = result.outputFile.length(),
+                        resolutionValue = normalizedResolution
+                    )
+                }
+                is VideoNormalizer.NormalizationResult.Error -> {
+                    Timber.tag(TAG).e("Video normalization failed: ${result.message}")
+                    if (normalizedFile.exists()) {
+                        normalizedFile.delete()
+                    }
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error normalizing video")
+            null
+        }
+    }
+
+    private suspend fun showProgressiveVideoFallbackToast() {
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                context.applicationContext,
+                context.getString(R.string.video_upload_progressive_format_warning),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private suspend fun isConversionServerAvailable(): Boolean {
+        return try {
+            Timber.tag(TAG).d(
+                "Checking HLS conversion server - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}"
+            )
+
+            if (appUser.cloudDrivePort <= 0) {
+                Timber.tag(TAG).d("No cloudDrivePort configured")
+                return false
+            }
+
+            if (appUser.writableUrl.isNullOrEmpty()) {
+                val resolvedUrl = appUser.resolveWritableUrl()
+                if (resolvedUrl.isNullOrEmpty()) {
+                    Timber.tag(TAG).w("Cannot resolve writableUrl for HLS conversion server")
+                    return false
+                }
+            }
+
+            val tusServerUrl = appUser.tusServerUrl ?: run {
+                Timber.tag(TAG).w("No TUS server URL available for HLS conversion")
+                return false
+            }
+
+            val response = withContext(Dispatchers.IO) {
+                try {
+                    httpClient.get("$tusServerUrl/health")
+                } catch (e: Exception) {
+                    Timber.tag(TAG).w("HLS conversion server health check failed: ${e.message}")
+                    null
+                }
+            }
+
+            response?.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to check HLS conversion server availability")
+            false
         }
     }
 

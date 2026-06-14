@@ -33,6 +33,22 @@ class LocalVideoProcessingService(
     }
 
     /**
+     * Process an already-normalized video - not supported in mini variant
+     * @return Error result indicating local processing is not available
+     */
+    suspend fun processNormalizedVideo(
+        uri: Uri,
+        fileName: String,
+        fileTimestamp: Long,
+        referenceId: MimeiId?,
+        originalFileSize: Long,
+        normalizedSize: Long,
+        normalizedResolution: Int?
+    ): VideoProcessingResult {
+        return VideoProcessingResult.Error("Local video processing not available in mini version. Use backend processing instead.")
+    }
+
+    /**
      * Result of video processing
      */
     sealed class VideoProcessingResult {

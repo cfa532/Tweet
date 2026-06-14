@@ -2899,13 +2899,10 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            Timber.tag("loadCachedTweetsByAuthor").d("Loading cached tweets for author: $authorId")
-            
             val allCachedTweets = mutableListOf<Tweet>()
             
             // Load from mainfeed cache (appUser.mid) and filter by authorId
             // This ensures we can find tweets that were cached when viewing the mainfeed
-            Timber.tag("loadCachedTweetsByAuthor").d("Checking mainfeed cache (uid = appUser.mid) for author: $authorId")
             dao.getCachedTweetsByUser(appUser.mid, 0, count * 3).forEach { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
@@ -2914,7 +2911,6 @@ object HproseInstance {
             }
             
             // Also load from user's own cache bucket (userId = authorId) and filter by authorId
-            Timber.tag("loadCachedTweetsByAuthor").d("Checking user's own cache (uid = $authorId) for author: $authorId")
             dao.getCachedTweetsByUser(authorId, 0, count * 3).forEach { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
@@ -2933,18 +2929,15 @@ object HproseInstance {
                 // For appUser's tweets, use appUser directly since it's always the most up-to-date singleton
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
-                    Timber.tag("loadCachedTweetsByAuthor").d("Using appUser singleton for tweet ${tweet.mid} - author: ${appUser.username}")
                 } else {
                     tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
 
                     // If no cached user found, create a skeleton user object as placeholder for offline loading
                     if (tweet.author == null) {
                         tweet.author = getUserInstance(tweet.authorId)
-                        Timber.tag("loadCachedTweetsByAuthor").d("Created skeleton user placeholder for tweet ${tweet.mid} - authorId ${tweet.authorId}")
                     }
                 }
 
-                Timber.tag("loadCachedTweetsByAuthor").d("Loaded cached tweet ${tweet.mid} with author ${tweet.author?.username ?: tweet.authorId}")
                 tweet
             }
                 .distinctBy { it.mid }

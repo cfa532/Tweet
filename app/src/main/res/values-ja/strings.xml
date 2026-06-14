@@ -151,6 +151,7 @@
     <string name="no_provider_ip_found">プロバイダーIPが見つかりません</string>
     <string name="failed_to_extract_zip_file">ZIPファイルの展開に失敗しました</string>
     <string name="invalid_hls_structure">無効なHLS構造</string>
+    <string name="video_upload_progressive_format_warning">クラウドドライブが設定されていません。この動画は通常のプログレッシブ動画としてアップロードされます。</string>
     <string name="app_id_mismatch">アプリIDが一致しません</string>
     <string name="chunk_size_exceeds_limit">チャンクサイズが1MB制限を超えています</string>
     <string name="invalid_host_id_format">ホストIDの形式が無効です。ホストIDを確認して、もう一度お試しください。</string>

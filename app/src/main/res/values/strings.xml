@@ -379,6 +379,7 @@
     <string name="no_provider_ip_found">No provider IP found</string>
     <string name="failed_to_extract_zip_file">Failed to extract zip file</string>
     <string name="invalid_hls_structure">Invalid HLS structure</string>
+    <string name="video_upload_progressive_format_warning">Cloud drive is not configured. This video will be uploaded as a regular progressive video.</string>
     <string name="app_id_mismatch">App ID mismatch</string>
     <string name="chunk_size_exceeds_limit">Chunk size exceeds 1MB limit</string>
     <string name="invalid_host_id_format">Invalid host ID format. Please check your host ID and try again.</string>

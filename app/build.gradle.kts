@@ -219,7 +219,7 @@ dependencies {
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
-    // OkHttp removed - using Ktor for all HTTP operations (consolidated)
+    implementation(libs.okhttp)
     implementation(libs.accompanist.systemuicontroller)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
