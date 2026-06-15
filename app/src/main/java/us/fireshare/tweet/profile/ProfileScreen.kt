@@ -96,6 +96,14 @@ fun ProfileScreen(
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     var didRequestResync by remember(userId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val profileCoordinator = remember(userId) { VideoPlaybackCoordinator() }
+
+    DisposableEffect(profileCoordinator) {
+        onDispose {
+            profileCoordinator.clear()
+            Timber.tag("ProfileScreen").d("Cleared profile VideoPlaybackCoordinator for $userId")
+        }
+    }
 
 
 
@@ -156,7 +164,7 @@ fun ProfileScreen(
                     // Use a dedicated coordinator for this profile so leaving main feed
                     // (or returning from profile) does not clear this list's playback state.
                     CompositionLocalProvider(
-                        LocalVideoCoordinator provides remember { VideoPlaybackCoordinator() }
+                        LocalVideoCoordinator provides profileCoordinator
                     ) {
                         ProfileContentWithTweetListView(
                             viewModel = viewModel,

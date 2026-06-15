@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequest
@@ -49,8 +50,14 @@ import us.fireshare.tweet.service.FollowUserWorker
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId
 ): ViewModel() {
+    private data class WorkObserverRegistration(
+        val workManager: WorkManager,
+        val userId: MimeiId,
+        val observer: Observer<WorkInfo?>
+    )
+
     // Track active work observers to clean up on ViewModel destruction
-    private val activeWorkObservers = mutableMapOf<java.util.UUID, androidx.lifecycle.Observer<WorkInfo?>>()
+    private val activeWorkObservers = mutableMapOf<java.util.UUID, WorkObserverRegistration>()
     
     // Track users with pending operations to prevent race conditions
     private val pendingOperations = mutableSetOf<MimeiId>()
@@ -561,11 +568,12 @@ class UserViewModel @AssistedInject constructor(
             .setInputData(data)
             .build()
         
-        WorkManager.getInstance(context).enqueue(followRequest)
+        val workManager = WorkManager.getInstance(context.applicationContext)
+        workManager.enqueue(followRequest)
         
         // Observe work status to rollback on failure / reconcile on success.
         viewModelScope.launch {
-            val observer = androidx.lifecycle.Observer<WorkInfo?> { workInfo ->
+            val observer = Observer<WorkInfo?> { workInfo ->
                 when (workInfo?.state) {
                     WorkInfo.State.FAILED -> {
                         Timber.tag("UserViewModel").d("Follow operation failed, rolling back for: $subjectUserId")
@@ -589,7 +597,7 @@ class UserViewModel @AssistedInject constructor(
 
                         viewModelScope.launch(IO) { rollbackTweetFeed(newFollowingState) }
                         _followOperationFailed.value = subjectUserId
-                        cleanupObserver(context, followRequest.id, subjectUserId)
+                        cleanupObserver(followRequest.id)
                     }
                     WorkInfo.State.SUCCEEDED -> {
                         // FollowUserWorker emits the server-returned isFollowing as
@@ -637,7 +645,7 @@ class UserViewModel @AssistedInject constructor(
                         } else {
                             Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
                         }
-                        cleanupObserver(context, followRequest.id, subjectUserId)
+                        cleanupObserver(followRequest.id)
                     }
                     else -> {
                         // Still in progress or other state
@@ -645,25 +653,27 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
 
-            activeWorkObservers[followRequest.id] = observer
+            activeWorkObservers[followRequest.id] = WorkObserverRegistration(
+                workManager = workManager,
+                userId = subjectUserId,
+                observer = observer
+            )
 
-            WorkManager.getInstance(context)
-                .getWorkInfoByIdLiveData(followRequest.id)
-                .observeForever(observer)
+            workManager.getWorkInfoByIdLiveData(followRequest.id).observeForever(observer)
         }
     }
     
     /**
      * Clean up observer and remove from pending operations
      */
-    private fun cleanupObserver(context: Context, workId: java.util.UUID, userId: MimeiId) {
-        activeWorkObservers[workId]?.let { observer ->
-            WorkManager.getInstance(context)
+    private fun cleanupObserver(workId: java.util.UUID) {
+        activeWorkObservers[workId]?.let { registration ->
+            registration.workManager
                 .getWorkInfoByIdLiveData(workId)
-                .removeObserver(observer)
+                .removeObserver(registration.observer)
             activeWorkObservers.remove(workId)
+            pendingOperations.remove(registration.userId)
         }
-        pendingOperations.remove(userId)
     }
     
     /**
@@ -675,9 +685,11 @@ class UserViewModel @AssistedInject constructor(
     
     override fun onCleared() {
         super.onCleared()
-        // Clean up all active observers when ViewModel is destroyed
-        // Note: We can't access context here, so we'll rely on WorkManager's lifecycle
-        // The observers will be automatically cleaned up when the app context is destroyed
+        activeWorkObservers.forEach { (workId, registration) ->
+            registration.workManager
+                .getWorkInfoByIdLiveData(workId)
+                .removeObserver(registration.observer)
+        }
         activeWorkObservers.clear()
         pendingOperations.clear()
         tweetRowTimestamps.clear()

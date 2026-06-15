@@ -65,6 +65,7 @@ object ImageCacheManager {
     private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
     private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
     private const val MAX_DOWNLOAD_RESULTS = 20 // FIX P1-4: Limit size of downloadResults map
+    private const val MAX_IMAGE_CACHE_VERSION_FLOWS = 500
     
     // Memory checking thresholds (similar to iOS MemoryCapManager)
     // iOS blocks duplicate requests at 60% of 2GB limit (1.2GB)
@@ -145,6 +146,7 @@ object ImageCacheManager {
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
     private var currentMemoryUsage = AtomicInteger(0)
     private val imageCacheVersionFlows = ConcurrentHashMap<String, MutableStateFlow<Int>>()
+    private val imageCacheVersionFlowAccess = ConcurrentHashMap<String, Long>()
 
     private enum class ImageDownloadPriority {
         AVATAR, VISIBLE, BACKGROUND
@@ -198,15 +200,67 @@ object ImageCacheManager {
     }
 
     fun getImageCacheVersionFlow(mid: String): StateFlow<Int> {
-        return imageCacheVersionFlows
+        imageCacheVersionFlowAccess[mid] = System.currentTimeMillis()
+        val flow = imageCacheVersionFlows
             .computeIfAbsent(mid) { MutableStateFlow(0) }
-            .asStateFlow()
+        trimImageCacheVersionFlows(protectedMid = mid)
+        return flow.asStateFlow()
     }
 
     private fun notifyImageCached(mid: String) {
+        imageCacheVersionFlowAccess[mid] = System.currentTimeMillis()
         imageCacheVersionFlows[mid]?.let { flow ->
             flow.value = flow.value + 1
         }
+    }
+
+    private fun removeImageCacheVersionFlow(mid: String) {
+        imageCacheVersionFlows.remove(mid)
+        imageCacheVersionFlowAccess.remove(mid)
+    }
+
+    private fun trimImageCacheVersionFlows(protectedMid: String? = null) {
+        val overflow = imageCacheVersionFlows.size - MAX_IMAGE_CACHE_VERSION_FLOWS
+        if (overflow <= 0) return
+
+        val removeCount = overflow + 50
+        val preferredCandidates = imageCacheVersionFlowAccess.entries
+            .asSequence()
+            .filter { entry ->
+                val key = entry.key
+                val baseMid = baseImageMid(key)
+                key != protectedMid &&
+                    !visibleImageMids.contains(baseMid) &&
+                    !hasMemoryCachedImage(key) &&
+                    !hasMemoryCachedImage(baseMid) &&
+                    !hasMemoryCachedImage("${baseMid}_original")
+            }
+            .sortedBy { it.value }
+            .map { it.key }
+            .take(removeCount)
+            .toList()
+
+        val fallbackCandidates = if (preferredCandidates.isEmpty()) {
+            imageCacheVersionFlowAccess.entries
+                .asSequence()
+                .filter { it.key != protectedMid }
+                .sortedBy { it.value }
+                .map { it.key }
+                .take(removeCount)
+                .toList()
+        } else {
+            emptyList()
+        }
+
+        (preferredCandidates + fallbackCandidates).forEach { key ->
+            removeImageCacheVersionFlow(key)
+        }
+    }
+
+    private fun clearInactiveImageCacheVersionFlows() {
+        imageCacheVersionFlows.keys
+            .filter { key -> !visibleImageMids.contains(baseImageMid(key)) }
+            .forEach { key -> removeImageCacheVersionFlow(key) }
     }
 
     private fun rebuildVisibleImageMidsLocked() {
@@ -260,6 +314,7 @@ object ImageCacheManager {
                     val oldBitmap = entry.value
                     iterator.remove()
                     currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
+                    removeImageCacheVersionFlow(entry.key)
                 }
             }
             
@@ -274,6 +329,7 @@ object ImageCacheManager {
                     // Just remove from cache, don't recycle to avoid crashes
                     iterator.remove()
                     currentMemoryUsage.addAndGet(-oldBitmap.byteCount)
+                    removeImageCacheVersionFlow(entry.key)
                 }
             }
             
@@ -301,6 +357,7 @@ object ImageCacheManager {
                 0 // Bitmap already recycled
             }
             currentMemoryUsage.addAndGet(-bitmapSize)
+            removeImageCacheVersionFlow(mid)
         }
         return bitmap
     }
@@ -1321,6 +1378,7 @@ object ImageCacheManager {
             // Just clear the cache, don't recycle bitmaps to avoid crashes
             // Android will handle bitmap cleanup when they're no longer referenced
             memoryCache.clear()
+            clearInactiveImageCacheVersionFlows()
             currentMemoryUsage.set(0)
         } catch (e: Exception) {
             Timber.d("ImageCacheManager - Error clearing memory cache: $e")
@@ -1508,6 +1566,8 @@ object ImageCacheManager {
         try {
             // Remove from memory cache with proper memory tracking
             removeFromMemoryCache(mid)
+            removeImageCacheVersionFlow(mid)
+            removeImageCacheVersionFlow("${mid}_original")
 
             // Remove from disk cache
             val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
@@ -1529,6 +1589,8 @@ object ImageCacheManager {
             if (dir.exists()) {
                 dir.deleteRecursively()
             }
+            imageCacheVersionFlows.clear()
+            imageCacheVersionFlowAccess.clear()
         } catch (e: Exception) {
             Timber.tag("ImageCacheManager").d("Error clearing all cached images: $e")
         }

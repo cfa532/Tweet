@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,8 +52,10 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
@@ -61,6 +64,8 @@ import us.fireshare.tweet.datamodel.MimeiFileType
 import java.io.File
 import java.net.URL
 import java.text.DecimalFormat
+
+private const val DOWNLOAD_MONITOR_TIMEOUT_MS = 30 * 60 * 1000L
 
 /**
  * View for displaying document attachments (PDF, Word, Excel, etc.) with improved UI
@@ -132,6 +137,7 @@ private fun DocumentRowView(
 ) {
     var isDownloading by remember { mutableStateOf(false) }
     var isDownloadingForShare by remember { mutableStateOf(false) }
+    val downloadScope = rememberCoroutineScope()
 
     val icon = getDocumentIcon(document.type)
     val iconColor = getDocumentIconColor(document.type)
@@ -195,7 +201,7 @@ private fun DocumentRowView(
             IconButton(
                 onClick = {
                     if (!isDownloadingForShare) {
-                        downloadDocument(context, document, baseUrl) {
+                        downloadDocument(context, document, baseUrl, downloadScope) {
                             isDownloadingForShare = it
                         }
                     }
@@ -387,6 +393,7 @@ private fun downloadDocument(
     context: Context,
     document: MimeiFileType,
     baseUrl: String?,
+    monitorScope: CoroutineScope,
     onDownloadingChange: (Boolean) -> Unit
 ) {
     val mediaUrl = document.url ?: getMediaUrl(document.mid, baseUrl ?: "") ?: ""
@@ -408,38 +415,47 @@ private fun downloadDocument(
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     val downloadId = downloadManager.enqueue(request)
 
-    // Monitor download completion using a coroutine instead of blocking a thread
-    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-        var downloading = true
-        while (downloading) {
-            val query = DownloadManager.Query().setFilterById(downloadId)
-            val cursor = downloadManager.query(query)
-            if (cursor.moveToFirst()) {
-                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                when (status) {
-                    DownloadManager.STATUS_SUCCESSFUL -> {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.downloading_file),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            onDownloadingChange(false)
+    monitorScope.launch(Dispatchers.IO) {
+        val completed = withTimeoutOrNull(DOWNLOAD_MONITOR_TIMEOUT_MS) {
+            var downloading = true
+            while (downloading) {
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                downloadManager.query(query).use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        when (status) {
+                            DownloadManager.STATUS_SUCCESSFUL -> {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.downloading_file),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    onDownloadingChange(false)
+                                }
+                                downloading = false
+                            }
+                            DownloadManager.STATUS_FAILED -> {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
+                                    onDownloadingChange(false)
+                                }
+                                downloading = false
+                            }
                         }
-                        downloading = false
-                    }
-                    DownloadManager.STATUS_FAILED -> {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
-                            onDownloadingChange(false)
-                        }
-                        downloading = false
                     }
                 }
+                if (downloading) {
+                    delay(500)
+                }
             }
-            cursor.close()
-            if (downloading) {
-                kotlinx.coroutines.delay(500)
+            true
+        }
+
+        if (completed != true) {
+            withContext(Dispatchers.Main) {
+                onDownloadingChange(false)
+                Toast.makeText(context, "Download is taking longer than expected", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -511,4 +527,3 @@ private fun getMimeType(fileName: String): String {
         else -> "application/octet-stream"
     }
 }
-

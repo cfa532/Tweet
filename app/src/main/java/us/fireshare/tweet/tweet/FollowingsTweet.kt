@@ -10,6 +10,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,11 @@ fun FollowingsTweet(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val followingsCoordinator = remember { VideoPlaybackCoordinator() }
+    DisposableEffect(followingsCoordinator) {
+        onDispose {
+            followingsCoordinator.clear()
+        }
+    }
 
     // State for full-screen video
     var fullScreenVideoUrl by remember { mutableStateOf<String?>(null) }

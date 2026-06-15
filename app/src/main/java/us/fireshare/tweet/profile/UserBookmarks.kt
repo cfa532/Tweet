@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,6 +66,11 @@ fun UserBookmarks(
     val user = appUser
 
     val bookmarksCoordinator = remember { VideoPlaybackCoordinator() }
+    DisposableEffect(bookmarksCoordinator) {
+        onDispose {
+            bookmarksCoordinator.clear()
+        }
+    }
 
     // Track scroll-to-top trigger
     var scrollToTopTrigger by remember { mutableIntStateOf(0) }
