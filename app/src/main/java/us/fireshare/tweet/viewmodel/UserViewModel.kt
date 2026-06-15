@@ -1337,6 +1337,7 @@ class UserViewModel @AssistedInject constructor(
                             is Tweet -> tweetRaw
                             is Map<*, *> -> {
                                 try {
+                                    @Suppress("UNCHECKED_CAST")
                                     Tweet.from(tweetRaw as Map<String, Any>)
                                 } catch (e: Exception) {
                                     Timber.tag("loadPinnedTweets")

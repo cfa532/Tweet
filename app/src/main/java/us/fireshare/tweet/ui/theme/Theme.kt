@@ -124,7 +124,9 @@ fun TweetTheme(
     if (!view.isInEditMode) {
         SideEffect {
             view.context.findActivity()?.window?.let { window ->
+                @Suppress("DEPRECATION")
                 window.statusBarColor = colorScheme.background.toArgb()
+                @Suppress("DEPRECATION")
                 window.navigationBarColor = colorScheme.surface.toArgb()
                 WindowCompat.getInsetsController(window, view).apply {
                     isAppearanceLightStatusBars = !darkTheme

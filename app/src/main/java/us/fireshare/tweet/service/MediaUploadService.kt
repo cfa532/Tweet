@@ -28,6 +28,7 @@ import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Service for handling media upload operations including:
@@ -40,7 +41,7 @@ class MediaUploadService(
     private val context: Context,
     private val httpClient: HttpClient,
     private val appUser: User,
-    private val appId: MimeiId
+    private val appId: MimeiId,
 ) {
 
     companion object {
@@ -101,7 +102,7 @@ class MediaUploadService(
         var fileName: String? = null
         try {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst() && cursor.columnCount > 0) {
+                if ((cursor.moveToFirst()) && (cursor.columnCount > 0)) {
                     val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (nameIndex != -1) {
                         fileName = cursor.getString(nameIndex)
@@ -308,8 +309,8 @@ class MediaUploadService(
                     referenceId,
                     MediaType.Video
                 )
-                if (result != null) {
-                    Timber.tag(TAG).d("Video uploaded: ${result.mid}")
+                result?.also {
+                    Timber.tag(TAG).d("Video uploaded: ${it.mid}")
                 }
                 result
             } finally {
@@ -441,7 +442,7 @@ class MediaUploadService(
                 if (attempt < 3) {
                     // Invalidate cache so next attempt re-resolves a fresh IP.
                     appUser.writableUrlResolvedAt = null
-                    delay(1000L * attempt)
+                    delay((1000 * attempt).milliseconds)
                 }
             }
         }

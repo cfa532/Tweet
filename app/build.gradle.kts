@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 130    // Full release version code. Must be increased each time,
+        versionCode = 131    // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
         versionName = "64"  // compared with App Mimei version to check for upgrade.
@@ -145,7 +145,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 130  // Play version code increased for release
+            versionCode = 131  // Play version code increased for release
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport
@@ -238,7 +238,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.material)
     add("playImplementation", libs.firebase.crashlytics)
-    implementation(libs.ui.graphics)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.accompanist.pager)
     implementation(libs.accompanist.pager.indicators)

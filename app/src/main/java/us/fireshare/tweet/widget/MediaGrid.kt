@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -208,7 +207,7 @@ fun MediaGrid(
     LaunchedEffect(limitedMediaList, enableRowPreloading) {
         if (!enableRowPreloading) return@LaunchedEffect
         // Delay preloading so fast-scrolling cancels before starting heavy work
-        kotlinx.coroutines.delay(300L)
+        delay(300)
         val preloadSemaphore = kotlinx.coroutines.sync.Semaphore(2) // Max 2 concurrent preloads
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
@@ -1310,7 +1309,7 @@ private fun formatPlaybackTime(timeMs: Long): String {
  */
 fun inferMediaTypeFromAttachment(attachment: MimeiFileType): MediaType {
     // Check if type is provided and valid
-    if (attachment.type != null && attachment.type != MediaType.Unknown) {
+    if (attachment.type != MediaType.Unknown) {
         return attachment.type
     }
 

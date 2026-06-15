@@ -37,9 +37,12 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.pow
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * ImageCacheManager compresses and caches images by their mid (unique id).
@@ -98,7 +101,7 @@ object ImageCacheManager {
                 readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 20s for IPFS
                 writeTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-                followRedirects(true)
+                followRedirects(followRedirects = true)
             }
         }
     }
@@ -111,7 +114,7 @@ object ImageCacheManager {
                 readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 15s for avatars
                 writeTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-                followRedirects(true)
+                followRedirects(followRedirects = true)
             }
         }
     }
@@ -133,7 +136,7 @@ object ImageCacheManager {
     // Pause/resume mechanism
     private val pausedDownloads = ConcurrentHashMap<String, Boolean>() // mid -> isPaused
     private val pausedDownloadMutex = Any()
-    private var resumerJob: kotlinx.coroutines.Job? = null
+    private var resumerJob: Job? = null
     private val scheduledPauseJobs = ConcurrentHashMap<String, Job>()
     private val visibleImageMids = ConcurrentHashMap.newKeySet<String>()
     private val viewportVisibleImageMids = ConcurrentHashMap.newKeySet<String>()
@@ -154,7 +157,7 @@ object ImageCacheManager {
 
     private data class DownloadPermit(
         val semaphore: Semaphore,
-        val priority: ImageDownloadPriority
+        val priority: ImageDownloadPriority,
     )
 
     private suspend fun acquireDownloadPermit(
@@ -196,7 +199,7 @@ object ImageCacheManager {
      * Use this from composable initialization to avoid blank frames during LazyColumn scroll.
      */
     fun getMemoryCachedBitmap(mid: String): Bitmap? {
-        return memoryCache[mid]?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 }
+        return memoryCache[mid]?.takeIf { (!it.isRecycled) && (it.width > 0) && (it.height > 0) }
     }
 
     fun getImageCacheVersionFlow(mid: String): StateFlow<Int> {
@@ -210,7 +213,7 @@ object ImageCacheManager {
     private fun notifyImageCached(mid: String) {
         imageCacheVersionFlowAccess[mid] = System.currentTimeMillis()
         imageCacheVersionFlows[mid]?.let { flow ->
-            flow.value = flow.value + 1
+            flow.value++
         }
     }
 
@@ -334,8 +337,7 @@ object ImageCacheManager {
             }
             
             // Remove existing entry if present (to update)
-            val existingBitmap = memoryCache.remove(mid)
-            if (existingBitmap != null) {
+            memoryCache.remove(mid)?.let { existingBitmap ->
                 currentMemoryUsage.addAndGet(-existingBitmap.byteCount)
             }
             
@@ -370,7 +372,7 @@ object ImageCacheManager {
             try {
                 val file = File(context.cacheDir, "$CACHE_DIR/$mid.jpg")
                 return@withContext if (file.exists()) file else null
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -382,7 +384,7 @@ object ImageCacheManager {
         withContext(Dispatchers.IO) {
             try {
                 // Check memory cache first
-                memoryCache.get(mid)?.let { bitmap ->
+                memoryCache[mid]?.let { bitmap ->
                     if (!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
                         return@withContext bitmap
                     } else {
@@ -423,7 +425,7 @@ object ImageCacheManager {
         val startTime = System.currentTimeMillis()
         
         while (true) {
-            delay(100) // Check every 100ms
+            delay(100.milliseconds) // Check every 100ms
             
             if (System.currentTimeMillis() - startTime > maxWaitTime) {
                 return null
@@ -468,8 +470,8 @@ object ImageCacheManager {
                 return true
             }
             
-            val delaySeconds = Math.pow(2.0, attempt.toDouble()) * 0.4
-            Timber.tag("ImageCacheManager").w("⏳ Memory at $currentPercent% (threshold $MEMORY_BLOCK_THRESHOLD_PERCENT%) - delaying new image download $retryLabel $cacheKey by ${String.format("%.1f", delaySeconds)}s")
+            val delaySeconds = 2.0.pow(attempt.toDouble()) * 0.4
+            Timber.tag("ImageCacheManager").w("⏳ Memory at $currentPercent% (threshold $MEMORY_BLOCK_THRESHOLD_PERCENT%) - delaying new image download $retryLabel $cacheKey by ${String.format(Locale.US, "%.1f", delaySeconds)}s")
             delay((delaySeconds * 1000).toLong())
         }
         
@@ -680,7 +682,7 @@ object ImageCacheManager {
                         if (!bitmap.isRecycled) {
                             try {
                                 bitmap.recycle()
-                            } catch (ex: Exception) {
+                            } catch (_: Exception) {
                                 // Ignore recycle errors
                             }
                         }
@@ -830,7 +832,7 @@ object ImageCacheManager {
                         if (!bitmap.isRecycled) {
                             try {
                                 bitmap.recycle()
-                            } catch (ex: Exception) {
+                            } catch (_: Exception) {
                                 // Ignore recycle errors
                             }
                         }
@@ -877,11 +879,7 @@ object ImageCacheManager {
     /**
      * Legacy method for backward compatibility - calls progressive version without callback
      */
-    private suspend fun performDownloadOriginal(
-        imageUrl: String,
-        mid: String,
-        context: Context
-    ): Bitmap? = performDownloadOriginalProgressive(imageUrl, mid, context, null)
+
 
     /**
      * Load original image with progressive loading support
@@ -1472,8 +1470,10 @@ object ImageCacheManager {
             if (downloadResults.size >= MAX_DOWNLOAD_RESULTS) {
                 // Remove oldest entries (by timestamp)
                 val oldestEntries = resultTimestamps.entries
+                    .asSequence()
                     .sortedBy { it.value }
-                    .take(5)  // Remove 5 oldest at a time
+                    .take(5)
+                    .toList()
                 
                 oldestEntries.forEach { entry ->
                     // Recycle bitmap before removing
@@ -1481,7 +1481,7 @@ object ImageCacheManager {
                         if (!oldBitmap.isRecycled) {
                             try {
                                 oldBitmap.recycle()
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 // Ignore recycle errors
                             }
                         }
@@ -1758,7 +1758,7 @@ object ImageCacheManager {
         tweets: List<Tweet>,
         maxTweets: Int
     ): List<DirectionalImageTarget> {
-        if (tweets.isEmpty() || visibleTweetIndexes.isEmpty() || direction == PreloadDirection.NONE) {
+        if (tweets.isEmpty() || visibleTweetIndexes.isEmpty()) {
             return emptyList()
         }
 

@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -71,23 +71,23 @@ fun CameraXPreview(
     onVideoRecorded: (Uri) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    openedFromComposer: Boolean = true // Default to true since most camera usage is from composer
+    openedFromComposer: Boolean = true, // Default to true since most camera usage is from composer
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = LocalView.current
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    var isBackCamera by remember { mutableStateOf(true) }
+    var isBackCamera by remember { mutableStateOf(value = true) }
     var isRecording by remember { mutableStateOf(false) }
     var captureMode by remember { mutableStateOf("photo") } // "photo" or "video"
-    var recordingDuration by remember { mutableStateOf(0L) } // Recording duration in seconds
+    var recordingDuration by remember { mutableLongStateOf(0L) } // Recording duration in seconds
 
     // Audio permission launcher
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted && captureMode == "video" && !isRecording) {
+        if (isGranted && (captureMode == "video") && (!isRecording)) {
             // Start recording after permission is granted
             cameraManager.startVideoRecording(onVideoRecorded)
             isRecording = true
@@ -108,11 +108,11 @@ fun CameraXPreview(
         // Hide keyboard using InputMethodManager with multiple approaches
         val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
-        inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_NOT_ALWAYS)
+        inputMethodManager.hideSoftInputFromWindow(null, 0)
         
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
-            inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
+            inputMethodManager.hideSoftInputFromWindow(null, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
@@ -158,11 +158,11 @@ fun CameraXPreview(
         // Aggressively hide keyboard using InputMethodManager with multiple approaches
         val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
-        inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_NOT_ALWAYS)
+        inputMethodManager.hideSoftInputFromWindow(null, 0)
         
         // If opened from composer, be extra aggressive with keyboard hiding
         if (openedFromComposer) {
-            inputMethodManager.hideSoftInputFromWindow(null, InputMethodManager.HIDE_IMPLICIT_ONLY)
+            inputMethodManager.hideSoftInputFromWindow(null, 0)
         }
         
         // Force clear focus to ensure keyboard doesn't reappear
@@ -201,12 +201,11 @@ fun CameraXPreview(
                     scaleType = PreviewView.ScaleType.FILL_CENTER
                 }
             },
-            modifier = Modifier.fillMaxSize(),
-            update = { pv ->
-                previewView = pv
-                cameraManager.startCamera(pv)
-            }
-        )
+            modifier = Modifier.fillMaxSize()
+        ) { pv ->
+            previewView = pv
+            cameraManager.startCamera(pv)
+        }
 
         // Top controls row with camera switch and cancel buttons
         Row(
@@ -338,13 +337,13 @@ fun CameraXPreview(
                 containerColor = if (isRecording) 
                     MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                 else 
-                    androidx.compose.ui.graphics.Color.Gray.copy(alpha = 0.6f)
+                    Color.Gray.copy(alpha = 0.6f)
             ) {
                 Icon(
                     imageVector = if (captureMode == "photo") Icons.Default.CameraAlt else if (isRecording) Icons.Default.Stop else Icons.Default.Videocam,
                     contentDescription = if (captureMode == "photo") "Take Photo" else if (isRecording) "Stop Recording" else "Start Recording",
                     modifier = Modifier.size(32.dp),
-                    tint = if (isRecording) MaterialTheme.colorScheme.onError else androidx.compose.ui.graphics.Color.White
+                    tint = if (isRecording) MaterialTheme.colorScheme.onError else Color.White
                 )
             }
 

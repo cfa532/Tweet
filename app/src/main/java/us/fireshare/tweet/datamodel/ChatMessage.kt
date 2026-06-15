@@ -354,6 +354,7 @@ fun ChatSessionEntity.toChatSession(lastMessage: ChatMessage): ChatSession {
 }
 
 @Dao
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 interface ChatMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessageEntity)
@@ -448,6 +449,7 @@ interface ChatMessageDao {
 }
 
 @Dao
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 interface ChatSessionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: ChatSessionEntity)
