@@ -1,5 +1,7 @@
 package us.fireshare.tweet.widget
 
+import android.graphics.Bitmap
+import android.view.TextureView
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
@@ -37,6 +39,7 @@ import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Lightweight video preview composable using XML PlayerView layout.
@@ -64,6 +67,7 @@ fun VideoPreview(
     val context = LocalContext.current
     val rootView = LocalView.current
     val retryScope = rememberCoroutineScope()
+    val playerContainerRef = remember { AtomicReference<View?>() }
 
     // --- State holder (all mutable state lives here) ---
     val state = rememberVideoPreviewState(videoMid, useIndependentMuteState)
@@ -336,6 +340,8 @@ fun VideoPreview(
         }
     }
 
+    var playerHasRenderedFrame by remember { mutableStateOf(false) }
+
     // --- Player listener (attach/detach with player) ---
     val playerListener = remember {
         object : Player.Listener {
@@ -367,6 +373,12 @@ fun VideoPreview(
                 }
                 state.isPlaying = isPlaying
             }
+            override fun onRenderedFirstFrame() {
+                MediaLog.d("VideoLoading") {
+                    "Rendered first frame key=$playerKey mid=$videoMid"
+                }
+                playerHasRenderedFrame = true
+            }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 MediaLog.d("VideoLoading") {
                     "Player error key=$playerKey mid=$videoMid code=${error.errorCodeName} message=${error.message}"
@@ -380,8 +392,10 @@ fun VideoPreview(
         if (exoPlayer == null) {
             MediaLog.d("VideoLoading") { "No ExoPlayer bound key=$playerKey mid=$videoMid" }
             state.isLoading = false
+            playerHasRenderedFrame = false
             onDispose { }
         } else {
+            playerHasRenderedFrame = false
             MediaLog.d("VideoLoading") {
                 "Attach listener key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(exoPlayer.playbackState)}"
             }
@@ -395,6 +409,11 @@ fun VideoPreview(
                 Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
             }
             onDispose {
+                playerContainerRef.get()
+                    ?.findViewById<PlayerView>(R.id.player_view)
+                    ?.saveCurrentVideoFrame(videoMid)
+                state.isPlaying = false
+                playerHasRenderedFrame = false
                 MediaLog.d("VideoLoading") { "Detach listener key=$playerKey mid=$videoMid" }
                 exoPlayer.removeListener(playerListener)
             }
@@ -469,6 +488,7 @@ fun VideoPreview(
     AndroidView(
         factory = { ctx ->
             LayoutInflater.from(ctx).inflate(R.layout.video_player_view, null).apply {
+                playerContainerRef.set(this)
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
                 findViewById<Button>(R.id.retry_button).setOnClickListener {
@@ -484,15 +504,26 @@ fun VideoPreview(
             }
         },
         update = { view ->
+            playerContainerRef.set(view)
             val playerView = view.findViewById<PlayerView>(R.id.player_view)
             if (playerView.player !== exoPlayer) {
+                playerView.saveCurrentVideoFrame(videoMid)
+                playerHasRenderedFrame = false
                 playerView.player = exoPlayer
             }
 
             val posterView = view.findViewById<ImageView>(R.id.video_poster)
+            val playerPlaybackState = exoPlayer?.playbackState
             val showPoster = cachedPoster != null &&
-                !state.isPlaying &&
-                (state.hasError || state.isLoading || !shouldPlay)
+                !playerHasRenderedFrame &&
+                (
+                    state.hasError ||
+                        state.isLoading ||
+                        !shouldPlay ||
+                        exoPlayer == null ||
+                        playerPlaybackState == Player.STATE_IDLE ||
+                        playerPlaybackState == Player.STATE_BUFFERING
+                    )
             if (showPoster) {
                 posterView.setImageBitmap(cachedPoster)
                 posterView.visibility = View.VISIBLE
@@ -611,6 +642,50 @@ fun VideoPreview(
             }
             .then(if (enableTapToShowControls) Modifier else Modifier.clickable { callback(index) })
     )
+}
+
+private fun PlayerView.saveCurrentVideoFrame(videoMid: MimeiId?) {
+    if (videoMid == null) return
+    val player = player ?: return
+    val currentPosition = try {
+        player.currentPosition
+    } catch (_: Exception) {
+        return
+    }
+    val playbackState = try {
+        player.playbackState
+    } catch (_: Exception) {
+        return
+    }
+    if (currentPosition <= 0L || playbackState == Player.STATE_IDLE) return
+    val textureView = videoSurfaceView as? TextureView ?: return
+    if (textureView.width <= 0 || textureView.height <= 0 || !textureView.isAvailable) return
+
+    val maxDimension = 640
+    val largerDimension = maxOf(textureView.width, textureView.height)
+    val scale = if (largerDimension > maxDimension) {
+        maxDimension.toFloat() / largerDimension.toFloat()
+    } else {
+        1f
+    }
+    val targetWidth = (textureView.width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (textureView.height * scale).toInt().coerceAtLeast(1)
+
+    val bitmap = try {
+        Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888).also { target ->
+            textureView.getBitmap(target)
+        }
+    } catch (e: Exception) {
+        MediaLog.d("VideoLoading") {
+            "Save video frame failed mid=$videoMid message=${e.message}"
+        }
+        null
+    } ?: return
+
+    VideoManager.saveVideoPoster(videoMid, bitmap)
+    MediaLog.d("VideoLoading") {
+        "Saved video frame poster mid=$videoMid size=${bitmap.width}x${bitmap.height} pos=$currentPosition"
+    }
 }
 
 private fun videoPreviewPlayerStateName(state: Int): String = when (state) {

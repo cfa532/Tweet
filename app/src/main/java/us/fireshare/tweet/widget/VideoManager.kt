@@ -1228,6 +1228,13 @@ object VideoManager {
         }
     }
 
+    fun saveVideoPoster(videoMid: MimeiId, poster: Bitmap) {
+        if (poster.isRecycled) return
+        posterBitmaps[videoMid] = poster
+        posterAccessTimestamps[videoMid] = System.currentTimeMillis()
+        trimPosterBitmaps()
+    }
+
     private fun trimPosterBitmaps() {
         if (posterBitmaps.size <= MAX_POSTER_BITMAPS) return
 
