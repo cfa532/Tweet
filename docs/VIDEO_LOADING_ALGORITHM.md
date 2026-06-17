@@ -10,9 +10,9 @@ This document describes the unified video loading and caching strategy used in t
 The system determines playback strategy based on the attachment's `Type` field:
 
 #### **For HLS Videos (`MediaType.HLS_VIDEO`):**
-1. **Start with `master.m3u8`** (HLS master playlist)
-2. **If that fails → try `playlist.m3u8`** (HLS playlist) 
-3. **If that fails → stop player** (NO fallback to progressive video)
+1. **Race `master.m3u8` and `playlist.m3u8`** (same base URL)
+2. **Use the first playlist that responds successfully**
+3. **If both fail -> stop player** (NO fallback to progressive video)
 
 #### **For Regular Videos (`MediaType.Video`):**
 1. **Play original URL directly** as progressive video
@@ -26,7 +26,7 @@ The system determines playback strategy based on the attachment's `Type` field:
 
 ### 3. **Type-Based Video Handling**
 - **Use attachment Type field** to determine playback strategy
-- **HLS videos**: Only try HLS URLs (master.m3u8 → playlist.m3u8)
+- **HLS videos**: Only try HLS URLs (`master.m3u8` and `playlist.m3u8` raced together)
 - **Regular videos**: Only play as progressive video
 - **NO** automatic format detection or guessing
 
@@ -63,6 +63,8 @@ The `videoType` parameter is passed to `createExoPlayer()` which determines the 
 - Failed players MUST be properly stopped with `exoPlayer.stop()`
 - **NO** memory leaks from abandoned ExoPlayer instances
 - Clean up resources after each failed attempt
+- Feed player cache is capped at 6 normal feed players
+- Hidden warm preload players are capped separately and kept small
 
 ### 7. **Exception Handling for Inaccessible URLs**
 - **Network errors** (500, 404, connection failures) are expected and handled gracefully
@@ -76,6 +78,17 @@ The `videoType` parameter is passed to `createExoPlayer()` which determines the 
 - **Fallback mechanism**: `getVideoAspectRatio(context, uri)` is only used as a fallback
 - **When to use fallback**: Only when the primary aspect ratio file is not available
 - **Performance**: Avoid expensive URI-based aspect ratio extraction when possible
+
+### 9. **Feed Visibility, Preload, and Cover Rules**
+- **Media visibility is authoritative**: Video load/play decisions are based on the media item's visibility, not only the surrounding tweet's visibility.
+- **Visible media is protected**: Visible media should not be cancelled or released by preload cleanup.
+- **Directional preload count is 2**: After scroll settles, preload up to 2 videos in the current scroll direction.
+- **Preload starts only after scroll stops**: During active scrolling, do not start new directional preloads.
+- **Scroll start cancels pending preload work**: When scrolling begins again, cancel active preload jobs, clear pending preload queues, and release hidden warm preload players.
+- **Foreground playback wins over preload**: Do not create hidden warm preload players while there is active foreground playback demand.
+- **Player cache limit is 6**: Normal feed player cache cleanup should keep the feed player pool bounded around 6 players, with a lower target during memory pressure.
+- **Cover image rule**: If an attached player has loaded video data, hide the cover image and let the player surface own the pixels. If that loaded player is later released, save the current texture frame and show it as a placeholder cover until a new player loads data.
+- **Generated posters must not overwrite last-frame covers**: A delayed poster-generation job must not replace a newer saved last-frame cover.
 
 ## Simplified Caching Strategy
 
@@ -114,8 +127,14 @@ ExoPlayer has **built-in, production-ready** caching for both progressive and HL
 
 #### **How It Works**
 ```kotlin
-// Function handles both HLS and progressive videos based on MediaType
-fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null): ExoPlayer {
+// Function handles both HLS and progressive videos based on MediaType.
+// HLS URLs are resolved before player creation by racing master.m3u8 and playlist.m3u8.
+fun createExoPlayer(
+    context: Context,
+    url: String,
+    mediaType: MediaType? = null,
+    resolvedHlsUrl: String? = null
+): ExoPlayer {
     val cache = getCache(context)
     val dataSourceFactory = DefaultDataSource.Factory(context)
     
@@ -126,39 +145,15 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
 
     val exoPlayer = ExoPlayer.Builder(context).build()
 
-    // Add listener for HLS fallback (only for HLS videos)
-    exoPlayer.addListener(object : Player.Listener {
-        private var hasTriedPlaylist = false
-
-        override fun onPlayerError(error: PlaybackException) {
-            // Only try HLS fallback for HLS videos
-            if (mediaType == MediaType.HLS_VIDEO && !hasTriedPlaylist) {
-                hasTriedPlaylist = true
-                // Try playlist.m3u8 fallback
-                val baseUrl = if (url.endsWith("/")) url else "$url/"
-                val playlistUrl = "${baseUrl}playlist.m3u8"
-                val fallbackMediaSource = mediaSourceFactory.createMediaSource(
-                    MediaItem.fromUri(playlistUrl)
-                )
-                setMediaSource(fallbackMediaSource)
-                prepare()
-            } else {
-                // For progressive videos or after HLS fallback failed, log error
-                Timber.e("Video playback failed: ${error.message}")
-            }
-        }
-    })
-
     // Create media source based on video type
-    val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
-        // For HLS videos, start with master.m3u8
-        val baseUrl = if (url.endsWith("/")) url else "$url/"
-        val masterUrl = "${baseUrl}master.m3u8"
-        mediaSourceFactory.createMediaSource(MediaItem.fromUri(masterUrl))
+    val mediaUrl = if (mediaType == MediaType.HLS_VIDEO) {
+        // For HLS videos, use the winning playlist from HlsUrlResolver.
+        resolvedHlsUrl ?: error("HLS URL must be resolved before player creation")
     } else {
         // For progressive videos, use original URL directly
-        mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
+        url
     }
+    val mediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(mediaUrl))
 
     return exoPlayer.apply {
         setMediaSource(mediaSource)
@@ -197,25 +192,11 @@ fun createExoPlayer(context: Context, url: String, mediaType: MediaType? = null)
 ```kotlin
 // Type-based video handling
 val mediaSource = if (mediaType == MediaType.HLS_VIDEO) {
-    // For HLS videos, start with master.m3u8
-    val baseUrl = if (url.endsWith("/")) url else "$url/"
-    val masterUrl = "${baseUrl}master.m3u8"
-    mediaSourceFactory.createMediaSource(MediaItem.fromUri(masterUrl))
+    // For HLS videos, use the winning playlist from HlsUrlResolver.
+    mediaSourceFactory.createMediaSource(MediaItem.fromUri(resolvedHlsUrl))
 } else {
     // For progressive videos, use original URL directly
     mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
-}
-
-// HLS fallback sequence in onPlayerError (only for HLS videos):
-if (mediaType == MediaType.HLS_VIDEO && !hasTriedPlaylist) {
-    hasTriedPlaylist = true
-    // Try playlist.m3u8 fallback
-    val playlistUrl = "${baseUrl}playlist.m3u8"
-    setMediaSource(mediaSourceFactory.createMediaSource(MediaItem.fromUri(playlistUrl)))
-    prepare()
-} else {
-    // For progressive videos or after HLS fallback failed, log error
-    Timber.e("Video playback failed: ${error.message}")
 }
 
 // Exception handling for inaccessible URLs
@@ -231,6 +212,10 @@ try {
 - Trying HLS fallback for regular videos
 - Falling back to progressive video for HLS videos
 - Multiple retries of the same URL
+- Starting directional preload while the user is actively scrolling
+- Leaving old preload jobs or queues alive when scrolling starts again
+- Showing a cover over a player that already has loaded video data
+- Letting generated posters replace a newer saved last-frame cover
 - Multiple ExoPlayer instances
 - Memory leaks from failed players
 - Crashes from inaccessible URLs
@@ -254,9 +239,9 @@ Cache Key: QmVideo123 (same for both progressive and HLS)
 
 ### **For HLS Videos:**
 ```
-1. "Player ready for URL: [base_url]/master.m3u8"
-2. If master.m3u8 fails: "Trying playlist.m3u8 fallback for HLS video: [url]"
-3. If playlist.m3u8 fails: "All HLS fallback attempts failed for URL: [url]"
+1. "Resolving HLS URL by racing master.m3u8 and playlist.m3u8"
+2. "Using resolved HLS URL: [winning_playlist]"
+3. If both playlist candidates fail: "All HLS playlist candidates failed for URL: [url]"
 4. Audio codec errors: "Audio codec error detected, continuing video playback in silence"
 5. VideoPreview/FullScreen: "Audio codec error detected in VideoPreview/FullScreenVideoPlayer, continuing video playback in silence"
 6. Error logs: "Final error: [specific error message]"
@@ -349,20 +334,26 @@ val stats = SimplifiedVideoCacheManager.getCacheStats(context)
 ## Key Points to Remember
 
 1. **Type-Based Strategy**: Use attachment Type field to determine playback strategy
-2. **HLS Videos**: Only try HLS URLs (master.m3u8 → playlist.m3u8), no progressive fallback
+2. **HLS Videos**: Only try HLS URLs (`master.m3u8` and `playlist.m3u8` raced together), no progressive fallback
 3. **Regular Videos**: Only play as progressive video, no HLS attempts
 4. **No Retries**: Each format once only
 5. **Clean Stop**: Properly stop failed players
 6. **Exception Handling**: Graceful handling of inaccessible URLs
 7. **Audio Codec Errors**: Continue video playback in silence when audio codec fails
 8. **Aspect Ratio**: Use attachment file first, URI extraction as fallback
-9. **Leverage ExoPlayer**: Use built-in capabilities instead of custom implementations
+9. **Preload Discipline**: Directional preloads start only after scroll stops and are cancelled when scroll starts again
+10. **Cover Discipline**: Loaded players do not show covers; released loaded players show their saved last frame
+11. **Leverage ExoPlayer**: Use built-in capabilities instead of custom implementations
 
 ## Common Mistakes to Avoid
 
 - ❌ Trying HLS fallback for regular videos
 - ❌ Falling back to progressive video for HLS videos
 - ❌ Retrying failed URLs
+- ❌ Preloading during active scroll
+- ❌ Keeping pending preload work after scroll starts
+- ❌ Showing a cover over a player that has loaded video data
+- ❌ Replacing last-frame covers with older generated posters
 - ❌ Creating multiple players
 - ❌ Forgetting to stop failed players
 - ❌ Crashes from network errors

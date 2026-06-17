@@ -278,8 +278,9 @@ suspend fun loadImageProgressive(context, imageUrl, mid, onProgress): Bitmap?
 **Configuration:**
 ```kotlin
 const val CACHE_SIZE_BYTES = 2000L * 1024 * 1024  // 2GB
-const val PRELOAD_AHEAD_COUNT = 3
-const val MAX_CONCURRENT_PRELOADS = 3
+const val DIRECTIONAL_VIDEO_PRELOAD_COUNT = 2
+const val MAX_CONCURRENT_PRELOADS = 2
+const val MAX_FEED_PLAYER_CACHE_SIZE = 6
 ```
 
 ---
@@ -672,6 +673,13 @@ fun getMediaUrl(mimeiId, baseUrl): Uri
 4. Memory management
 5. Full-screen support
 
+**Current feed video rules:**
+- Media-level visibility drives video load/play decisions.
+- Directional preload starts only after scroll stops.
+- When scrolling starts again, pending preload jobs and queues are cancelled and hidden warm preload players are released.
+- Foreground playback is prioritized over hidden warm preloads.
+- Covers are hidden once an attached player has loaded video data; after release, the saved last frame is used as the placeholder cover.
+
 **Player Lifecycle:**
 ```
 Create → Prepare → Play → Pause → Stop → Release
@@ -1059,4 +1067,3 @@ upload = 3_000_000ms (50 min)
 ---
 
 **End of Technical Architecture Guide**
-

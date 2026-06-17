@@ -78,6 +78,12 @@ fun TweetListView(
    - Ensures users see the loading feedback
    - Prevents flickering for fast responses
 
+6. **Video Preload Scroll Lifecycle**
+   - Directional video preload starts only after scrolling stops
+   - When scrolling starts again, pending preload jobs and queues are cancelled
+   - Hidden warm preload players are released on scroll start
+   - Visible/active media remains protected from preload cleanup
+
 ### Loading States
 
 - **`isRefreshingAtTop`** - Pull-to-refresh state with 10-second timeout

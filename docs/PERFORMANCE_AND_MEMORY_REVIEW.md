@@ -18,7 +18,7 @@ The codebase has already been through several optimization passes (see `PERFORMA
 
 ### 2.1 Tweet feed (TweetListView) — already optimized
 
-- **Throttled scroll work:** Scroll position save is throttled (1s during scroll, immediate on stop); video preloader uses `derivedStateOf` rounded to every 3 items.
+- **Throttled scroll work:** Scroll position save is throttled (1s during scroll, immediate on stop); video preload decisions are derived from coarse list position and only start after scroll has stopped.
 - **O(n) indexing:** Tweet/video list building avoids O(n²) (no `indexOf` in loops).
 - **Job cleanup:** `activeJobs` is cleared on dispose; periodic cleanup every 5s reduces churn.
 - **Incremental video list:** New tweets are appended to the video list instead of full rebuild when possible.
@@ -42,9 +42,11 @@ The codebase has already been through several optimization passes (see `PERFORMA
 
 ### 2.4 Video (VideoManager, VideoPreview, VideoPlaybackCoordinator)
 
-- **Preload:** Capped (`PRELOAD_AHEAD_COUNT`, `MAX_CONCURRENT_PRELOADS`, semaphore).
+- **Preload:** Directional preload is capped at 2 videos and 2 concurrent preload jobs. Preload starts only after scroll stops; when scrolling starts again, pending preload jobs/queues are cancelled and hidden warm preload players are released.
 - **Disk cache:** 2GB SimpleCache with LRU eviction.
+- **Player cache:** Normal feed player cache is capped at 6 players, with stricter cleanup during memory pressure.
 - **Cleanup:** `cleanupInactivePlayers()` releases players not in `activeVideos`/`visibleVideos`. Called from `markVideoInactive()` when `videoPlayers.size > 10 && videoPlayers.size % 5 == 0`, and **now also from TweetListView’s `DisposableEffect` on dispose** so leaving the feed triggers cleanup.
+- **Cover memory:** Last-frame covers are saved when a loaded player detaches/releases; generated posters must not overwrite newer last-frame covers.
 
 **Recommendation:** Profile under rapid scroll and tab switching to confirm player count stays bounded and no frame drops. `releaseAllVideos()` is available for full cleanup if a screen needs it.
 
