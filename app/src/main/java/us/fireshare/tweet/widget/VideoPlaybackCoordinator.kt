@@ -970,7 +970,10 @@ class VideoPlaybackCoordinator(
                 _playbackCommands.emit(VideoPlaybackCommand.ShouldPauseVideo(info.identifier, info.videoMid))
             }
         }
-        MediaLog.d { "VideoPlaybackCoordinator: Host paused; preserved primary=$primaryVideoId" }
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Host paused; preserved primary=$primaryVideoId " +
+                "visible=${visibleVideos.map { it.identifier }} load=$loadVisibleVideoIds playable=$playableVideoIds"
+        }
     }
 
     fun onHostResumed() {
@@ -983,19 +986,37 @@ class VideoPlaybackCoordinator(
             rebuildVisibilitySetsFromRatios()
             reconcilePlaybackForCurrentVisibility(replayCurrentPrimary = true)
         }
-        MediaLog.d { "VideoPlaybackCoordinator: Host resumed; scheduling foreground reconciliation" }
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Host resumed; scheduling foreground reconciliation " +
+                "primary=$primaryVideoId pending=$pendingResumePrimaryId videos=${videoMetaMap.size}"
+        }
     }
 
     private fun resumePendingPrimaryIfPossible(): Boolean {
-        if (isPaused || !isFeedVisible) return false
+        if (isPaused || !isFeedVisible) {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped paused=$isPaused visible=$isFeedVisible " +
+                    "primary=$primaryVideoId pending=$pendingResumePrimaryId"
+            }
+            return false
+        }
         val resumeId = pendingResumePrimaryId ?: primaryVideoId ?: return false
-        val info = videoMetaMap[resumeId] ?: return false
+        val info = videoMetaMap[resumeId] ?: run {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped missing metadata resumeId=$resumeId " +
+                    "primary=$primaryVideoId pending=$pendingResumePrimaryId videos=${videoMetaMap.size}"
+            }
+            return false
+        }
 
         pendingResumePrimaryId = null
         primaryBelowContinueIdentifier = null
         setPrimaryVideoId(resumeId)
         emitPlayForPrimary(info)
-        MediaLog.d { "VideoPlaybackCoordinator: Replaying foreground primary ${info.videoMid}" }
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Replaying foreground primary ${info.videoMid} " +
+                "resumeId=$resumeId load=$loadVisibleVideoIds playable=$playableVideoIds"
+        }
         return true
     }
 
@@ -1047,6 +1068,8 @@ class VideoPlaybackCoordinator(
         hostResumedAt = 0L
         isFeedVisible = false
 
-        MediaLog.d { "VideoPlaybackCoordinator: Cleared all state" }
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Cleared all state"
+        }
     }
 }

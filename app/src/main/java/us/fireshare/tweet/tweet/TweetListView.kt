@@ -594,6 +594,7 @@ fun TweetListView(
                     directionStableCount = 1
                     lastDirection
                 }
+                val scrollingStarted = isScrolling && !lastScrollingState
 
                 // Throttle VideoPlaybackCoordinator scroll direction updates
                 if (isScrolling && (abs(indexDelta) >= 2 || abs(offsetDelta) > 200)) {
@@ -609,6 +610,9 @@ fun TweetListView(
                 }
                 if (confirmedDirection != ScrollDirection.NONE) {
                     lastNonIdleDirection = confirmedDirection
+                }
+                if (scrollingStarted) {
+                    VideoManager.stopAllPreloading(releasePreloadedPlayers = true)
                 }
 
                 val mediaPreloadDirection = when (if (confirmedDirection == ScrollDirection.NONE) lastNonIdleDirection else confirmedDirection) {
@@ -639,7 +643,7 @@ fun TweetListView(
                         visibleTweetIndexes = visibleTweetIndexes,
                         direction = mediaPreloadDirection,
                         tweets = visibleTweets,
-                        startPreloading = true,
+                        startPreloading = !isScrolling,
                         feedContext = context
                     )
                     lastMediaPreloadIndexes = visibleTweetIndexes

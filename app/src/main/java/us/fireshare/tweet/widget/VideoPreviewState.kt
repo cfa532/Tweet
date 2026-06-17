@@ -127,7 +127,8 @@ class VideoPreviewState(
         context: Context,
         url: String?,
         videoType: MediaType?,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        retryVideoMid: MimeiId? = videoMid
     ) {
         if (isMediaCodecRecoveryInProgress) {
             MediaLog.d("VideoPreview") { "Ignoring transient error during recovery for $videoMid: ${error.message}" }
@@ -152,16 +153,16 @@ class VideoPreviewState(
                 isLoading = false
                 hasError = false
             }
-            errorType == ErrorType.MEDIA_CODEC && videoMid != null && retryCount < maxRetries -> {
-                attemptMediaCodecRecovery(context, url, videoType, scope)
+            errorType == ErrorType.MEDIA_CODEC && retryVideoMid != null && retryCount < maxRetries -> {
+                attemptMediaCodecRecovery(context, url, videoType, scope, retryVideoMid)
             }
-            errorType == ErrorType.MEDIA_CODEC && videoMid != null -> {
+            errorType == ErrorType.MEDIA_CODEC && retryVideoMid != null -> {
                 Timber.tag("VideoPreview").e("MediaCodec failure exceeded retry limit for video: $videoMid")
                 isLoading = false
                 hasError = true
             }
-            errorType == ErrorType.RECOVERABLE && retryCount < 1 && videoMid != null -> {
-                attemptNetworkRecovery(context, url, videoType, scope)
+            errorType == ErrorType.RECOVERABLE && retryCount < 1 && retryVideoMid != null -> {
+                attemptNetworkRecovery(context, url, videoType, scope, retryVideoMid)
             }
             else -> {
                 isLoading = false
@@ -288,9 +289,10 @@ class VideoPreviewState(
         context: Context,
         url: String?,
         videoType: MediaType?,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        retryVideoMid: MimeiId? = videoMid
     ) {
-        if (videoMid == null) return
+        val targetVideoMid = retryVideoMid ?: videoMid ?: return
         retryCount = 0
         blockAutoPrepareAfterError = false
         isNetworkRecoveryInProgress = false
@@ -302,7 +304,7 @@ class VideoPreviewState(
         scope.launch(Dispatchers.Main) {
             try {
                 val success = if (url != null) {
-                    VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                    VideoManager.forceRecreatePlayer(context, targetVideoMid, url, videoType)
                 } else false
                 if (success) {
                     MediaLog.d("VideoPreview") { "Manual retry successful for video: $videoMid" }
@@ -322,7 +324,8 @@ class VideoPreviewState(
         context: Context,
         url: String?,
         videoType: MediaType?,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        retryVideoMid: MimeiId
     ) {
         if (videoMid == null) return
         retryCount++
@@ -335,7 +338,7 @@ class VideoPreviewState(
             try {
                 delay(1000)
                 val success = if (url != null) {
-                    VideoManager.forceRecreatePlayer(context, videoMid, url, videoType)
+                    VideoManager.forceRecreatePlayer(context, retryVideoMid, url, videoType)
                 } else false
                 if (success) {
                     isLoading = false
@@ -358,7 +361,8 @@ class VideoPreviewState(
         context: Context,
         url: String?,
         videoType: MediaType?,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        retryVideoMid: MimeiId
     ) {
         if (videoMid == null || url == null) return
         retryCount++
@@ -373,7 +377,7 @@ class VideoPreviewState(
             delay(1000)
             try {
                 if (isLoading && !hasError) {
-                    VideoManager.attemptVideoRecovery(context, videoMid, url, videoType, forceSoftwareDecoder = false)
+                    VideoManager.attemptVideoRecovery(context, retryVideoMid, url, videoType, forceSoftwareDecoder = false)
                 }
             } finally {
                 isNetworkRecoveryInProgress = false

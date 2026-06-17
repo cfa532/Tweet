@@ -81,8 +81,8 @@ class TweetApplication : Application(), ComponentCallbacks2 {
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
-        androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_ERROR)
-        androidx.media3.common.util.Log.setLogStackTraces(false)
+        androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_ALL)
+        androidx.media3.common.util.Log.setLogStackTraces(true)
 
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())

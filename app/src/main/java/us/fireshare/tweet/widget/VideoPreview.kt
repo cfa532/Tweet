@@ -91,12 +91,48 @@ fun VideoPreview(
     val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val preloadGeneration = VideoManager.preloadGenerations[playerKey] ?: 0
     val hasWarmPlayer = playerKey?.let { VideoManager.hasWarmVideoPlayer(it) } == true
+    var resolvedHlsUrl by remember(url, videoType) {
+        mutableStateOf(
+            if (videoType == MediaType.HLS_VIDEO && url != null) {
+                HlsUrlResolver.getCached(context, url)
+            } else {
+                null
+            }
+        )
+    }
+    LaunchedEffect(context, url, videoType) {
+        if (videoType == MediaType.HLS_VIDEO && url != null && resolvedHlsUrl == null) {
+            resolvedHlsUrl = HlsUrlResolver.resolve(context, url)
+        }
+    }
+    val hlsUrlReady = videoType != MediaType.HLS_VIDEO || resolvedHlsUrl != null
     val shouldAcquirePlayer = !isInFullScreen && (
         !shouldUseCoordinator ||
             effectivelyVisible ||
             shouldPlay ||
             hasWarmPlayer
-        )
+        ) && hlsUrlReady
+    LaunchedEffect(
+        playerKey,
+        shouldAcquirePlayer,
+        shouldPlay,
+        effectivelyVisible,
+        state.isVideoVisible,
+        hlsUrlReady,
+        hasWarmPlayer,
+        isInFullScreen,
+        playerGeneration,
+        preloadGeneration,
+        resolvedHlsUrl
+    ) {
+        MediaLog.d("VideoLoading") {
+            "Preview decision key=$playerKey mid=$videoMid type=$videoType acquire=$shouldAcquirePlayer " +
+                "play=$shouldPlay visible=${state.isVideoVisible} effectiveVisible=$effectivelyVisible " +
+                "coordinator=$shouldUseCoordinator fullscreen=$isInFullScreen warm=$hasWarmPlayer " +
+                "hlsReady=$hlsUrlReady resolvedHls=${resolvedHlsUrl?.substringAfterLast('/')} " +
+                "playerGen=$playerGeneration preloadGen=$preloadGeneration urlPresent=${url != null}"
+        }
+    }
 
     // --- Coordinator command collection ---
     LaunchedEffect(videoMid, playbackTweetId, resolvedPlaybackVideoId, coordinator) {
@@ -115,21 +151,38 @@ fun VideoPreview(
             when (command) {
                 is VideoPlaybackCommand.ShouldPlayVideo ->
                     if (command.playbackVideoId == resolvedPlaybackVideoId && command.videoMid == currentVideoMid) {
+                        MediaLog.d("VideoLoading") {
+                            "Coordinator play command matched key=$playerKey mid=$currentVideoMid tweet=$currentPlaybackTweetId"
+                        }
                         state.coordinatorWantsToPlay = true
                         // If this video becomes primary while in error, immediately retry.
                         // "Primary" reflects explicit user intent (tap) or coordinator focus.
                         if (state.hasError) {
-                            state.manualRetry(context, url, videoType, retryScope)
+                            state.manualRetry(context, url, videoType, retryScope, playerKey)
                         }
                     } else {
                         state.coordinatorWantsToPlay = false
                     }
                 is VideoPlaybackCommand.ShouldPauseVideo ->
-                    if (command.playbackVideoId == resolvedPlaybackVideoId) state.coordinatorWantsToPlay = false
+                    if (command.playbackVideoId == resolvedPlaybackVideoId) {
+                        MediaLog.d("VideoLoading") {
+                            "Coordinator pause command matched key=$playerKey mid=$currentVideoMid"
+                        }
+                        state.coordinatorWantsToPlay = false
+                    }
                 is VideoPlaybackCommand.ShouldStopVideo ->
-                    if (command.playbackVideoId == resolvedPlaybackVideoId) state.coordinatorWantsToPlay = false
-                VideoPlaybackCommand.ShouldStopAllVideos ->
+                    if (command.playbackVideoId == resolvedPlaybackVideoId) {
+                        MediaLog.d("VideoLoading") {
+                            "Coordinator stop command matched key=$playerKey mid=$currentVideoMid"
+                        }
+                        state.coordinatorWantsToPlay = false
+                    }
+                VideoPlaybackCommand.ShouldStopAllVideos -> {
+                    MediaLog.d("VideoLoading") {
+                        "Coordinator stop-all command observed key=$playerKey mid=$currentVideoMid"
+                    }
                     state.coordinatorWantsToPlay = false
+                }
             }
         }
     }
@@ -137,10 +190,16 @@ fun VideoPreview(
     // --- Player acquisition and visibility ownership ---
     DisposableEffect(playerKey, shouldAcquirePlayer, playerGeneration) {
         if (playerKey != null && shouldAcquirePlayer) {
+            MediaLog.d("VideoLoading") {
+                "Mark active key=$playerKey mid=$videoMid generation=$playerGeneration"
+            }
             VideoManager.markVideoActive(playerKey)
         }
         onDispose {
             if (playerKey != null && shouldAcquirePlayer) {
+                MediaLog.d("VideoLoading") {
+                    "Mark inactive key=$playerKey mid=$videoMid generation=$playerGeneration"
+                }
                 VideoManager.markVideoInactive(playerKey)
                 VideoManager.cleanupInactivePlayersDeferred()
             }
@@ -152,8 +211,10 @@ fun VideoPreview(
         val key = playerKey ?: return@LaunchedEffect
         if (effectivelyVisible == wasManagerVisible) return@LaunchedEffect
         if (effectivelyVisible) {
+            MediaLog.d("VideoLoading") { "Mark visible key=$key mid=$videoMid" }
             VideoManager.markVideoVisible(key)
         } else {
+            MediaLog.d("VideoLoading") { "Mark not visible key=$key mid=$videoMid" }
             VideoManager.markVideoNotVisible(key)
         }
         wasManagerVisible = effectivelyVisible
@@ -163,6 +224,7 @@ fun VideoPreview(
         onDispose {
             val key = playerKey
             if (key != null && wasManagerVisible) {
+                MediaLog.d("VideoLoading") { "Dispose mark not visible key=$key mid=$videoMid" }
                 VideoManager.markVideoNotVisible(key)
                 wasManagerVisible = false
             }
@@ -171,11 +233,16 @@ fun VideoPreview(
 
     // --- ExoPlayer (regenerated on force-recreate) ---
     val cachedPoster = if (videoMid != null) VideoManager.posterBitmaps[videoMid] else null
-    val exoPlayer = remember(playerKey, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType) {
-        if (!shouldAcquirePlayer || url == null) return@remember null
-        val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
-            HlsUrlResolver.getCached(context, url)
-        } else null
+    val exoPlayer = remember(playerKey, playerGeneration, preloadGeneration, shouldAcquirePlayer, url, videoType, resolvedHlsUrl) {
+        if (!shouldAcquirePlayer || url == null) {
+            MediaLog.d("VideoLoading") {
+                "No player acquired key=$playerKey mid=$videoMid acquire=$shouldAcquirePlayer urlPresent=${url != null}"
+            }
+            return@remember null
+        }
+        MediaLog.d("VideoLoading") {
+            "Acquire player key=$playerKey mid=$videoMid type=$videoType resolvedHls=${resolvedHlsUrl?.substringAfterLast('/')}"
+        }
         val player = if (playerKey != null) {
             VideoManager.getVideoPlayer(
                 context,
@@ -187,6 +254,10 @@ fun VideoPreview(
             )
         } else {
             createExoPlayer(context, url, videoType ?: MediaType.Video, resolvedHlsUrl = resolvedHlsUrl)
+        }
+        MediaLog.d("VideoLoading") {
+            "Player acquired key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(player.playbackState)} " +
+                "playWhenReady=${player.playWhenReady} items=${player.mediaItemCount}"
         }
         player.repeatMode = Player.REPEAT_MODE_OFF
         player
@@ -269,10 +340,17 @@ fun VideoPreview(
     val playerListener = remember {
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val player = currentExoPlayer
+                MediaLog.d("VideoLoading") {
+                    "Playback state key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(playbackState)} " +
+                        "play=$shouldPlay visible=${state.isVideoVisible} coordinatorWants=${state.coordinatorWantsToPlay} " +
+                        "pos=${player?.currentPosition} buffered=${player?.bufferedPosition} duration=${player?.duration} " +
+                        "playWhenReady=${player?.playWhenReady} isPlaying=${player?.isPlaying}"
+                }
                 if (playbackState == Player.STATE_READY && videoMid != null) {
                     VideoManager.ensureVideoPoster(context, videoMid, url, videoType, null)
                 }
-                val player = currentExoPlayer ?: return
+                if (player == null) return
                 val playbackVisible = if (shouldUseCoordinator) {
                     state.isVideoVisible || state.coordinatorWantsToPlay
                 } else {
@@ -284,19 +362,29 @@ fun VideoPreview(
                 )
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                MediaLog.d("VideoLoading") {
+                    "isPlaying changed key=$playerKey mid=$videoMid isPlaying=$isPlaying playWhenReady=${currentExoPlayer?.playWhenReady}"
+                }
                 state.isPlaying = isPlaying
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                state.onPlayerError(error, context, url, videoType, retryScope)
+                MediaLog.d("VideoLoading") {
+                    "Player error key=$playerKey mid=$videoMid code=${error.errorCodeName} message=${error.message}"
+                }
+                state.onPlayerError(error, context, url, videoType, retryScope, playerKey)
             }
         }
     }
 
     DisposableEffect(exoPlayer) {
         if (exoPlayer == null) {
+            MediaLog.d("VideoLoading") { "No ExoPlayer bound key=$playerKey mid=$videoMid" }
             state.isLoading = false
             onDispose { }
         } else {
+            MediaLog.d("VideoLoading") {
+                "Attach listener key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(exoPlayer.playbackState)}"
+            }
             exoPlayer.addListener(playerListener)
             when (exoPlayer.playbackState) {
                 Player.STATE_READY -> state.observePlaybackProgress(
@@ -306,13 +394,20 @@ fun VideoPreview(
                 )
                 Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
             }
-            onDispose { exoPlayer.removeListener(playerListener) }
+            onDispose {
+                MediaLog.d("VideoLoading") { "Detach listener key=$playerKey mid=$videoMid" }
+                exoPlayer.removeListener(playerListener)
+            }
         }
     }
 
     // --- Playback state changes ---
     LaunchedEffect(state.isVideoVisible, shouldPlay, exoPlayer) {
         exoPlayer?.let {
+            MediaLog.d("VideoLoading") {
+                "Handle playback change key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(it.playbackState)} " +
+                    "play=$shouldPlay effectiveVisible=$effectivelyVisible playWhenReady=${it.playWhenReady}"
+            }
             state.handlePlaybackStateChange(it, shouldPlay, effectivelyVisible, playerKey)
         }
     }
@@ -358,6 +453,10 @@ fun VideoPreview(
     var showLoadingSpinner by remember { mutableStateOf(false) }
     LaunchedEffect(state.isLoading, shouldAcquirePlayer, shouldPlay) {
         val shouldShowSpinner = state.isLoading && shouldAcquirePlayer && shouldPlay
+        MediaLog.d("VideoLoading") {
+            "Loading flag key=$playerKey mid=$videoMid isLoading=${state.isLoading} " +
+                "acquire=$shouldAcquirePlayer play=$shouldPlay showSpinner=$shouldShowSpinner"
+        }
         if (shouldShowSpinner) {
             delay(500)
             showLoadingSpinner = true
@@ -373,7 +472,7 @@ fun VideoPreview(
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
                 findViewById<Button>(R.id.retry_button).setOnClickListener {
-                    state.manualRetry(ctx, url, videoType, retryScope)
+                    state.manualRetry(ctx, url, videoType, retryScope, playerKey)
                 }
                 if (enableTapToShowControls) {
                     playerView.useController = true
@@ -482,6 +581,13 @@ fun VideoPreview(
                 if (!shouldReportImmediately && timeSinceLastUpdate < state.visibilityUpdateThrottleMs) {
                     return@onGloballyPositioned
                 }
+                if (shouldReportImmediately) {
+                    MediaLog.d("VideoLoading") {
+                        "Visibility geometry key=$playerKey mid=$videoMid ratio=$measuredVisibilityRatio " +
+                            "was=${state.lastVisibilityRatio} visible=$newVisibility " +
+                            "crossAuto=$crossedAutoplayThreshold crossContinue=$crossedContinueThreshold"
+                    }
+                }
                 state.lastVisibilityUpdate = now
                 if (state.isVideoVisible != newVisibility) {
                     state.isVideoVisible = newVisibility
@@ -505,4 +611,12 @@ fun VideoPreview(
             }
             .then(if (enableTapToShowControls) Modifier else Modifier.clickable { callback(index) })
     )
+}
+
+private fun videoPreviewPlayerStateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "UNKNOWN($state)"
 }

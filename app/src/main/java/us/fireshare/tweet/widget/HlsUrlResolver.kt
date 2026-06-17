@@ -1,9 +1,10 @@
 package us.fireshare.tweet.widget
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
@@ -11,6 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.LinkedHashMap
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Resolves the correct HLS playlist URL (master.m3u8 vs playlist.m3u8) for a given base URL.
@@ -26,7 +28,7 @@ import java.util.Properties
  *  1. Check in-memory cache  — instant, zero network cost.
  *  2. Check disk cache       — fast, zero network cost.
  *  3. Probe both master.m3u8 and playlist.m3u8 in PARALLEL with HTTP HEAD requests;
- *     master is preferred when both succeed.
+ *     the first successful response wins.
  *  4. Persist the winner to disk so all future loads skip probing entirely.
  *
  * Disk storage: a Java Properties file in context.cacheDir ("hls_url_cache.properties").
@@ -92,29 +94,37 @@ object HlsUrlResolver {
             return "${base}master.m3u8"
         }
 
-        // Slow path — parallel probe both candidates simultaneously
+        // Slow path — race both candidates simultaneously
         val masterUrl   = "${base}master.m3u8"
         val playlistUrl = "${base}playlist.m3u8"
 
-        Timber.d("HlsUrlResolver: parallel probe — $masterUrl  |  $playlistUrl")
+        Timber.d("HlsUrlResolver: racing probes — $masterUrl  |  $playlistUrl")
 
         val suffix = withContext(Dispatchers.IO) {
             coroutineScope {
-                val masterOk   = async { probeUrl(masterUrl) }
-                val playlistOk = async { probeUrl(playlistUrl) }
+                val winner = CompletableDeferred<String?>()
+                val failures = AtomicInteger(0)
 
-                val mOk = masterOk.await()
-                val pOk = playlistOk.await()
-
-                when {
-                    mOk  -> "master.m3u8"
-                    pOk  -> "playlist.m3u8"
-                    else -> {
-                        // Both probes failed (offline, DNS error, etc.) — default to master
-                        // so ExoPlayer's own error-handling takes over, as before.
-                        Timber.w("HlsUrlResolver: both probes failed for $base, defaulting to master")
-                        "master.m3u8"
+                fun probeCandidate(suffix: String, url: String) = launch {
+                    if (probeUrl(url)) {
+                        winner.complete(suffix)
+                    } else if (failures.incrementAndGet() == 2) {
+                        winner.complete(null)
                     }
+                }
+
+                val masterJob = probeCandidate("master.m3u8", masterUrl)
+                val playlistJob = probeCandidate("playlist.m3u8", playlistUrl)
+
+                val firstSuccess = winner.await()
+                masterJob.cancel()
+                playlistJob.cancel()
+
+                firstSuccess ?: run {
+                    // Both probes failed (offline, DNS error, etc.) — default to master
+                    // so ExoPlayer's own error-handling takes over, as before.
+                    Timber.w("HlsUrlResolver: both probes failed for $base, defaulting to master")
+                    "master.m3u8"
                 }
             }
         }

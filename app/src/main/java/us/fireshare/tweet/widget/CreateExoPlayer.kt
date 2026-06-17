@@ -48,10 +48,10 @@ fun createExoPlayer(
     mediaType: MediaType? = null,
     forceSoftwareDecoder: Boolean = false,
     resolvedHlsUrl: String? = null,
-    minBufferMs: Int = 3_000,
-    maxBufferMs: Int = 12_000,
-    bufferForPlaybackMs: Int = 500,
-    bufferForPlaybackAfterRebufferMs: Int = 1_000,
+    minBufferMs: Int = 8_000,
+    maxBufferMs: Int = 30_000,
+    bufferForPlaybackMs: Int = 1_000,
+    bufferForPlaybackAfterRebufferMs: Int = 3_000,
     maxVideoWidth: Int? = FEED_MAX_VIDEO_DIMENSION,
     maxVideoHeight: Int? = FEED_MAX_VIDEO_DIMENSION,
     maxVideoBitrate: Int? = null
@@ -101,7 +101,8 @@ fun createExoPlayer(
         }
     }
 
-    // Moderate buffering to balance smooth playback with memory usage on low-end devices
+    // Feed HLS/IPFS streams can arrive in uneven bursts. Keep enough buffer so inline
+    // playback does not resume after every tiny refill and immediately stall again.
     val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
             minBufferMs,

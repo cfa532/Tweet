@@ -251,6 +251,10 @@ object VideoManager {
         preloadedVideos.remove(videoMid)
         inactiveSinceTimestamps.remove(videoMid)
         touchPlayer(videoMid)
+        MediaLog.d("VideoLoading") {
+            "Manager visible key=$videoMid visibleCount=${visibleVideoCounts[videoMid]} " +
+                "activeCount=${activeVideos.getOrDefault(videoMid, 0)} players=${videoPlayers.size}"
+        }
     }
 
     /**
@@ -274,6 +278,11 @@ object VideoManager {
         val stillVisible = visibleVideoCounts.getOrDefault(videoMid, 0) > 0
         val stillActive = activeVideos.getOrDefault(videoMid, 0) > 0
         val retainedByPlaybackOwner = isPlaybackOwnerProtected(videoMid)
+        MediaLog.d("VideoLoading") {
+            "Manager not-visible key=$videoMid visibleCount=${visibleVideoCounts.getOrDefault(videoMid, 0)} " +
+                "activeCount=${activeVideos.getOrDefault(videoMid, 0)} retained=$retainedByPlaybackOwner " +
+                "fullscreen=${isVideoInFullScreen(videoMid)}"
+        }
         if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive && !retainedByPlaybackOwner) {
             // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
@@ -287,6 +296,9 @@ object VideoManager {
                     }
                     player.clearVideoSurface()
                     player.stop()
+                    MediaLog.d("VideoLoading") {
+                        "Manager stopped invisible player key=$videoMid pos=${player.currentPosition} duration=${player.duration}"
+                    }
                 } catch (e: Exception) {
                     Timber.e("VideoManager - Error stopping video: $e")
                 }
@@ -348,7 +360,8 @@ object VideoManager {
         val preloadTargets = directionalVideos
             .distinctBy { it.mid }
             .take(preloadCount)
-        val protectedIds = preloadTargets.map { it.mid }.toSet()
+        val visibleMediaIds = loadVisibleVideos.map { it.mid }.toSet()
+        val protectedIds = (preloadTargets.map { it.mid } + visibleMediaIds).toSet()
 
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
@@ -493,8 +506,8 @@ object VideoManager {
         videoMid: MimeiId,
         directionalPreloads: Set<MimeiId>
     ): Boolean {
-        if (activeVideos.containsKey(videoMid)) return true
-        if (visibleVideos.contains(videoMid)) return true
+        if (hasActiveAppearanceForMedia(videoMid)) return true
+        if (hasVisibleAppearanceForMedia(videoMid)) return true
         if (isCoordinatorRetainedVideo(videoMid)) return true
         if (directionalPreloads.contains(videoMid)) return true
         if (isVideoProtectedForFullScreen(videoMid)) return true
@@ -515,6 +528,18 @@ object VideoManager {
 
     private fun keyMatchesMedia(playerKey: MimeiId, mediaMid: MimeiId): Boolean {
         return playerKey == mediaMid || playerKey.endsWith("_$mediaMid")
+    }
+
+    private fun keysReferToSameMedia(firstKey: MimeiId, secondKey: MimeiId): Boolean {
+        return keyMatchesMedia(firstKey, secondKey) || keyMatchesMedia(secondKey, firstKey)
+    }
+
+    private fun hasActiveAppearanceForMedia(mediaMid: MimeiId): Boolean {
+        return activeVideos.keys.any { keysReferToSameMedia(it, mediaMid) }
+    }
+
+    private fun hasVisibleAppearanceForMedia(mediaMid: MimeiId): Boolean {
+        return visibleVideos.any { keysReferToSameMedia(it, mediaMid) }
     }
 
     private fun hasPlayerForMedia(mediaMid: MimeiId): Boolean {
@@ -656,7 +681,7 @@ object VideoManager {
     /**
      * Stop preloading all videos
      */
-    fun stopAllPreloading() {
+    fun stopAllPreloading(releasePreloadedPlayers: Boolean = false) {
         // Cancel all active preload jobs
         preloadJobs.values.forEach { job ->
             try {
@@ -665,10 +690,19 @@ object VideoManager {
         }
         preloadJobs.clear()
         preloadingVideos.clear()
+        preloadQueue.clear()
+        if (releasePreloadedPlayers) {
+            preloadedVideos
+                .filter { isHiddenWarmPreload(it) }
+                .toList()
+                .forEach { releasePlayer(it) }
+        }
         synchronized(currentDirectionalPreloadVideos) {
             currentDirectionalPreloadVideos.clear()
         }
-        MediaLog.d { "VideoManager - Stopped all preloading" }
+        MediaLog.d("VideoLoading") {
+            "Stopped all preloading releasePreloadedPlayers=$releasePreloadedPlayers players=${videoPlayers.size}"
+        }
     }
 
     /**
@@ -735,6 +769,10 @@ object VideoManager {
         }
 
         val isReusing = videoPlayers.containsKey(videoMid)
+        MediaLog.d("VideoLoading") {
+            "Manager getPlayer key=$videoMid mediaMid=$mediaMid type=$videoType reuse=$isReusing " +
+                "resolvedHls=${resolvedHlsUrl?.substringAfterLast('/')} players=${videoPlayers.size}"
+        }
 
         // When offline, only reuse existing players — don't create new ones that trigger network
         if (!us.fireshare.tweet.HproseInstance.isOnline.value && !isReusing) {
@@ -756,6 +794,9 @@ object VideoManager {
                     videoType ?: MediaType.Video,
                     resolvedHlsUrl = resolvedHlsUrl
                 )
+                MediaLog.d("VideoLoading") {
+                    "Manager created player key=$videoMid state=${playerStateName(player.playbackState)} items=${player.mediaItemCount}"
+                }
                 player
             } catch (oom: OutOfMemoryError) {
                 Timber.tag("VideoManager").e("Player creation OOM for $videoMid; releasing unprotected feed players and retrying once")
@@ -766,6 +807,9 @@ object VideoManager {
                     videoType ?: MediaType.Video,
                     resolvedHlsUrl = resolvedHlsUrl
                 )
+                MediaLog.d("VideoLoading") {
+                    "Manager created player after OOM key=$videoMid state=${playerStateName(player.playbackState)}"
+                }
                 player
             } catch (e: Exception) {
                 Timber.tag("VideoManager").e("Player creation failed: ${e.message}")
@@ -774,6 +818,11 @@ object VideoManager {
             }
         }.also { player ->
             touchPlayer(videoMid)
+            MediaLog.d("VideoLoading") {
+                "Manager return player key=$videoMid reuse=$isReusing state=${playerStateName(player.playbackState)} " +
+                    "playWhenReady=${player.playWhenReady} active=${activeVideos.getOrDefault(videoMid, 0)} " +
+                    "visible=${visibleVideoCounts.getOrDefault(videoMid, 0)}"
+            }
             // Pop saved position before resetPlayerState can overwrite with seekTo(0)
             val savedPos = savedPositions.remove(videoMid)
             if (isReusing) {
@@ -850,6 +899,10 @@ object VideoManager {
         activeVideos[videoMid] = currentCount + 1
         preloadedVideos.remove(videoMid)
         inactiveSinceTimestamps.remove(videoMid)
+        MediaLog.d("VideoLoading") {
+            "Manager active key=$videoMid activeCount=${activeVideos[videoMid]} " +
+                "visibleCount=${visibleVideoCounts.getOrDefault(videoMid, 0)} players=${videoPlayers.size}"
+        }
     }
 
     /**
@@ -865,6 +918,10 @@ object VideoManager {
             } else {
                 activeVideos[videoMid] = newCount
             }
+        }
+        MediaLog.d("VideoLoading") {
+            "Manager inactive key=$videoMid activeCount=${activeVideos.getOrDefault(videoMid, 0)} " +
+                "visibleCount=${visibleVideoCounts.getOrDefault(videoMid, 0)} players=${videoPlayers.size}"
         }
         
         // Clean up inactive players periodically to prevent leaks
@@ -927,6 +984,7 @@ object VideoManager {
 
         videoPlayers.values.forEach { player ->
             try {
+                removeHlsFallbackListener(player)
                 player.clearVideoSurface()
                 player.stop()
                 player.release()
@@ -949,6 +1007,7 @@ object VideoManager {
         preloadQueue.clear()
         posterJobs.values.forEach { it.cancel() }
         posterJobs.clear()
+        clearHlsFallbackListeners()
         clearPosterBitmaps()
         savedPositions.clear()
         synchronized(currentDirectionalPreloadVideos) {
@@ -1053,6 +1112,7 @@ object VideoManager {
 
     private fun canCreateWarmPreload(videoMid: MimeiId): Boolean {
         if (hasPlayerForMedia(videoMid)) return false
+        if (hasForegroundPlaybackDemand()) return false
         if (isHeapTightForWarmPreload()) {
             releasePlayersForMemoryPressure()
             return false
@@ -1062,6 +1122,15 @@ object VideoManager {
 
         releaseOldestHiddenWarmPreload()
         return hiddenWarmPreloadCount() < MAX_WARM_PRELOADED_PLAYERS
+    }
+
+    private fun hasForegroundPlaybackDemand(): Boolean {
+        return videoPlayers.any { (videoMid, player) ->
+            (hasActiveAppearanceForMedia(videoMid) ||
+                hasVisibleAppearanceForMedia(videoMid) ||
+                isCoordinatorRetainedVideo(videoMid)) &&
+                (player.playWhenReady || player.isPlaying || player.playbackState == Player.STATE_BUFFERING)
+        }
     }
 
     private fun hiddenWarmPreloadCount(): Int {
@@ -1109,6 +1178,24 @@ object VideoManager {
         }
         preloadingVideos.remove(videoMid)
         preloadQueue.remove(videoMid)
+    }
+
+    private fun removeHlsFallbackListener(player: ExoPlayer?) {
+        if (player == null) return
+        hlsFallbackListeners.remove(player)?.let { listener ->
+            try {
+                player.removeListener(listener)
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun clearHlsFallbackListeners() {
+        hlsFallbackListeners.forEach { (player, listener) ->
+            try {
+                player.removeListener(listener)
+            } catch (_: Exception) { }
+        }
+        hlsFallbackListeners.clear()
     }
 
     fun ensureVideoPoster(
@@ -1227,11 +1314,12 @@ object VideoManager {
     }
 
     /**
-     * True only when a real ExoPlayer already exists for this media or appearance.
-     * Metadata-only HLS warming must not make a feed cell acquire a player early.
+     * True only when a reusable warm preload exists for this media or appearance.
+     * Normal visible players should not keep offscreen previews acquired just because
+     * their ExoPlayer still exists in the cache.
      */
     fun hasWarmVideoPlayer(videoMid: MimeiId): Boolean {
-        return hasPlayerForMedia(videoMid)
+        return hasPreloadForMedia(videoMid)
     }
 
     // ===== FULL-SCREEN MANAGEMENT =====
@@ -1295,10 +1383,10 @@ object VideoManager {
             player.stop()
             
             // Remove any existing HLS fallback listener
-            hlsFallbackListeners[player]?.let { existingListener ->
-                player.removeListener(existingListener)
-                hlsFallbackListeners.remove(player)
-            }
+            removeHlsFallbackListener(player)
+            val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                HlsUrlResolver.getCached(context, videoUrl)
+            } else null
             
             // Use the same cache-aware data source factory as createExoPlayer
             val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
@@ -1318,8 +1406,8 @@ object VideoManager {
             // Use DefaultMediaSourceFactory backed by CacheDataSource which handles HLS and progressive
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
             
-            // Add HLS fallback listener for HLS videos
-            if (videoType == MediaType.HLS_VIDEO) {
+            // Add HLS fallback listener only when the race result is not cached yet.
+            if (videoType == MediaType.HLS_VIDEO && resolvedHlsUrl == null) {
                 val fallbackListener = HLSFallbackListener(videoUrl, player, mediaSourceFactory)
                 player.addListener(fallbackListener)
                 hlsFallbackListeners[player] = fallbackListener
@@ -1328,10 +1416,11 @@ object VideoManager {
             // Create media source based on video type (same logic as createExoPlayer)
             val mediaSource = when (videoType) {
                 MediaType.HLS_VIDEO -> {
-                    // For HLS videos: start with master.m3u8
-                    val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
-                    val masterUrl = "${baseUrl}master.m3u8"
-                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+                    val hlsUrl = resolvedHlsUrl ?: run {
+                        val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                        "${baseUrl}master.m3u8"
+                    }
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(hlsUrl))
                 }
                 MediaType.Video -> {
                     // For progressive videos: play URL directly
@@ -1396,7 +1485,15 @@ object VideoManager {
      * Release full screen player
      */
     fun releaseFullScreenPlayer() {
-        fullScreenPlayer?.release()
+        fullScreenPlayer?.let { player ->
+            autoReplayListener?.let { listener ->
+                try {
+                    player.removeListener(listener)
+                } catch (_: Exception) { }
+            }
+            removeHlsFallbackListener(player)
+            player.release()
+        }
         fullScreenPlayer = null
         currentVideoUrl = null
         autoReplayListener = null
@@ -1507,13 +1604,13 @@ object VideoManager {
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
             
             // Remove any existing HLS fallback listener for this player
-            hlsFallbackListeners[player]?.let { existingListener ->
-                player.removeListener(existingListener)
-                hlsFallbackListeners.remove(player)
-            }
+            removeHlsFallbackListener(player)
+            val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                HlsUrlResolver.getCached(context, videoUrl)
+            } else null
             
-            // Add HLS fallback listener for HLS videos
-            if (videoType == MediaType.HLS_VIDEO) {
+            // Add HLS fallback listener only when the race result is not cached yet.
+            if (videoType == MediaType.HLS_VIDEO && resolvedHlsUrl == null) {
                 val fallbackListener = HLSFallbackListener(videoUrl, player, mediaSourceFactory)
                 player.addListener(fallbackListener)
                 hlsFallbackListeners[player] = fallbackListener
@@ -1521,10 +1618,11 @@ object VideoManager {
             
             val mediaSource = when (videoType) {
                 MediaType.HLS_VIDEO -> {
-                    // For HLS videos: try master.m3u8 first
-                    val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
-                    val masterUrl = "${baseUrl}master.m3u8"
-                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(masterUrl))
+                    val hlsUrl = resolvedHlsUrl ?: run {
+                        val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+                        "${baseUrl}master.m3u8"
+                    }
+                    mediaSourceFactory.createMediaSource(androidx.media3.common.MediaItem.fromUri(hlsUrl))
                 }
                 MediaType.Video -> {
                     // For progressive videos: play the URL directly
@@ -1569,6 +1667,9 @@ object VideoManager {
 
         if (inactivePlayers.isNotEmpty()) {
             MediaLog.d("VideoManager") { "🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players" }
+            MediaLog.d("VideoLoading") {
+                "Manager cleanup inactive=$inactivePlayers active=${activeVideos.keys} visible=${visibleVideos}"
+            }
             inactivePlayers.forEach { videoMid ->
                 releasePlayer(videoMid)
             }
@@ -1599,6 +1700,11 @@ object VideoManager {
         val player = videoPlayers.remove(videoMid)
         if (player != null) {
             try {
+                MediaLog.d("VideoLoading") {
+                    "Manager release key=$videoMid state=${playerStateName(player.playbackState)} " +
+                        "pos=${player.currentPosition} duration=${player.duration} playWhenReady=${player.playWhenReady}"
+                }
+                removeHlsFallbackListener(player)
                 // Save position before release (only if not already saved by markVideoNotVisible).
                 if (!savedPositions.containsKey(videoMid)) {
                     val pos = player.currentPosition
@@ -1618,6 +1724,7 @@ object VideoManager {
 
                 // Release the player completely
                 player.release()
+                MediaLog.d("VideoLoading") { "Manager released key=$videoMid" }
 
             } catch (e: Exception) {
                 Timber.tag("VideoManager").w("⚠️ Error releasing player for $videoMid: ${e.message}")
@@ -1662,6 +1769,7 @@ object VideoManager {
             val oldPlayer = videoPlayers[videoMid]
             oldPlayer?.let { player ->
                 try {
+                    removeHlsFallbackListener(player)
                     player.clearVideoSurface()
                     player.stop()
                     player.clearMediaItems()
@@ -1688,7 +1796,16 @@ object VideoManager {
             }
 
             // Create a completely new player with software decoder to avoid MediaCodec failures
-            val newPlayer = createExoPlayer(context, videoUrl, videoType ?: MediaType.Video, forceSoftwareDecoder = true)
+            val resolvedHlsUrl = if (videoType == MediaType.HLS_VIDEO) {
+                HlsUrlResolver.getCached(context, videoUrl)
+            } else null
+            val newPlayer = createExoPlayer(
+                context,
+                videoUrl,
+                videoType ?: MediaType.Video,
+                forceSoftwareDecoder = true,
+                resolvedHlsUrl = resolvedHlsUrl
+            )
             videoPlayers[videoMid] = newPlayer
             touchPlayer(videoMid)
             // Notify Compose that VideoPreview should re-read the player for this video.
