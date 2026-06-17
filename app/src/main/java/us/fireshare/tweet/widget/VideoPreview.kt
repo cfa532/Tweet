@@ -270,6 +270,18 @@ fun VideoPreview(
     // --- Lifecycle observer (pause/resume) ---
     val currentExoPlayer by rememberUpdatedState(exoPlayer)
     val currentShouldPlay by rememberUpdatedState(shouldPlay)
+    val currentState by rememberUpdatedState(state)
+    val currentPlayerKey by rememberUpdatedState(playerKey)
+    val currentVideoMid by rememberUpdatedState(videoMid)
+    val currentUrl by rememberUpdatedState(url)
+    val currentVideoType by rememberUpdatedState(videoType)
+    val currentShouldUseCoordinator by rememberUpdatedState(shouldUseCoordinator)
+    val currentAutoPlay by rememberUpdatedState(autoPlay)
+    val currentPlaybackTweetId by rememberUpdatedState(playbackTweetId)
+    val currentResolvedPlaybackVideoId by rememberUpdatedState(resolvedPlaybackVideoId)
+    val currentOnLoadComplete by rememberUpdatedState(onLoadComplete)
+    val currentOnVideoCompleted by rememberUpdatedState(onVideoCompleted)
+    val currentCoordinator by rememberUpdatedState(coordinator)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(
@@ -340,50 +352,57 @@ fun VideoPreview(
         }
     }
 
-    var playerHasRenderedFrame by remember { mutableStateOf(false) }
+    var playerHasLoadedData by remember { mutableStateOf(false) }
 
     // --- Player listener (attach/detach with player) ---
     val playerListener = remember {
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val player = currentExoPlayer
+                val activeState = currentState
+                val activePlayerKey = currentPlayerKey
+                val activeVideoMid = currentVideoMid
+                val activeShouldPlay = currentShouldPlay
+                val activeShouldUseCoordinator = currentShouldUseCoordinator
                 MediaLog.d("VideoLoading") {
-                    "Playback state key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(playbackState)} " +
-                        "play=$shouldPlay visible=${state.isVideoVisible} coordinatorWants=${state.coordinatorWantsToPlay} " +
+                    "Playback state key=$activePlayerKey mid=$activeVideoMid state=${videoPreviewPlayerStateName(playbackState)} " +
+                        "play=$activeShouldPlay visible=${activeState.isVideoVisible} coordinatorWants=${activeState.coordinatorWantsToPlay} " +
                         "pos=${player?.currentPosition} buffered=${player?.bufferedPosition} duration=${player?.duration} " +
                         "playWhenReady=${player?.playWhenReady} isPlaying=${player?.isPlaying}"
                 }
-                if (playbackState == Player.STATE_READY && videoMid != null) {
-                    VideoManager.ensureVideoPoster(context, videoMid, url, videoType, null)
+                if (playbackState == Player.STATE_READY && activeVideoMid != null) {
+                    playerHasLoadedData = true
+                    VideoManager.ensureVideoPoster(context, activeVideoMid, currentUrl, currentVideoType, null)
                 }
                 if (player == null) return
-                val playbackVisible = if (shouldUseCoordinator) {
-                    state.isVideoVisible || state.coordinatorWantsToPlay
+                val playbackVisible = if (activeShouldUseCoordinator) {
+                    activeState.isVideoVisible || activeState.coordinatorWantsToPlay
                 } else {
-                    state.isVideoVisible
+                    activeState.isVideoVisible
                 }
-                state.onPlaybackStateChanged(
-                    playbackState, player, shouldUseCoordinator, autoPlay,
-                    playbackVisible, coordinator, playbackTweetId, resolvedPlaybackVideoId, onLoadComplete, onVideoCompleted
+                activeState.onPlaybackStateChanged(
+                    playbackState, player, activeShouldUseCoordinator, currentAutoPlay,
+                    playbackVisible, currentCoordinator, currentPlaybackTweetId,
+                    currentResolvedPlaybackVideoId, currentOnLoadComplete, currentOnVideoCompleted
                 )
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 MediaLog.d("VideoLoading") {
-                    "isPlaying changed key=$playerKey mid=$videoMid isPlaying=$isPlaying playWhenReady=${currentExoPlayer?.playWhenReady}"
+                    "isPlaying changed key=$currentPlayerKey mid=$currentVideoMid isPlaying=$isPlaying playWhenReady=${currentExoPlayer?.playWhenReady}"
                 }
-                state.isPlaying = isPlaying
+                currentState.isPlaying = isPlaying
             }
             override fun onRenderedFirstFrame() {
                 MediaLog.d("VideoLoading") {
-                    "Rendered first frame key=$playerKey mid=$videoMid"
+                    "Rendered first frame key=$currentPlayerKey mid=$currentVideoMid"
                 }
-                playerHasRenderedFrame = true
+                playerHasLoadedData = true
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 MediaLog.d("VideoLoading") {
-                    "Player error key=$playerKey mid=$videoMid code=${error.errorCodeName} message=${error.message}"
+                    "Player error key=$currentPlayerKey mid=$currentVideoMid code=${error.errorCodeName} message=${error.message}"
                 }
-                state.onPlayerError(error, context, url, videoType, retryScope, playerKey)
+                currentState.onPlayerError(error, context, currentUrl, currentVideoType, retryScope, currentPlayerKey)
             }
         }
     }
@@ -392,20 +411,23 @@ fun VideoPreview(
         if (exoPlayer == null) {
             MediaLog.d("VideoLoading") { "No ExoPlayer bound key=$playerKey mid=$videoMid" }
             state.isLoading = false
-            playerHasRenderedFrame = false
+            playerHasLoadedData = false
             onDispose { }
         } else {
-            playerHasRenderedFrame = false
+            playerHasLoadedData = exoPlayer.hasLoadedVideoData()
             MediaLog.d("VideoLoading") {
                 "Attach listener key=$playerKey mid=$videoMid state=${videoPreviewPlayerStateName(exoPlayer.playbackState)}"
             }
             exoPlayer.addListener(playerListener)
             when (exoPlayer.playbackState) {
-                Player.STATE_READY -> state.observePlaybackProgress(
-                    exoPlayer,
-                    shouldPlay,
-                    effectivelyVisible
-                )
+                Player.STATE_READY -> {
+                    playerHasLoadedData = true
+                    state.observePlaybackProgress(
+                        exoPlayer,
+                        shouldPlay,
+                        effectivelyVisible
+                    )
+                }
                 Player.STATE_BUFFERING, Player.STATE_IDLE -> state.isLoading = true
             }
             onDispose {
@@ -413,7 +435,7 @@ fun VideoPreview(
                     ?.findViewById<PlayerView>(R.id.player_view)
                     ?.saveCurrentVideoFrame(videoMid)
                 state.isPlaying = false
-                playerHasRenderedFrame = false
+                playerHasLoadedData = false
                 MediaLog.d("VideoLoading") { "Detach listener key=$playerKey mid=$videoMid" }
                 exoPlayer.removeListener(playerListener)
             }
@@ -434,6 +456,9 @@ fun VideoPreview(
     LaunchedEffect(exoPlayer, shouldPlay, effectivelyVisible, url, videoType) {
         val player = exoPlayer ?: return@LaunchedEffect
         while (true) {
+            if (player.hasLoadedVideoData()) {
+                playerHasLoadedData = true
+            }
             state.observePlaybackProgress(
                 player,
                 shouldPlay,
@@ -508,22 +533,16 @@ fun VideoPreview(
             val playerView = view.findViewById<PlayerView>(R.id.player_view)
             if (playerView.player !== exoPlayer) {
                 playerView.saveCurrentVideoFrame(videoMid)
-                playerHasRenderedFrame = false
+                playerHasLoadedData = false
                 playerView.player = exoPlayer
             }
 
             val posterView = view.findViewById<ImageView>(R.id.video_poster)
-            val playerPlaybackState = exoPlayer?.playbackState
+            if (exoPlayer?.hasLoadedVideoData() == true) {
+                playerHasLoadedData = true
+            }
             val showPoster = cachedPoster != null &&
-                !playerHasRenderedFrame &&
-                (
-                    state.hasError ||
-                        state.isLoading ||
-                        !shouldPlay ||
-                        exoPlayer == null ||
-                        playerPlaybackState == Player.STATE_IDLE ||
-                        playerPlaybackState == Player.STATE_BUFFERING
-                    )
+                (exoPlayer == null || !playerHasLoadedData)
             if (showPoster) {
                 posterView.setImageBitmap(cachedPoster)
                 posterView.visibility = View.VISIBLE
@@ -657,7 +676,7 @@ private fun PlayerView.saveCurrentVideoFrame(videoMid: MimeiId?) {
     } catch (_: Exception) {
         return
     }
-    if (currentPosition <= 0L || playbackState == Player.STATE_IDLE) return
+    if (playbackState == Player.STATE_IDLE || !player.hasLoadedVideoData()) return
     val textureView = videoSurfaceView as? TextureView ?: return
     if (textureView.width <= 0 || textureView.height <= 0 || !textureView.isAvailable) return
 
@@ -685,6 +704,17 @@ private fun PlayerView.saveCurrentVideoFrame(videoMid: MimeiId?) {
     VideoManager.saveVideoPoster(videoMid, bitmap)
     MediaLog.d("VideoLoading") {
         "Saved video frame poster mid=$videoMid size=${bitmap.width}x${bitmap.height} pos=$currentPosition"
+    }
+}
+
+private fun Player.hasLoadedVideoData(): Boolean {
+    return try {
+        playbackState == Player.STATE_READY ||
+            playbackState == Player.STATE_ENDED ||
+            currentPosition > 0L ||
+            bufferedPosition > currentPosition
+    } catch (_: Exception) {
+        false
     }
 }
 

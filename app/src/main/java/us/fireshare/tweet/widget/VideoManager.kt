@@ -1220,9 +1220,13 @@ object VideoManager {
                 createPosterBitmap(context, videoUrl, videoType, resolvedHlsUrl)
             }
             if (poster != null && !poster.isRecycled) {
-                posterBitmaps[videoMid] = poster
-                posterAccessTimestamps[videoMid] = System.currentTimeMillis()
-                trimPosterBitmaps()
+                if (posterBitmaps.containsKey(videoMid)) {
+                    poster.recycle()
+                } else {
+                    posterBitmaps[videoMid] = poster
+                    posterAccessTimestamps[videoMid] = System.currentTimeMillis()
+                    trimPosterBitmaps()
+                }
             }
             posterJobs.remove(videoMid)
         }
@@ -1230,9 +1234,17 @@ object VideoManager {
 
     fun saveVideoPoster(videoMid: MimeiId, poster: Bitmap) {
         if (poster.isRecycled) return
-        posterBitmaps[videoMid] = poster
+        val previousPoster = posterBitmaps.put(videoMid, poster)
         posterAccessTimestamps[videoMid] = System.currentTimeMillis()
         trimPosterBitmaps()
+        if (previousPoster != null && previousPoster !== poster && !previousPoster.isRecycled) {
+            videoLoadingScope.launch {
+                delay(1_000L)
+                if (posterBitmaps[videoMid] !== previousPoster && !previousPoster.isRecycled) {
+                    previousPoster.recycle()
+                }
+            }
+        }
     }
 
     private fun trimPosterBitmaps() {
