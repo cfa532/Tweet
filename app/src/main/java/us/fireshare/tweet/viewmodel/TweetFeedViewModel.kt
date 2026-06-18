@@ -53,6 +53,10 @@ import kotlin.math.max
 class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
+    private val _pendingNewTweets = MutableStateFlow<List<Tweet>>(emptyList())
+    val pendingNewTweets: StateFlow<List<Tweet>> get() = _pendingNewTweets.asStateFlow()
+    private val _showNewTweetsBanner = MutableStateFlow(false)
+    val showNewTweetsBanner: StateFlow<Boolean> get() = _showNewTweetsBanner.asStateFlow()
 
     // Indicate the first time TweeFeed screen is loading.
     var initState = MutableStateFlow(true)      // initial load state
@@ -80,14 +84,87 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         return tweetRowTimestamps[mid] ?: timestamp
     }
 
+    private fun mergeAndSortTweets(currentTweets: List<Tweet>, incomingTweets: List<Tweet>): List<Tweet> {
+        return (currentTweets + incomingTweets)
+            .distinctBy { tweet: Tweet -> tweet.mid }
+            .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
+    }
+
+    private fun mergeTweetsIntoFeed(incomingTweets: List<Tweet>) {
+        _tweets.update { currentTweets ->
+            val currentTweetIds = currentTweets.map { it.mid }.toSet()
+            val trulyNewTweets = incomingTweets.filter { it.mid !in currentTweetIds }
+
+            if (trulyNewTweets.isNotEmpty()) {
+                mergeAndSortTweets(currentTweets, trulyNewTweets)
+            } else {
+                currentTweets
+            }
+        }
+    }
+
+    private fun mergeTopPageTweetsIntoFeed(incomingTweets: List<Tweet>) {
+        _tweets.update { currentTweets ->
+            val visibleIncomingTweets = incomingTweets.filter { tweet -> !tweet.isPrivate }
+
+            if (visibleIncomingTweets.isNotEmpty()) {
+                mergeAndSortTweets(currentTweets, visibleIncomingTweets)
+            } else {
+                currentTweets
+            }
+        }
+    }
+
+    private fun queuePendingNewTweets(incomingTweets: List<Tweet>) {
+        val visibleTweetIds = _tweets.value.map { it.mid }.toSet()
+        val existingPendingIds = _pendingNewTweets.value.map { it.mid }.toSet()
+        val trulyNewTweets = incomingTweets.filter { tweet ->
+            !tweet.isPrivate && tweet.mid !in visibleTweetIds && tweet.mid !in existingPendingIds
+        }
+
+        if (trulyNewTweets.isNotEmpty()) {
+            _pendingNewTweets.update { pendingTweets ->
+                mergeAndSortTweets(pendingTweets, trulyNewTweets)
+            }
+            _showNewTweetsBanner.value = true
+        } else if (_pendingNewTweets.value.isNotEmpty()) {
+            _showNewTweetsBanner.value = true
+        }
+    }
+
+    private fun clearPendingNewTweets() {
+        _pendingNewTweets.value = emptyList()
+        _showNewTweetsBanner.value = false
+    }
+
+    fun applyPendingNewTweets() {
+        val pendingTweets = _pendingNewTweets.value
+        if (pendingTweets.isNotEmpty()) {
+            mergeTopPageTweetsIntoFeed(pendingTweets)
+        }
+        clearPendingNewTweets()
+    }
+
+    fun dismissNewTweetsBanner() {
+        _showNewTweetsBanner.value = false
+    }
+
     private var feedRefreshTimerJob: Job? = null
     private var nextFeedRefreshRunAtMs: Long = 0L
+    private var hasEnteredBackground = false
+    private var foregroundRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
+            if (hasEnteredBackground) {
+                hasEnteredBackground = false
+                scheduleNextFeedRefreshFromNow()
+                refreshFeedDirectlyAfterForeground()
+            }
             startFeedRefreshTimer()
         }
 
         override fun onStop(owner: LifecycleOwner) {
+            hasEnteredBackground = true
             stopFeedRefreshTimer()
         }
     }
@@ -218,22 +295,27 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * Called after login or logout(). Update current user's following list and tweets.
      * When new following is added or removed, _followings will be updated also.
      * */
-    suspend fun refresh(pageNumber: Int = 0) {
+    suspend fun refresh(pageNumber: Int = 0, deferNewTweets: Boolean = false) {
         // Don't save appUser here - it gets saved after network initialization with full data
         if (pageNumber != 0) {
-            fetchTweets(pageNumber)
+            fetchTweets(pageNumber, deferNewTweets = deferNewTweets)
             return
         }
 
-        fetchInitialPagesUsingIosPaginationRule()
+        if (deferNewTweets) {
+            fetchTweets(0, deferNewTweets = true)
+            return
+        }
+
+        fetchInitialPagesUsingIosPaginationRule(deferNewTweets = deferNewTweets)
     }
 
-    private suspend fun fetchInitialPagesUsingIosPaginationRule() {
+    private suspend fun fetchInitialPagesUsingIosPaginationRule(deferNewTweets: Boolean = false) {
         var pageToLoad = 0
         var autoLoadedExtraPages = 0
 
         while (true) {
-            val tweetsFromServer = fetchTweets(pageToLoad)
+            val tweetsFromServer = fetchTweets(pageToLoad, deferNewTweets = deferNewTweets)
             val validTweetCount = tweetsFromServer.count { it != null }
             val responseWasFull = tweetsFromServer.size >= TW_CONST.PAGE_SIZE
             val needsMinimumTweets = _tweets.value.size < minimumTweetsBeforeStoppingInitialLoad
@@ -278,13 +360,38 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val minimumTweetsBeforeStoppingInitialLoad = 4
     private val maxAutoLoadedInitialPages = 200
 
+    private fun scheduleNextFeedRefreshFromNow() {
+        nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
+    }
+
+    private fun refreshFeedDirectlyAfterForeground() {
+        if (!isInitialized || !HproseInstance.isOnline.value) {
+            return
+        }
+
+        if (foregroundRefreshJob?.isActive == true) {
+            return
+        }
+
+        foregroundRefreshJob = applicationScope.launch(IO) {
+            try {
+                Timber.tag("TweetFeedViewModel").d("Foreground return: refreshing latest tweets directly")
+                refresh(0, deferNewTweets = false)
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed on foreground")
+            } finally {
+                foregroundRefreshJob = null
+            }
+        }
+    }
+
     private fun startFeedRefreshTimer() {
         if (feedRefreshTimerJob?.isActive == true) {
             return
         }
 
         if (nextFeedRefreshRunAtMs == 0L) {
-            nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
+            scheduleNextFeedRefreshFromNow()
         }
 
         feedRefreshTimerJob = applicationScope.launch(IO) {
@@ -295,8 +402,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     break
                 }
 
-                refresh(0)
-                nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
+                refresh(0, deferNewTweets = true)
+                scheduleNextFeedRefreshFromNow()
             }
         }
     }
@@ -306,7 +413,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         feedRefreshTimerJob = null
     }
 
-    fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE) {
+    fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE, deferNewTweets: Boolean = false) {
         if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value) {
             return
         }
@@ -334,18 +441,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 rememberTweetRowTimestamps(followingTweets)
 
                 withContext(Main) {
-                    _tweets.update { currentTweets ->
-                        val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                        val trulyNewFollowingTweets =
-                            followingTweets.filter { it.mid !in currentTweetIds }
-
-                        if (trulyNewFollowingTweets.isNotEmpty()) {
-                            (currentTweets + trulyNewFollowingTweets)
-                                .distinctBy { it.mid }
-                                .sortedByDescending { it.feedOrderingTimestamp() }
-                        } else {
-                            currentTweets
-                        }
+                    if (deferNewTweets) {
+                        queuePendingNewTweets(followingTweets)
+                    } else {
+                        mergeTweetsIntoFeed(followingTweets)
                     }
                 }
             } catch (e: Exception) {
@@ -370,14 +469,28 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     suspend fun fetchTweets(
         pageNumber: Int,   // page number for pagination (0, 1, 2, etc.)
         pageSize: Int = TW_CONST.PAGE_SIZE,   // page size to be loaded.
+        deferNewTweets: Boolean = false,
     ): List<Tweet?> {
         val guardPageZero = pageNumber == 0
-        if (guardPageZero && !pageZeroFetchMutex.tryLock()) {
-            Timber.tag("TweetFeedViewModel").d("Page 0 feed refresh already running; skipping duplicate")
-            return emptyList()
+        val lockedPageZero = if (guardPageZero) {
+            if (deferNewTweets) {
+                if (!pageZeroFetchMutex.tryLock()) {
+                    Timber.tag("TweetFeedViewModel").d("Page 0 feed refresh already running; skipping duplicate")
+                    return emptyList()
+                }
+            } else {
+                pageZeroFetchMutex.lock()
+            }
+            true
+        } else {
+            false
         }
 
         try {
+        if (pageNumber == 0 && !deferNewTweets) {
+            clearPendingNewTweets()
+        }
+
         val cachedTweets = loadCachedTweets(pageNumber * pageSize, pageSize)
         
         if (pageNumber == 0) {
@@ -395,33 +508,34 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             }
             val defaultUserId = alphaIds.first()
             Timber.tag("TweetFeedViewModel").d("🔍 Using defaultUserId (first alphaId): $defaultUserId")
-            _tweets.update { currentTweets ->
-                val allTweets = (cachedTweets + currentTweets)
-                    // only show default tweets to guest
-                    .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
-                Timber.tag("TweetFeedViewModel").d("🔍 Cached tweets for alphaId: ${allTweets.size}")
-                allTweets
+            if (!deferNewTweets) {
+                _tweets.update { currentTweets ->
+                    val allTweets = (cachedTweets + currentTweets)
+                        // only show default tweets to guest
+                        .filter { tweet: Tweet -> tweet.authorId == defaultUserId }
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
+                    Timber.tag("TweetFeedViewModel").d("🔍 Cached tweets for alphaId: ${allTweets.size}")
+                    allTweets
+                }
             }
             Timber.tag("TweetFeedViewModel").d("🔍 Calling getTweets for userId: $defaultUserId, pageNumber: $pageNumber")
-            val result = getTweets(defaultUserId, pageNumber)
+            val result = getTweets(defaultUserId, pageNumber, deferNewTweets = deferNewTweets)
             Timber.tag("TweetFeedViewModel").d("🔍 getTweets returned ${result.size} tweets")
             return result
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
             // Immediately merge cached tweets if they're not already in the list
-            _tweets.update { currentTweets ->
-                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+            if (!deferNewTweets) {
+                _tweets.update { currentTweets ->
+                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
+                    val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
 
-                if (newCachedTweets.isNotEmpty()) {
-                    val allTweets = (currentTweets + newCachedTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
-                    allTweets
-                } else {
-                    currentTweets
+                    if (newCachedTweets.isNotEmpty()) {
+                        mergeAndSortTweets(currentTweets, newCachedTweets)
+                    } else {
+                        currentTweets
+                    }
                 }
             }
 
@@ -479,19 +593,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("MainFeed").d("🌐 Network returned raw=${tweetsWithNulls.size}, valid=${validTweets.size} tweets")
             }
 
-            // Always merge new tweets with existing ones, never replace
-            _tweets.update { currentTweets ->
-                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val trulyNewTweets = validTweets.filter { it.mid !in currentTweetIds }
-
-                if (trulyNewTweets.isNotEmpty()) {
-                    val mergedTweets = (currentTweets + trulyNewTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
-                    mergedTweets
-                } else {
-                    currentTweets
-                }
+            if (deferNewTweets) {
+                queuePendingNewTweets(validTweets)
+            } else if (pageNumber == 0) {
+                mergeTopPageTweetsIntoFeed(validTweets)
+            } else {
+                mergeTweetsIntoFeed(validTweets)
             }
 
             /**
@@ -515,12 +622,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * // Process both results together
              * */
             if (pageNumber == 0) {
-                refreshFollowingTweets(pageSize)
+                refreshFollowingTweets(pageSize, deferNewTweets = deferNewTweets)
             }
             return tweetsWithNulls
         }
         } finally {
-            if (guardPageZero) {
+            if (lockedPageZero) {
                 pageZeroFetchMutex.unlock()
             }
         }
@@ -529,7 +636,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     /**
      * Given an user Id, load its tweets on a page.
      * */
-    private suspend fun getTweets(userId: MimeiId, pageNumber: Int = 0): List<Tweet?> {
+    private suspend fun getTweets(
+        userId: MimeiId,
+        pageNumber: Int = 0,
+        deferNewTweets: Boolean = false,
+    ): List<Tweet?> {
         try {
             Timber.tag("GetTweets").d("🔍 Fetching user data for userId: $userId")
             
@@ -565,16 +676,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 rememberTweetRowTimestamps(validTweets)
                 Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
-                _tweets.update { list ->
-                    val beforeFilter = validTweets + list
-                    val afterPrivateFilter =
-                        beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
-                    val mergedTweets = afterPrivateFilter
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
+                if (deferNewTweets) {
+                    queuePendingNewTweets(validTweets)
+                } else if (pageNumber == 0) {
+                    mergeTopPageTweetsIntoFeed(validTweets)
+                } else {
+                    _tweets.update { list ->
+                        val beforeFilter = validTweets + list
+                        val afterPrivateFilter =
+                            beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                        val mergedTweets = afterPrivateFilter
+                            .distinctBy { tweet: Tweet -> tweet.mid }
+                            .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
 
-                    Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
-                    mergedTweets
+                        Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
+                        mergedTweets
+                    }
                 }
                 return tweetsWithNulls
             }
@@ -601,16 +718,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             rememberTweetRowTimestamps(validTweets)
             Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
-            _tweets.update { list ->
-                val beforeFilter = validTweets + list
-                val afterPrivateFilter =
-                    beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
-                val mergedTweets = afterPrivateFilter
-                    .distinctBy { tweet: Tweet -> tweet.mid }
-                    .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
+            if (deferNewTweets) {
+                queuePendingNewTweets(validTweets)
+            } else if (pageNumber == 0) {
+                mergeTopPageTweetsIntoFeed(validTweets)
+            } else {
+                _tweets.update { list ->
+                    val beforeFilter = validTweets + list
+                    val afterPrivateFilter =
+                        beforeFilter.filterNot { tweet: Tweet -> tweet.isPrivate }
+                    val mergedTweets = afterPrivateFilter
+                        .distinctBy { tweet: Tweet -> tweet.mid }
+                        .sortedByDescending { tweet: Tweet -> tweet.feedOrderingTimestamp() }
 
-                Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
-                mergedTweets
+                    Timber.tag("GetTweets").d("🔍 After merging and filtering: ${mergedTweets.size} tweets")
+                    mergedTweets
+                }
             }
             return tweetsWithNulls
         } catch (e: Exception) {

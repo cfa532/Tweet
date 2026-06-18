@@ -223,7 +223,7 @@ dependencies {
     "fullImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
     "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
     "playImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
-    "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
+//    "playImplementation"("com.arthenica:smart-exception-java:0.2.1")
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)

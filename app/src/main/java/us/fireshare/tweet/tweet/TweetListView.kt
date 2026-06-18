@@ -422,42 +422,44 @@ fun TweetListView(
             // tweet videos should not wait for that slower work before they can autoplay.
             coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
 
-            // Detect if this is a user change (need full rebuild)
-            val needsFullRebuild = currentUserId != null && 
-                                   (processedTweetIds.isEmpty() || lastProcessedTweetCount > tweets.size)
+            val newTweets = tweets.filter { it.mid !in processedTweetIds }
+            val newTweetIds = newTweets.map { it.mid }.toSet()
+            val newTweetsAreTailAppend = newTweets.isNotEmpty() &&
+                tweets.takeLast(newTweets.size).all { it.mid in newTweetIds }
+            val needsFullRebuild = processedTweetIds.isEmpty() ||
+                lastProcessedTweetCount > tweets.size ||
+                (newTweets.isNotEmpty() && !newTweetsAreTailAppend)
             
             val videoJob = launch(Dispatchers.IO) {
                 try {
                     if (needsFullRebuild) {
-                        // Full rebuild for user change or initial load
                         Timber.tag("TweetListView").d("Full video list rebuild for ${tweets.size} tweets")
                         processedTweetIds.clear()
                         val newVideoList = createVideoIndexedListAsync(tweets)
                         tweets.forEach { processedTweetIds.add(it.mid) }
 
                         withContext(Dispatchers.Main) {
+                            videoIndexedList = newVideoList
+                            lastProcessedTweetCount = tweets.size
                             tweetListViewModel.setVideoIndexedList(newVideoList)
                             onVideoIndexedListChange?.invoke(newVideoList)
                             coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
                         }
-                    } else if (tweets.size > lastProcessedTweetCount) {
-                        // PERF FIX: Use takeLast instead of filter for O(1) slice
-                        // Incremental update - only process new tweets
-                        val newCount = tweets.size - lastProcessedTweetCount
-                        val newTweets = tweets.takeLast(newCount)
+                    } else if (newTweets.isNotEmpty()) {
+                        Timber.tag("TweetListView").d("Incremental video list update: ${newTweets.size} new tweets")
+                        val newVideos = createVideoIndexedListAsync(newTweets)
+                        newTweets.forEach { processedTweetIds.add(it.mid) }
 
-                        if (newTweets.isNotEmpty()) {
-                            Timber.tag("TweetListView").d("Incremental video list update: ${newTweets.size} new tweets")
-                            val newVideos = createVideoIndexedListAsync(newTweets)
-                            newTweets.forEach { processedTweetIds.add(it.mid) }
-
-                            withContext(Dispatchers.Main) {
-                                // Simple append (already sorted by timestamp in creation)
-                                videoIndexedList = videoIndexedList + newVideos
-                                tweetListViewModel.setVideoIndexedList(videoIndexedList)
-                                onVideoIndexedListChange?.invoke(videoIndexedList)
-                                coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
-                            }
+                        withContext(Dispatchers.Main) {
+                            videoIndexedList = videoIndexedList + newVideos
+                            lastProcessedTweetCount = tweets.size
+                            tweetListViewModel.setVideoIndexedList(videoIndexedList)
+                            onVideoIndexedListChange?.invoke(videoIndexedList)
+                            coordinator.buildVideoList(tweets, pinnedTweets = pinnedTweets)
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            lastProcessedTweetCount = tweets.size
                         }
                     }
                 } catch (e: Exception) {
