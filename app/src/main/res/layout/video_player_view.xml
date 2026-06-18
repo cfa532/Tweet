@@ -65,34 +65,15 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@android:drawable/ic_dialog_alert"
-            android:contentDescription="@string/video_error" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/video_unavailable"
-            android:textSize="14sp" />
-
-        <Button
+        <ImageButton
             android:id="@+id/retry_button"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginTop="8dp"
-            android:text="@string/retry"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/retry_count_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textSize="10sp"
-            android:visibility="gone" />
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_video_retry_button"
+            android:contentDescription="@string/video_retry_playback"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_retry_24" />
     </LinearLayout>
 
 </FrameLayout>

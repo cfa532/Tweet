@@ -165,15 +165,26 @@ fun BottomNavigationBar(
         // Home should always bring you back to the main feed, even from deep stacks like UserProfile.
         // Prefer popping back to an existing TweetFeed instance (keeps its state/scroll), otherwise navigate.
         if (targetRoute == NavTweet.TweetFeed) {
-            val tweetFeedRouteName = NavTweet.TweetFeed::class.qualifiedName
-            // Pop any screens above TweetFeed (e.g. TweetDetail)
-            tweetFeedRouteName?.let { routeName ->
-                navController.popBackStack(routeName, inclusive = false)
+            val isOnTweetFeed = currentRoute?.contains("TweetFeed") == true
+            if (!isOnTweetFeed) {
+                val poppedToFeed = navController.popBackStack(
+                    route = NavTweet.TweetFeed,
+                    inclusive = false
+                )
+                if (!poppedToFeed) {
+                    navController.navigate(NavTweet.TweetFeed) {
+                        launchSingleTop = true
+                        restoreState = true
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                    }
+                }
             }
 
             BottomBarState.opacity = 0.98f
-            // Only scroll to top when user was already on feed (second tap); otherwise keep persisted position
-            if (currentRoute?.contains("TweetFeed") == true) {
+            // Only scroll to top when user was already on feed (second tap); otherwise keep persisted position.
+            if (isOnTweetFeed) {
                 BottomBarState.homeTapTrigger++
                 onScrollToTop()
             }

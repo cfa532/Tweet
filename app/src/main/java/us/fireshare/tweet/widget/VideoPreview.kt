@@ -4,11 +4,10 @@ import android.graphics.Bitmap
 import android.view.TextureView
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
@@ -516,7 +515,7 @@ fun VideoPreview(
                 playerContainerRef.set(this)
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
-                findViewById<Button>(R.id.retry_button).setOnClickListener {
+                findViewById<ImageButton>(R.id.retry_button).setOnClickListener {
                     state.manualRetry(ctx, url, videoType, retryScope, playerKey)
                 }
                 if (enableTapToShowControls) {
@@ -592,13 +591,6 @@ fun VideoPreview(
 
             val errorView = view.findViewById<LinearLayout>(R.id.error_view)
             errorView.visibility = if (state.hasError) View.VISIBLE else View.GONE
-            if (state.hasError && state.retryCount > 0) {
-                val retryLabel = view.findViewById<TextView>(R.id.retry_count_label)
-                retryLabel.visibility = View.VISIBLE
-                retryLabel.text = "Attempts: ${state.retryCount}"
-                view.findViewById<Button>(R.id.retry_button).text =
-                    if (state.retryCount > 0) "Retry Again" else "Retry"
-            }
         },
         modifier = modifier
             .clipToBounds()
