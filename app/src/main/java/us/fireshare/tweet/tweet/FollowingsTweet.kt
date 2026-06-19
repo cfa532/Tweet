@@ -155,7 +155,7 @@ private fun NewTweetsBanner(
 
     LaunchedEffect(visible, pendingTweetIds) {
         if (visible && pendingTweets.isNotEmpty()) {
-            delay(6_000)
+            delay(10_000)
             onAutoHide()
         }
     }
@@ -168,7 +168,7 @@ private fun NewTweetsBanner(
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f),
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
             modifier = Modifier
@@ -182,13 +182,13 @@ private fun NewTweetsBanner(
             ) {
                 Text(
                     text = "\u2191",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Normal)
                 )
                 NewTweetsAvatarCluster(pendingTweets)
                 Text(
                     text = if (pendingTweets.size == 1) "1 new tweet" else "${pendingTweets.size} new tweets",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Normal)
                 )
             }

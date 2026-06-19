@@ -375,8 +375,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         foregroundRefreshJob = applicationScope.launch(IO) {
             try {
-                Timber.tag("TweetFeedViewModel").d("Foreground return: refreshing latest tweets directly")
-                refresh(0, deferNewTweets = false)
+                Timber.tag("TweetFeedViewModel").d("Foreground return: checking latest tweets behind banner")
+                refresh(0, deferNewTweets = true)
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed on foreground")
             } finally {
