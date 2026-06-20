@@ -2,14 +2,7 @@ package us.fireshare.tweet.video
 
 import android.content.Context
 import android.net.Uri
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.FFmpegSession
-import com.arthenica.ffmpegkit.ReturnCode
-import com.arthenica.ffmpegkit.Statistics
-import com.arthenica.ffmpegkit.Log
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -417,44 +410,6 @@ class LocalHLSConverter(private val context: Context) {
     }
 
     /**
-     * Execute FFmpeg command asynchronously with real-time logging and progress tracking
-     */
-    private suspend fun executeFFmpegAsync(
-        command: String,
-        resolution: String
-    ): Boolean = suspendCancellableCoroutine { cont ->
-        Timber.tag(TAG).d("Starting async FFmpeg execution for $resolution")
-
-        val session = FFmpegKit.executeAsync(
-            command,
-            { completedSession: FFmpegSession ->
-                val rc = completedSession.returnCode
-                if (ReturnCode.isSuccess(rc)) {
-                    Timber.tag(TAG).d("FFmpeg $resolution conversion succeeded")
-                    cont.resume(true)
-                } else {
-                    val logs = completedSession.allLogsAsString
-                    Timber.tag(TAG).e("FFmpeg $resolution failed (rc=$rc): $logs")
-                    cont.resume(false)
-                }
-            },
-            { log: Log ->
-                // Real-time log output from FFmpeg
-                Timber.tag(TAG).d("FFmpeg $resolution log: ${log.message}")
-            },
-            { stats: Statistics ->
-                // Real-time statistics/progress from FFmpeg
-                Timber.tag(TAG).d("FFmpeg $resolution stats: time=${stats.time}ms, size=${stats.size}B, bitrate=${stats.bitrate}bps, speed=${stats.speed}x")
-            }
-        )
-
-        cont.invokeOnCancellation {
-            Timber.tag(TAG).w("Cancelling FFmpeg execution for $resolution")
-            session.cancel()
-        }
-    }
-
-    /**
      * Execute FFmpeg command with fallback from COPY codec to MediaCodec H.264.
      * If COPY codec fails, automatically retry with h264_mediacodec encoding.
      */
@@ -476,7 +431,7 @@ class LocalHLSConverter(private val context: Context) {
             )
 
             Timber.tag(TAG).d("FFmpeg command for $resolution (first attempt): $firstCommand")
-            executeFFmpegAsync(firstCommand, "$resolution (first attempt)")
+            LazyFFmpegKit.executeAsync(firstCommand, "$resolution (first attempt)", TAG)
         } else {
             encodeMp4ThenSegmentHls(
                 inputPath = inputPath,
@@ -619,7 +574,7 @@ class LocalHLSConverter(private val context: Context) {
         Timber.tag(TAG).d("FFmpeg command for $resolution MP4 encode: $encodeCommand")
 
         return try {
-            if (!executeFFmpegAsync(encodeCommand, "$resolution MP4 encode")) {
+            if (!LazyFFmpegKit.executeAsync(encodeCommand, "$resolution MP4 encode", TAG)) {
                 Timber.tag(TAG).e("FFmpeg $resolution MP4 encode failed")
                 false
             } else {
@@ -630,7 +585,7 @@ class LocalHLSConverter(private val context: Context) {
                 )
 
                 Timber.tag(TAG).d("FFmpeg command for $resolution HLS segment: $hlsCommand")
-                executeFFmpegAsync(hlsCommand, "$resolution HLS segment")
+                LazyFFmpegKit.executeAsync(hlsCommand, "$resolution HLS segment", TAG)
             }
         } finally {
             if (encodedMp4.exists()) {

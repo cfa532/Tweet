@@ -2,8 +2,6 @@ package us.fireshare.tweet.video
 
 import android.content.Context
 import android.net.Uri
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -466,14 +464,13 @@ class LocalVideoProcessingService(
             
             // Execute FFmpeg
             val startTime = System.currentTimeMillis()
-            val session = FFmpegKit.execute(command)
-            val returnCode = session.returnCode
+            val ffmpegResult = LazyFFmpegKit.execute(command, "standardization", TAG)
             val duration = System.currentTimeMillis() - startTime
             
             // Clean up temp input file
             tempInputFile.delete()
             
-            if (ReturnCode.isSuccess(returnCode)) {
+            if (ffmpegResult.success) {
                 val normalizedSize = normalizedFile.length()
                 val sizeDiff = normalizedSize - originalFileSize
                 val sizeChangePercent = if (originalFileSize > 0) {
@@ -497,8 +494,7 @@ class LocalVideoProcessingService(
                     normalizedBitrate = targetBitrate
                 )
             } else {
-                val logs = session.allLogsAsString
-                Timber.tag(TAG).e("Normalization failed: $logs")
+                Timber.tag(TAG).e("Normalization failed: ${ffmpegResult.logs}")
                 // Clean up failed normalized file
                 normalizedFile.delete()
                 NormalizationResult.Failed(uri)

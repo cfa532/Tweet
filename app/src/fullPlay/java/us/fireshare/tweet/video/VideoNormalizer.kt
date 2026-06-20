@@ -2,14 +2,7 @@ package us.fireshare.tweet.video
 
 import android.content.Context
 import android.net.Uri
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.FFmpegSession
-import com.arthenica.ffmpegkit.ReturnCode
-import com.arthenica.ffmpegkit.Statistics
-import com.arthenica.ffmpegkit.Log
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -36,44 +29,6 @@ class VideoNormalizer(private val context: Context) {
         private const val MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000L  // 2 hours maximum
         private const val BASE_PROCESSING_RATE_MS_PER_SECOND = 1500L  // 1.5 seconds processing per 1 second video
         private const val FILE_SIZE_MULTIPLIER = 0.001  // Additional time per MB of file size
-    }
-
-    /**
-     * Execute FFmpeg command asynchronously with real-time logging
-     */
-    private suspend fun executeFFmpegAsync(
-        command: String,
-        operation: String = "normalization"
-    ): Boolean = suspendCancellableCoroutine { cont ->
-        Timber.tag(TAG).d("Starting async FFmpeg execution for $operation")
-
-        val session = FFmpegKit.executeAsync(
-            command,
-            { completedSession: FFmpegSession ->
-                val rc = completedSession.returnCode
-                if (ReturnCode.isSuccess(rc)) {
-                    Timber.tag(TAG).d("FFmpeg $operation succeeded")
-                    cont.resume(true)
-                } else {
-                    val logs = completedSession.allLogsAsString
-                    Timber.tag(TAG).e("FFmpeg $operation failed (rc=$rc): $logs")
-                    cont.resume(false)
-                }
-            },
-            { log: Log ->
-                // Real-time log output from FFmpeg
-                Timber.tag(TAG).d("FFmpeg $operation log: ${log.message}")
-            },
-            { stats: Statistics ->
-                // Real-time statistics/progress from FFmpeg
-                Timber.tag(TAG).d("FFmpeg $operation stats: time=${stats.time}ms, size=${stats.size}B, bitrate=${stats.bitrate}bps, speed=${stats.speed}x")
-            }
-        )
-
-        cont.invokeOnCancellation {
-            Timber.tag(TAG).w("Cancelling FFmpeg execution for $operation")
-            session.cancel()
-        }
     }
 
     /**
@@ -205,7 +160,7 @@ class VideoNormalizer(private val context: Context) {
                 
                 // Execute FFmpeg command asynchronously (dynamic timeout)
                 val success = withTimeout(dynamicTimeoutMs) {
-                    executeFFmpegAsync(ffmpegCommand, operationDescription)
+                    LazyFFmpegKit.executeAsync(ffmpegCommand, operationDescription, TAG)
                 }
 
                 if (success) {
@@ -393,7 +348,7 @@ class VideoNormalizer(private val context: Context) {
                 
                 // Execute FFmpeg command asynchronously (dynamic timeout)
                 val success = withTimeout(dynamicTimeoutMs) {
-                    executeFFmpegAsync(ffmpegCommand, "normalization")
+                    LazyFFmpegKit.executeAsync(ffmpegCommand, "normalization", TAG)
                 }
 
                 if (success) {
