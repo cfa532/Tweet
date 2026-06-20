@@ -124,6 +124,7 @@ object VideoManager {
     private const val MAX_POSTER_BITMAPS = 24
     private const val MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES = 64L * 1024L * 1024L
     private const val INACTIVE_PLAYER_RELEASE_GRACE_MS = 1_500L
+    private const val DEBUG_SNAPSHOT_MIN_INTERVAL_MS = 2_000L
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -136,6 +137,7 @@ object VideoManager {
     private val posterJobs = ConcurrentHashMap<MimeiId, Job>()
     private var inactiveCleanupJob: Job? = null
     private var playerCacheLimitJob: Job? = null
+    private var lastDebugSnapshotAtMs: Long = 0L
     val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
     private val posterAccessTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
@@ -239,6 +241,40 @@ object VideoManager {
         return if (cachedFile.exists()) cachedFile else null
     }
 
+    fun logDebugSnapshot(reason: String) {
+        logVideoDebugSnapshot(reason, force = true)
+    }
+
+    private fun logVideoDebugSnapshot(reason: String, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastDebugSnapshotAtMs < DEBUG_SNAPSHOT_MIN_INTERVAL_MS) return
+        lastDebugSnapshotAtMs = now
+
+        val runtime = Runtime.getRuntime()
+        val usedHeapMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
+        val maxHeapMb = runtime.maxMemory() / (1024L * 1024L)
+        val directionalCount = synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.size
+        }
+        val protectedFullscreenCount = synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.size
+        }
+        val hiddenWarmPreloads = preloadedVideos.count { isHiddenWarmPreload(it) }
+        val foregroundPlayers = videoPlayers.keys.count { videoMid ->
+            activeVideos.containsKey(videoMid) || visibleVideos.contains(videoMid)
+        }
+
+        MediaLog.d("VideoMemory") {
+            "reason=$reason players=${videoPlayers.size} foregroundPlayers=$foregroundPlayers " +
+                "active=${activeVideos.size} visible=${visibleVideos.size} " +
+                "preloaded=${preloadedVideos.size} hiddenWarmPreloads=$hiddenWarmPreloads " +
+                "preloadJobs=${preloadJobs.size} preloading=${preloadingVideos.size} queue=${preloadQueue.size} " +
+                "directional=$directionalCount fullscreen=${currentFullScreenVideoMid != null} " +
+                "fullscreenProtected=$protectedFullscreenCount dedicatedFullscreen=${fullScreenPlayer != null} " +
+                "posters=${posterBitmaps.size} heap=${usedHeapMb}/${maxHeapMb}MB"
+        }
+    }
+
     // ===== VISIBILITY-BASED LOADING CONTROL =====
 
     /**
@@ -255,6 +291,7 @@ object VideoManager {
             "Manager visible key=$videoMid visibleCount=${visibleVideoCounts[videoMid]} " +
                 "activeCount=${activeVideos.getOrDefault(videoMid, 0)} players=${videoPlayers.size}"
         }
+        logVideoDebugSnapshot("visible")
     }
 
     /**
@@ -290,6 +327,7 @@ object VideoManager {
         } else if (!stillVisible && !stillActive && retainedByPlaybackOwner) {
             MediaLog.d("VideoManager") { "Preserving coordinator-owned player while view is detached: $videoMid" }
         }
+        logVideoDebugSnapshot("not-visible")
     }
 
     /**
@@ -713,6 +751,7 @@ object VideoManager {
         MediaLog.d("VideoLoading") {
             "Stopped all preloading releasePreloadedPlayers=$releasePreloadedPlayers players=${videoPlayers.size}"
         }
+        logVideoDebugSnapshot("stop-preloading", force = true)
     }
 
     /**
@@ -828,6 +867,9 @@ object VideoManager {
             }
         }.also { player ->
             touchPlayer(videoMid)
+            if (!isReusing) {
+                logVideoDebugSnapshot("player-created")
+            }
             MediaLog.d("VideoLoading") {
                 "Manager return player key=$videoMid reuse=$isReusing state=${playerStateName(player.playbackState)} " +
                     "playWhenReady=${player.playWhenReady} active=${activeVideos.getOrDefault(videoMid, 0)} " +
@@ -1580,6 +1622,7 @@ object VideoManager {
             "Handled memory pressure level=$level releaseVisibleFeedPlayers=$releaseVisibleFeedPlayers " +
                 "playersBefore=$beforeCount playersAfter=${videoPlayers.size}"
         )
+        logVideoDebugSnapshot("memory-pressure", force = true)
     }
 
     /**
@@ -1800,6 +1843,7 @@ object VideoManager {
         synchronized(fullScreenProtectedVideos) {
             fullScreenProtectedVideos.remove(videoMid)
         }
+        logVideoDebugSnapshot("player-released", force = true)
     }
     
     /**
