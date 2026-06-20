@@ -370,6 +370,7 @@ fun TweetListView(
             // Defer inactive player cleanup so the incoming screen has time to mark its
             // players as active/visible. Synchronous cleanup here races with navigation
             // and releases players that the next screen just created but hasn't registered yet.
+            VideoManager.stopAllPreloading(releasePreloadedPlayers = true)
             VideoManager.cleanupInactivePlayersDeferred()
             ImageCacheManager.clearDirectionalImagePreloads()
             // BUG FIX: Always clear loading states on dispose to prevent stuck spinners
@@ -596,7 +597,9 @@ fun TweetListView(
                     directionStableCount = 1
                     lastDirection
                 }
-                val scrollingStarted = isScrolling && !lastScrollingState
+                val wasScrolling = lastScrollingState
+                val scrollingStarted = isScrolling && !wasScrolling
+                val scrollingStopped = !isScrolling && wasScrolling
 
                 // Throttle VideoPlaybackCoordinator scroll direction updates
                 if (isScrolling && (abs(indexDelta) >= 2 || abs(offsetDelta) > 200)) {
@@ -627,7 +630,8 @@ fun TweetListView(
                     .toSet()
                 val preloadStateChanged = visibleTweetIndexes != lastMediaPreloadIndexes ||
                     mediaPreloadDirection != lastMediaPreloadDirection ||
-                    isScrolling != lastMediaPreloadScrolling
+                    isScrolling != lastMediaPreloadScrolling ||
+                    scrollingStopped
                 val preloadThrottleMs = if (isScrolling) 250L else 0L
                 if (visibleTweetIndexes.isNotEmpty() &&
                     preloadStateChanged &&

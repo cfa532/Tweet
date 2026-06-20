@@ -121,6 +121,7 @@ fun VideoPreview(
         shouldPlay,
         effectivelyVisible,
         state.isVideoVisible,
+        state.lastVisibilityRatio,
         hlsUrlReady,
         hasWarmPlayer,
         isInFullScreen,
@@ -131,6 +132,7 @@ fun VideoPreview(
         MediaLog.d("VideoLoading") {
             "Preview decision key=$playerKey mid=$videoMid type=$videoType acquire=$shouldAcquirePlayer " +
                 "play=$shouldPlay visible=${state.isVideoVisible} effectiveVisible=$effectivelyVisible " +
+                "ratio=${state.lastVisibilityRatio} " +
                 "coordinator=$shouldUseCoordinator fullscreen=$isInFullScreen warm=$hasWarmPlayer " +
                 "hlsReady=$hlsUrlReady resolvedHls=${resolvedHlsUrl?.substringAfterLast('/')} " +
                 "playerGen=$playerGeneration preloadGen=$preloadGeneration urlPresent=${url != null}"
