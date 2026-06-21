@@ -104,13 +104,13 @@ fun CommentButton(
                 painter = painterResource(id = R.drawable.ic_ms_comment),
                 contentDescription = stringResource(R.string.comments),
                 modifier = Modifier.size(TweetActionIconSize),
-                tint = color ?: if (count > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                tint = color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = countText,
                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                color = color ?: MaterialTheme.colorScheme.primary,
+                color = color ?: MaterialTheme.colorScheme.secondary,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.width(28.dp)
