@@ -1084,6 +1084,10 @@ class UserViewModel @AssistedInject constructor(
         private val initUserFetchSemaphore = Semaphore(3)
     }
 
+    private fun publishRefreshedUser(freshUser: User) {
+        _user.value = freshUser
+    }
+
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications()
@@ -1120,18 +1124,22 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
 
-                // Fetch fresh user data in background and update
-                if (
-                    userId != appUser.mid &&
-                    (cachedUser == null || cachedUser.username.isNullOrBlank())
-                ) {
+                // Show cached user immediately, then refresh route/data in the background.
+                // baseUrl="" forces fetchUser to bypass stale cached baseUrl and resolve
+                // the read node (hostIds[1]) through NodePool/getHostIP.
+                if (userId != appUser.mid) {
                     launch(IO) {
                         try {
                             val freshUser = initUserFetchSemaphore.withPermit {
-                                fetchUser(userId, maxRetries = 2)
+                                fetchUser(
+                                    userId,
+                                    baseUrl = "",
+                                    maxRetries = 2,
+                                    forceRefresh = true
+                                )
                             }
                             if (freshUser != null) {
-                                _user.value = freshUser
+                                publishRefreshedUser(freshUser)
 
                                 // Update count variables with fresh data
                                 _bookmarksCount.value = freshUser.bookmarksCount
@@ -1148,8 +1156,6 @@ class UserViewModel @AssistedInject constructor(
                             Timber.tag("UserViewModel").e("Error updating user data for $userId: $e")
                         }
                     }
-                } else if (userId != appUser.mid) {
-                    Timber.tag("UserViewModel").d("Using cached user data for $userId")
                 }
 
                 if (userId == appUser.mid) {

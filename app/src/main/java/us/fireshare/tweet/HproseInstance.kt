@@ -75,7 +75,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 /**
- * NodePool: performance cache for node IP management
+ * NodePool: session source of truth for node IP management
  * 
  * Key Principles:
  * - Tracks access nodes (hostIds[1]) for READ operations only
@@ -85,9 +85,9 @@ import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstanc
  * - Thread-safe operations with mutex protection
  * 
  * Usage Flow:
- * 1. Try the user's access node once for a fast first read.
- * 2. On a miss or failure, resolve through getProviderIP(), the source of truth.
- * 3. After a successful read, update/replace the node's IP list.
+ * 1. Resolve a user's access node once, then share that node route across users.
+ * 2. Treat NodePool as authoritative during the app session.
+ * 3. Re-resolve only when the node entry is missing or proven stale.
  */
 object NodePool {
     data class NodeInfo(
@@ -4239,10 +4239,10 @@ object HproseInstance {
      * Resolves and updates user's baseUrl (for first attempt or retries).
      * 
      * NodePool Integration:
-     * - First attempt: try NodePool once as a performance hint.
-     * - NodePool miss: try the cached baseUrl once because dynamic IPs rarely change.
-     * - Forced refresh and retry attempts: resolve through getProviderIP().
-     * - After successful resolution: update NodePool with the fresh IP.
+     * - NodePool is the app-session source of truth for read-node routing.
+     * - First attempt uses the access-node entry from NodePool when available.
+     * - Re-resolution is a repair path for a missing or proven-stale node entry.
+     * - After successful resolution, update NodePool so all users on that node share it.
      */
     private suspend fun resolveAndUpdateBaseUrl(
         user: User, 
@@ -4284,7 +4284,8 @@ object HproseInstance {
             Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - No cached route for userId: ${user.mid}; resolving provider IP")
         }
         
-        // Resolve fresh IP (retry attempts or forced refresh)
+        // Direct read-node discovery is the strongest fallback for known users:
+        // baseUrl may be stale, while hostIds[1] identifies the node that serves reads.
         val reason = if (attempt > 1) {
             "retry attempt - resolving fresh IP"
         } else {
@@ -4293,6 +4294,23 @@ object HproseInstance {
                 hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
                 else -> "no baseUrl"
             }
+        }
+
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+        if (accessNodeMid != null) {
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving read node $accessNodeMid for userId: ${user.mid}, reason: $reason")
+            val accessIP = getHostIP(accessNodeMid)
+            if (!accessIP.isNullOrBlank()) {
+                user.baseUrl = if (accessIP.startsWith("http://") || accessIP.startsWith("https://")) {
+                    accessIP
+                } else {
+                    "http://$accessIP"
+                }
+                user.clearHproseService()
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using resolved read-node IP: ${user.baseUrl} for userId: ${user.mid}")
+                return
+            }
+            Timber.tag("updateUserFromServer").w("⚠️ getHostIP returned null for read node $accessNodeMid, falling back to provider IP for userId: ${user.mid}")
         }
         
         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
