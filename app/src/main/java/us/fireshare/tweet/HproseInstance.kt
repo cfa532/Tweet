@@ -1881,6 +1881,34 @@ object HproseInstance {
         }
     }
 
+    private suspend fun evictNodeRouteAfterFailure(
+        user: User,
+        attemptedBaseUrl: String?,
+        error: Throwable,
+        tag: String
+    ) {
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+        if (accessNodeMid == null || attemptedBaseUrl.isNullOrBlank()) return
+
+        // Timeout means the current route did not respond in time and should
+        // be evicted. For other failures, remove the shared node route only
+        // after a direct health check confirms this route is unreachable.
+        // User-level failures or malformed user data do not prove the node IP is stale.
+        if (error.hasTimeoutCause()) {
+            Timber.tag(tag).d("Removing timed-out node $accessNodeMid from pool")
+            NodePool.removeNode(accessNodeMid)
+            return
+        }
+
+        val routeStillHealthy = isServerHealthy(attemptedBaseUrl)
+        if (!routeStillHealthy) {
+            Timber.tag(tag).d("Removing unhealthy node $accessNodeMid from pool after failed route health check")
+            NodePool.removeNode(accessNodeMid)
+        } else {
+            Timber.tag(tag).d("Keeping node $accessNodeMid in pool; route health check still passes after failure")
+        }
+    }
+
     /**
      * Given user object get a list of Field-Value, where Field is user Id,
      * Value is timestamp when the following is added.
@@ -1933,6 +1961,10 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
+                evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFollowings")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
@@ -2002,6 +2034,10 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
+                evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFans")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
@@ -4410,17 +4446,10 @@ object HproseInstance {
                 val success = if (userData != null) {
                     processUserDataResponse(user, userData, skipRetryAndBlacklist)
                 } else {
-                    // unwrapV2Response returned null (either error response or null response)
-                    // MATCH iOS: Clear baseUrl and let retry loop handle it
-                    // This ensures next attempt will resolve fresh IP
+                    // unwrapV2Response returned null (either error response or null response).
+                    // This can mean the user was invalidated even when the node route is healthy,
+                    // so do not evict the shared NodePool entry from this signal alone.
                     Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
-
-                    // Remove unhealthy node from pool (null response indicates node issue)
-                    val accessNodeMid = user.hostIds?.getOrNull(1)
-                    if (accessNodeMid != null) {
-                        Timber.tag("updateUserFromServer").d("Removing node $accessNodeMid from pool after null response")
-                        NodePool.removeNode(accessNodeMid)
-                    }
 
                     user.baseUrl = null
 
@@ -4431,7 +4460,7 @@ object HproseInstance {
                             recordReliabilityFailureUser(user.mid)
                         }
                     } else {
-                        Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
+                        Timber.tag("updateUserFromServer").d("Will retry route repair on next attempt")
                     }
                     false
                 }
@@ -4465,18 +4494,7 @@ object HproseInstance {
                 // return stale "healthy" for the failed IP
                 invalidateIPCache(user.baseUrl)
 
-                // Remove unhealthy node from pool only for genuine connection failures.
-                // Timeouts and cancellations can be caused by backgrounding/task teardown,
-                // not necessarily an unhealthy node.
-                val isTransient = e is java.net.SocketTimeoutException ||
-                        e.message?.contains("timeout", ignoreCase = true) == true
-                if (!isTransient) {
-                    val accessNodeMid = user.hostIds?.getOrNull(1)
-                    if (accessNodeMid != null) {
-                        Timber.tag("updateUserFromServer").d("Removing unhealthy node $accessNodeMid from pool after failure")
-                        NodePool.removeNode(accessNodeMid)
-                    }
-                }
+                evictNodeRouteAfterFailure(user, user.baseUrl, e, "updateUserFromServer")
 
                 if (skipRetryAndBlacklist) {
                     return false
@@ -4490,13 +4508,8 @@ object HproseInstance {
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
 
-        // MATCH iOS: Remove node from pool and clear stale baseUrl
-        // so the NEXT fetchUser call forces fresh IP resolution via getProviderIP()
-        val accessNodeMid = user.hostIds?.getOrNull(1)
-        if (accessNodeMid != null && !user.baseUrl.isNullOrEmpty()) {
-            Timber.tag("updateUserFromServer").d("Removing failed node $accessNodeMid from pool after all retries failed")
-            NodePool.removeNode(accessNodeMid)
-        }
+        // Clear this user's failed route. Shared NodePool eviction is handled
+        // above only for timeout or confirmed-unhealthy route failures.
         user.baseUrl = null
 
         if (!skipRetryAndBlacklist && lastError != null) {
@@ -4855,7 +4868,9 @@ object HproseInstance {
         while (current != null) {
             if (
                 current is java.util.concurrent.TimeoutException ||
-                current.message?.contains("timeout", ignoreCase = true) == true
+                current is java.net.SocketTimeoutException ||
+                current.message?.contains("timeout", ignoreCase = true) == true ||
+                current.message?.contains("timed out", ignoreCase = true) == true
             ) {
                 return true
             }

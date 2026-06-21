@@ -7,6 +7,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.nio.channels.UnresolvedAddressException
+import java.util.concurrent.TimeoutException
 
 object ErrorMessageUtils {
     
@@ -83,20 +84,32 @@ object ErrorMessageUtils {
      * Checks if an error is network-related and should be retried
      */
     fun isNetworkError(error: Throwable?): Boolean {
-        return when (error) {
-            is SocketTimeoutException,
-            is ConnectException,
-            is UnknownHostException,
-            is UnresolvedAddressException,
-            is IOException -> true
-            else -> {
-                val message = error?.message?.lowercase() ?: ""
-                message.contains("timeout") || 
-                message.contains("connection") || 
-                message.contains("unreachable") || 
+        var current = error
+        while (current != null) {
+            when (current) {
+                is SocketTimeoutException,
+                is TimeoutException,
+                is ConnectException,
+                is UnknownHostException,
+                is UnresolvedAddressException,
+                is IOException -> return true
+            }
+
+            val message = current.message?.lowercase() ?: ""
+            if (
+                message.contains("timeout") ||
+                message.contains("timed out") ||
+                message.contains("connection") ||
+                message.contains("unreachable") ||
                 message.contains("network") ||
                 message.contains("unresolved")
+            ) {
+                return true
             }
+
+            current = current.cause
         }
+
+        return false
     }
 }
