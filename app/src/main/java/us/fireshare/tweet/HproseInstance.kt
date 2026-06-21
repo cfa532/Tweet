@@ -918,15 +918,18 @@ object HproseInstance {
         maxRetries: Int = 2
     ): Pair<Boolean, String?> {
         var lastError: String? = null
+        var lastFailureWasTimeout = false
         
         for (attempt in 0..maxRetries) {
             val forceRefresh = attempt > 0
-            if (forceRefresh) {
+            if (forceRefresh && lastFailureWasTimeout) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: previous sender-node send timed out; keeping current baseUrl")
+            } else if (forceRefresh) {
                 Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing sender's baseUrl")
             }
             
             // Refresh appUser's baseUrl if needed
-            if (forceRefresh) {
+            if (forceRefresh && !lastFailureWasTimeout) {
                 val refreshedUser = fetchUser(appUser.mid, baseUrl = "", forceRefresh = true)
                 if (refreshedUser != null && refreshedUser.baseUrl != appUser.baseUrl) {
                     appUser.baseUrl = refreshedUser.baseUrl
@@ -990,6 +993,7 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 lastError = e.message ?: applicationContext.getString(R.string.error_network)
                 Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message ?: "Network error"}")
                 
@@ -1016,15 +1020,18 @@ object HproseInstance {
     ): Pair<Boolean, String?> {
         var receiptUser: User?
         var lastError: String? = null
+        var lastFailureWasTimeout = false
         
         for (attempt in 0..maxRetries) {
             val forceRefresh = attempt > 0
-            if (forceRefresh) {
+            if (forceRefresh && lastFailureWasTimeout) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: previous recipient-node send timed out; keeping current baseUrl for userId: $receiptId")
+            } else if (forceRefresh) {
                 Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing recipient's baseUrl for userId: $receiptId")
             }
             
             // Fetch recipient user (with forced refresh on retry)
-            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh) "" else null)
+            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh && !lastFailureWasTimeout) "" else null)
             
             if (receiptUser == null) {
                 val errorMsg = "Recipient user not found"
@@ -1087,6 +1094,7 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 lastError = ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e)
                 Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
                 
@@ -1913,15 +1921,19 @@ object HproseInstance {
         user: User,
         attemptedBaseUrl: String?,
         error: Throwable,
-        tag: String
+        tag: String,
+        treatTimeoutAsStaleNode: Boolean = false
     ) {
         val accessNodeMid = user.hostIds?.getOrNull(1)
         if (accessNodeMid == null || attemptedBaseUrl.isNullOrBlank()) return
 
-        // A timeout means the attempted route failed to respond and should be
-        // repaired. Other request failures can be user/API-specific, so they do
-        // not prove the shared access-node route is stale.
+        // Only fetch-user timeouts are treated as a stale node route signal.
+        // Other RPCs can time out because the operation itself is slow.
         if (error.hasTimeoutCause()) {
+            if (!treatTimeoutAsStaleNode) {
+                Timber.tag(tag).d("Keeping node $accessNodeMid in pool after operation timeout to $attemptedBaseUrl")
+                return
+            }
             val currentPoolIP = NodePool.getIPFromNodeId(accessNodeMid)
             val attemptedKey = normalizeIPHealthCacheKey(attemptedBaseUrl)
             val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
@@ -1966,15 +1978,18 @@ object HproseInstance {
             "userid" to user.mid
         )
         
+        var lastFailureWasTimeout = false
+
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                if (attempt > 0 || user.hproseService == null) {
+                val shouldRefreshRoute = user.hproseService == null || (attempt > 0 && !lastFailureWasTimeout)
+                if (shouldRefreshRoute) {
                     val routeReady = refreshRelationshipListBaseUrl(
                         user,
                         tag = "getFollowings",
                         reason = if (attempt == 0) "missing route" else "retry after failure",
-                        forceFresh = attempt > 0
+                        forceFresh = attempt > 0 && !lastFailureWasTimeout
                     )
                     if (!routeReady) {
                         if (attempt < maxRetries) {
@@ -2001,11 +2016,16 @@ object HproseInstance {
                 if (e is kotlinx.coroutines.CancellationException) {
                     throw e
                 }
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFollowings")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    Timber.tag("getFollowings").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getFollowings").d("Operation timeout detected, retrying same route immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    } else {
+                        Timber.tag("getFollowings").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    }
                     continue
                 }
                 
@@ -2039,15 +2059,18 @@ object HproseInstance {
             "userid" to user.mid
         )
         
+        var lastFailureWasTimeout = false
+
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                if (attempt > 0 || user.hproseService == null) {
+                val shouldRefreshRoute = user.hproseService == null || (attempt > 0 && !lastFailureWasTimeout)
+                if (shouldRefreshRoute) {
                     val routeReady = refreshRelationshipListBaseUrl(
                         user,
                         tag = "getFans",
                         reason = if (attempt == 0) "missing route" else "retry after failure",
-                        forceFresh = attempt > 0
+                        forceFresh = attempt > 0 && !lastFailureWasTimeout
                     )
                     if (!routeReady) {
                         if (attempt < maxRetries) {
@@ -2074,11 +2097,16 @@ object HproseInstance {
                 if (e is kotlinx.coroutines.CancellationException) {
                     throw e
                 }
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFans")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    Timber.tag("getFans").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getFans").d("Operation timeout detected, retrying same route immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    } else {
+                        Timber.tag("getFans").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    }
                     continue
                 }
                 
@@ -2177,6 +2205,8 @@ object HproseInstance {
             }
         }
         
+        var lastFailureWasTimeout = false
+
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
@@ -2184,16 +2214,20 @@ object HproseInstance {
                 if (forceRefresh) {
                     // Notify UI about retry attempt
                     onRetry?.invoke(attempt, maxRetries)
-                    
-                    Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
-                    // Refresh appUser's baseUrl on retry
-                    val refreshedUser = fetchUser(appUser.mid, baseUrl = "")
-                    if (refreshedUser != null) {
-                        // Update appUser's baseUrl (hproseService is computed from baseUrl)
-                        appUser.baseUrl = refreshedUser.baseUrl
-                        Timber.tag("getTweetFeed").d("✅ Refreshed appUser baseUrl: ${appUser.baseUrl}")
+
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: previous feed call timed out; keeping current appUser baseUrl: ${appUser.baseUrl}")
                     } else {
-                        Timber.tag("getTweetFeed").w("⚠️ Failed to refresh appUser baseUrl on retry")
+                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
+                        // Refresh appUser's baseUrl on non-timeout retry
+                        val refreshedUser = fetchUser(appUser.mid, baseUrl = "")
+                        if (refreshedUser != null) {
+                            // Update appUser's baseUrl (hproseService is computed from baseUrl)
+                            appUser.baseUrl = refreshedUser.baseUrl
+                            Timber.tag("getTweetFeed").d("✅ Refreshed appUser baseUrl: ${appUser.baseUrl}")
+                        } else {
+                            Timber.tag("getTweetFeed").w("⚠️ Failed to refresh appUser baseUrl on retry")
+                        }
                     }
                 }
                 
@@ -2305,11 +2339,16 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
                     val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
-                    Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying same route (attempt ${attempt + 1}/${maxRetries + 1})")
+                    } else {
+                        Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    }
                     delay(delayMs.milliseconds)
                     continue
                 }
@@ -2445,6 +2484,7 @@ object HproseInstance {
         }
         var activeUser = user
         var refreshedRoute = false
+        var retriedSameRouteAfterTimeout = false
 
         while (true) {
             try {
@@ -2547,6 +2587,16 @@ object HproseInstance {
             NodePool.updateFromUser(activeUser)
             return result
         } catch (e: Exception) {
+            if (e.hasTimeoutCause()) {
+                if (!retriedSameRouteAfterTimeout) {
+                    Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out for ${activeUser.mid}; retrying same route once")
+                    retriedSameRouteAfterTimeout = true
+                    continue
+                }
+                Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out again for ${activeUser.mid}; not refreshing route for operation timeout")
+                throw e
+            }
+
             if (refreshedRoute) {
                 Timber.tag("getTweetsByUser").e("Error fetching tweets for user after route refresh: ${activeUser.mid}: ${e.message}")
                 throw e
@@ -4294,18 +4344,27 @@ object HproseInstance {
      * @return true if successful, throws exception otherwise
      */
     private suspend fun processUserDataResponse(user: User, response: Map<*, *>, skipRetryAndBlacklist: Boolean): Boolean {
+        @Suppress("UNCHECKED_CAST")
+        val typedResponse = response as Map<String, Any>
+        val candidate = user.copy()
+        candidate.from(typedResponse)
+
+        if (!isValidUserData(candidate)) {
+            Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${candidate.mid}, username: ${candidate.username}")
+            if (!skipRetryAndBlacklist) {
+                recordReliabilityFailureUser(user.mid)
+            }
+            throw InvalidUserDataException("Invalid user data received for userId: ${user.mid}")
+        }
+
+        user.from(typedResponse)
         if (!skipRetryAndBlacklist) {
             recordReliabilitySuccessUser(user.mid)
         }
-        user.from(response as Map<String, Any>)
-        
-        if (isValidUserData(user)) {
-            return true
-        } else {
-            Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
-            throw Exception("Invalid user data received")
-        }
+        return true
     }
+
+    private class InvalidUserDataException(message: String) : Exception(message)
 
 
     /**
@@ -4479,23 +4538,13 @@ object HproseInstance {
                 val success = if (userData != null) {
                     processUserDataResponse(user, userData, skipRetryAndBlacklist)
                 } else {
-                    // unwrapV2Response returned null (either error response or null response).
-                    // This can mean the user was invalidated even when the node route is healthy,
-                    // so do not evict the shared NodePool entry from this signal alone.
-                    Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
-
-                    user.baseUrl = null
-
-                    // If this was the last attempt, fail
-                    if (attempt >= maxRetries) {
-                        Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
-                        if (!skipRetryAndBlacklist) {
-                            recordReliabilityFailureUser(user.mid)
-                        }
-                    } else {
-                        Timber.tag("updateUserFromServer").d("Will retry route repair on next attempt")
+                    // Null/error get_user response means the user data is missing or broken.
+                    // It is not evidence that the node IP is stale.
+                    Timber.tag("updateUserFromServer").w("❌ NULL USER DATA RESPONSE: userId: ${user.mid}, attempt: $attempt/$maxRetries")
+                    if (!skipRetryAndBlacklist) {
+                        recordReliabilityFailureUser(user.mid)
                     }
-                    false
+                    throw InvalidUserDataException("Null user data received for userId: ${user.mid}")
                 }
                 
                 // On success, replace the access-node fast path with the route
@@ -4519,15 +4568,27 @@ object HproseInstance {
                     Timber.tag("updateUserFromServer").d("🔄 Fetch cancelled for userId: ${user.mid}, attempt: $attempt/$maxRetries")
                     throw e  // Propagate cancellation immediately
                 }
+
+                if (e is InvalidUserDataException) {
+                    Timber.tag("updateUserFromServer").e("❌ USER DATA INVALID: userId: ${user.mid}, error: ${e.message}")
+                    return false
+                }
                 
                 lastError = e
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
 
-                // Invalidate IP cache so retry's getProviderIP() health check won't
-                // return stale "healthy" for the failed IP
-                invalidateIPCache(user.baseUrl)
-
-                evictNodeRouteAfterFailure(user, user.baseUrl, e, "updateUserFromServer")
+                if (e.hasTimeoutCause()) {
+                    // Only a fetch-user timeout is treated as stale route evidence.
+                    // Other get_user failures can be user/API-specific.
+                    invalidateIPCache(user.baseUrl)
+                    evictNodeRouteAfterFailure(
+                        user,
+                        user.baseUrl,
+                        e,
+                        "updateUserFromServer",
+                        treatTimeoutAsStaleNode = true
+                    )
+                }
 
                 if (skipRetryAndBlacklist) {
                     return false
@@ -4541,9 +4602,11 @@ object HproseInstance {
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
 
-        // Clear this user's failed route. Shared NodePool eviction is handled
-        // above only for timeout or confirmed-unhealthy route failures.
-        user.baseUrl = null
+        // Clear this user's failed route only when fetch-user timed out. Invalid
+        // user data and other API failures do not prove the route is stale.
+        if (lastError?.hasTimeoutCause() == true) {
+            user.baseUrl = null
+        }
 
         if (!skipRetryAndBlacklist && lastError != null) {
             recordReliabilityFailureUser(user.mid)
