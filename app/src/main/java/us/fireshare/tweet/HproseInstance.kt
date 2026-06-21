@@ -1519,7 +1519,7 @@ object HproseInstance {
                     TweetApplication.applicationScope.launch {
                         hostIPRequestsMutex.withLock {
                             if (hostIPRequests[requestKey] === newRequest) {
-                                hostIPRequests.remove(requestKey)
+                                hostIPRequests -= requestKey
                             }
                         }
                     }
@@ -1904,10 +1904,11 @@ object HproseInstance {
                 Timber.tag(tag).w("Could not refresh baseUrl before relationship-list call for userId: ${user.mid}")
                 false
             } else {
+                val oldBaseUrl = user.baseUrl
                 user.baseUrl = refreshedBaseUrl
-                // Drop any pooled client for this URL so the list call does not reuse
-                // the same connection state that just failed or timed out.
-                user.clearHproseService()
+                if (oldBaseUrl?.let { normalizeIPHealthCacheKey(it) } != normalizeIPHealthCacheKey(refreshedBaseUrl)) {
+                    user.clearHproseService()
+                }
                 Timber.tag(tag).d("Using refreshed baseUrl for relationship-list call: ${user.baseUrl}")
                 true
             }
@@ -1920,37 +1921,33 @@ object HproseInstance {
     private suspend fun evictNodeRouteAfterFailure(
         user: User,
         attemptedBaseUrl: String?,
-        error: Throwable,
-        tag: String,
-        treatTimeoutAsStaleNode: Boolean = false
+        tag: String
     ) {
         val accessNodeMid = user.hostIds?.getOrNull(1)
         if (accessNodeMid == null || attemptedBaseUrl.isNullOrBlank()) return
 
-        // Only fetch-user timeouts are treated as a stale node route signal.
-        // Other RPCs can time out because the operation itself is slow.
-        if (error.hasTimeoutCause()) {
-            if (!treatTimeoutAsStaleNode) {
-                Timber.tag(tag).d("Keeping node $accessNodeMid in pool after operation timeout to $attemptedBaseUrl")
-                return
-            }
-            val currentPoolIP = NodePool.getIPFromNodeId(accessNodeMid)
-            val attemptedKey = normalizeIPHealthCacheKey(attemptedBaseUrl)
-            val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
-            if (currentKey == attemptedKey) {
-                Timber.tag(tag).d("Removing timed-out node $accessNodeMid from pool after request to $attemptedBaseUrl")
-                NodePool.removeNode(accessNodeMid)
-                HproseClientPool.clearClient(attemptedBaseUrl)
-            } else {
-                Timber.tag(tag).d(
-                    "Keeping node $accessNodeMid in pool after timed-out stale route " +
-                        "attempted=$attemptedBaseUrl current=$currentPoolIP"
-                )
-            }
+        // The health check is the source of truth for whether a route should
+        // be invalidated. Drop cached health first so this probe is fresh.
+        Timber.tag(tag).d("Fetch-user timeout to $attemptedBaseUrl; checking route health before changing NodePool")
+        invalidateIPCache(attemptedBaseUrl)
+        if (isServerHealthy(attemptedBaseUrl)) {
+            Timber.tag(tag).d("Keeping node $accessNodeMid in pool; health check passed after failure to $attemptedBaseUrl")
             return
         }
 
-        Timber.tag(tag).d("Keeping node $accessNodeMid in pool after request failure to $attemptedBaseUrl")
+        val currentPoolIP = NodePool.getIPFromNodeId(accessNodeMid)
+        val attemptedKey = normalizeIPHealthCacheKey(attemptedBaseUrl)
+        val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
+        if (currentKey == attemptedKey) {
+            Timber.tag(tag).d("Removing unhealthy node $accessNodeMid from pool after failed health check for $attemptedBaseUrl")
+            NodePool.removeNode(accessNodeMid)
+            HproseClientPool.clearClient(attemptedBaseUrl)
+        } else {
+            Timber.tag(tag).d(
+                "Keeping node $accessNodeMid in pool after failed health check for stale route " +
+                    "attempted=$attemptedBaseUrl current=$currentPoolIP"
+            )
+        }
     }
 
     private fun setUserBaseUrlForRequest(user: User, newBaseUrl: String) {
@@ -2017,7 +2014,6 @@ object HproseInstance {
                     throw e
                 }
                 lastFailureWasTimeout = e.hasTimeoutCause()
-                evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFollowings")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
@@ -2098,7 +2094,6 @@ object HproseInstance {
                     throw e
                 }
                 lastFailureWasTimeout = e.hasTimeoutCause()
-                evictNodeRouteAfterFailure(user, user.baseUrl, e, "getFans")
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
@@ -4578,15 +4573,10 @@ object HproseInstance {
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
 
                 if (e.hasTimeoutCause()) {
-                    // Only a fetch-user timeout is treated as stale route evidence.
-                    // Other get_user failures can be user/API-specific.
-                    invalidateIPCache(user.baseUrl)
                     evictNodeRouteAfterFailure(
                         user,
                         user.baseUrl,
-                        e,
-                        "updateUserFromServer",
-                        treatTimeoutAsStaleNode = true
+                        "updateUserFromServer"
                     )
                 }
 
@@ -4595,18 +4585,12 @@ object HproseInstance {
                 }
 
                 if (attempt < maxRetries) {
-                    Timber.tag("updateUserFromServer").d("Discarded failed route; resolving fresh provider IP immediately")
+                    Timber.tag("updateUserFromServer").d("Retrying get_user after failure; route health will decide whether IP changes")
                 }
             }
         }
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
-
-        // Clear this user's failed route only when fetch-user timed out. Invalid
-        // user data and other API failures do not prove the route is stale.
-        if (lastError?.hasTimeoutCause() == true) {
-            user.baseUrl = null
-        }
 
         if (!skipRetryAndBlacklist && lastError != null) {
             recordReliabilityFailureUser(user.mid)
@@ -5019,7 +5003,7 @@ object HproseInstance {
                     TweetApplication.applicationScope.launch {
                         providerIPRequestsMutex.withLock {
                             if (providerIPRequests[mid] === newRequest) {
-                                providerIPRequests.remove(mid)
+                                providerIPRequests -= mid
                             }
                         }
                     }
@@ -5063,7 +5047,7 @@ object HproseInstance {
         Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
         // Health check all returned IPs - no pre-filtering needed
-        if (ipArray != null && ipArray.isNotEmpty()) {
+        if (!ipArray.isNullOrEmpty()) {
             Timber.tag("_getProviderIP").d("🔍 Testing ${ipArray.size} IPs via health check")
             return tryIpAddresses(ipArray)
         }
