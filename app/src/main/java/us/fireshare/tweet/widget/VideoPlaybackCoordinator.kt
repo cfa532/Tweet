@@ -615,7 +615,7 @@ class VideoPlaybackCoordinator(
     private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
         if (isPaused || !isFeedVisible) return
 
-        if (replayCurrentPrimary && resumePendingPrimaryIfPossible()) {
+        if (replayCurrentPrimary && resumePendingPrimaryIfPossible(requirePlayable = true)) {
             return
         }
 
@@ -652,7 +652,11 @@ class VideoPlaybackCoordinator(
         }
 
         if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
-            startPlaybackWithDebounce()
+            if (replayCurrentPrimary) {
+                startPrimaryVideoPlayback(playDelayMs = 0L)
+            } else {
+                startPlaybackWithDebounce()
+            }
         }
     }
 
@@ -804,7 +808,7 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null) {
+    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null, playDelayMs: Long = 50L) {
         if (isPaused) return
         if (visibleVideos.isEmpty()) {
             return
@@ -814,6 +818,9 @@ class VideoPlaybackCoordinator(
         if (expectedIdentifier != null && primary.identifier != expectedIdentifier) return
         val previousPrimaryId = primaryVideoId
         setPrimaryVideoId(primary.identifier)
+        if (pendingResumePrimaryId != primary.identifier) {
+            pendingResumePrimaryId = null
+        }
 
         scope.launch {
             if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
@@ -833,7 +840,9 @@ class VideoPlaybackCoordinator(
                 }
             }
 
-            delay(50L)
+            if (playDelayMs > 0L) {
+                delay(playDelayMs)
+            }
 
             if (primaryVideoId != primary.identifier ||
                 primary.identifier !in playableVideoIds ||
@@ -992,7 +1001,7 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun resumePendingPrimaryIfPossible(): Boolean {
+    private fun resumePendingPrimaryIfPossible(requirePlayable: Boolean = false): Boolean {
         if (isPaused || !isFeedVisible) {
             MediaLog.d("VideoLoading") {
                 "Coordinator[$managerPlaybackOwnerKey] resume skipped paused=$isPaused visible=$isFeedVisible " +
@@ -1005,6 +1014,16 @@ class VideoPlaybackCoordinator(
             MediaLog.d("VideoLoading") {
                 "Coordinator[$managerPlaybackOwnerKey] resume skipped missing metadata resumeId=$resumeId " +
                     "primary=$primaryVideoId pending=$pendingResumePrimaryId videos=${videoMetaMap.size}"
+            }
+            return false
+        }
+        if (requirePlayable &&
+            resumeId !in playableVideoIds &&
+            (videoVisibilityMap[resumeId] ?: 0f) < VISIBILITY_THRESHOLD
+        ) {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped non-playable resumeId=$resumeId " +
+                    "primary=$primaryVideoId pending=$pendingResumePrimaryId playable=$playableVideoIds"
             }
             return false
         }

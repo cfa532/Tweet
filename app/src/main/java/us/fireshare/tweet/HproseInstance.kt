@@ -150,6 +150,9 @@ object NodePool {
     suspend fun updateNodeIP(nodeMid: MimeiId, newIP: String) = nodeMutex.withLock {
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
+            if (nodeInfo.ips.size == 1 && nodeInfo.hasIP(newIP)) {
+                return@withLock
+            }
             // Replace IP list with new IP
             nodeInfo.ips = mutableListOf(newIP)
             nodeInfo.lastUpdate = System.currentTimeMillis()
@@ -1479,6 +1482,7 @@ object HproseInstance {
             Timber.tag("getHostIP").d("Offline: skipping")
             return null
         }
+
         // Step 1: Check NodePool for known IPs and verify health
         val poolIP = NodePool.getIPFromNodeId(nodeId)
         if (poolIP != null) {
@@ -1496,7 +1500,31 @@ object HproseInstance {
                 // Fall through to Step 2
             }
         }
-        
+
+        val requestKey = "$nodeId|$v4Only"
+        val request = hostIPRequestsMutex.withLock {
+            hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
+                val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
+                    resolveHostIPAfterPoolMiss(nodeId, v4Only)
+                }
+                newRequest.invokeOnCompletion {
+                    TweetApplication.applicationScope.launch {
+                        hostIPRequestsMutex.withLock {
+                            if (hostIPRequests[requestKey] === newRequest) {
+                                hostIPRequests.remove(requestKey)
+                            }
+                        }
+                    }
+                }
+                hostIPRequests[requestKey] = newRequest
+                newRequest
+            }
+        }
+
+        return request.await()
+    }
+
+    private suspend fun resolveHostIPAfterPoolMiss(nodeId: MimeiId, v4Only: String): String? {
         // Step 2: Try lookup using appUser's client
         try {
             val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService)
@@ -1890,23 +1918,32 @@ object HproseInstance {
         val accessNodeMid = user.hostIds?.getOrNull(1)
         if (accessNodeMid == null || attemptedBaseUrl.isNullOrBlank()) return
 
-        // Timeout means the current route did not respond in time and should
-        // be evicted. For other failures, remove the shared node route only
-        // after a direct health check confirms this route is unreachable.
-        // User-level failures or malformed user data do not prove the node IP is stale.
+        // A timeout means the attempted route failed to respond and should be
+        // repaired. Other request failures can be user/API-specific, so they do
+        // not prove the shared access-node route is stale.
         if (error.hasTimeoutCause()) {
-            Timber.tag(tag).d("Removing timed-out node $accessNodeMid from pool")
-            NodePool.removeNode(accessNodeMid)
+            val currentPoolIP = NodePool.getIPFromNodeId(accessNodeMid)
+            val attemptedKey = normalizeIPHealthCacheKey(attemptedBaseUrl)
+            val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
+            if (currentKey == attemptedKey) {
+                Timber.tag(tag).d("Removing timed-out node $accessNodeMid from pool after request to $attemptedBaseUrl")
+                NodePool.removeNode(accessNodeMid)
+                HproseClientPool.clearClient(attemptedBaseUrl)
+            } else {
+                Timber.tag(tag).d(
+                    "Keeping node $accessNodeMid in pool after timed-out stale route " +
+                        "attempted=$attemptedBaseUrl current=$currentPoolIP"
+                )
+            }
             return
         }
 
-        val routeStillHealthy = isServerHealthy(attemptedBaseUrl)
-        if (!routeStillHealthy) {
-            Timber.tag(tag).d("Removing unhealthy node $accessNodeMid from pool after failed route health check")
-            NodePool.removeNode(accessNodeMid)
-        } else {
-            Timber.tag(tag).d("Keeping node $accessNodeMid in pool; route health check still passes after failure")
-        }
+        Timber.tag(tag).d("Keeping node $accessNodeMid in pool after request failure to $attemptedBaseUrl")
+    }
+
+    private fun setUserBaseUrlForRequest(user: User, newBaseUrl: String) {
+        val normalizedBaseUrl = newBaseUrl.trim().removeSuffix("/")
+        user.baseUrl = normalizedBaseUrl
     }
 
     /**
@@ -4293,8 +4330,7 @@ object HproseInstance {
             val accessNodeMid = user.hostIds?.getOrNull(1)
             val poolIP = accessNodeMid?.let { NodePool.getIPFromNodeId(it) }
             if (poolIP != null) {
-                user.baseUrl = "http://$poolIP"
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, "http://$poolIP")
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP by access node: $poolIP for userId: ${user.mid}")
                 return
             }
@@ -4304,15 +4340,13 @@ object HproseInstance {
             // NodePool is trusted only once for performance.
             val poolIP = NodePool.getIPFromNode(user)
             if (poolIP != null) {
-                user.baseUrl = "http://$poolIP"
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, "http://$poolIP")
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP once: $poolIP for userId: ${user.mid}")
                 return
             }
 
             if (!originalBaseUrl.isNullOrBlank()) {
-                user.baseUrl = originalBaseUrl
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, originalBaseUrl)
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - NodePool miss; trying cached baseUrl once for userId: ${user.mid}")
                 return
             }
@@ -4337,12 +4371,12 @@ object HproseInstance {
             Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving read node $accessNodeMid for userId: ${user.mid}, reason: $reason")
             val accessIP = getHostIP(accessNodeMid)
             if (!accessIP.isNullOrBlank()) {
-                user.baseUrl = if (accessIP.startsWith("http://") || accessIP.startsWith("https://")) {
+                val newBaseUrl = if (accessIP.startsWith("http://") || accessIP.startsWith("https://")) {
                     accessIP
                 } else {
                     "http://$accessIP"
                 }
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, newBaseUrl)
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using resolved read-node IP: ${user.baseUrl} for userId: ${user.mid}")
                 return
             }
@@ -4360,8 +4394,7 @@ object HproseInstance {
                     "http://$providerIP"
                 }
                 
-                user.baseUrl = newBaseUrl
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, newBaseUrl)
                 
                 // Update NodePool with newly resolved IP (replaces old IPs for this node)
                 val accessNodeMid = user.hostIds?.getOrNull(1)
@@ -4528,6 +4561,8 @@ object HproseInstance {
 
     private val providerIPRequests = mutableMapOf<MimeiId, Deferred<String?>>()
     private val providerIPRequestsMutex = Mutex()
+    private val hostIPRequests = mutableMapOf<String, Deferred<String?>>()
+    private val hostIPRequestsMutex = Mutex()
 
     private fun normalizeIPHealthCacheKey(ipAddress: String): String {
         val trimmed = ipAddress.trim()
