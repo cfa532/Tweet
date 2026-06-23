@@ -159,6 +159,8 @@ class TweetActivity : ComponentActivity() {
         // Handle initial intent
         activityViewModel.currentIntent.value = intent
         handleIntent(intent)
+
+        UpgradeDownloadState.installCompletedUpgrade(this, fromForeground = true)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -192,6 +194,8 @@ class TweetActivity : ComponentActivity() {
                 Timber.tag("TweetActivity").d("ChatSessionRepository not initialized yet, will check messages after initialization")
             }
         }
+
+        UpgradeDownloadState.installCompletedUpgrade(this, fromForeground = true)
     }
 
     override fun onDestroy() {
@@ -501,7 +505,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 // Use exact same download logic as working downloadAndInstall
                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 val request = DownloadManager.Request(downloadUrl.toUri())
-                    .setMimeType("application/octet-stream")
+                    .setMimeType("application/vnd.android.package-archive")
                     .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "temp_upgrade.apk")
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     .setTitle("Checking for updates")
@@ -698,12 +702,13 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(downloadUrl.toUri())
-            .setMimeType("application/octet-stream") // Set appropriate MIME type if known
+            .setMimeType("application/vnd.android.package-archive")
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setTitle("Downloading Update")
 
         val downloadId = downloadManager.enqueue(request)
+        UpgradeDownloadState.rememberDownload(context, downloadId)
         Timber.tag("downloadAndInstall").d("Download started with ID: $downloadId")
 
         viewModelScope.launch(IO) {
@@ -718,21 +723,8 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                         finishDownload = true
                         _isDownloading.value = false
                         Timber.tag("downloadAndInstall").d("Download completed successfully")
-
-                        // Get the downloaded APK file URI
-                        val downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
-
-                        // Create an intent to install the APK
-                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(
-                                downloadedApkUri,
-                                "application/vnd.android.package-archive"
-                            )
-                            flags =
-                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        }
-                        // Start the installation activity
-                        context.startActivity(installIntent)
+                        UpgradeDownloadState.markCompleted(context, downloadId)
+                        UpgradeDownloadState.installCompletedUpgrade(context, fromForeground = true)
 
                     } else if (status == DownloadManager.STATUS_FAILED) {
                         finishDownload = true
@@ -794,4 +786,3 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     }
 
 }
-

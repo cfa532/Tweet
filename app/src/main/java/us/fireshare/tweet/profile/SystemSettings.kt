@@ -99,8 +99,14 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 },
                 navigationIcon = {
                     IconButton(onClick = { 
-                        // Navigate back to the start destination (TweetFeed) to ensure proper navigation
-                        navController.popBackStack(navController.graph.startDestinationId, false)
+                        if (!navController.popBackStack()) {
+                            navController.navigate(NavTweet.TweetFeed) {
+                                launchSingleTop = true
+                                popUpTo(NavTweet.Settings) {
+                                    inclusive = true
+                                }
+                            }
+                        }
                     })
                     {
                         Icon(

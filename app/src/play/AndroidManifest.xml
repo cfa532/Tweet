@@ -88,6 +88,10 @@
                 android:resource="@xml/path_provider" />
         </provider>
 
+        <receiver
+            android:name=".UpgradeDownloadReceiver"
+            tools:node="remove" />
+
         <service
             android:name="androidx.work.impl.background.systemjob.SystemJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"

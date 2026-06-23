@@ -81,7 +81,11 @@ fun MainTopAppBar(
             }
         },
         actions = {
-            IconButton(onClick = { navController.navigate(NavTweet.Settings) }) {
+            IconButton(onClick = {
+                navController.navigate(NavTweet.Settings) {
+                    launchSingleTop = true
+                }
+            }) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = stringResource(R.string.settings),
