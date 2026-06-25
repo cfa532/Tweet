@@ -258,11 +258,7 @@ fun TweetFeedScreen(
                                                     }
                                                 }
                                             },
-                                            scrollToTopTrigger = scrollToTopTrigger,
-                                            onShowPendingNewTweets = {
-                                                selectedTabIndex = 0
-                                                scrollToTopTrigger += 1
-                                            }
+                                            scrollToTopTrigger = scrollToTopTrigger
                                         )
                                     }
                                 } else {

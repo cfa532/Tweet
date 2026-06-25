@@ -147,7 +147,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private var hasEnteredBackground = false
-    private var foregroundRefreshJob: Job? = null
+    private var behindBannerRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             if (hasEnteredBackground) {
@@ -354,22 +354,30 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val maxAutoLoadedInitialPages = 200
 
     private fun refreshFeedDirectlyAfterForeground() {
+        refreshFeedBehindBanner(reason = "Foreground return")
+    }
+
+    fun refreshFeedBehindBannerOnProfileOpen() {
+        refreshFeedBehindBanner(reason = "Profile open")
+    }
+
+    private fun refreshFeedBehindBanner(reason: String) {
         if (!shouldCheckNewTweetsBehindBanner()) {
             return
         }
 
-        if (foregroundRefreshJob?.isActive == true) {
+        if (behindBannerRefreshJob?.isActive == true) {
             return
         }
 
-        foregroundRefreshJob = applicationScope.launch(IO) {
+        behindBannerRefreshJob = applicationScope.launch(IO) {
             try {
-                Timber.tag("TweetFeedViewModel").d("Foreground return: checking latest tweets behind banner")
+                Timber.tag("TweetFeedViewModel").d("$reason: checking latest tweets behind banner")
                 refresh(0, deferNewTweets = true)
             } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed on foreground")
+                Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed behind banner")
             } finally {
-                foregroundRefreshJob = null
+                behindBannerRefreshJob = null
             }
         }
     }

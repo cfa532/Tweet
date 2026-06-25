@@ -6,9 +6,13 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -16,13 +20,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +51,7 @@ import us.fireshare.tweet.profile.UserBookmarks
 import us.fireshare.tweet.profile.UserFavorites
 import us.fireshare.tweet.service.SearchScreen
 import us.fireshare.tweet.service.SearchViewModel
+import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.ComposeCommentScreen
 import us.fireshare.tweet.tweet.ComposeTweetScreen
 import us.fireshare.tweet.tweet.TweetDetailScreen
@@ -79,6 +88,13 @@ fun TweetNavGraph(
         }
     // Use activity-scoped TweetFeedViewModel to ensure single instance across the app
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
+    val pendingNewTweets by tweetFeedViewModel.pendingNewTweets.collectAsState()
+    val showNewTweetsBanner by tweetFeedViewModel.showNewTweetsBanner.collectAsState()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val shouldShowMainFeedNewTweetsBanner =
+        currentRoute?.contains("TweetFeed") == true || currentRoute?.contains("UserProfile") == true
+    val newTweetsBannerTopPadding = 100.dp
     
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
@@ -133,11 +149,12 @@ fun TweetNavGraph(
     }
 
     CompositionLocalProvider(LocalNavController provides navController) {
-        NavHost(
-            modifier = modifier,
-            navController = navController,
-            startDestination = startDestination
-        ) {
+        Box(modifier = modifier) {
+            NavHost(
+                modifier = Modifier.fillMaxSize(),
+                navController = navController,
+                startDestination = startDestination
+            ) {
             composable<NavTweet.TweetFeed> {
                 TweetFeedScreen(navController, it, 0, tweetFeedViewModel)
             }
@@ -171,6 +188,9 @@ fun TweetNavGraph(
                     it
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
+                LaunchedEffect(userId) {
+                    tweetFeedViewModel.refreshFeedBehindBannerOnProfileOpen()
+                }
                 // reassign the appUserViewModel here, in case the user login with
                 // a different username.
                 sharedViewModel.appUserViewModel =
@@ -282,6 +302,36 @@ fun TweetNavGraph(
                 val tweetId = it.toRoute<NavTweet.DeepLink>().tweetId
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
                 TweetDetailScreen(authorId, tweetId, parentEntry)
+            }
+            }
+
+            if (shouldShowMainFeedNewTweetsBanner) {
+                NewTweetsBanner(
+                    pendingTweets = pendingNewTweets,
+                    visible = showNewTweetsBanner && pendingNewTweets.isNotEmpty(),
+                    onClick = {
+                        tweetFeedViewModel.applyPendingNewTweets()
+                        BottomBarState.opacity = 0.98f
+                        if (!currentRoute.contains("TweetFeed")) {
+                            val poppedToFeed = navController.popBackStack(
+                                route = NavTweet.TweetFeed,
+                                inclusive = false
+                            )
+                            if (!poppedToFeed) {
+                                navController.navigate(NavTweet.TweetFeed) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                        BottomBarState.homeTapTrigger++
+                    },
+                    onAutoHide = tweetFeedViewModel::dismissNewTweetsBanner,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = newTweetsBannerTopPadding)
+                        .zIndex(1500f)
+                )
             }
         }
     }
