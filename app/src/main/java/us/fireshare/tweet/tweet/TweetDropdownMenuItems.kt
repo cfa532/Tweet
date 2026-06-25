@@ -68,7 +68,6 @@ fun TweetDropdownMenuItems(
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val context = LocalContext.current
     // Capture string resources at composable level to avoid Android Studio warnings
-    val deleteTweetText = stringResource(R.string.delete_tweet)
     val deleteFailedText = stringResource(R.string.delete_failed)
     val networkErrorText = stringResource(R.string.network_error_connection_lost)
 
@@ -135,15 +134,6 @@ fun TweetDropdownMenuItems(
                                         originTweetViewModel.updateRetweetCount(updatedOriginTweet)
                                     }
                                 }
-                            }
-                            
-                            // Show success message on Main thread
-                            applicationScope.launch(Main) {
-                                Toast.makeText(
-                                    context,
-                                    deleteTweetText,
-                                    Toast.LENGTH_SHORT
-                                ).show()
                             }
                         }
                     } catch (e: Exception) {

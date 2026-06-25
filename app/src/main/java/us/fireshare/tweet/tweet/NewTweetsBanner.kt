@@ -151,7 +151,7 @@ private fun NewTweetsAvatarCluster(
                 item = item,
                 modifier = Modifier
                     .offset(x = (index * overlap).dp)
-                    .zIndex(index.toFloat())
+                    .zIndex((avatarCount - index).toFloat())
             )
         }
     }
