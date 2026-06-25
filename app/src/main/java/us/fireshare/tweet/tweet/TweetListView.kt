@@ -317,17 +317,44 @@ fun TweetListView(
     // or 0.1s for load-more scroll; we wait one frame to avoid the visible jump that a 100ms
     // delay caused.
     var scrollRestoredForSession by remember { mutableStateOf(false) }
+    // Tracks the newest tweet mid we've displayed so we can detect that an even newer one
+    // was prepended (cache→server merge on open, or a refresh) and surface it.
+    var lastDisplayedTopMid by remember { mutableStateOf<MimeiId?>(null) }
     LaunchedEffect(tweets.size, context) {
-        if (scrollRestoredForSession || tweets.isEmpty()) return@LaunchedEffect
-        val (index, offset) = ScrollPositionStore.restore(context)
-        if (index <= 0) return@LaunchedEffect
-        val maxIndex = (tweets.size * 2) + 4
-        if (index >= maxIndex) return@LaunchedEffect
-        withFrameMillis { } // one frame so first layout is done (avoids 100ms visible jump)
+        if (tweets.isEmpty()) return@LaunchedEffect
+        val headerCount = if (headerContent != null) 1 else 0
+        val currentTopMid = tweets.firstOrNull()?.mid
+
+        // Prepend detected: a newer tweet is now at the top than what we last showed.
+        // Profile only — surface the new tweet at the top of the regular list (just below
+        // the header/pinned). Covers first-open cache→server merge and reopen-with-new,
+        // mirroring iOS. The main feed defers new tweets behind its banner, so its top
+        // tweet never changes here. Checked before the scrollRestoredForSession gate so a
+        // prepend on the *second* tweets update (after the initial restore) still fires.
+        if (headerCount > 0 &&
+            lastDisplayedTopMid != null &&
+            currentTopMid != null &&
+            currentTopMid != lastDisplayedTopMid) {
+            withFrameMillis { }
+            listState.scrollToItem(headerCount, 0)
+            scrollRestoredForSession = true
+            lastDisplayedTopMid = currentTopMid
+            return@LaunchedEffect
+        }
+
+        // First population this session: restore saved position (if any), else stay at top.
         if (!scrollRestoredForSession) {
             scrollRestoredForSession = true
-            listState.scrollToItem(index.coerceIn(0, maxIndex), offset)
+            val (index, offset) = ScrollPositionStore.restore(context)
+            if (index > 0) {
+                val maxIndex = (tweets.size * 2) + 4
+                if (index < maxIndex) {
+                    withFrameMillis { } // one frame so first layout is done (avoids visible jump)
+                    listState.scrollToItem(index.coerceIn(0, maxIndex), offset)
+                }
+            }
         }
+        lastDisplayedTopMid = currentTopMid
     }
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup
