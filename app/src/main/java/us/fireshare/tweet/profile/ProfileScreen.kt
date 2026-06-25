@@ -2,6 +2,8 @@ package us.fireshare.tweet.profile
 
 import android.app.Activity
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -51,11 +53,14 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.service.OrientationManager
+import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
+import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
@@ -71,6 +76,10 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
+    val activity = LocalActivity.current as ComponentActivity
+    val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
+    val pendingNewTweets by tweetFeedViewModel.pendingNewTweets.collectAsState()
+    val showNewTweetsBanner by tweetFeedViewModel.showNewTweetsBanner.collectAsState()
 
     // Cancel image loading when leaving the screen
     DisposableEffect(Unit) {
@@ -107,8 +116,8 @@ fun ProfileScreen(
 
 
 
-    val activity = context as? Activity
-    activity?.let { OrientationManager.lockToPortrait(it) }
+    val orientationActivity = context as? Activity
+    orientationActivity?.let { OrientationManager.lockToPortrait(it) }
 
     // Load tweets when screen opens (on IO dispatcher to avoid blocking main thread
     // with synchronous Hprose network calls, especially when user's IP has changed)
@@ -201,14 +210,37 @@ fun ProfileScreen(
                                     }
                                 }
                             },
-                        onScrolledToTop = {
-                            BottomBarState.opacity = 0.98f
-                            scrollState = ScrollState(false, ScrollDirection.NONE)
-                            scrollBehavior.state.heightOffset = 0f
-                        }
+                            onScrolledToTop = {
+                                BottomBarState.opacity = 0.98f
+                                scrollState = ScrollState(false, ScrollDirection.NONE)
+                                scrollBehavior.state.heightOffset = 0f
+                            }
                         )
                     }
                 }
+
+                NewTweetsBanner(
+                    pendingTweets = pendingNewTweets,
+                    visible = showNewTweetsBanner && pendingNewTweets.isNotEmpty(),
+                    onClick = {
+                        tweetFeedViewModel.applyPendingNewTweets()
+                        BottomBarState.opacity = 0.98f
+                        BottomBarState.homeTapTrigger++
+                        val poppedToFeed = navController.popBackStack(
+                            route = NavTweet.TweetFeed,
+                            inclusive = false
+                        )
+                        if (!poppedToFeed) {
+                            navController.navigate(NavTweet.TweetFeed) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                    onAutoHide = tweetFeedViewModel::dismissNewTweetsBanner,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                )
             }
         }
 

@@ -30,6 +30,7 @@ sealed class TweetEvent {
     data class TweetRetweeted(val originalTweet: Tweet, val retweet: Tweet) : TweetEvent()
     data class UserDataUpdated(val user: User) : TweetEvent()
     data class FeedResetRequested(val reason: FeedResetReason) : TweetEvent()
+    data class MainFeedNewTweetsFound(val tweets: List<Tweet>) : TweetEvent()
     
     // Chat events
     data class ChatMessageSent(val message: ChatMessage) : TweetEvent()
@@ -63,4 +64,4 @@ object TweetNotificationCenter {
             _events.emit(event)
         }
     }
-} 
+}

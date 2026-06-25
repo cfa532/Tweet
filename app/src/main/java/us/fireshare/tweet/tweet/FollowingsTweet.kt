@@ -148,7 +148,7 @@ fun FollowingsTweet(
 }
 
 @Composable
-private fun NewTweetsBanner(
+fun NewTweetsBanner(
     pendingTweets: List<Tweet>,
     visible: Boolean,
     onClick: () -> Unit,

@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -20,12 +19,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -149,37 +146,29 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         _showNewTweetsBanner.value = false
     }
 
-    private var feedRefreshTimerJob: Job? = null
-    private var nextFeedRefreshRunAtMs: Long = 0L
     private var hasEnteredBackground = false
     private var foregroundRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             if (hasEnteredBackground) {
                 hasEnteredBackground = false
-                scheduleNextFeedRefreshFromNow()
                 refreshFeedDirectlyAfterForeground()
             }
-            startFeedRefreshTimer()
         }
 
         override fun onStop(owner: LifecycleOwner) {
             hasEnteredBackground = true
-            stopFeedRefreshTimer()
         }
     }
 
     private fun shouldCheckNewTweetsBehindBanner(): Boolean {
-        return isInitialized && HproseInstance.isOnline.value && !appUser.isGuest()
+        return isInitialized && HproseInstance.isOnline.value
     }
 
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
         ProcessLifecycleOwner.get().lifecycle.addObserver(appForegroundObserver)
-        if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            startFeedRefreshTimer()
-        }
         
         // Don't load tweets immediately - wait for explicit initialization
         // This prevents race conditions with HproseInstance initialization
@@ -364,10 +353,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val minimumTweetsBeforeStoppingInitialLoad = 4
     private val maxAutoLoadedInitialPages = 200
 
-    private fun scheduleNextFeedRefreshFromNow() {
-        nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
-    }
-
     private fun refreshFeedDirectlyAfterForeground() {
         if (!shouldCheckNewTweetsBehindBanner()) {
             return
@@ -387,36 +372,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 foregroundRefreshJob = null
             }
         }
-    }
-
-    private fun startFeedRefreshTimer() {
-        if (feedRefreshTimerJob?.isActive == true) {
-            return
-        }
-
-        if (nextFeedRefreshRunAtMs == 0L) {
-            scheduleNextFeedRefreshFromNow()
-        }
-
-        feedRefreshTimerJob = applicationScope.launch(IO) {
-            while (isActive) {
-                val waitMs = (nextFeedRefreshRunAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
-                delay(waitMs)
-                if (!isActive) {
-                    break
-                }
-
-                if (shouldCheckNewTweetsBehindBanner()) {
-                    refresh(0, deferNewTweets = true)
-                }
-                scheduleNextFeedRefreshFromNow()
-            }
-        }
-    }
-
-    private fun stopFeedRefreshTimer() {
-        feedRefreshTimerJob?.cancel()
-        feedRefreshTimerJob = null
     }
 
     fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE, deferNewTweets: Boolean = false) {
@@ -463,7 +418,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     override fun onCleared() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(appForegroundObserver)
-        stopFeedRefreshTimer()
         super.onCleared()
     }
 
@@ -1044,6 +998,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             try {
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
+                        is TweetEvent.MainFeedNewTweetsFound -> {
+                            Timber.tag("TweetFeedViewModel").d("Received ${event.tweets.size} main feed tweets from background check")
+                            rememberTweetRowTimestamps(event.tweets)
+                            withContext(Main) {
+                                queuePendingNewTweets(event.tweets)
+                            }
+                        }
+
                         is TweetEvent.TweetUploaded -> {
                             Timber.tag("TweetFeedViewModel").d("Received TweetUploaded notification for tweet: ${event.tweet.mid}, author: ${event.tweet.authorId}, current user: ${appUser.mid}")
 
