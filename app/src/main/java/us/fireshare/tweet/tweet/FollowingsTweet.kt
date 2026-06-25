@@ -66,6 +66,7 @@ fun FollowingsTweet(
     viewModel: TweetFeedViewModel,
     onScrollStateChange: (ScrollState) -> Unit = {},
     scrollToTopTrigger: Int = 0,
+    onShowPendingNewTweets: () -> Unit = {},
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pendingNewTweets by viewModel.pendingNewTweets.collectAsState()
@@ -111,7 +112,10 @@ fun FollowingsTweet(
         NewTweetsBanner(
             pendingTweets = pendingNewTweets,
             visible = showNewTweetsBanner && pendingNewTweets.isNotEmpty(),
-            onClick = viewModel::applyPendingNewTweets,
+            onClick = {
+                viewModel.applyPendingNewTweets()
+                onShowPendingNewTweets()
+            },
             onAutoHide = viewModel::dismissNewTweetsBanner,
             modifier = Modifier
                 .align(Alignment.TopCenter)

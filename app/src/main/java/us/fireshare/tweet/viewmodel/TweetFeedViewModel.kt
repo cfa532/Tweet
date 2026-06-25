@@ -169,6 +169,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    private fun shouldCheckNewTweetsBehindBanner(): Boolean {
+        return isInitialized && HproseInstance.isOnline.value && !appUser.isGuest()
+    }
+
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
@@ -224,8 +228,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     } else {
                         Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
                     }
-                    // Always attempt a refresh when online. Internal retry/fallback logic
-                    // will keep cached data on failure and prevents permanent spinner lock.
+                    // App open shows fresh tweets directly. Foreground return and timer
+                    // checks use the banner path.
                     refresh(0)
                 }
             } catch (e: Exception) {
@@ -365,7 +369,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun refreshFeedDirectlyAfterForeground() {
-        if (!isInitialized || !HproseInstance.isOnline.value) {
+        if (!shouldCheckNewTweetsBehindBanner()) {
             return
         }
 
@@ -402,7 +406,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     break
                 }
 
-                refresh(0, deferNewTweets = true)
+                if (shouldCheckNewTweetsBehindBanner()) {
+                    refresh(0, deferNewTweets = true)
+                }
                 scheduleNextFeedRefreshFromNow()
             }
         }
