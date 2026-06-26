@@ -3705,9 +3705,11 @@ object HproseInstance {
     }
 
     /**
-     * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
+     * Delete a tweet and return the deleted tweetId.
+     * The backend decides whether to permanently delete the tweet or remove it
+     * from the current user's personal lists.
      */
-    suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
+    suspend fun deleteTweet(tweetId: MimeiId, tweetAuthorId: MimeiId = appUser.mid): MimeiId {
         if (!isOnline.value) {
             Timber.tag("deleteTweet").d("Offline: skipping")
             throw Exception("No network connection")
@@ -3723,8 +3725,9 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "version" to "v2",
+            "version" to "v3",
             "userid" to appUser.mid,
+            "authorid" to tweetAuthorId,
             "tweetid" to tweetId
         )
         return try {

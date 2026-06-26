@@ -402,14 +402,9 @@ class DeleteTweetWorker @AssistedInject constructor(
                 withContext(Dispatchers.IO) {
                     try {
                         val deletedTweetId = HproseInstance.deleteTweet(tweetId)
-                        if (deletedTweetId != null) {
-                            Timber.tag("DeleteTweetWorker").d("Tweet $deletedTweetId deleted.")
-                            val outputData = workDataOf("tweetId" to deletedTweetId)
-                            return@withContext Result.success(outputData)
-                        } else {
-                            Timber.tag("DeleteTweetWorker").w("Tweet deletion returned null")
-                            return@withContext Result.failure()
-                        }
+                        Timber.tag("DeleteTweetWorker").d("Tweet $deletedTweetId deleted.")
+                        val outputData = workDataOf("tweetId" to deletedTweetId)
+                        return@withContext Result.success(outputData)
                     } catch (e: Exception) {
                         Timber.tag("DeleteTweetWorker").e(e, "Error deleting tweet: ${e.message}")
                         return@withContext Result.failure()

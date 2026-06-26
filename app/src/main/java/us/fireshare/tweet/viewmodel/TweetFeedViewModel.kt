@@ -863,15 +863,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         var errorMessage: String? = null
         try {
             Timber.tag("TweetFeedViewModel").d("Attempting backend deletion of tweet $tweetId")
-            val deletedTweetId = HproseInstance.deleteTweet(tweetId)
-            if (deletedTweetId != null) {
-                // Success - backend confirmed deletion
-                Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
-            } else {
-                deletionFailed = true
-                errorMessage = "Backend returned null"
-                Timber.tag("TweetFeedViewModel").w("Backend deleteTweet returned null for tweetId $tweetId")
-            }
+            val deletedTweetId = HproseInstance.deleteTweet(tweetId, authorId)
+            Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
         } catch (e: Exception) {
             deletionFailed = true
             errorMessage = e.message ?: "Unknown error"
