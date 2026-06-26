@@ -49,6 +49,7 @@ fun NewTweetsBanner(
     val pendingTweetIds = pendingTweets.joinToString(separator = "|") { it.mid }
     val avatarItems = newTweetsAvatarItems(pendingTweets)
     val shouldShowTitle = avatarItems.size <= 3
+    val countLabel = if (pendingTweets.size > 9) "9+" else pendingTweets.size.toString()
 
     LaunchedEffect(visible, pendingTweetIds) {
         if (visible && pendingTweets.isNotEmpty()) {
@@ -92,7 +93,7 @@ fun NewTweetsBanner(
                 )
                 if (shouldShowTitle) {
                     Text(
-                        text = if (pendingTweets.size == 1) "1 new tweet" else "${pendingTweets.size} new tweets",
+                        text = if (pendingTweets.size == 1) "1 new tweet" else "$countLabel new tweets",
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Normal)
                     )

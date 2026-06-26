@@ -89,6 +89,12 @@ fun TweetNavGraph(
     // Use activity-scoped TweetFeedViewModel to ensure single instance across the app
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
     val pendingNewTweets by tweetFeedViewModel.pendingNewTweets.collectAsState()
+    val renderedTweets by tweetFeedViewModel.tweets.collectAsState()
+    val renderedTweetIds = remember(renderedTweets) { renderedTweets.map { tweet -> tweet.mid }.toSet() }
+    val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweetIds) {
+        pendingNewTweets
+            .filter { tweet -> !tweet.isPrivate && tweet.mid !in renderedTweetIds }
+    }
     val showNewTweetsBanner by tweetFeedViewModel.showNewTweetsBanner.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -188,9 +194,6 @@ fun TweetNavGraph(
                     it
                 }
                 val userId = it.toRoute<NavTweet.UserProfile>().userId
-                LaunchedEffect(userId) {
-                    tweetFeedViewModel.refreshFeedBehindBannerOnProfileOpen()
-                }
                 // reassign the appUserViewModel here, in case the user login with
                 // a different username.
                 sharedViewModel.appUserViewModel =
@@ -307,8 +310,8 @@ fun TweetNavGraph(
 
             if (shouldShowMainFeedNewTweetsBanner) {
                 NewTweetsBanner(
-                    pendingTweets = pendingNewTweets,
-                    visible = showNewTweetsBanner && pendingNewTweets.isNotEmpty(),
+                    pendingTweets = visiblePendingNewTweets,
+                    visible = showNewTweetsBanner && visiblePendingNewTweets.isNotEmpty(),
                     onClick = {
                         tweetFeedViewModel.applyPendingNewTweets()
                         BottomBarState.opacity = 0.98f

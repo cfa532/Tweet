@@ -112,21 +112,61 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private fun queuePendingNewTweets(incomingTweets: List<Tweet>) {
+    private data class DeferredTopPageTweets(
+        val tweetsToMerge: List<Tweet>,
+        val deferredTweetIds: Set<MimeiId>,
+    )
+
+    private fun updateNewTweetsSnapshot(incomingTweets: List<Tweet>) {
+        val uniqueIncomingTweets = incomingTweets.distinctBy { tweet -> tweet.mid }
         val visibleTweetIds = _tweets.value.map { it.mid }.toSet()
-        val existingPendingIds = _pendingNewTweets.value.map { it.mid }.toSet()
-        val trulyNewTweets = incomingTweets.filter { tweet ->
-            !tweet.isPrivate && tweet.mid !in visibleTweetIds && tweet.mid !in existingPendingIds
+        val snapshot = uniqueIncomingTweets
+            .filter { tweet -> !tweet.isPrivate && tweet.mid !in visibleTweetIds }
+            .sortedByDescending { tweet -> tweet.feedOrderingTimestamp() }
+
+        _pendingNewTweets.value = snapshot
+        _showNewTweetsBanner.value = snapshot.isNotEmpty()
+        Timber.tag("TweetFeedViewModel").d("New tweet banner snapshot: ${snapshot.size} unrendered candidate(s)")
+    }
+
+    private fun shouldDeferTopPageTweetsBehindBanner(): Boolean {
+        return behindBannerRefreshJob?.isActive == true
+    }
+
+    private fun deferTopPageTweetsBehindBannerIfNeeded(
+        incomingTweets: List<Tweet>,
+        reason: String,
+    ): DeferredTopPageTweets {
+        if (!shouldDeferTopPageTweetsBehindBanner()) {
+            return DeferredTopPageTweets(incomingTweets, emptySet())
         }
 
-        if (trulyNewTweets.isNotEmpty()) {
-            _pendingNewTweets.update { pendingTweets ->
-                mergeAndSortTweets(pendingTweets, trulyNewTweets)
-            }
-            _showNewTweetsBanner.value = true
-        } else if (_pendingNewTweets.value.isNotEmpty()) {
-            _showNewTweetsBanner.value = true
+        val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
+        val deferrableTweets = incomingTweets.filter { tweet ->
+            !tweet.isPrivate && tweet.mid !in visibleTweetIds
         }
+        if (deferrableTweets.isEmpty()) {
+            return DeferredTopPageTweets(incomingTweets, emptySet())
+        }
+
+        updateNewTweetsSnapshot(deferrableTweets)
+
+        val pendingTweetIds = _pendingNewTweets.value.map { tweet -> tweet.mid }.toSet()
+        val deferredTweetIds = deferrableTweets.map { tweet -> tweet.mid }
+            .toSet()
+            .intersect(pendingTweetIds)
+
+        if (deferredTweetIds.isEmpty()) {
+            return DeferredTopPageTweets(incomingTweets, emptySet())
+        }
+
+        Timber.tag("TweetFeedViewModel")
+            .d("Deferred ${deferredTweetIds.size} top-page tweet(s) behind banner during $reason")
+
+        return DeferredTopPageTweets(
+            tweetsToMerge = incomingTweets.filter { tweet -> tweet.mid !in deferredTweetIds },
+            deferredTweetIds = deferredTweetIds,
+        )
     }
 
     private fun clearPendingNewTweets() {
@@ -136,10 +176,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     fun applyPendingNewTweets() {
         val pendingTweets = _pendingNewTweets.value
-        if (pendingTweets.isNotEmpty()) {
-            mergeTopPageTweetsIntoFeed(pendingTweets)
+        val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
+        val tweetsToApply = pendingTweets.filter { tweet ->
+            !tweet.isPrivate && tweet.mid !in visibleTweetIds
         }
+        val staleCount = pendingTweets.size - tweetsToApply.size
+
+        if (tweetsToApply.isNotEmpty()) {
+            mergeTopPageTweetsIntoFeed(tweetsToApply)
+        }
+
         clearPendingNewTweets()
+        Timber.tag("TweetFeedViewModel")
+            .d("Applied ${tweetsToApply.size} pending main feed tweet(s), dropped $staleCount stale")
     }
 
     fun dismissNewTweetsBanner() {
@@ -162,7 +211,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun shouldCheckNewTweetsBehindBanner(): Boolean {
-        return isInitialized && HproseInstance.isOnline.value && !appUser.isGuest()
+        return isInitialized && HproseInstance.isOnline.value
     }
 
     init {
@@ -334,17 +383,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
+    private suspend fun waitForAppUser(
+        timeoutMillis: Long = 10000L,
+        timeoutAction: String = "using entry IP"
+    ): Boolean {
         val startTime = System.currentTimeMillis()
         Timber.tag("TweetFeedViewModel").d("Waiting for appUser to be fully initialized (timeout: ${timeoutMillis}ms)")
         while (!HproseInstance.isAppUserInitialized.value && System.currentTimeMillis() - startTime < timeoutMillis) {
             kotlinx.coroutines.delay(200)
         }
         val elapsed = System.currentTimeMillis() - startTime
-        if (!HproseInstance.isAppUserInitialized.value) {
-            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, using entry IP")
+        return if (!HproseInstance.isAppUserInitialized.value) {
+            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, $timeoutAction")
+            false
         } else {
             Timber.tag("TweetFeedViewModel").d("appUser initialized after ${elapsed}ms: ${appUser.baseUrl}")
+            true
         }
     }
 
@@ -355,10 +409,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     private fun refreshFeedDirectlyAfterForeground() {
         refreshFeedBehindBanner(reason = "Foreground return")
-    }
-
-    fun refreshFeedBehindBannerOnProfileOpen() {
-        refreshFeedBehindBanner(reason = "Profile open")
     }
 
     private fun refreshFeedBehindBanner(reason: String) {
@@ -375,7 +425,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("TweetFeedViewModel").d("$reason: checking latest main feed tweets behind banner")
                 val freshTweets = fetchTopMainFeedTweetsForBanner(TW_CONST.PAGE_SIZE)
                 withContext(Main) {
-                    queuePendingNewTweets(freshTweets)
+                    updateNewTweetsSnapshot(freshTweets)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed behind banner")
@@ -386,6 +436,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private suspend fun fetchTopMainFeedTweetsForBanner(pageSize: Int): List<Tweet> {
+        if (!waitForAppUser(timeoutAction = "skipping banner feed check")) {
+            return emptyList()
+        }
+
         if (appUser.isGuest()) {
             return emptyList()
         }
@@ -441,9 +495,13 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
                 withContext(Main) {
                     if (deferNewTweets) {
-                        queuePendingNewTweets(followingTweets)
+                        updateNewTweetsSnapshot(followingTweets)
                     } else {
-                        mergeTweetsIntoFeed(followingTweets)
+                        val deferredTweets = deferTopPageTweetsBehindBannerIfNeeded(
+                            incomingTweets = followingTweets,
+                            reason = "update_following_tweets",
+                        )
+                        mergeTweetsIntoFeed(deferredTweets.tweetsToMerge)
                     }
                 }
             } catch (e: Exception) {
@@ -485,7 +543,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
 
         try {
-        if (pageNumber == 0 && !deferNewTweets) {
+        if (pageNumber == 0 && !deferNewTweets && !shouldDeferTopPageTweetsBehindBanner()) {
             clearPendingNewTweets()
         }
 
@@ -591,12 +649,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("MainFeed").d("🌐 Network returned raw=${tweetsWithNulls.size}, valid=${validTweets.size} tweets")
             }
 
-            if (deferNewTweets) {
-                queuePendingNewTweets(validTweets)
+            val responseTweets = if (deferNewTweets) {
+                updateNewTweetsSnapshot(validTweets)
+                tweetsWithNulls
             } else if (pageNumber == 0) {
-                mergeTopPageTweetsIntoFeed(validTweets)
+                val deferredTweets = deferTopPageTweetsBehindBannerIfNeeded(
+                    incomingTweets = validTweets,
+                    reason = "server page 0 refresh",
+                )
+                mergeTopPageTweetsIntoFeed(deferredTweets.tweetsToMerge)
+                if (deferredTweets.deferredTweetIds.isEmpty()) {
+                    tweetsWithNulls
+                } else {
+                    tweetsWithNulls.map { tweet ->
+                        if (tweet != null && tweet.mid in deferredTweets.deferredTweetIds) null else tweet
+                    }
+                }
             } else {
                 mergeTweetsIntoFeed(validTweets)
+                tweetsWithNulls
             }
 
             /**
@@ -622,7 +693,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             if (pageNumber == 0) {
                 refreshFollowingTweets(pageSize, deferNewTweets = deferNewTweets)
             }
-            return tweetsWithNulls
+            return responseTweets
         }
         } finally {
             if (lockedPageZero) {
@@ -675,7 +746,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
                 if (deferNewTweets) {
-                    queuePendingNewTweets(validTweets)
+                    updateNewTweetsSnapshot(validTweets)
                 } else if (pageNumber == 0) {
                     mergeTopPageTweetsIntoFeed(validTweets)
                 } else {
@@ -717,7 +788,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
             if (deferNewTweets) {
-                queuePendingNewTweets(validTweets)
+                updateNewTweetsSnapshot(validTweets)
             } else if (pageNumber == 0) {
                 mergeTopPageTweetsIntoFeed(validTweets)
             } else {
@@ -1033,7 +1104,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             Timber.tag("TweetFeedViewModel").d("Received ${event.tweets.size} main feed tweets from background check")
                             rememberTweetRowTimestamps(event.tweets)
                             withContext(Main) {
-                                queuePendingNewTweets(event.tweets)
+                                updateNewTweetsSnapshot(event.tweets)
                             }
                         }
 

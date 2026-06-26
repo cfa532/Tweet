@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
@@ -38,6 +39,11 @@ class MainFeedCheckWorker @AssistedInject constructor(
 
             if (!HproseInstance.isOnline.value) {
                 Timber.tag(TAG).d("Offline: skipping main feed check")
+                return@withContext Result.success()
+            }
+
+            if (!waitForAppUser()) {
+                Timber.tag(TAG).w("AppUser not initialized, skipping main feed check")
                 return@withContext Result.success()
             }
 
@@ -82,6 +88,22 @@ class MainFeedCheckWorker @AssistedInject constructor(
             Result.success()
         } finally {
             scheduleNext(applicationContext)
+        }
+    }
+
+    private suspend fun waitForAppUser(timeoutMillis: Long = 10000L): Boolean {
+        val startTime = System.currentTimeMillis()
+        Timber.tag(TAG).d("Waiting for appUser initialization (timeout: ${timeoutMillis}ms)")
+        while (!HproseInstance.isAppUserInitialized.value && System.currentTimeMillis() - startTime < timeoutMillis) {
+            delay(200)
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+        return if (HproseInstance.isAppUserInitialized.value) {
+            Timber.tag(TAG).d("appUser initialized after ${elapsed}ms")
+            true
+        } else {
+            Timber.tag(TAG).w("Timeout waiting for appUser initialization after ${elapsed}ms")
+            false
         }
     }
 
