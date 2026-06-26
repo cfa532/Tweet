@@ -41,21 +41,34 @@ class MainFeedCheckWorker @AssistedInject constructor(
                 return@withContext Result.success()
             }
 
-            val cachedTweetIds = HproseInstance.loadCachedTweets(0, TW_CONST.PAGE_SIZE)
-                .map { it.mid }
-                .toSet()
+            if (HproseInstance.appUser.isGuest()) {
+                Timber.tag(TAG).d("User is guest, skipping main feed check")
+                return@withContext Result.success()
+            }
 
-            val freshTweets = HproseInstance.getTweetFeed(
+            val feedTweets = HproseInstance.getTweetFeed(
                 pageNumber = 0,
                 pageSize = TW_CONST.PAGE_SIZE,
                 maxRetries = 1
             )
                 .filterNotNull()
+
+            val followingTweets = HproseInstance.getTweetFeed(
+                pageNumber = 0,
+                pageSize = TW_CONST.PAGE_SIZE,
+                entry = "update_following_tweets",
+                maxRetries = 1
+            )
+                .filterNotNull()
+
+            val newTweets = (feedTweets + followingTweets)
+                .distinctBy { it.mid }
                 .filterNot { it.isPrivate }
 
-            val newTweets = freshTweets.filter { it.mid !in cachedTweetIds }
             if (newTweets.isNotEmpty()) {
-                Timber.tag(TAG).d("Found ${newTweets.size} new main feed tweets")
+                Timber.tag(TAG).d(
+                    "Found ${newTweets.size} new main feed tweets (get_tweet_feed=${feedTweets.size}, update_following_tweets=${followingTweets.size})"
+                )
                 TweetNotificationCenter.post(
                     TweetEvent.MainFeedNewTweetsFound(newTweets)
                 )

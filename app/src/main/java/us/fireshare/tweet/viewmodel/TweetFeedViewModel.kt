@@ -162,7 +162,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun shouldCheckNewTweetsBehindBanner(): Boolean {
-        return isInitialized && HproseInstance.isOnline.value
+        return isInitialized && HproseInstance.isOnline.value && !appUser.isGuest()
     }
 
     init {
@@ -372,8 +372,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         behindBannerRefreshJob = applicationScope.launch(IO) {
             try {
-                Timber.tag("TweetFeedViewModel").d("$reason: checking latest tweets behind banner")
-                refresh(0, deferNewTweets = true)
+                Timber.tag("TweetFeedViewModel").d("$reason: checking latest main feed tweets behind banner")
+                val freshTweets = fetchTopMainFeedTweetsForBanner(TW_CONST.PAGE_SIZE)
+                withContext(Main) {
+                    queuePendingNewTweets(freshTweets)
+                }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed behind banner")
             } finally {
@@ -382,8 +385,35 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    private suspend fun fetchTopMainFeedTweetsForBanner(pageSize: Int): List<Tweet> {
+        if (appUser.isGuest()) {
+            return emptyList()
+        }
+
+        val feedTweets = HproseInstance.getTweetFeed(
+            pageNumber = 0,
+            pageSize = pageSize,
+        ).filterNotNull()
+
+        val followingTweets = HproseInstance.getTweetFeed(
+            pageNumber = 0,
+            pageSize = pageSize,
+            entry = "update_following_tweets",
+        ).filterNotNull()
+
+        val combinedTweets = (feedTweets + followingTweets)
+            .distinctBy { tweet -> tweet.mid }
+            .filterNot { tweet -> tweet.isPrivate }
+
+        rememberTweetRowTimestamps(combinedTweets)
+        Timber.tag("TweetFeedViewModel").d(
+            "Banner check candidates: get_tweet_feed=${feedTweets.size}, update_following_tweets=${followingTweets.size}, unique=${combinedTweets.size}"
+        )
+        return combinedTweets
+    }
+
     fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE, deferNewTweets: Boolean = false) {
-        if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value) {
+        if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value || appUser.isGuest()) {
             return
         }
 
