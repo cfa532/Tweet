@@ -88,6 +88,8 @@ object VideoManager {
     private var hlsFallbackListener: HLSFallbackListener? = null
     private var currentFullScreenVideoMid: MimeiId? = null
     private val fullScreenProtectedVideos = mutableSetOf<MimeiId>()
+    private val imageFullScreenLock = Any()
+    private var imageFullScreenDepth = 0
     
     // ===== HLS FALLBACK LISTENER TRACKING =====
     // Track HLS fallback listeners per player to allow proper cleanup
@@ -790,6 +792,44 @@ object VideoManager {
         MediaLog.d("VideoManager") {
             "Suspended feed activity for fullscreen $protecting; released ${stalePreloadedPlayers.size} preloaded players"
         }
+    }
+
+    fun suspendFeedActivityForImageFullScreen(imageMid: MimeiId) {
+        synchronized(imageFullScreenLock) {
+            imageFullScreenDepth++
+        }
+        stopAllPreloading()
+
+        val stalePreloadedPlayers = videoPlayers.keys.filter { videoMid ->
+            preloadedVideos.contains(videoMid) && activeVideos.getOrDefault(videoMid, 0) == 0
+        }
+        stalePreloadedPlayers.forEach { videoMid ->
+            releasePlayer(videoMid)
+        }
+
+        videoPlayers.values.forEach { player ->
+            try {
+                player.playWhenReady = false
+                player.pause()
+            } catch (e: Exception) {
+                Timber.tag("VideoManager").w("Error pausing feed player for image fullscreen: ${e.message}")
+            }
+        }
+
+        MediaLog.d("VideoManager") {
+            "Suspended feed video activity for image fullscreen $imageMid; released ${stalePreloadedPlayers.size} preloaded players"
+        }
+    }
+
+    fun clearImageFullScreen(imageMid: MimeiId) {
+        synchronized(imageFullScreenLock) {
+            imageFullScreenDepth = (imageFullScreenDepth - 1).coerceAtLeast(0)
+        }
+        MediaLog.d("VideoManager") { "Cleared image fullscreen video suspension for $imageMid" }
+    }
+
+    fun isImageFullScreenActive(): Boolean {
+        return synchronized(imageFullScreenLock) { imageFullScreenDepth > 0 }
     }
 
     // ===== PLAYER MANAGEMENT =====

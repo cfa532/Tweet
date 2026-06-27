@@ -142,11 +142,73 @@ fun AdvancedImageViewer(
     var lastRetryTime by remember { mutableLongStateOf(0L) }
     var currentImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var imageSetInView by remember { mutableStateOf(false) } // Track if image has been set in SubsamplingScaleImageView
+    var tempImageFile by remember(mid) { mutableStateOf<File?>(null) }
     
     // Reset image set flag when imageUrl changes (new image)
     LaunchedEffect(imageUrl) {
         imageSetInView = false
         currentImageUri = null
+        tempImageFile?.delete()
+        tempImageFile = null
+    }
+
+    DisposableEffect(mid) {
+        ImageCacheManager.beginFullScreenImageLoad(mid)
+        VideoManager.suspendFeedActivityForImageFullScreen(mid)
+        onDispose {
+            ImageCacheManager.endFullScreenImageLoad(mid)
+            VideoManager.clearImageFullScreen(mid)
+            tempImageFile?.delete()
+        }
+    }
+
+    suspend fun applyAdvancedCachedImageIfAvailable(reason: String): Boolean {
+        val cacheKeys = listOf("${mid}_original", mid)
+        for (cacheKey in cacheKeys) {
+            val cachedBitmap = ImageCacheManager.getCachedImage(context, cacheKey)
+            if (cachedBitmap != null && !cachedBitmap.isRecycled) {
+                val hadReadyBitmap = loadState.bitmap?.let { !it.isRecycled } == true &&
+                    !loadState.isLoading &&
+                    !loadState.hasError
+
+                loadState = loadState.copy(
+                    bitmap = cachedBitmap,
+                    isLoading = false,
+                    hasError = false
+                )
+
+                val cachedFile = ImageCacheManager.getCachedImageFile(context, cacheKey)
+                if (cachedFile != null && cachedFile.exists()) {
+                    imageFile = cachedFile
+                    if (cacheKey.endsWith("_original")) {
+                        tempImageFile?.delete()
+                        tempImageFile = null
+                    }
+                }
+
+                if (!hadReadyBitmap) {
+                    onLoadComplete?.invoke()
+                    MediaLog.d("ImageViewer") {
+                        "Applied cached fullscreen image for $mid after $reason (cacheKey=$cacheKey)"
+                    }
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    LaunchedEffect(mid) {
+        applyAdvancedCachedImageIfAvailable("cache-observer-start")
+        coroutineScope {
+            listOf("${mid}_original", mid).forEach { cacheKey ->
+                launch {
+                    ImageCacheManager.getImageCacheVersionFlow(cacheKey).collect {
+                        applyAdvancedCachedImageIfAvailable("cache-update")
+                    }
+                }
+            }
+        }
     }
 
     // Function to check if retry should be attempted (debounced and with available slots)
@@ -182,6 +244,7 @@ fun AdvancedImageViewer(
         
         try {
             var compressedBitmap: android.graphics.Bitmap? = null
+            var compressedPreviewJob: kotlinx.coroutines.Job? = null
             
             // If we already have an initial bitmap, use it immediately
             if (initialBitmap != null) {
@@ -232,6 +295,35 @@ fun AdvancedImageViewer(
                     loadState = loadState.copy(isLoading = true, hasError = false)
                 }
             }
+
+            if (initialBitmap == null && compressedBitmap == null) {
+                compressedPreviewJob = launch {
+                    val previewBitmap = ImageCacheManager.downloadAndCacheImage(
+                        context = context,
+                        imageUrl = imageUrl,
+                        mid = mid,
+                        isVisible = true
+                    )
+                    if (previewBitmap != null && !previewBitmap.isRecycled) {
+                        val hasOriginalBitmap = imageFile?.name == "${mid}_original.jpg"
+                        if (!hasOriginalBitmap) {
+                            loadState = loadState.copy(
+                                bitmap = previewBitmap,
+                                isLoading = false,
+                                hasError = false
+                            )
+                            val cachedFile = ImageCacheManager.getCachedImageFile(context, mid)
+                            if (cachedFile != null && cachedFile.exists()) {
+                                imageFile = cachedFile
+                            }
+                            onLoadComplete?.invoke()
+                            MediaLog.d("ImageViewer") {
+                                "Applied compressed fullscreen preview for $mid while original loads"
+                            }
+                        }
+                    }
+                }
+            }
             
             // Step 2: Load original image from server (only if no cached images found and no initial bitmap)
             // Skip loading original if we have an initialBitmap to prevent flicker
@@ -258,6 +350,7 @@ fun AdvancedImageViewer(
                     }
                     
                     if (downloadedBitmap != null) {
+                        compressedPreviewJob?.cancel()
                         // Update with original high-resolution image
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
                         
@@ -533,11 +626,12 @@ fun AdvancedImageViewer(
                         loadState.bitmap?.let { bitmap ->
                             try {
                                 // Use cached file if available, otherwise create temp file from bitmap
-                                val fileToUse = imageFile ?: run {
+                                val fileToUse = imageFile ?: tempImageFile ?: run {
                                     val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
                                     tempFile.outputStream().use { out ->
                                         bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, out)
                                     }
+                                    tempImageFile = tempFile
                                     tempFile
                                 }
                                 val imageUri = fileToUse.toUri()

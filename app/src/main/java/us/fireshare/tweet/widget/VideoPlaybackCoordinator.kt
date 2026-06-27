@@ -614,6 +614,7 @@ class VideoPlaybackCoordinator(
 
     private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
         if (isPaused || !isFeedVisible) return
+        if (VideoManager.isImageFullScreenActive()) return
 
         if (replayCurrentPrimary && resumePendingPrimaryIfPossible(requirePlayable = true)) {
             return
@@ -1002,6 +1003,12 @@ class VideoPlaybackCoordinator(
     }
 
     private fun resumePendingPrimaryIfPossible(requirePlayable: Boolean = false): Boolean {
+        if (VideoManager.isImageFullScreenActive()) {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped because image fullscreen is active"
+            }
+            return false
+        }
         if (isPaused || !isFeedVisible) {
             MediaLog.d("VideoLoading") {
                 "Coordinator[$managerPlaybackOwnerKey] resume skipped paused=$isPaused visible=$isFeedVisible " +

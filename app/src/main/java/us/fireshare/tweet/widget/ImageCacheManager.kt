@@ -142,6 +142,8 @@ object ImageCacheManager {
     private val viewportVisibleImageMids = ConcurrentHashMap.newKeySet<String>()
     private val visibleImageRefCounts = ConcurrentHashMap<String, AtomicInteger>()
     private val visibleImageMutex = Any()
+    private val fullScreenImageMids = ConcurrentHashMap.newKeySet<String>()
+    private val fullScreenImageRefCounts = ConcurrentHashMap<String, AtomicInteger>()
     private val directionalPreloadImageMids = ConcurrentHashMap.newKeySet<String>()
     private val imagePreloadJobs = ConcurrentHashMap<String, Job>()
 
@@ -166,10 +168,11 @@ object ImageCacheManager {
         isVisible: Boolean,
         isAvatar: Boolean
     ): DownloadPermit {
-        val priority = when {
-            isAvatarRequest(mid, imageUrl, isAvatar) -> ImageDownloadPriority.AVATAR
-            isVisible -> ImageDownloadPriority.VISIBLE
-            else -> ImageDownloadPriority.BACKGROUND
+        waitForFullScreenImageTurn(mid)
+        var priority = effectiveDownloadPriority(mid, imageUrl, isVisible, isAvatar)
+        while (priority == ImageDownloadPriority.BACKGROUND && hasVisibleDownloadDemand()) {
+            delay(100L)
+            priority = effectiveDownloadPriority(mid, imageUrl, isVisible, isAvatar)
         }
         val semaphore = when (priority) {
             ImageDownloadPriority.AVATAR -> avatarDownloadSemaphore
@@ -178,6 +181,102 @@ object ImageCacheManager {
         }
         semaphore.acquire()
         return DownloadPermit(semaphore, priority)
+    }
+
+    private fun effectiveDownloadPriority(
+        mid: String,
+        imageUrl: String,
+        isVisible: Boolean,
+        isAvatar: Boolean
+    ): ImageDownloadPriority {
+        val baseMid = baseImageMid(mid)
+        val isNowVisible = isVisible ||
+            downloadPriorityQueue[mid] == true ||
+            fullScreenImageMids.contains(baseMid) ||
+            visibleImageMids.contains(baseMid)
+
+        return when {
+            isAvatarRequest(mid, imageUrl, isAvatar) -> ImageDownloadPriority.AVATAR
+            isNowVisible -> ImageDownloadPriority.VISIBLE
+            else -> ImageDownloadPriority.BACKGROUND
+        }
+    }
+
+    private fun hasVisibleDownloadDemand(): Boolean {
+        return activeVisibleDownloads > 0 ||
+            synchronized(downloadQueueMutex) {
+                downloadPriorityQueue.values.any { it }
+            }
+    }
+
+    private fun promoteDownloadToVisible(downloadKey: String) {
+        synchronized(downloadQueueMutex) {
+            if (ongoingDownloads.containsKey(downloadKey) || downloadQueue.containsKey(downloadKey)) {
+                downloadPriorityQueue[downloadKey] = true
+            }
+        }
+        resumeDownload(downloadKey)
+    }
+
+    private fun hasFullScreenImageActive(): Boolean {
+        return fullScreenImageMids.isNotEmpty()
+    }
+
+    private fun isFullScreenImageKey(mid: String): Boolean {
+        return fullScreenImageMids.contains(baseImageMid(mid))
+    }
+
+    private fun shouldDeferForFullScreen(mid: String): Boolean {
+        return hasFullScreenImageActive() && !isFullScreenImageKey(mid)
+    }
+
+    private suspend fun waitForFullScreenImageTurn(mid: String) {
+        while (shouldDeferForFullScreen(mid)) {
+            delay(100L)
+        }
+    }
+
+    private fun suspendNonFullScreenImageLoads() {
+        imagePreloadJobs.entries
+            .filterNot { isFullScreenImageKey(it.key) }
+            .forEach { entry ->
+                entry.value.cancel()
+                imagePreloadJobs.remove(entry.key)
+                pauseDownload(entry.key)
+            }
+
+        directionalPreloadImageMids.removeIf { !isFullScreenImageKey(it) }
+
+        val activeKeys = synchronized(downloadQueueMutex) {
+            (downloadQueue.keys + ongoingDownloads.keys).distinct()
+        }
+        activeKeys
+            .filterNot { isFullScreenImageKey(it) }
+            .forEach { key ->
+                pauseDownload(key)
+                downloadPriorityQueue[key] = false
+            }
+    }
+
+    fun beginFullScreenImageLoad(mid: String) {
+        val baseMid = baseImageMid(mid)
+        val originalMid = "${baseMid}_original"
+        fullScreenImageRefCounts
+            .computeIfAbsent(baseMid) { AtomicInteger(0) }
+            .incrementAndGet()
+        fullScreenImageMids.add(baseMid)
+        promoteDownloadToVisible(baseMid)
+        promoteDownloadToVisible(originalMid)
+        suspendNonFullScreenImageLoads()
+    }
+
+    fun endFullScreenImageLoad(mid: String) {
+        val baseMid = baseImageMid(mid)
+        val count = fullScreenImageRefCounts[baseMid]?.decrementAndGet() ?: 0
+        if (count <= 0) {
+            fullScreenImageRefCounts.remove(baseMid)
+            fullScreenImageMids.remove(baseMid)
+        }
     }
 
     private fun releaseDownloadPermit(permit: DownloadPermit?) {
@@ -507,25 +606,32 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
+                waitForFullScreenImageTurn(mid)
+
                 // Deduplication: Check if already downloading this image
                 val shouldProceed = synchronized(downloadQueueMutex) {
                     if (ongoingDownloads.contains(mid)) {
                         false // Another thread is downloading
                     } else {
                         ongoingDownloads[mid] = System.currentTimeMillis()
+                        downloadPriorityQueue[mid] = isVisible
                         true // This thread will download
                     }
                 }
 
-            if (!shouldProceed) {
-                // Wait for the concurrent download to complete
-                return@withContext waitForConcurrentDownload(context, mid)
-            }
+                if (!shouldProceed) {
+                    if (isVisible) {
+                        promoteDownloadToVisible(mid)
+                    }
+                    // Wait for the concurrent download to complete
+                    return@withContext waitForConcurrentDownload(context, mid)
+                }
 
                 // Check memory availability before starting download (similar to iOS)
                 if (!waitForMemoryWindow(mid, "[thumbnail]")) {
                     synchronized(downloadQueueMutex) {
                         ongoingDownloads.remove(mid)
+                        downloadPriorityQueue.remove(mid)
                     }
                     return@withContext null
                 }
@@ -566,6 +672,7 @@ object ImageCacheManager {
                     downloadQueue.remove(mid)
                     // Remove from ongoing downloads to signal completion
                     synchronized(downloadQueueMutex) {
+                        downloadPriorityQueue.remove(mid)
                         ongoingDownloads.remove(mid)
                     }
                     if (permit.priority == ImageDownloadPriority.BACKGROUND) {
@@ -614,6 +721,7 @@ object ImageCacheManager {
                     permit = null
                 } else {
                     synchronized(downloadQueueMutex) {
+                        downloadPriorityQueue.remove(mid)
                         ongoingDownloads.remove(mid)
                     }
                     us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
@@ -637,6 +745,10 @@ object ImageCacheManager {
             var inputStream: InputStream? = null
 
             try {
+                if (isDownloadPaused(mid) || shouldDeferForFullScreen(mid)) {
+                    return@withContext null
+                }
+
                 val client = if (isAvatarRequest(mid, imageUrl, isAvatar)) avatarHttpClient else imageHttpClient
                 val response = client.get(imageUrl) {
                     headers {
@@ -719,7 +831,7 @@ object ImageCacheManager {
 
             try {
                 // Check if download is paused before starting
-                if (isDownloadPaused(mid)) {
+                if (isDownloadPaused(mid) || shouldDeferForFullScreen(mid)) {
                     return@withContext null
                 }
                 
@@ -759,13 +871,13 @@ object ImageCacheManager {
                 FileOutputStream(tempFile).use { out ->
                     var len: Int
                     while (inputStream.read(buffer).also { len = it } != -1) {
-                        if (isDownloadPaused(mid)) break
+                        if (isDownloadPaused(mid) || shouldDeferForFullScreen(mid)) break
                         out.write(buffer, 0, len)
                     }
                 }
                 
                 // Check if download was paused during streaming
-                if (isDownloadPaused(mid)) {
+                if (isDownloadPaused(mid) || shouldDeferForFullScreen(mid)) {
                     tempFile?.delete()
                     return@withContext null
                 }
@@ -908,6 +1020,8 @@ object ImageCacheManager {
                     return@withContext null
                 }
 
+                waitForFullScreenImageTurn(originalMid)
+
                 // Atomically check if downloading and mark as downloading to prevent race conditions
                 val shouldDownload = synchronized(downloadQueueMutex) {
                     if (downloadQueue.containsKey(originalMid)) {
@@ -922,10 +1036,14 @@ object ImageCacheManager {
                 }
                 
                 if (!shouldDownload) {
+                    if (isVisible) {
+                        promoteDownloadToVisible(originalMid)
+                    }
                     // Another thread is downloading, wait for the result
+                    val maxAttempts = if (isVisible) 600 else 100
                     var attempts = 0
                     var shouldContinue = true
-                    while (attempts < 100 && shouldContinue) { // Wait up to 10 seconds (100 * 100ms) - reduced timeout
+                    while (attempts < maxAttempts && shouldContinue) {
                         delay(100L)
                         attempts++
                         
@@ -946,6 +1064,7 @@ object ImageCacheManager {
                 if (!waitForMemoryWindow(originalMid, "[original]")) {
                     synchronized(downloadQueueMutex) {
                         downloadQueue.remove(originalMid)
+                        downloadPriorityQueue.remove(originalMid)
                         ongoingDownloads.remove(originalMid)
                     }
                     return@withContext null
@@ -979,6 +1098,11 @@ object ImageCacheManager {
                             if (bitmap != null && !bitmap.isRecycled) {
                                 // Store original bitmap in memory cache with original key
                                 addToMemoryCache(originalMid, bitmap)
+                                if (getMemoryCachedBitmap(mid) == null &&
+                                    getCachedImageFile(context, mid) == null
+                                ) {
+                                    cacheImage(context, mid, bitmap)
+                                }
                                 // FIX P1-4: Store result with size limit enforcement
                                 storeDownloadResult(originalMid, bitmap)
                                 notifyImageCached(originalMid)
@@ -1601,6 +1725,10 @@ object ImageCacheManager {
      */
     suspend fun preloadImages(context: Context, mid: String, imageUrl: String) = withContext(Dispatchers.IO) {
         try {
+            if (shouldDeferForFullScreen(mid)) {
+                return@withContext
+            }
+
             // Check if already cached
             if (getCachedImage(context, mid) != null) {
                 return@withContext
@@ -1617,18 +1745,21 @@ object ImageCacheManager {
 
     fun markImageVisible(mid: String) {
         val baseMid = baseImageMid(mid)
+        val originalMid = "${baseMid}_original"
         synchronized(visibleImageMutex) {
             visibleImageRefCounts
                 .computeIfAbsent(baseMid) { AtomicInteger(0) }
                 .incrementAndGet()
             visibleImageMids.add(baseMid)
         }
+        promoteDownloadToVisible(baseMid)
+        promoteDownloadToVisible(originalMid)
         resumeDownload(mid)
-        resumeDownload("${baseMid}_original")
     }
 
     fun markImageNotVisible(mid: String) {
         val baseMid = baseImageMid(mid)
+        val originalMid = "${baseMid}_original"
         synchronized(visibleImageMutex) {
             val count = visibleImageRefCounts[baseMid]?.decrementAndGet() ?: 0
             if (count <= 0) {
@@ -1637,13 +1768,15 @@ object ImageCacheManager {
             rebuildVisibleImageMidsLocked()
         }
         if (!isImageProtected(mid)) {
-            cancelImageLoad(mid)
+            schedulePauseDownload(baseMid)
+            schedulePauseDownload(originalMid)
         }
     }
 
     fun isImageProtected(mid: String): Boolean {
         val baseMid = baseImageMid(mid)
         return visibleImageMids.contains(baseMid) ||
+            fullScreenImageMids.contains(baseMid) ||
             directionalPreloadImageMids.contains(baseMid) ||
             hasMemoryCachedImage(mid) ||
             hasMemoryCachedImage(baseMid) ||
@@ -1677,6 +1810,17 @@ object ImageCacheManager {
         tweets: List<Tweet>,
         includeOppositeOnStop: Boolean = false
     ) {
+        if (hasFullScreenImageActive()) {
+            directionalPreloadImageMids.clear()
+            imagePreloadJobs.entries
+                .filterNot { isFullScreenImageKey(it.key) }
+                .forEach { entry ->
+                    entry.value.cancel()
+                    imagePreloadJobs.remove(entry.key)
+                }
+            return
+        }
+
         val visibleImageIds = visibleTweetIndexes
             .mapNotNull { tweets.getOrNull(it) }
             .flatMap { tweet ->
