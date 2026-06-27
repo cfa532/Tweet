@@ -437,7 +437,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
     
-    // Check for upgrade using versionCode comparison (for mini version users, not play)
+    // Check for upgrade using server versionName comparison (for mini version users, not play)
     fun checkForMiniUpgrade(context: Context) {
         // Play version doesn't support upgrades
         if (BuildConfig.IS_PLAY_VERSION) {
@@ -459,9 +459,14 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
             try {
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                 val currentVersionString = packageInfo.versionName ?: return@launch
-                val currentVersionCode = packageInfo.longVersionCode.toInt()
+                val currentVersion = try {
+                    currentVersionString.toInt()
+                } catch (e: NumberFormatException) {
+                    Timber.tag("checkForMiniUpgrade").e(e, "Failed to parse current version as Int: $currentVersionString")
+                    return@launch
+                }
                 
-                Timber.tag("checkForMiniUpgrade").d("Mini user requesting upgrade: $currentVersionString (code=$currentVersionCode)")
+                Timber.tag("checkForMiniUpgrade").d("Mini user requesting upgrade: $currentVersionString")
                 
                 // Query server for full version package
                 Timber.tag("checkForMiniUpgrade").d("Calling HproseInstance.checkUpgrade()")
@@ -474,6 +479,35 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                         android.widget.Toast.makeText(context,
                             "Server returned null version info",
                             android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val serverVersionString = versionInfo["version"]
+                if (serverVersionString == null) {
+                    Timber.tag("checkForMiniUpgrade").e("Server version info missing version")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            "Server missing version",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val serverVersion = try {
+                    serverVersionString.toInt()
+                } catch (e: NumberFormatException) {
+                    Timber.tag("checkForMiniUpgrade").e(e, "Failed to parse server version as Int: $serverVersionString")
+                    return@launch
+                }
+
+                Timber.tag("checkForMiniUpgrade").d("Version comparison: current=$currentVersion, server=$serverVersion")
+                if (currentVersion >= serverVersion) {
+                    Timber.tag("checkForMiniUpgrade").d("No update needed: current=$currentVersion >= server=$serverVersion")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            "You already have the latest version",
+                            android.widget.Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
@@ -495,9 +529,18 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 Timber.tag("checkForMiniUpgrade").d("Calling HproseInstance.getProviderIP($packageId)")
                 val providerIp = HproseInstance.getProviderIP(packageId)
                 Timber.tag("checkForMiniUpgrade").d("getProviderIP() returned: $providerIp")
+                if (providerIp == null) {
+                    Timber.tag("checkForMiniUpgrade").e("Cannot download upgrade: provider IP is null for packageId=$packageId")
+                    withContext(Main) {
+                        android.widget.Toast.makeText(context,
+                            "Could not resolve update server",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
 
                 val downloadUrl = "http://$providerIp/mm/$packageId"
-                Timber.tag("checkForMiniUpgrade").d("Downloading APK to check version: $downloadUrl")
+                Timber.tag("checkForMiniUpgrade").d("Downloading APK: $downloadUrl")
                 
                 // Set download state to true
                 _isDownloading.value = true
@@ -531,41 +574,10 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                             Timber.tag("checkForMiniUpgrade").d("Downloaded file exists: ${apkFile.exists()}")
                             Timber.tag("checkForMiniUpgrade").d("Downloaded file size: ${apkFile.length()} bytes")
                             
-                            // Get versionCode from downloaded APK
-                            val downloadedPackageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-                            if (downloadedPackageInfo != null) {
-                                val downloadedVersionCode = downloadedPackageInfo.longVersionCode.toInt()
-                                Timber.tag("checkForMiniUpgrade").d("Version comparison: current=$currentVersionCode, downloaded=$downloadedVersionCode")
-                                
-                                if (downloadedVersionCode > currentVersionCode) {
-                                    Timber.tag("checkForMiniUpgrade").d("Update available, starting installation")
-                                    // Install the downloaded APK
-                                    installApkFromFile(context, apkFile)
-                                    // Reset download state after installation is triggered
-                                    _isDownloading.value = false
-                                } else {
-                                    Timber.tag("checkForMiniUpgrade").d("No update needed: current version is up to date")
-                                    withContext(Main) {
-                                        android.widget.Toast.makeText(context,
-                                            "You already have the latest version",
-                                            android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                    // Clean up temp file
-                                    apkFile.delete()
-                                    // Reset download state
-                                    _isDownloading.value = false
-                                }
-                            } else {
-                                Timber.tag("checkForMiniUpgrade").e("Failed to read package info from downloaded APK")
-                                withContext(Main) {
-                                    android.widget.Toast.makeText(context,
-                                        "Failed to verify downloaded package",
-                                        android.widget.Toast.LENGTH_LONG).show()
-                                }
-                                apkFile.delete()
-                                // Reset download state
-                                _isDownloading.value = false
-                            }
+                            Timber.tag("checkForMiniUpgrade").d("Update available, starting installation")
+                            installApkFromFile(context, apkFile)
+                            // Reset download state after installation is triggered
+                            _isDownloading.value = false
                         } else if (status == DownloadManager.STATUS_FAILED) {
                             finishDownload = true
                             _isDownloading.value = false

@@ -193,16 +193,18 @@ data class User(
             return writableUrl
         }
         clearWritableClient()
+        writableUrl = null
+        writableUrlResolvedAt = null
 
         suspend fun tryResolve(): String? {
             if (hostIds.isNullOrEmpty()) {
-                return writableUrl
+                return null
             }
 
             val firstHostId = hostIds?.first()
 
             if (firstHostId.isNullOrEmpty()) {
-                return writableUrl
+                return null
             }
 
             val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true")
@@ -220,7 +222,7 @@ data class User(
                             ipv6 to portStr
                         } else {
                             Timber.w("[resolveWritableUrl] Failed to parse IPv6 with port: $hostIP")
-                            return writableUrl
+                            return null
                         }
                     }
                     hostIP.contains(":") && !hostIP.contains("]: ") && !hostIP.contains("[") -> {
@@ -230,20 +232,20 @@ data class User(
                             parts[0] to parts[1]
                         } else {
                             Timber.w("[resolveWritableUrl] Failed to parse IPv4 with port: $hostIP")
-                            return writableUrl
+                            return null
                         }
                     }
                     else -> {
                         // No port specified - cannot construct URL
                         Timber.w("[resolveWritableUrl] No port specified in hostIP: $hostIP")
-                        return writableUrl
+                        return null
                     }
                 }
 
                 val portNumber = port.toIntOrNull()
                 if (portNumber == null || portNumber !in 1..65535) {
                     Timber.w("[resolveWritableUrl] Port $port is not a valid port (1-65535)")
-                    return writableUrl
+                    return null
                 }
 
                 // Construct URL string
@@ -260,12 +262,12 @@ data class User(
                 Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
             }
 
-            return writableUrl
+            return null
         }
 
         // First attempt
         val firstAttempt = tryResolve()
-        if (!firstAttempt.isNullOrEmpty() && firstAttempt != writableUrl) {
+        if (!firstAttempt.isNullOrEmpty()) {
             return firstAttempt
         }
         // Retry once if first attempt failed

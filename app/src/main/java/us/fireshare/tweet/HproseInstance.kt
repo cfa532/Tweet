@@ -438,6 +438,12 @@ object HproseInstance {
         }
     }
 
+    internal fun markAppUserInitializedAfterLogin() {
+        if (!appUser.isGuest() && !appUser.baseUrl.isNullOrBlank()) {
+            _isAppUserInitialized.value = true
+        }
+    }
+
     private lateinit var chatDatabase: ChatDatabase
     lateinit var dao: CachedTweetDao
     
@@ -847,19 +853,28 @@ object HproseInstance {
             Timber.tag("initAppEntry")
                 .d("User initialized with cached data. $appId, appUser.baseUrl: ${appUser.baseUrl}")
         } else {
+            val guestUser = appUser
             val alphaIds = getAlphaIds()
-            appUser.followingList = alphaIds
+            guestUser.followingList = alphaIds
             // Ensure baseUrl is set so hproseService is non-null for login (getUserId) calls
-            if (appUser.baseUrl.isNullOrBlank()) {
+            if (guestUser.baseUrl.isNullOrBlank()) {
                 val entryIP = findEntryIP()
-                appUser.baseUrl = "http://$entryIP"
-                Timber.tag("initAppEntry").d("🔍 Guest user: resolved entry IP for baseUrl: ${appUser.baseUrl}")
+                if (preferenceHelper.getUserId() != TW_CONST.GUEST_ID || !appUser.isGuest()) {
+                    Timber.tag("initAppEntry").d("Guest bootstrap finished after login; skipping stale guest state update")
+                    return
+                }
+                guestUser.baseUrl = "http://$entryIP"
+                Timber.tag("initAppEntry").d("🔍 Guest user: resolved entry IP for baseUrl: ${guestUser.baseUrl}")
             }
-            TweetCacheManager.saveUser(appUser)
+            if (preferenceHelper.getUserId() != TW_CONST.GUEST_ID || !appUser.isGuest()) {
+                Timber.tag("initAppEntry").d("Guest bootstrap superseded by login; skipping guest cache/update")
+                return
+            }
+            TweetCacheManager.saveUser(guestUser)
             Timber.tag("initAppEntry").d("🔍 Guest user initialized. appId: $appId")
             Timber.tag("initAppEntry").d("🔍 Guest user alphaIds: $alphaIds")
-            Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${appUser.baseUrl}")
-            Timber.tag("initAppEntry").d("🔍 Guest user mid: ${appUser.mid}")
+            Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${guestUser.baseUrl}")
+            Timber.tag("initAppEntry").d("🔍 Guest user mid: ${guestUser.mid}")
             _isAppUserInitialized.value = true
             // For guest users, also call the callback to show UI
             onBaseUrlReady?.invoke()
@@ -1820,9 +1835,8 @@ object HproseInstance {
 
         try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val response = (appUser.writableClient ?: appUser.hproseService)
-                ?.runMApp<Map<String, Any>>(entry, params)
+            val response = requireWritableClient(appUser, "updateUserCore")
+                .runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -1875,13 +1889,21 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java)
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val response = appUser.writableClient?.runMApp<MimeiId>(entry, request)
+            val response = requireWritableClient(appUser, "setUserAvatar").runMApp<MimeiId>(entry, request)
             response
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e)
             null
         }
+    }
+
+    private suspend fun requireWritableClient(user: User, operation: String): HproseService {
+        val writableUrl = user.resolveWritableUrl()
+        if (writableUrl.isNullOrBlank()) {
+            throw IllegalStateException("$operation failed: writableUrl could not be resolved for user ${user.mid}")
+        }
+        return user.writableClient
+            ?: throw IllegalStateException("$operation failed: writable client not available for $writableUrl")
     }
 
     private suspend fun refreshRelationshipListBaseUrl(
@@ -2382,28 +2404,14 @@ object HproseInstance {
         val homeHostId = hostIds.getOrNull(0)
 
         if (!homeHostId.isNullOrBlank()) {
-            appUser.resolveWritableUrl()
-            appUser.writableClient?.let { homeService ->
-                Timber.tag("getTweetFeed").d(
-                    "Routing update_following_tweets to appUser home host $homeHostId"
-                )
-                return homeService
-            }
-
-            val homeIp = getHostIP(homeHostId)
-            val homeService = homeIp?.let { HproseClientPool.getRegularClient("http://$it") }
-            if (homeService != null) {
-                Timber.tag("getTweetFeed").d(
-                    "Routing update_following_tweets to resolved home host $homeHostId"
-                )
-                return homeService
-            }
-            Timber.tag("getTweetFeed").w(
-                "Could not resolve home host $homeHostId for update_following_tweets; falling back to appUser.baseUrl=${appUser.baseUrl}"
+            val homeService = requireWritableClient(appUser, "update_following_tweets")
+            Timber.tag("getTweetFeed").d(
+                "Routing update_following_tweets to appUser home host $homeHostId"
             )
+            return homeService
         }
 
-        return appUser.hproseService
+        throw IllegalStateException("update_following_tweets failed: appUser has no home host")
     }
 
     /**
@@ -3214,10 +3222,9 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val client = appUser.writableClient ?: appUser.hproseService
+            val client = requireWritableClient(appUser, "uploadTweet")
             val rawResponse = try {
-                client?.runMApp<Map<String, Any>>(entry, params)
+                client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
                 throw e
@@ -3342,19 +3349,7 @@ object HproseInstance {
             // returns a Java-Map-backed object that wrapResponse mishandles),
             // making a clearly successful operation look like failure on the
             // client. By calling the home node directly we never hit it.
-            //
-            // Falls back to appUser.hproseService if hostId resolution fails,
-            // so the call still goes out (just risks the stale-payload bug).
-            val homeService = appUser.hostIds?.firstOrNull()?.let { hostId ->
-                getHostIP(hostId)?.let { ip ->
-                    HproseClientPool.getRegularClient("http://$ip")
-                }
-            } ?: appUser.hproseService
-
-            if (homeService == null) {
-                Timber.tag("toggleFollowing").e("hproseService is null! Cannot call toggle_following")
-                return null
-            }
+            val homeService = requireWritableClient(appUser, "toggleFollowing")
             Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}, homeHostId=${appUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
@@ -3501,10 +3496,10 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        tweet.author?.resolveWritableUrl()
+        val author = tweet.author
+            ?: throw Exception("Author not available for toggleFavorite")
+        val authorClient = requireWritableClient(author, "toggleFavorite")
         return try {
-            val authorClient = tweet.author?.writableClient
-                ?: throw Exception("Author writable client not available for toggleFavorite")
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
@@ -3570,10 +3565,10 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        tweet.author?.resolveWritableUrl()
+        val author = tweet.author
+            ?: throw Exception("Author not available for toggleBookmark")
+        val authorClient = requireWritableClient(author, "toggleBookmark")
         return try {
-            val authorClient = tweet.author?.writableClient
-                ?: throw Exception("Author writable client not available for toggleBookmark")
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
@@ -3733,10 +3728,9 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val client = appUser.writableClient ?: appUser.hproseService
+            val client = requireWritableClient(appUser, "deleteTweet")
             val rawResponse = try {
-                client?.runMApp<Map<String, Any>>(entry, params)
+                client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
                 throw e
@@ -3790,9 +3784,8 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         // Mutation: route through appUser's writable host (hostIds[0]).
-        appUser.resolveWritableUrl()
-        val client = appUser.writableClient ?: appUser.hproseService
-        val rawResponse = client?.runMApp<Any>(entry, params)
+        val client = requireWritableClient(appUser, "deleteAccount")
+        val rawResponse = client.runMApp<Any>(entry, params)
         return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
     }
 
@@ -4944,7 +4937,7 @@ object HproseInstance {
         // Safety check: never try to get provider IP for GUEST_ID
         if (mid == TW_CONST.GUEST_ID) {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
-            return@coroutineScope findEntryIP()
+            return@coroutineScope null
         }
 
         val request = providerIPRequestsMutex.withLock {
@@ -5085,11 +5078,10 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val pinClient = appUser.writableClient ?: appUser.hproseService
+            val pinClient = requireWritableClient(appUser, "togglePinnedTweet")
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            when (val rawResponse = pinClient?.runMApp<Any>(entry, params)) {
+            when (val rawResponse = pinClient.runMApp<Any>(entry, params)) {
                 is Boolean -> {
                     // Legacy format: direct boolean response
                     rawResponse
