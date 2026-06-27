@@ -60,6 +60,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
+    val isCurrentUserProfile = appUser.mid == user.mid
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
 
@@ -72,7 +73,10 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(end = 8.dp),
+                    .padding(
+                        start = if (isCurrentUserProfile) 4.dp else 20.dp,
+                        end = 8.dp
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {

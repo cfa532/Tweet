@@ -99,14 +99,14 @@ fun ProfileDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .padding(horizontal = if (isCurrentUserProfile) 8.dp else 20.dp),
+                    .padding(horizontal = if (isCurrentUserProfile) 16.dp else 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ProfileTextStatItem(
                     label = stringResource(R.string.fans),
                     count = followersCount.toString(),
                     modifier = Modifier
-                        .weight(1f)
                         .clickable {
                             navController.navigate(NavTweet.Follower(displayUser.mid))
                         }
@@ -115,15 +115,13 @@ fun ProfileDetail(
                     label = stringResource(R.string.followings),
                     count = followingsCount.toString(),
                     modifier = Modifier
-                        .weight(1f)
                         .clickable {
                             navController.navigate(NavTweet.Following(displayUser.mid))
                         }
                 )
                 ProfileTextStatItem(
                     label = stringResource(R.string.posts),
-                    count = tweetCount.toString(),
-                    modifier = Modifier.weight(1f)
+                    count = tweetCount.toString()
                 )
                 if (isCurrentUserProfile) {
                     ProfileIconStatItem(
@@ -131,7 +129,6 @@ fun ProfileDetail(
                         contentDescription = stringResource(R.string.user_bookmarks),
                         count = bookmarksCount.toString(),
                         modifier = Modifier
-                            .weight(1f)
                             .clickable {
                                 navController.navigate(NavTweet.Bookmarks(displayUser.mid))
                             }
@@ -141,7 +138,6 @@ fun ProfileDetail(
                         contentDescription = stringResource(R.string.your_favorites),
                         count = favoritesCount.toString(),
                         modifier = Modifier
-                            .weight(1f)
                             .clickable {
                                 navController.navigate(NavTweet.Favorites(displayUser.mid))
                             }

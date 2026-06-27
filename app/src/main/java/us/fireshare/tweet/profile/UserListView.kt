@@ -75,6 +75,7 @@ fun UserListView(
     // Internal state management
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
+    var isInitialLoading by remember { mutableStateOf(false) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var lastUserId by remember { mutableStateOf(currentUserId) }
     var serverDepleted by remember { mutableStateOf(false) }
@@ -100,6 +101,7 @@ fun UserListView(
             allUserIds = emptyList()
             displayedUserCount = 0
             serverDepleted = false
+            isInitialLoading = true
             
             // Keep the potentially blocking Hprose call off the UI dispatcher during
             // the first profile-list load. Pull-to-refresh and paging use the same
@@ -127,6 +129,8 @@ fun UserListView(
             } catch (e: Exception) {
                 Timber.tag("UserListView").e(e, "Error during initial load")
                 serverDepleted = true
+            } finally {
+                isInitialLoading = false
             }
         } else {
             Timber.tag("UserListView").d("No change detected, skipping initialization")
@@ -282,6 +286,17 @@ fun UserListView(
                         )
                     }
                 }
+            }
+        }
+        if (isInitialLoading && displayedUserIds.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp
+                )
             }
         }
         PullRefreshIndicator(
