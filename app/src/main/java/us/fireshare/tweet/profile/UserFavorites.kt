@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
@@ -140,7 +139,7 @@ fun UserFavorites(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(color = Color.LightGray)
+                    .background(color = MaterialTheme.colorScheme.background)
                     .padding(innerPadding),
             ) {
                 CompositionLocalProvider(LocalVideoCoordinator provides favoritesCoordinator) {

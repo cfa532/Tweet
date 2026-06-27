@@ -136,12 +136,12 @@ fun CommentItem(
                         Text(
                             text = " @${author?.username ?: "unknown"}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = " · ${localizedTimeDifference(comment.timestamp)}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     CommentDropdownMenu(comment, parentTweetViewModel)

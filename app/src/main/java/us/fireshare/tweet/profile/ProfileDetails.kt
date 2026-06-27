@@ -32,6 +32,8 @@ import androidx.navigation.NavHostController
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.ui.theme.XLightSecondaryText
+import us.fireshare.tweet.ui.theme.XLightText
 import us.fireshare.tweet.viewmodel.UserViewModel
 
 @Composable
@@ -93,7 +95,8 @@ fun ProfileDetail(
         // Bottom row (visual): iOS-style single stat row
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFFB7F0F7)
+            color = Color(0xFFB7F0F7),
+            contentColor = XLightText
         ) {
             Row(
                 modifier = Modifier
@@ -167,7 +170,7 @@ private fun ProfileTextStatItem(
                 text = label,
                 fontSize = 14.sp,
                 lineHeight = 16.sp,
-                color = Color.Gray,
+                color = XLightSecondaryText,
                 maxLines = 1
             )
         }
@@ -193,7 +196,7 @@ private fun ProfileIconStatItem(
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
-            tint = Color(0xFF536471),
+            tint = XLightSecondaryText,
             modifier = Modifier.size(20.dp)
         )
         Text(

@@ -410,12 +410,6 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                 
                 Timber.tag("checkForUpgrade").d("Version comparison: current=$currentVersion, server=$serverVersion")
                 
-                val hostIp = HproseInstance.appUser.baseUrl
-                if (hostIp == null) {
-                    Timber.tag("checkForUpgrade").e("Cannot check upgrade: baseUrl is null")
-                    return@launch
-                }
-                
                 if (currentVersion < serverVersion) {
                     Timber.tag("checkForUpgrade").d("✅ Upgrade available! current=$currentVersion < server=$serverVersion")
                     
@@ -424,8 +418,14 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                         Timber.tag("checkForUpgrade").e("Cannot show upgrade dialog: packageId is null")
                         return@launch
                     }
-                    
-                    val downloadUrl = "$hostIp/mm/$packageId"
+
+                    val providerIp = HproseInstance.getProviderIP(packageId)
+                    if (providerIp == null) {
+                        Timber.tag("checkForUpgrade").e("Cannot show upgrade dialog: provider IP is null for packageId=$packageId")
+                        return@launch
+                    }
+
+                    val downloadUrl = "http://$providerIp/mm/$packageId"
                     Timber.tag("checkForUpgrade").d("Showing upgrade dialog with URL: $downloadUrl")
                     showUpdateDialog(context, downloadUrl)
                 } else {

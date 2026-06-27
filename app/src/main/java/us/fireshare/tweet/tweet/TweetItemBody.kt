@@ -367,7 +367,7 @@ fun TweetHeaderText(
     modifier: Modifier = Modifier
 ) {
     val primaryColor = MaterialTheme.colorScheme.onSurface
-    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant
     val safeUsername = username?.takeIf { it.isNotBlank() } ?: "unknown"
 
     Text(
