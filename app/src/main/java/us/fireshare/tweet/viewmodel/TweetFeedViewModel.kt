@@ -117,11 +117,25 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val deferredTweetIds: Set<MimeiId>,
     )
 
+    private fun isNewerThanCurrentFeedTop(tweet: Tweet): Boolean {
+        val topTweet = _tweets.value.firstOrNull() ?: return true
+        val tweetTimestamp = tweet.feedOrderingTimestamp()
+        val topTimestamp = topTweet.feedOrderingTimestamp()
+        return tweetTimestamp > topTimestamp ||
+            (tweetTimestamp == topTimestamp && tweet.mid > topTweet.mid)
+    }
+
+    private fun isPendingNewFeedTweet(tweet: Tweet, visibleTweetIds: Set<MimeiId>): Boolean {
+        return !tweet.isPrivate &&
+            tweet.mid !in visibleTweetIds &&
+            isNewerThanCurrentFeedTop(tweet)
+    }
+
     private fun updateNewTweetsSnapshot(incomingTweets: List<Tweet>) {
         val uniqueIncomingTweets = incomingTweets.distinctBy { tweet -> tweet.mid }
         val visibleTweetIds = _tweets.value.map { it.mid }.toSet()
         val snapshot = uniqueIncomingTweets
-            .filter { tweet -> !tweet.isPrivate && tweet.mid !in visibleTweetIds }
+            .filter { tweet -> isPendingNewFeedTweet(tweet, visibleTweetIds) }
             .sortedByDescending { tweet -> tweet.feedOrderingTimestamp() }
 
         _pendingNewTweets.value = snapshot
@@ -143,7 +157,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
         val deferrableTweets = incomingTweets.filter { tweet ->
-            !tweet.isPrivate && tweet.mid !in visibleTweetIds
+            isPendingNewFeedTweet(tweet, visibleTweetIds)
         }
         if (deferrableTweets.isEmpty()) {
             return DeferredTopPageTweets(incomingTweets, emptySet())
@@ -178,7 +192,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         val pendingTweets = _pendingNewTweets.value
         val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
         val tweetsToApply = pendingTweets.filter { tweet ->
-            !tweet.isPrivate && tweet.mid !in visibleTweetIds
+            isPendingNewFeedTweet(tweet, visibleTweetIds)
         }
         val staleCount = pendingTweets.size - tweetsToApply.size
 

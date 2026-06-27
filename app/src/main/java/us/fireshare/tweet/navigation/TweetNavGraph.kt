@@ -41,6 +41,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.getAlphaIds
 import us.fireshare.tweet.chat.ChatListScreen
 import us.fireshare.tweet.chat.ChatScreen
+import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.profile.EditProfileScreen
 import us.fireshare.tweet.profile.FollowerScreen
 import us.fireshare.tweet.profile.FollowingScreen
@@ -91,9 +92,19 @@ fun TweetNavGraph(
     val pendingNewTweets by tweetFeedViewModel.pendingNewTweets.collectAsState()
     val renderedTweets by tweetFeedViewModel.tweets.collectAsState()
     val renderedTweetIds = remember(renderedTweets) { renderedTweets.map { tweet -> tweet.mid }.toSet() }
-    val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweetIds) {
+    val topRenderedTweet = remember(renderedTweets) { renderedTweets.firstOrNull() }
+    fun isNewerThanTopRenderedTweet(tweet: Tweet): Boolean {
+        val topTweet = topRenderedTweet ?: return true
+        return tweet.timestamp > topTweet.timestamp ||
+            (tweet.timestamp == topTweet.timestamp && tweet.mid > topTweet.mid)
+    }
+    val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweetIds, topRenderedTweet) {
         pendingNewTweets
-            .filter { tweet -> !tweet.isPrivate && tweet.mid !in renderedTweetIds }
+            .filter { tweet ->
+                !tweet.isPrivate &&
+                    tweet.mid !in renderedTweetIds &&
+                    isNewerThanTopRenderedTweet(tweet)
+            }
     }
     val showNewTweetsBanner by tweetFeedViewModel.showNewTweetsBanner.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
