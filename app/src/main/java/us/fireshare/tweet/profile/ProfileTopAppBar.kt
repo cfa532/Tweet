@@ -50,6 +50,7 @@ import us.fireshare.tweet.widget.SelectableText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +61,6 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
-    val isCurrentUserProfile = appUser.mid == user.mid
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
 
@@ -74,7 +74,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = if (isCurrentUserProfile) 4.dp else 20.dp,
+                        start = 0.dp,
                         end = 8.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -91,13 +91,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onClick = { showDialog = true }
                     )
                     Column(
-                        modifier = Modifier.padding(start = 16.dp, top = 6.dp),
+                        modifier = Modifier.padding(start = 8.dp, top = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Text(
                             text = user.name ?: "No one",
-                            fontSize = 22.sp,
-                            lineHeight = 26.sp,
+                            fontSize = 18.sp,
+                            lineHeight = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -111,7 +111,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         )
                         // Show registration date
                         val date = Date(user.timestamp)
-                        val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+                        val dateFormat = SimpleDateFormat("MMM yyyy", LocalLocale.current.platformLocale)
                         Text(
                             text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
                             fontSize = 12.sp,
