@@ -78,7 +78,7 @@ fun ProfileDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 4.dp)
             ) {
                 Text(
                     text = profile ?: "",
@@ -93,24 +93,20 @@ fun ProfileDetail(
         // Bottom row (visual): iOS-style single stat row
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            tonalElevation = 100.dp
+            color = Color(0xFFB7F0F7)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        start = if (isCurrentUserProfile) 12.dp else 20.dp,
-                        end = 20.dp,
-                        top = if (hasProfile) 10.dp else 4.dp,
-                        bottom = 6.dp
-                    ),
+                    .height(54.dp)
+                    .padding(horizontal = if (isCurrentUserProfile) 8.dp else 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ProfileTextStatItem(
                     label = stringResource(R.string.fans),
                     count = followersCount.toString(),
                     modifier = Modifier
-                        .weight(if (isCurrentUserProfile) 1.2f else 1f)
+                        .weight(1f)
                         .clickable {
                             navController.navigate(NavTweet.Follower(displayUser.mid))
                         }
@@ -119,7 +115,7 @@ fun ProfileDetail(
                     label = stringResource(R.string.followings),
                     count = followingsCount.toString(),
                     modifier = Modifier
-                        .weight(if (isCurrentUserProfile) 1.2f else 1f)
+                        .weight(1f)
                         .clickable {
                             navController.navigate(NavTweet.Following(displayUser.mid))
                         }
@@ -127,7 +123,7 @@ fun ProfileDetail(
                 ProfileTextStatItem(
                     label = stringResource(R.string.posts),
                     count = tweetCount.toString(),
-                    modifier = Modifier.weight(if (isCurrentUserProfile) 1.2f else 1f)
+                    modifier = Modifier.weight(1f)
                 )
                 if (isCurrentUserProfile) {
                     ProfileIconStatItem(
@@ -135,7 +131,7 @@ fun ProfileDetail(
                         contentDescription = stringResource(R.string.user_bookmarks),
                         count = bookmarksCount.toString(),
                         modifier = Modifier
-                            .weight(0.7f)
+                            .weight(1f)
                             .clickable {
                                 navController.navigate(NavTweet.Bookmarks(displayUser.mid))
                             }
@@ -145,7 +141,7 @@ fun ProfileDetail(
                         contentDescription = stringResource(R.string.your_favorites),
                         count = favoritesCount.toString(),
                         modifier = Modifier
-                            .weight(0.7f)
+                            .weight(1f)
                             .clickable {
                                 navController.navigate(NavTweet.Favorites(displayUser.mid))
                             }
@@ -165,10 +161,10 @@ private fun ProfileTextStatItem(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.height(24.dp),
+            modifier = Modifier.height(20.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -196,12 +192,12 @@ private fun ProfileIconStatItem(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
-            tint = Color.Gray,
+            tint = Color(0xFF536471),
             modifier = Modifier.size(20.dp)
         )
         Text(

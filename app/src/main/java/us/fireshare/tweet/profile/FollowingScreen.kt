@@ -226,7 +226,7 @@ fun FollowingItem(
     )
     Row(
         modifier = Modifier
-            .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .fillMaxWidth()
     ) {
@@ -250,21 +250,10 @@ fun FollowingItem(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = user.name ?: "No One",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "@${user.username}",
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-                    }
+                    UserRowIdentityText(
+                        displayName = user.name ?: "No One",
+                        username = user.username
+                    )
                     Text(
                         text = "Joined ${formatUserCreationDate(user.timestamp)}",
                         style = MaterialTheme.typography.labelSmall,

@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -75,7 +76,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(verticalAlignment = Alignment.Top) {
                     if (showDialog) {
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
@@ -86,20 +87,22 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onClick = { showDialog = true }
                     )
                     Column(
-                        modifier = Modifier.padding(start = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier = Modifier.padding(start = 16.dp, top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Text(
                             text = user.name ?: "No one",
-                            fontSize = 15.sp,
-                            lineHeight = 16.sp,
+                            fontSize = 22.sp,
+                            lineHeight = 26.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "@" + (user.username ?: "NoOne"),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             lineHeight = 16.sp,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(start = 0.dp)
                         )
                         // Show registration date
