@@ -30,10 +30,10 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 135   // Full release version code. Must be increased each time,
+        versionCode = 136   // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "65"  // compared with App Mimei version to check for upgrade.
+        versionName = "66"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -49,10 +49,15 @@ android {
     }
     
     signingConfigs {
-        // Debug signing config (automatically available)
+        create("debugLocal") {
+            storeFile = rootProject.file("debug-keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         
         create("release") {
-            // Load from keystore.properties file or fall back to debug signing
+            // Load from keystore.properties file or fall back to local debug signing
             if (keystorePropertiesFile.exists()) {
                 // Use rootProject.file() since keystore is in project root, not app/ directory
                 storeFile = rootProject.file(keystoreProperties["KEYSTORE_FILE"].toString())
@@ -60,17 +65,18 @@ android {
                 keyAlias = keystoreProperties["KEY_ALIAS"].toString()
                 keyPassword = keystoreProperties["KEY_PASSWORD"].toString()
             } else {
-                // Fallback to debug signing if keystore.properties doesn't exist
-                storeFile = signingConfigs.getByName("debug").storeFile
-                storePassword = signingConfigs.getByName("debug").storePassword
-                keyAlias = signingConfigs.getByName("debug").keyAlias
-                keyPassword = signingConfigs.getByName("debug").keyPassword
+                // Fallback to local debug signing if keystore.properties doesn't exist
+                storeFile = signingConfigs.getByName("debugLocal").storeFile
+                storePassword = signingConfigs.getByName("debugLocal").storePassword
+                keyAlias = signingConfigs.getByName("debugLocal").keyAlias
+                keyPassword = signingConfigs.getByName("debugLocal").keyPassword
             }
         }
     }
     
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName("debugLocal")
             applicationIdSuffix = ".debug"
 //            isMinifyEnabled = true
 //            isShrinkResources = true
@@ -145,7 +151,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 135  // Play version code increased for release
+            versionCode = 136  // Play version code increased for release
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport

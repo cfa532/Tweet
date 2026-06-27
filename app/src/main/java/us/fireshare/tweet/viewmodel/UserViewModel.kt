@@ -1511,6 +1511,7 @@ class UserViewModel @AssistedInject constructor(
                 User.updateUserInstance(loggedInUser, true)
                 appUser = User.getInstance(loggedInUser.mid)
                 preferenceHelper.setUserId(appUser.mid)
+                HproseInstance.markAppUserInitializedAfterLogin()
                 _user.value = appUser
                 username.value = appUser.username
                 name.value = appUser.name ?: ""

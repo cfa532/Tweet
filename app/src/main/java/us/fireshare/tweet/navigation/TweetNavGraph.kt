@@ -274,7 +274,12 @@ fun TweetNavGraph(
                 val scope = rememberCoroutineScope()
                 LoginScreen(register) {
                     scope.launch(Dispatchers.Main) {
-                        navController.popBackStack()
+                        navController.navigate(NavTweet.TweetFeed) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
                     }
                 }
             }
