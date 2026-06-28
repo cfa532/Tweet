@@ -83,6 +83,12 @@ class UserViewModel @AssistedInject constructor(
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
 
+    private val _pendingNewTweets = MutableStateFlow<List<Tweet>>(emptyList())
+    val pendingNewTweets: StateFlow<List<Tweet>> get() = _pendingNewTweets.asStateFlow()
+    private val _showNewTweetsBanner = MutableStateFlow(false)
+    val showNewTweetsBanner: StateFlow<Boolean> get() = _showNewTweetsBanner.asStateFlow()
+    private var isProfileHeaderVisible = true
+
     // pinned tweets
     private val _pinnedTweets = MutableStateFlow<List<Tweet>>(emptyList())
     val pinnedTweets: StateFlow<List<Tweet>> get() = _pinnedTweets.asStateFlow()
@@ -324,8 +330,48 @@ class UserViewModel @AssistedInject constructor(
     fun applyResyncedTweets(resyncedTweets: List<Tweet>) {
         if (resyncedTweets.isEmpty()) return
 
+        val visibleTweets = visibleRegularProfileTweets(resyncedTweets)
+
+        if (visibleTweets.isEmpty()) return
+
+        visibleTweets.forEach { tweet ->
+            TweetCacheManager.saveTweet(tweet, userId)
+        }
+
+        stageOrMergeProfileTweets(visibleTweets, pageNumber = 0)
+    }
+
+    fun setProfileHeaderVisible(isVisible: Boolean) {
+        isProfileHeaderVisible = isVisible
+    }
+
+    fun applyPendingNewTweets() {
+        val pendingTweets = _pendingNewTweets.value
+        val visibleTweetIds = (_tweets.value + _pinnedTweets.value).map { it.mid }.toSet()
+        val tweetsToApply = pendingTweets.filter { tweet ->
+            isPendingProfileNewTweet(tweet, visibleTweetIds)
+        }
+        val staleCount = pendingTweets.size - tweetsToApply.size
+        if (tweetsToApply.isNotEmpty()) {
+            mergeProfileTweets(tweetsToApply)
+        }
+        clearPendingNewTweets()
+        Timber.tag("UserViewModel")
+            .d("Applied ${tweetsToApply.size} pending profile tweet(s), dropped $staleCount stale")
+    }
+
+    fun dismissNewTweetsBanner() {
+        _showNewTweetsBanner.value = false
+    }
+
+    private fun clearPendingNewTweets() {
+        _pendingNewTweets.value = emptyList()
+        _showNewTweetsBanner.value = false
+    }
+
+    private fun visibleRegularProfileTweets(incomingTweets: List<Tweet>): List<Tweet> {
         val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-        val visibleTweets = resyncedTweets
+        return incomingTweets
             .filter { tweet -> tweet.authorId == userId }
             .filterNot { tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
             .filterNot { tweet -> tweet.mid in pinnedTweetIds }
@@ -336,14 +382,66 @@ class UserViewModel @AssistedInject constructor(
                     tweet
                 }
             }
+    }
 
-        if (visibleTweets.isEmpty()) return
-
+    private fun mergeProfileTweets(incomingTweets: List<Tweet>) {
         _tweets.update { currentTweets ->
-            (visibleTweets + currentTweets)
+            (incomingTweets + currentTweets)
                 .distinctBy { tweet -> tweet.mid }
-                .sortedByDescending { tweet -> tweet.timestamp }
+                .sortedByDescending { tweet -> tweet.profileOrderingTimestamp() }
         }
+    }
+
+    private fun isNewerThanCurrentProfileTop(tweet: Tweet): Boolean {
+        val topTweet = _tweets.value.firstOrNull() ?: return true
+        val tweetTimestamp = tweet.profileOrderingTimestamp()
+        val topTimestamp = topTweet.profileOrderingTimestamp()
+        return tweetTimestamp > topTimestamp ||
+            (tweetTimestamp == topTimestamp && tweet.mid > topTweet.mid)
+    }
+
+    private fun isPendingProfileNewTweet(tweet: Tweet, visibleTweetIds: Set<MimeiId>): Boolean {
+        return tweet.mid !in visibleTweetIds && isNewerThanCurrentProfileTop(tweet)
+    }
+
+    fun visiblePendingNewTweetsSnapshot(): List<Tweet> {
+        val visibleTweetIds = (_tweets.value + _pinnedTweets.value).map { tweet -> tweet.mid }.toSet()
+        return _pendingNewTweets.value
+            .filter { tweet -> isPendingProfileNewTweet(tweet, visibleTweetIds) }
+            .sortedByDescending { tweet -> tweet.profileOrderingTimestamp() }
+    }
+
+    private fun stageOrMergeProfileTweets(incomingTweets: List<Tweet>, pageNumber: Int) {
+        if (incomingTweets.isEmpty()) return
+
+        val visibleTweetIds = (_tweets.value + _pinnedTweets.value).map { it.mid }.toSet()
+        val existingTweets = incomingTweets.filter { tweet -> tweet.mid in visibleTweetIds }
+        val newTopTweets = incomingTweets.filter { tweet ->
+            isPendingProfileNewTweet(tweet, visibleTweetIds)
+        }
+
+        if (pageNumber != 0 || isProfileHeaderVisible) {
+            mergeProfileTweets(incomingTweets)
+            return
+        }
+
+        val stagedTweets = newTopTweets
+            .distinctBy { tweet -> tweet.mid }
+            .sortedByDescending { tweet -> tweet.profileOrderingTimestamp() }
+
+        if (existingTweets.isNotEmpty()) {
+            mergeProfileTweets(existingTweets)
+        }
+
+        if (stagedTweets.isEmpty()) {
+            return
+        }
+
+        _pendingNewTweets.value = ((_pendingNewTweets.value + stagedTweets)
+            .distinctBy { tweet -> tweet.mid }
+            .filter { tweet -> isPendingProfileNewTweet(tweet, visibleTweetIds) }
+            .sortedByDescending { tweet -> tweet.profileOrderingTimestamp() })
+        _showNewTweetsBanner.value = _pendingNewTweets.value.isNotEmpty()
     }
 
     /**
@@ -1280,31 +1378,7 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("getTweets")
                     .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
-                // Always merge new tweets with existing ones, never replace (like TweetFeedViewModel)
-                _tweets.update { currentTweets ->
-                    val filteredTweets = newTweets.filterNot { tweet: Tweet ->
-                        tweet.isPrivate && tweet.authorId != appUser.mid
-                    }
-
-                    // Get current pinned tweet IDs after ensuring they're loaded
-                    val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
-                    val tweetsWithoutPinned = filteredTweets.filterNot { tweet: Tweet ->
-                        pinnedTweetIds.contains(tweet.mid)
-                    }
-
-                    val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                    val trulyNewTweets = tweetsWithoutPinned.filter { it.mid !in currentTweetIds }
-
-                    if (trulyNewTweets.isNotEmpty()) {
-                        val mergedTweets = (currentTweets + trulyNewTweets)
-                            .distinctBy { tweet: Tweet -> tweet.mid }
-                            .sortedByDescending { tweet: Tweet -> tweet.profileOrderingTimestamp() }
-                        // Don't override tweet count - it should come from server data, not local list size
-                        mergedTweets
-                    } else {
-                        currentTweets
-                    }
-                }
+                stageOrMergeProfileTweets(visibleRegularProfileTweets(newTweets), pageNumber)
 
                 return newTweetsWithNulls
             } else {

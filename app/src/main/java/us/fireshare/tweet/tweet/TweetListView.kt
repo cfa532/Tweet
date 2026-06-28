@@ -93,7 +93,8 @@ enum class ScrollDirection {
 
 data class ScrollState(
     val isScrolling: Boolean,
-    val direction: ScrollDirection
+    val direction: ScrollDirection,
+    val isAtTop: Boolean = false
 )
 
 /**
@@ -101,14 +102,30 @@ data class ScrollState(
  * Persists scroll positions across navigation as long as the app process is alive.
  */
 object ScrollPositionStore {
-    private val positions = mutableMapOf<String, Pair<Int, Int>>()
+    data class Position(
+        val firstVisibleItemIndex: Int,
+        val scrollOffset: Int,
+        val firstVisibleItemKey: String? = null
+    )
 
-    fun save(context: String, firstVisibleItemIndex: Int, scrollOffset: Int) {
-        positions[context] = Pair(firstVisibleItemIndex, scrollOffset)
+    private val positions = mutableMapOf<String, Position>()
+
+    fun save(
+        context: String,
+        firstVisibleItemIndex: Int,
+        scrollOffset: Int,
+        firstVisibleItemKey: String? = null
+    ) {
+        positions[context] = Position(firstVisibleItemIndex, scrollOffset, firstVisibleItemKey)
     }
 
     fun restore(context: String): Pair<Int, Int> {
-        return positions[context] ?: Pair(0, 0)
+        val position = restorePosition(context)
+        return Pair(position.firstVisibleItemIndex, position.scrollOffset)
+    }
+
+    fun restorePosition(context: String): Position {
+        return positions[context] ?: Position(0, 0)
     }
 }
 
@@ -215,8 +232,11 @@ fun TweetListView(
     onVideoIndexedListChange: ((List<Pair<MimeiId, MediaType>>) -> Unit)? = null, // Callback when video list changes
     isInitialLoading: Boolean = false, // External loading state (for ProfileScreen)
     scrollToTopTrigger: Int = 0, // Increment to trigger scroll-to-top from parent
+    scrollToTweetId: MimeiId? = null,
+    scrollToTweetTrigger: Int = 0,
     pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
     onScrolledToTop: (() -> Unit)? = null, // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
+    onHeaderVisibilityChange: ((Boolean) -> Unit)? = null,
     onPullRefresh: (() -> Unit)? = null
 
 ) {
@@ -278,8 +298,11 @@ fun TweetListView(
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
 
     // Restore scroll position from in-memory store
-    val initialScrollPosition = remember { ScrollPositionStore.restore(context) }
-    val savedScrollPosition = remember { mutableStateOf(initialScrollPosition) }
+    val initialScrollPosition = remember(context) { ScrollPositionStore.restore(context) }
+    val savedScrollPosition = remember(context) { mutableStateOf(initialScrollPosition) }
+    var lastScrollAnchor by remember(context) {
+        mutableStateOf(ScrollPositionStore.restorePosition(context))
+    }
 
     // Pagination states
     var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
@@ -301,13 +324,40 @@ fun TweetListView(
     var lastCleanupTime by remember { mutableLongStateOf(0L) }
     var lastLoadMoreTrigger by remember { mutableLongStateOf(0L) }
     val loadMoreDebounceMs = 300L // 300ms debounce to prevent rapid triggers during same scroll
+
+    // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
+    val visibleTweets = remember(tweets, showPrivateTweets) {
+        if (showPrivateTweets) tweets else tweets.filter { !it.isPrivate }
+    }
+
+    fun saveScrollPosition(
+        firstVisibleItemIndex: Int,
+        scrollOffset: Int,
+        firstVisibleItemKey: String?
+    ) {
+        savedScrollPosition.value = Pair(firstVisibleItemIndex, scrollOffset)
+        lastScrollAnchor = ScrollPositionStore.Position(
+            firstVisibleItemIndex = firstVisibleItemIndex,
+            scrollOffset = scrollOffset,
+            firstVisibleItemKey = firstVisibleItemKey
+        )
+        ScrollPositionStore.save(
+            context = context,
+            firstVisibleItemIndex = firstVisibleItemIndex,
+            scrollOffset = scrollOffset,
+            firstVisibleItemKey = firstVisibleItemKey
+        )
+    }
     
     // Scroll to top when parent requests it (e.g., app icon tap in main feed)
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
             listState.scrollToItem(0, 0)
-            savedScrollPosition.value = Pair(0, 0)
-            ScrollPositionStore.save(context, 0, 0)
+            saveScrollPosition(
+                firstVisibleItemIndex = 0,
+                scrollOffset = 0,
+                firstVisibleItemKey = if (headerContent != null) "header" else visibleTweets.firstOrNull()?.mid
+            )
         }
     }
 
@@ -316,45 +366,82 @@ fun TweetListView(
     // the scroll is wrong or the list jumps. iOS uses DispatchQueue.main.async (no fixed delay)
     // or 0.1s for load-more scroll; we wait one frame to avoid the visible jump that a 100ms
     // delay caused.
-    var scrollRestoredForSession by remember { mutableStateOf(false) }
-    // Tracks the newest tweet mid we've displayed so we can detect that an even newer one
-    // was prepended (cache→server merge on open, or a refresh) and surface it.
-    var lastDisplayedTopMid by remember { mutableStateOf<MimeiId?>(null) }
-    LaunchedEffect(tweets.size, context) {
-        if (tweets.isEmpty()) return@LaunchedEffect
-        val headerCount = if (headerContent != null) 1 else 0
-        val currentTopMid = tweets.firstOrNull()?.mid
+    fun indexForScrollKey(key: String?, tweetsForIndex: List<Tweet>): Int? {
+        if (key == null) return null
+        if (key == "header" && headerContent != null) return 0
+        val tweetIndex = tweetsForIndex.indexOfFirst { tweet -> tweet.mid == key }
+        if (tweetIndex < 0) return null
+        return tweetIndex + if (headerContent != null) 1 else 0
+    }
 
-        // Prepend detected: a newer tweet is now at the top than what we last showed.
-        // Profile only — surface the new tweet at the top of the regular list (just below
-        // the header/pinned). Covers first-open cache→server merge and reopen-with-new,
-        // mirroring iOS. The main feed defers new tweets behind its banner, so its top
-        // tweet never changes here. Checked before the scrollRestoredForSession gate so a
-        // prepend on the *second* tweets update (after the initial restore) still fires.
-        if (headerCount > 0 &&
-            lastDisplayedTopMid != null &&
-            currentTopMid != null &&
-            currentTopMid != lastDisplayedTopMid) {
-            withFrameMillis { }
-            listState.scrollToItem(headerCount, 0)
-            scrollRestoredForSession = true
-            lastDisplayedTopMid = currentTopMid
-            return@LaunchedEffect
+    fun currentFirstVisibleItemKey(): String? {
+        return listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item -> item.index == listState.firstVisibleItemIndex }
+            ?.key as? String
+    }
+
+    LaunchedEffect(scrollToTweetTrigger) {
+        if (scrollToTweetTrigger <= 0 || scrollToTweetId == null) return@LaunchedEffect
+        val tweetIndex = indexForScrollKey(scrollToTweetId, visibleTweets) ?: return@LaunchedEffect
+        val targetIndex = if (headerContent != null && tweetIndex == 1) 0 else tweetIndex
+        withFrameMillis { }
+        listState.scrollToItem(targetIndex, 0)
+        saveScrollPosition(
+            firstVisibleItemIndex = targetIndex,
+            scrollOffset = 0,
+            firstVisibleItemKey = if (targetIndex == 0 && headerContent != null) "header" else scrollToTweetId
+        )
+        if (targetIndex == 0) {
+            onScrolledToTop?.invoke()
         }
+    }
+
+    val visibleTweetIds = remember(visibleTweets) { visibleTweets.map { tweet -> tweet.mid } }
+    var scrollRestoredForSession by remember(context) { mutableStateOf(false) }
+    var previousVisibleTweetIds by remember(context) { mutableStateOf<List<MimeiId>>(emptyList()) }
+
+    LaunchedEffect(visibleTweetIds, context) {
+        if (visibleTweets.isEmpty() && headerContent == null) return@LaunchedEffect
 
         // First population this session: restore saved position (if any), else stay at top.
         if (!scrollRestoredForSession) {
             scrollRestoredForSession = true
-            val (index, offset) = ScrollPositionStore.restore(context)
+            val storedPosition = lastScrollAnchor
+            val index = indexForScrollKey(storedPosition.firstVisibleItemKey, visibleTweets)
+                ?: storedPosition.firstVisibleItemIndex
+            val offset = storedPosition.scrollOffset
             if (index > 0) {
-                val maxIndex = (tweets.size * 2) + 4
+                val maxIndex = visibleTweets.size + if (headerContent != null) 1 else 0
                 if (index < maxIndex) {
                     withFrameMillis { } // one frame so first layout is done (avoids visible jump)
                     listState.scrollToItem(index.coerceIn(0, maxIndex), offset)
                 }
             }
+            previousVisibleTweetIds = visibleTweetIds
+            return@LaunchedEffect
         }
-        lastDisplayedTopMid = currentTopMid
+
+        val contentChanged = previousVisibleTweetIds.isNotEmpty() &&
+            previousVisibleTweetIds != visibleTweetIds
+        previousVisibleTweetIds = visibleTweetIds
+
+        if (!contentChanged) {
+            return@LaunchedEffect
+        }
+
+        val storedPosition = lastScrollAnchor
+        val shouldPreserveAnchor = storedPosition.firstVisibleItemIndex > 0 ||
+            storedPosition.scrollOffset > 0
+        val restoredIndex = indexForScrollKey(storedPosition.firstVisibleItemKey, visibleTweets)
+        if (shouldPreserveAnchor && restoredIndex != null) {
+            withFrameMillis { }
+            listState.scrollToItem(restoredIndex, storedPosition.scrollOffset)
+            saveScrollPosition(
+                firstVisibleItemIndex = restoredIndex,
+                scrollOffset = storedPosition.scrollOffset,
+                firstVisibleItemKey = storedPosition.firstVisibleItemKey
+            )
+        }
     }
     
     // PERF FIX: Helper to add job with periodic cleanup instead of every-time cleanup
@@ -383,10 +470,10 @@ fun TweetListView(
     DisposableEffect(Unit) {
         onDispose {
             // Save scroll position to in-memory store before disposing
-            ScrollPositionStore.save(
-                context,
-                listState.firstVisibleItemIndex,
-                listState.firstVisibleItemScrollOffset
+            saveScrollPosition(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                scrollOffset = listState.firstVisibleItemScrollOffset,
+                firstVisibleItemKey = currentFirstVisibleItemKey()
             )
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
@@ -506,10 +593,6 @@ fun TweetListView(
     val minimumTweetsBeforeStoppingPagination = 4
     val maxAutoLoadedExtraPages = 200
 
-    // Pre-filter visible tweets to avoid per-item branching inside LazyColumn
-    val visibleTweets = remember(tweets, showPrivateTweets) {
-        if (showPrivateTweets) tweets else tweets.filter { !it.isPrivate }
-    }
     val visibleTweetIndexById = remember(visibleTweets) {
         visibleTweets.mapIndexed { index, tweet -> tweet.mid to index }.toMap()
     }
@@ -584,11 +667,13 @@ fun TweetListView(
         var pendingDirection = ScrollDirection.NONE
         var directionStableCount = 0
         val stabilityThreshold = 3 // Require 3 consecutive frames to confirm direction change
-        var wasAtTop = true // Track top-of-list transitions for onScrolledToTop
+        var wasAtTop = true // Track top-of-list transitions for scroll-state reporting
+        var wasSettledAtTop = true // Track settled top transitions for onScrolledToTop
         var lastMediaPreloadIndexes = emptySet<Int>()
         var lastMediaPreloadDirection = PreloadDirection.NONE
         var lastMediaPreloadScrolling: Boolean? = null
         var lastMediaPreloadTime = 0L
+        var lastHeaderVisible: Boolean? = null
 
 	        snapshotFlow {
 	            Triple(
@@ -599,6 +684,13 @@ fun TweetListView(
 	        }
 	            .collect { (firstVisibleItem, scrollOffset, isScrolling) ->
                 val now = System.currentTimeMillis()
+                val headerVisible = headerContent != null && firstVisibleItem == 0
+                if (headerVisible != lastHeaderVisible) {
+                    onHeaderVisibilityChange?.invoke(headerVisible)
+                    lastHeaderVisible = headerVisible
+                }
+                val isAtTop = firstVisibleItem == 0 && scrollOffset == 0
+
                 // --- Scroll direction tracking ---
                 val indexDelta = firstVisibleItem - previousFirstVisibleItem
                 val offsetDelta = scrollOffset - previousScrollOffset
@@ -635,8 +727,8 @@ fun TweetListView(
                 }
 
                 // Only invoke callback if state actually changed
-                if (confirmedDirection != lastDirection || isScrolling != lastScrollingState) {
-                    onScrollStateChange?.invoke(ScrollState(isScrolling, confirmedDirection))
+                if (confirmedDirection != lastDirection || isScrolling != lastScrollingState || isAtTop != wasAtTop) {
+                    onScrollStateChange?.invoke(ScrollState(isScrolling, confirmedDirection, isAtTop))
                     lastDirection = confirmedDirection
                     lastScrollingState = isScrolling
                 }
@@ -692,10 +784,11 @@ fun TweetListView(
                 // Detect when list arrives at the absolute top.
                 // Index 0 alone is not enough when headerContent is tall (e.g. profile + pinned tweets),
                 // because we can still be scrolled within that first item.
-                val isAtTop = firstVisibleItem == 0 && scrollOffset == 0 && !isScrolling
-                if (isAtTop && !wasAtTop) {
+                val isSettledAtTop = isAtTop && !isScrolling
+                if (isSettledAtTop && !wasSettledAtTop) {
                     onScrolledToTop?.invoke()
                 }
+                wasSettledAtTop = isSettledAtTop
                 wasAtTop = isAtTop
 
                 previousFirstVisibleItem = firstVisibleItem
@@ -705,8 +798,11 @@ fun TweetListView(
                 val shouldSave = !isRefreshingAtTop && (!isScrolling || (now - lastSaveTime > 1000))
                 if (shouldSave && (firstVisibleItem != savedScrollPosition.value.first ||
                                    scrollOffset != savedScrollPosition.value.second)) {
-                    savedScrollPosition.value = Pair(firstVisibleItem, scrollOffset)
-                    ScrollPositionStore.save(context, firstVisibleItem, scrollOffset)
+                    saveScrollPosition(
+                        firstVisibleItemIndex = firstVisibleItem,
+                        scrollOffset = scrollOffset,
+                        firstVisibleItemKey = currentFirstVisibleItemKey()
+                    )
                     lastSaveTime = now
                 }
 
@@ -831,7 +927,11 @@ fun TweetListView(
                     }
                     onPullRefresh?.invoke()
                     listState.scrollToItem(0, 0)
-                    savedScrollPosition.value = Pair(0, 0)
+                    saveScrollPosition(
+                        firstVisibleItemIndex = 0,
+                        scrollOffset = 0,
+                        firstVisibleItemKey = if (headerContent != null) "header" else visibleTweets.firstOrNull()?.mid
+                    )
                 } catch (e: Exception) {
                     Timber.tag("TweetListView").e(e, "Error during pull refresh")
                 } finally {

@@ -28,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +55,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
+import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -95,6 +97,9 @@ fun ProfileScreen(
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     var didRequestResync by remember(userId) { mutableStateOf(false) }
+    var scrollToTopTrigger by remember(userId) { mutableIntStateOf(0) }
+    var scrollToTweetTrigger by remember(userId) { mutableIntStateOf(0) }
+    var scrollToTweetId by remember(userId) { mutableStateOf<MimeiId?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val profileCoordinator = remember(userId) { VideoPlaybackCoordinator() }
 
@@ -205,7 +210,10 @@ fun ProfileScreen(
                                 BottomBarState.opacity = 0.98f
                                 scrollState = ScrollState(false, ScrollDirection.NONE)
                                 scrollBehavior.state.heightOffset = 0f
-                            }
+                            },
+                            scrollToTopTrigger = scrollToTopTrigger,
+                            scrollToTweetId = scrollToTweetId,
+                            scrollToTweetTrigger = scrollToTweetTrigger
                         )
                     }
                 }
@@ -220,6 +228,30 @@ fun ProfileScreen(
                 .align(Alignment.BottomCenter),
             navController,
             0
+        )
+
+        val pendingNewTweets by viewModel.pendingNewTweets.collectAsState()
+        val showNewTweetsBanner by viewModel.showNewTweetsBanner.collectAsState()
+        val renderedTweets by viewModel.tweets.collectAsState()
+        val renderedPinnedTweets by viewModel.pinnedTweets.collectAsState()
+        val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweets, renderedPinnedTweets) {
+            viewModel.visiblePendingNewTweetsSnapshot()
+        }
+        NewTweetsBanner(
+            pendingTweets = visiblePendingNewTweets,
+            visible = showNewTweetsBanner && visiblePendingNewTweets.isNotEmpty(),
+            onClick = {
+                scrollToTweetId = visiblePendingNewTweets.firstOrNull()?.mid
+                viewModel.applyPendingNewTweets()
+                scrollBehavior.state.heightOffset = 0f
+                scrollToTweetTrigger += 1
+            },
+            onAutoHide = {
+                viewModel.dismissNewTweetsBanner()
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 88.dp)
         )
     }
 }
@@ -240,6 +272,9 @@ private fun ProfileContentWithTweetListView(
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
     onScrolledToTop: (() -> Unit)? = null,
+    scrollToTopTrigger: Int = 0,
+    scrollToTweetId: MimeiId? = null,
+    scrollToTweetTrigger: Int = 0,
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -310,6 +345,12 @@ private fun ProfileContentWithTweetListView(
         isInitialLoading = initState, // Pass the initialization state to delay videolist creation
         pinnedTweets = pinnedTweets, // Include pinned tweets in video navigation
         onScrolledToTop = onScrolledToTop,
+        scrollToTopTrigger = scrollToTopTrigger,
+        scrollToTweetId = scrollToTweetId,
+        scrollToTweetTrigger = scrollToTweetTrigger,
+        onHeaderVisibilityChange = { isVisible ->
+            viewModel.setProfileHeaderVisible(isVisible)
+        },
         onPullRefresh = {
             viewModel.resyncProfileUser(ignoreDebounce = true)
         }

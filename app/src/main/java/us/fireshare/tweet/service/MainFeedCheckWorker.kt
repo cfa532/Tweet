@@ -58,6 +58,17 @@ class MainFeedCheckWorker @AssistedInject constructor(
                 maxRetries = 1
             )
                 .filterNotNull()
+                .distinctBy { it.mid }
+                .filterNot { it.isPrivate }
+
+            if (feedTweets.isNotEmpty()) {
+                Timber.tag(TAG).d("Found ${feedTweets.size} main feed tweets from get_tweet_feed")
+                TweetNotificationCenter.post(
+                    TweetEvent.MainFeedRefreshed(feedTweets)
+                )
+            } else {
+                Timber.tag(TAG).d("No main feed tweets found from get_tweet_feed")
+            }
 
             val followingTweets = HproseInstance.getTweetFeed(
                 pageNumber = 0,
@@ -67,19 +78,19 @@ class MainFeedCheckWorker @AssistedInject constructor(
             )
                 .filterNotNull()
 
-            val newTweets = (feedTweets + followingTweets)
+            val followingNewTweets = followingTweets
                 .distinctBy { it.mid }
                 .filterNot { it.isPrivate }
 
-            if (newTweets.isNotEmpty()) {
+            if (followingNewTweets.isNotEmpty()) {
                 Timber.tag(TAG).d(
-                    "Found ${newTweets.size} new main feed tweets (get_tweet_feed=${feedTweets.size}, update_following_tweets=${followingTweets.size})"
+                    "Found ${followingNewTweets.size} new main feed tweets (update_following_tweets=${followingTweets.size})"
                 )
                 TweetNotificationCenter.post(
-                    TweetEvent.MainFeedNewTweetsFound(newTweets)
+                    TweetEvent.MainFeedNewTweetsFound(followingNewTweets)
                 )
             } else {
-                Timber.tag(TAG).d("No new main feed tweets found")
+                Timber.tag(TAG).d("No update_following_tweets banner candidates found")
             }
 
             Result.success()

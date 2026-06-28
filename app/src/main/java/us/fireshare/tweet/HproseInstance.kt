@@ -2303,7 +2303,7 @@ object HproseInstance {
                     }
                 }
 
-                // Process main tweets - cache mainfeed tweets under appUser.mid
+                // Process main tweets - cache main feed rows under the signed-in user's feed list key.
                 val result = tweetsData?.map { tweetJson ->
                     // If the element is null, keep it as null
                     if (tweetJson == null) {
@@ -2339,8 +2339,7 @@ object HproseInstance {
                             if (tweet.isPrivate) {
                                 null
                             } else {
-                                // Cache mainfeed tweets under appUser.mid
-                                updateCachedTweet(tweet, userId = appUser.mid)
+                                updateCachedTweet(tweet, userId = TweetCacheManager.getMainFeedCacheId(appUser.mid))
                                 tweet
                             }
                         } catch (e: Exception) {
@@ -2970,11 +2969,18 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            // Load tweets cached for mainfeed (uid = appUser.mid)
-            val userId = appUser.mid
-            Timber.tag("loadCachedTweets").d("Loading cached tweets for mainfeed user: $userId")
-            
-            dao.getCachedTweetsByUser(userId, startRank, count).mapNotNull { cachedTweet ->
+            val cacheId = TweetCacheManager.getMainFeedCacheId(appUser.mid)
+            Timber.tag("loadCachedTweets").d("Loading cached tweets for main feed cache: $cacheId")
+
+            val primaryRows = dao.getCachedTweetsByUser(cacheId, startRank, count)
+            val cachedRows = if (primaryRows.isEmpty() && startRank == 0) {
+                Timber.tag("loadCachedTweets").d("No rows in $cacheId, trying legacy main feed cache: ${appUser.mid}")
+                dao.getCachedTweetsByUser(appUser.mid, startRank, count)
+            } else {
+                primaryRows
+            }
+
+            cachedRows.mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
@@ -3014,11 +3020,7 @@ object HproseInstance {
      * Load cached tweets for a specific user profile (filtered by authorId)
      * Used for offline loading of user profile tweets
      * 
-     * For any user profile, we check both cache buckets and filter by authorId:
-     * 1. Mainfeed cache (uid = appUser.mid) - contains tweets from all followings
-     * 2. User's own cache (uid = authorId) - contains tweets cached from their profile
-     * 
-     * This ensures tweets cached from the mainfeed can still be loaded for individual user profiles.
+     * Profiles are keyed by the profile user's mid, independent of the main feed cache.
      */
     suspend fun loadCachedTweetsByAuthor(
         authorId: MimeiId,
@@ -3026,27 +3028,12 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val allCachedTweets = mutableListOf<Tweet>()
-            
-            // Load from mainfeed cache (appUser.mid) and filter by authorId
-            // This ensures we can find tweets that were cached when viewing the mainfeed
-            dao.getCachedTweetsByUser(appUser.mid, 0, count * 3).forEach { cachedTweet ->
+            dao.getCachedTweetsByUser(authorId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
-                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
-                    allCachedTweets.add(tweet)
+                if (tweet.authorId.isEmpty() || tweet.authorId != authorId) {
+                    return@mapNotNull null
                 }
-            }
-            
-            // Also load from user's own cache bucket (userId = authorId) and filter by authorId
-            dao.getCachedTweetsByUser(authorId, 0, count * 3).forEach { cachedTweet ->
-                val tweet = cachedTweet.originalTweet
-                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
-                    allCachedTweets.add(tweet)
-                }
-            }
-            
-            // Populate authors and filter
-            allCachedTweets.mapNotNull { tweet ->
+
                 // Filter out private tweets unless viewing appUser's own profile
                 if (tweet.isPrivate && authorId != appUser.mid) {
                     return@mapNotNull null
@@ -3067,10 +3054,6 @@ object HproseInstance {
 
                 tweet
             }
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
-                .drop(startRank)
-                .take(count)
         } catch (e: Exception) {
             Timber.tag("loadCachedTweetsByAuthor").e("Error loading cached tweets by author: $e")
             emptyList()

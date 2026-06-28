@@ -83,7 +83,6 @@ fun TweetFeedScreen(
     
     // Collect retry message
     val retryMessage by viewModel.retryMessage.collectAsState()
-
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -221,6 +220,7 @@ fun TweetFeedScreen(
                                             viewModel,
                                             onScrollStateChange = { newScrollState ->
                                                 scrollState = newScrollState
+                                                viewModel.setMainFeedAtTop(newScrollState.isAtTop)
 
                                                 // Ignore NONE - when scroll stops, keep current opacity
                                                 if (newScrollState.direction == ScrollDirection.NONE) {

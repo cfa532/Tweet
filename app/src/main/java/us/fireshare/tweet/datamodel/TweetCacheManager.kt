@@ -18,10 +18,10 @@ import java.util.Locale
  * Provides methods to save, retrieve, and manage cached tweets and users with automatic cleanup.
  * 
  * Caching Strategy:
- * - Main feed tweets: Cached by `appUser.mid`
- * - Profile tweets: Cached by tweet's `authorId`
- * - Bookmarks: Cached by `appUser.mid + "_bookmarks"` (NEVER EXPIRES)
- * - Favorites: Cached by `appUser.mid + "_favorites"` (NEVER EXPIRES)
+ * - Main feed tweets: Cached by `main_feed_<appUser.mid>`
+ * - Profile tweets: Cached by the profile user's `mid`
+ * - Bookmarks: Cached by `bookmark_list_<appUser.mid>` (NEVER EXPIRES)
+ * - Favorites: Cached by `favorite_list_<appUser.mid>` (NEVER EXPIRES)
  * - AppUser's private tweets: NEVER EXPIRE (preserved during cleanup)
  * 
  * Expiration Policy:
@@ -48,9 +48,9 @@ object TweetCacheManager {
     // User cache expiration time (30 minutes in milliseconds)
     internal const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L
     
-    // Special cache ID suffixes for bookmarks and favorites (never expire)
-    private const val BOOKMARKS_SUFFIX = "_bookmarks"
-    private const val FAVORITES_SUFFIX = "_favorites"
+    private const val MAIN_FEED_PREFIX = "main_feed_"
+    private const val BOOKMARKS_PREFIX = "bookmark_list_"
+    private const val FAVORITES_PREFIX = "favorite_list_"
 
     // LRU limits for in-memory caches (evict least recently used when over capacity)
     private const val MAX_MEMORY_TWEETS = 500
@@ -69,18 +69,26 @@ object TweetCacheManager {
     private val userStateFlows = mutableMapOf<String, MutableStateFlow<User?>>()
     private val userStateFlowsLock = Any()
 
+    fun getMainFeedCacheId(userId: MimeiId): MimeiId {
+        return MAIN_FEED_PREFIX + userId
+    }
+
     /**
      * Generate special cache ID for bookmarks
      */
     fun getBookmarksCacheId(userId: MimeiId): MimeiId {
-        return userId + BOOKMARKS_SUFFIX
+        return BOOKMARKS_PREFIX + userId
     }
     
     /**
      * Generate special cache ID for favorites
      */
     fun getFavoritesCacheId(userId: MimeiId): MimeiId {
-        return userId + FAVORITES_SUFFIX
+        return FAVORITES_PREFIX + userId
+    }
+
+    private fun tweetMemoryKey(tweetId: MimeiId, cacheKey: MimeiId): String {
+        return "$cacheKey|$tweetId"
     }
 
     /**
@@ -131,8 +139,20 @@ object TweetCacheManager {
                     tweetTimestamp = tweet.timestamp  // Store tweet's actual creation timestamp for ordering
                 )
 
-                // Always update memory cache (LRU: put moves entry to most recent)
-                memoryCache[tweet.mid] = cached
+                val sameTweetEntries = memoryCache
+                    .filterValues { it.mid == tweet.mid }
+                    .mapValues { (_, existing) ->
+                        existing.copy(
+                            originalTweet = tweet,
+                            tweetTimestamp = tweet.timestamp
+                        )
+                    }
+                sameTweetEntries.forEach { (key, refreshed) ->
+                    memoryCache[key] = refreshed
+                }
+
+                // Always update target list membership (LRU: put moves entry to most recent)
+                memoryCache[tweetMemoryKey(tweet.mid, userId)] = cached
                 evictTweetLruIfNeeded()
                 cached
             }
@@ -141,6 +161,11 @@ object TweetCacheManager {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
+                    HproseInstance.dao.updateCachedTweetPayload(
+                        tweetId = tweet.mid,
+                        tweet = tweet,
+                        tweetTimestamp = tweet.timestamp
+                    )
                 } catch (e: Exception) {
                     Timber.e("Error saving tweet to database: $e")
                 }
@@ -168,16 +193,19 @@ object TweetCacheManager {
     fun getCachedTweet(tweetId: MimeiId): Tweet? {
         return try {
             synchronized(cacheLock) {
-                // Check memory cache first (searches across all tweets by mid)
-                memoryCache[tweetId]?.let { cachedTweet ->
+                // Check memory cache first (searches across all list memberships by mid)
+                memoryCache.values
+                    .filter { cachedTweet -> cachedTweet.mid == tweetId }
+                    .maxByOrNull { cachedTweet -> cachedTweet.timestamp.time }
+                    ?.let { cachedTweet ->
                     return cachedTweet.originalTweet
                 }
 
-                // Check database cache (searches across all caches by mid, not filtered by uid)
+                // Check database cache (searches across all list memberships by mid, not filtered by uid)
                 val dbCachedTweet = HproseInstance.dao.getCachedTweet(tweetId)
                 dbCachedTweet?.let { cachedTweet ->
                     // Add to memory cache for faster access (LRU)
-                    memoryCache[tweetId] = cachedTweet
+                    memoryCache[tweetMemoryKey(cachedTweet.mid, cachedTweet.uid)] = cachedTweet
                     evictTweetLruIfNeeded()
                     return cachedTweet.originalTweet
                 }
@@ -197,7 +225,10 @@ object TweetCacheManager {
      */
     fun getCachedTweetMemoryOnly(tweetId: MimeiId): Tweet? {
         return synchronized(cacheLock) {
-            memoryCache[tweetId]?.originalTweet
+            memoryCache.values
+                .filter { cachedTweet -> cachedTweet.mid == tweetId }
+                .maxByOrNull { cachedTweet -> cachedTweet.timestamp.time }
+                ?.originalTweet
         }
     }
 

@@ -22,10 +22,13 @@ import us.fireshare.tweet.HproseInstance.appUser
 import java.util.Date
 
 // cache for tweets
-@Entity(indices = [Index(value = ["uid"]), Index(value = ["tweetTimestamp"])])
+@Entity(
+    primaryKeys = ["mid", "uid"],
+    indices = [Index(value = ["uid"]), Index(value = ["mid"]), Index(value = ["tweetTimestamp"])]
+)
 data class CachedTweet(
-    @PrimaryKey val mid: MimeiId,   // Tweet's mimei Id
-    val uid: MimeiId,       // user Id
+    val mid: MimeiId,   // Tweet's mimei Id
+    val uid: MimeiId,       // cache list key
     val originalTweet: Tweet,   // tweet object.
     val timestamp: Date = Date(), // Cache timestamp (when saved to database)
     val tweetTimestamp: Long = 0L  // Tweet's actual creation timestamp (for ordering)
@@ -127,13 +130,20 @@ interface CachedTweetDao {
      * IMPORTANT: Searches across ALL user caches, not filtered by uid.
      * This is necessary because tweets can be cached under different uid values:
      * - Original tweets: cached by authorId
-     * - Mainfeed tweets: cached by appUser.mid
-     * - Retweets: cached by appUser.mid
+     * - Main feed tweets: cached by main_feed_<appUser.mid>
+     * - Profile tweets: cached by profile user mid
+     * - Bookmarks/favorites: cached by their list keys
      * 
      * When we only have a tweet mid, we don't know which cache it's in, so we search all caches.
      */
-    @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId")
+    @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId ORDER BY timestamp DESC LIMIT 1")
     fun getCachedTweet(tweetId: MimeiId): CachedTweet?
+
+    @Query("SELECT * FROM CachedTweet WHERE mid = :tweetId ORDER BY timestamp DESC")
+    fun getCachedTweetCopies(tweetId: MimeiId): List<CachedTweet>
+
+    @Query("UPDATE CachedTweet SET originalTweet = :tweet, tweetTimestamp = :tweetTimestamp WHERE mid = :tweetId")
+    fun updateCachedTweetPayload(tweetId: MimeiId, tweet: Tweet, tweetTimestamp: Long)
 
     @Query("SELECT * FROM CachedTweet ORDER BY tweetTimestamp DESC LIMIT :count OFFSET :offset")
     fun getCachedTweets(offset: Int, count: Int): List<CachedTweet>
@@ -150,8 +160,8 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE uid = :userId " +
             "ORDER BY " +
             "CASE " +
-            "  WHEN uid LIKE '%_bookmarks' THEN timestamp " +
-            "  WHEN uid LIKE '%_favorites' THEN timestamp " +
+            "  WHEN uid LIKE 'bookmark_list_%' THEN timestamp " +
+            "  WHEN uid LIKE 'favorite_list_%' THEN timestamp " +
             "  ELSE tweetTimestamp " +
             "END DESC " +
             "LIMIT :count OFFSET :offset")
@@ -161,23 +171,23 @@ interface CachedTweetDao {
      * Delete expired tweets older than the cutoff date.
      * 
      * IMPORTANT: Never-expiring tweets:
-     * - Bookmarks (uid LIKE '%_bookmarks') - User's saved tweets
-     * - Favorites (uid LIKE '%_favorites') - User's favorited tweets
+     * - Bookmarks (uid LIKE 'bookmark_list_%') - User's saved tweets
+     * - Favorites (uid LIKE 'favorite_list_%') - User's favorited tweets
      * - AppUser's private tweets - Checked in CleanUpWorker code
      * 
      * Expiration applies to other caches:
      * - Tweets cached by authorId (public tweets from profiles)
-     * - Tweets cached by appUser.mid (mainfeed public tweets)
+     * - Tweets cached by main_feed_<appUser.mid> (main feed public tweets)
      * 
      * Expiration is based on timestamp, excluding special cache buckets.
      */
-    @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE '%_bookmarks' AND uid NOT LIKE '%_favorites'")
+    @Query("DELETE FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE 'bookmark_list_%' AND uid NOT LIKE 'favorite_list_%'")
     fun deleteOldCachedTweets(oneMonthAgo: Date)
     
     /**
      * Get old cached tweets that would be deleted (for filtering private tweets)
      */
-    @Query("SELECT * FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE '%_bookmarks' AND uid NOT LIKE '%_favorites'")
+    @Query("SELECT * FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE 'bookmark_list_%' AND uid NOT LIKE 'favorite_list_%'")
     fun getOldCachedTweets(oneMonthAgo: Date): List<CachedTweet>
 
     @Query("DELETE FROM CachedTweet")
@@ -185,9 +195,12 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedTweet WHERE mid = :tweetId")
     fun deleteCachedTweet(tweetId: MimeiId)
+
+    @Query("DELETE FROM CachedTweet WHERE mid = :tweetId AND uid = :cacheKey")
+    fun deleteCachedTweetFromCache(tweetId: MimeiId, cacheKey: MimeiId)
 }
 
-@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 13, exportSchema = false)
+@Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 14, exportSchema = false)
 @TypeConverters(DateConverter::class, TweetConverter::class, UserConverter::class)
 abstract class TweetCacheDatabase : RoomDatabase() {
     abstract fun tweetDao(): CachedTweetDao
@@ -205,7 +218,7 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                     "tweet_cache_database"
                 )
                     .fallbackToDestructiveMigration(false)
-                    .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                    .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     .build()
                 INSTANCE = instance
                 instance
@@ -233,6 +246,35 @@ abstract class TweetCacheDatabase : RoomDatabase() {
                 Timber.tag("TweetCacheDatabase").w("Migration 12->13: Adding tweetTimestamp column")
                 db.execSQL("ALTER TABLE CachedTweet ADD COLUMN tweetTimestamp INTEGER NOT NULL DEFAULT 0")
                 // Create index for faster ordering
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CachedTweet_tweetTimestamp ON CachedTweet(tweetTimestamp)")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Timber.tag("TweetCacheDatabase").w("Migration 13->14: Re-keying tweet cache by tweet/list membership")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS CachedTweet_new (
+                        mid TEXT NOT NULL,
+                        uid TEXT NOT NULL,
+                        originalTweet TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        tweetTimestamp INTEGER NOT NULL,
+                        PRIMARY KEY(mid, uid)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT OR REPLACE INTO CachedTweet_new (mid, uid, originalTweet, timestamp, tweetTimestamp)
+                    SELECT mid, uid, originalTweet, timestamp, tweetTimestamp FROM CachedTweet
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE CachedTweet")
+                db.execSQL("ALTER TABLE CachedTweet_new RENAME TO CachedTweet")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CachedTweet_uid ON CachedTweet(uid)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CachedTweet_mid ON CachedTweet(mid)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_CachedTweet_tweetTimestamp ON CachedTweet(tweetTimestamp)")
             }
         }
