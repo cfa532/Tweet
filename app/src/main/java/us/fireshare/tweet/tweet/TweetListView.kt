@@ -399,6 +399,8 @@ fun TweetListView(
     val visibleTweetIds = remember(visibleTweets) { visibleTweets.map { tweet -> tweet.mid } }
     var scrollRestoredForSession by remember(context) { mutableStateOf(false) }
     var previousVisibleTweetIds by remember(context) { mutableStateOf<List<MimeiId>>(emptyList()) }
+    var isUserScrollActive by remember(context) { mutableStateOf(false) }
+    var lastScrollStoppedAt by remember(context) { mutableLongStateOf(0L) }
 
     LaunchedEffect(visibleTweetIds, context) {
         if (visibleTweets.isEmpty() && headerContent == null) return@LaunchedEffect
@@ -426,6 +428,13 @@ fun TweetListView(
         previousVisibleTweetIds = visibleTweetIds
 
         if (!contentChanged) {
+            return@LaunchedEffect
+        }
+
+        // Avoid snapping back to a stale saved anchor while Compose is settling a drag/fling.
+        // Stable item keys already preserve the visible row for normal list mutations here.
+        val recentlyStoppedScrolling = System.currentTimeMillis() - lastScrollStoppedAt < 750L
+        if (isUserScrollActive || recentlyStoppedScrolling) {
             return@LaunchedEffect
         }
 
@@ -719,6 +728,10 @@ fun TweetListView(
                 val wasScrolling = lastScrollingState
                 val scrollingStarted = isScrolling && !wasScrolling
                 val scrollingStopped = !isScrolling && wasScrolling
+                isUserScrollActive = isScrolling
+                if (scrollingStopped) {
+                    lastScrollStoppedAt = now
+                }
 
                 // Throttle VideoPlaybackCoordinator scroll direction updates
                 if (isScrolling && (abs(indexDelta) >= 2 || abs(offsetDelta) > 200)) {
