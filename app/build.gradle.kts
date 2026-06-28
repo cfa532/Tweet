@@ -30,10 +30,10 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 136   // Full release version code. Must be increased each time,
+        versionCode = 137   // Full release version code. Must be increased each time,
                             // and higher than mini version code.
                             // So full version can override mini version. 
-        versionName = "66"  // compared with App Mimei version to check for upgrade.
+        versionName = "67"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -151,7 +151,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 136  // Play version code increased for release
+            versionCode = 137  // Play version code increased for release
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport
