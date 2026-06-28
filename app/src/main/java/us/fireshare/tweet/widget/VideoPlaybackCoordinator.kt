@@ -91,7 +91,6 @@ class VideoPlaybackCoordinator(
         /** Singleton instance for the main feed, similar to iOS VideoPlaybackCoordinator.shared */
         val shared = VideoPlaybackCoordinator(syncWithFullScreenPlayer = true)
 
-        private const val PLAYBACK_DEBOUNCE_MS = 100L
         private const val VISIBILITY_THRESHOLD = 0.5f
         private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = 0.7f
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
@@ -165,6 +164,7 @@ class VideoPlaybackCoordinator(
 
     private var scrollDirection: Boolean = true
     private var previousContentOffset: Float = 0f
+    private var isScrollInProgress: Boolean = false
 
     private var playbackDebounceJob: Job? = null
     private var playbackDebounceCandidateId: String? = null
@@ -386,6 +386,30 @@ class VideoPlaybackCoordinator(
         previousContentOffset = currentOffset
     }
 
+    fun updateScrollActivity(isScrolling: Boolean) {
+        if (isScrollInProgress == isScrolling) return
+
+        isScrollInProgress = isScrolling
+        if (isScrolling) {
+            playbackDebounceJob?.cancel()
+            playbackDebounceJob = null
+            playbackDebounceCandidateId = null
+            primaryVideoId?.let { cancelPendingVisibilityLossStop(it) }
+            updateManagerRetainedVideos()
+            MediaLog.d {
+                "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Scroll started; preserving primary=$primaryVideoId"
+            }
+            return
+        }
+
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Scroll stopped; reconciling primary=$primaryVideoId"
+        }
+        refreshViewportVisibilityFromGeometry()
+        rebuildVisibilitySetsFromRatios()
+        reconcilePlaybackForCurrentVisibility()
+    }
+
     /**
      * Update viewport size (called by TweetListView)
      */
@@ -551,7 +575,11 @@ class VideoPlaybackCoordinator(
         nextLoadVisible.forEach { cancelPendingVisibilityLossStop(it) }
 
         (previousLoadVisible - nextLoadVisible).forEach { identifier ->
-            scheduleStopAfterVisibilityLoss(identifier)
+            if (isScrollInProgress && identifier == primaryVideoId) {
+                cancelPendingVisibilityLossStop(identifier)
+            } else {
+                scheduleStopAfterVisibilityLoss(identifier)
+            }
         }
         updateManagerRetainedVideos()
 
@@ -615,6 +643,9 @@ class VideoPlaybackCoordinator(
     private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
         if (isPaused || !isFeedVisible) return
         if (VideoManager.isImageFullScreenActive()) return
+        if (isScrollInProgress) {
+            return
+        }
 
         if (replayCurrentPrimary && resumePendingPrimaryIfPossible(requirePlayable = true)) {
             return
@@ -656,12 +687,15 @@ class VideoPlaybackCoordinator(
             if (replayCurrentPrimary) {
                 startPrimaryVideoPlayback(playDelayMs = 0L)
             } else {
-                startPlaybackWithDebounce()
+                startPrimaryVideoPlayback(playDelayMs = 0L)
             }
         }
     }
 
     private fun stopAllVideosIfLayoutIsStable() {
+        if (isScrollInProgress) {
+            return
+        }
         val now = System.currentTimeMillis()
         val timeSinceUserRequest = now - userRequestedPlayAt
         if (timeSinceUserRequest < 500L) {
@@ -739,6 +773,13 @@ class VideoPlaybackCoordinator(
                 }
                 return@launch
             }
+            if (isScrollInProgress && identifier == primaryVideoId) {
+                updateManagerRetainedVideos()
+                MediaLog.d {
+                    "VideoPlaybackCoordinator: Preserved primary ${info.videoMid} during active scroll"
+                }
+                return@launch
+            }
 
             finishedVideoIds.remove(identifier)
             if (identifier == primaryBelowContinueIdentifier) {
@@ -786,30 +827,7 @@ class VideoPlaybackCoordinator(
         return protected
     }
 
-    private fun startPlaybackWithDebounce() {
-        val candidate = identifyPrimaryVideo() ?: return
-        if (playbackDebounceJob?.isActive == true &&
-            playbackDebounceCandidateId == candidate.identifier
-        ) {
-            return
-        }
-
-        playbackDebounceJob?.cancel()
-        playbackDebounceCandidateId = candidate.identifier
-        playbackDebounceJob = scope.launch {
-            delay(PLAYBACK_DEBOUNCE_MS)
-
-            if (visibleVideos.isNotEmpty() &&
-                primaryVideoId == null &&
-                identifyPrimaryVideo()?.identifier == candidate.identifier
-            ) {
-                startPrimaryVideoPlayback(candidate.identifier)
-            }
-            playbackDebounceCandidateId = null
-        }
-    }
-
-    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null, playDelayMs: Long = 50L) {
+    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null, playDelayMs: Long = 0L) {
         if (isPaused) return
         if (visibleVideos.isEmpty()) {
             return
@@ -1089,6 +1107,7 @@ class VideoPlaybackCoordinator(
         visibleTweetIds = emptySet()
         previousContentOffset = 0f
         scrollDirection = true
+        isScrollInProgress = false
         userRequestedPlayAt = 0L
         videoListBuiltAt = 0L
         hostResumedAt = 0L

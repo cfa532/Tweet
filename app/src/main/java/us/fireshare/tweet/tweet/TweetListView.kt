@@ -779,6 +779,7 @@ fun TweetListView(
 
                 // iOS-style playback coordination: after each list geometry/scroll pass,
                 // reconcile video playback once from the registered media-cell bounds.
+                coordinator.updateScrollActivity(isScrolling)
                 coordinator.refreshViewportVisibilityFromGeometry()
 
                 // Detect when list arrives at the absolute top.
