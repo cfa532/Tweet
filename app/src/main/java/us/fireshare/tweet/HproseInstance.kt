@@ -267,6 +267,40 @@ object HproseInstance {
             }
         }
     }
+
+    private fun isTweetNotFoundDeleteFailure(error: Throwable? = null, response: Any? = null): Boolean {
+        return isTweetNotFoundMessage(error?.message)
+                || isTweetNotFoundMessage(error?.localizedMessage)
+                || stringValues(response).any(::isTweetNotFoundMessage)
+    }
+
+    private fun isTweetNotFoundMessage(message: String?): Boolean {
+        val normalized = message
+            ?.lowercase()
+            ?.replace("_", " ")
+            ?.replace("-", " ")
+            ?: return false
+
+        return normalized.contains("tweet not found") ||
+                normalized.contains("cannot find the tweet") ||
+                normalized.contains("cannot find tweet") ||
+                normalized.contains("tweet does not exist") ||
+                (normalized.contains("tweet") && normalized.contains("not found"))
+    }
+
+    private fun stringValues(value: Any?): Sequence<String> = sequence {
+        when (value) {
+            null -> Unit
+            is Map<*, *> -> value.values.forEach { yieldAll(stringValues(it)) }
+            is Iterable<*> -> value.forEach { yieldAll(stringValues(it)) }
+            is Array<*> -> value.forEach { yieldAll(stringValues(it)) }
+            is Throwable -> {
+                value.message?.let { yield(it) }
+                value.localizedMessage?.let { yield(it) }
+            }
+            else -> yield(value.toString())
+        }
+    }
     // Use Application context to avoid memory leaks - Application lives for the entire app lifecycle
     private lateinit var applicationContext: Application
     lateinit var preferenceHelper: PreferenceHelper
@@ -3709,18 +3743,47 @@ object HproseInstance {
             "authorid" to tweetAuthorId,
             "tweetid" to tweetId
         )
+
+        suspend fun refreshAppUserAfterDelete() {
+            try {
+                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
+                if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    // Update singleton and set appUser to it
+                    User.updateUserInstance(refreshedUser, true)
+                    appUser = getInstance(refreshedUser.mid)
+
+                    // Notify other ViewModels that user data has been updated
+                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
+                }
+            } catch (e: Exception) {
+                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
+            }
+        }
+
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
             val client = requireWritableClient(appUser, "deleteTweet")
             val rawResponse = try {
                 client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
+                if (isTweetNotFoundDeleteFailure(error = e)) {
+                    Timber.tag("deleteTweet")
+                        .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    refreshAppUserAfterDelete()
+                    return tweetId
+                }
                 Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
                 throw e
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response == null) {
+                if (isTweetNotFoundDeleteFailure(response = rawResponse)) {
+                    Timber.tag("deleteTweet")
+                        .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    refreshAppUserAfterDelete()
+                    return tweetId
+                }
                 val errorMsg = "Delete tweet failed: server returned null response"
                 Timber.tag("deleteTweet").e(errorMsg)
                 throw Exception(errorMsg)
@@ -3735,22 +3798,16 @@ object HproseInstance {
             }
 
             // Refresh appUser from server to get updated tweetCount and other properties
-            try {
-                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
-                if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Update singleton and set appUser to it
-                    User.updateUserInstance(refreshedUser, true)
-                    appUser = getInstance(refreshedUser.mid)
-
-                    // Notify other ViewModels that user data has been updated
-                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
-                }
-            } catch (e: Exception) {
-                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
-            }
+            refreshAppUserAfterDelete()
 
             deletedTweetId
         } catch (e: Exception) {
+            if (isTweetNotFoundDeleteFailure(error = e)) {
+                Timber.tag("deleteTweet")
+                    .d("Tweet $tweetId is already missing on server; treating delete as success")
+                refreshAppUserAfterDelete()
+                return tweetId
+            }
             Timber.tag("deleteTweet").e(e, "Error deleting tweet: ${e.message}")
             Timber.tag("deleteTweet").e("Stack trace: ${e.stackTraceToString()}")
             // Re-throw with original message or provide default
@@ -4273,7 +4330,6 @@ object HproseInstance {
                     Timber.tag("fetchUser").d("📥 Hydrated singleton from cached user before fetch: userId: $userId")
                 } else {
                     if (user.baseUrl.isNullOrEmpty()) user.baseUrl = cachedUser.baseUrl
-                    if (user.writableUrl.isNullOrEmpty()) user.writableUrl = cachedUser.writableUrl
                     if (user.name == null) user.name = cachedUser.name
                     if (user.avatar == null) user.avatar = cachedUser.avatar
                     if (user.email == null) user.email = cachedUser.email

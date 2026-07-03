@@ -16,6 +16,14 @@ import kotlin.coroutines.resume
  * command, so app startup and non-video upload paths do not initialize FFmpegKit.
  */
 internal object LazyFFmpegKit {
+    private const val MAX_FAILURE_LOG_LINES = 8
+    private const val MAX_FAILURE_LOG_LINE_LENGTH = 180
+    private val noisyDecoderMessages = listOf(
+        "Error while decoding stream #0:0: Try again",
+        "Missing Sequence Header",
+        "Invalid data found when processing input"
+    )
+
     data class ExecutionResult(
         val success: Boolean,
         val logs: String
@@ -39,7 +47,7 @@ internal object LazyFFmpegKit {
                             cont.resume(true)
                         }
                     } else {
-                        val logs = completedSession.allLogsAsString
+                        val logs = summarizeFailureLogs(completedSession.allLogsAsString)
                         Timber.tag(logTag).e("FFmpeg $operation failed (rc=$rc): $logs")
                         if (cont.isActive) {
                             cont.resume(false)
@@ -47,7 +55,10 @@ internal object LazyFFmpegKit {
                     }
                 },
                 { log: Log ->
-                    Timber.tag(logTag).d("FFmpeg $operation log: ${log.message}")
+                    val message = log.message.trim()
+                    if (message.isNotEmpty() && !isNoisyDecoderMessage(message)) {
+                        Timber.tag(logTag).d("FFmpeg $operation log: $message")
+                    }
                 },
                 { stats: Statistics ->
                     Timber.tag(logTag)
@@ -86,6 +97,50 @@ internal object LazyFFmpegKit {
                 success = false,
                 logs = e.message.orEmpty()
             )
+        }
+    }
+
+    private fun summarizeFailureLogs(logs: String): String {
+        val lines = logs
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+
+        if (lines.isEmpty()) {
+            return "no FFmpeg logs available"
+        }
+
+        val noisyCount = lines.count(::isNoisyDecoderMessage)
+        val usefulLines = lines
+            .asReversed()
+            .filterNot(::isNoisyDecoderMessage)
+            .distinct()
+            .take(MAX_FAILURE_LOG_LINES)
+            .asReversed()
+            .map(::truncateFailureLine)
+
+        val summaryParts = mutableListOf<String>()
+        if (noisyCount > 0) {
+            summaryParts += "suppressed $noisyCount repetitive decoder log lines"
+        }
+        if (usefulLines.isNotEmpty()) {
+            summaryParts += usefulLines.joinToString(" | ")
+        }
+
+        return summaryParts.takeIf { it.isNotEmpty() }?.joinToString("; ")
+            ?: "suppressed ${lines.size} repetitive decoder log lines"
+    }
+
+    private fun isNoisyDecoderMessage(message: String): Boolean {
+        return noisyDecoderMessages.any { message.contains(it) }
+    }
+
+    private fun truncateFailureLine(line: String): String {
+        return if (line.length <= MAX_FAILURE_LOG_LINE_LENGTH) {
+            line
+        } else {
+            "${line.take(MAX_FAILURE_LOG_LINE_LENGTH)}..."
         }
     }
 }

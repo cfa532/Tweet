@@ -251,7 +251,6 @@ fun ProfileScreen(
             },
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 88.dp)
         )
     }
 }

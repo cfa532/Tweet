@@ -1099,18 +1099,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
 
-                            // Show success toast if it's the current user's tweet
-                            val context = notificationContextRef?.get()
-                            if (tweetWithAuthor.authorId == appUser.mid && context != null) {
-                                Timber.tag("TweetFeedViewModel").d("Showing success toast for tweet: ${tweetWithAuthor.mid}")
-                                withContext(Main) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.tweet_uploaded),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                                
+                            if (tweetWithAuthor.authorId == appUser.mid) {
                                 TweetCacheManager.saveTweet(
                                     tweetWithAuthor,
                                     TweetCacheManager.getMainFeedCacheId(appUser.mid)

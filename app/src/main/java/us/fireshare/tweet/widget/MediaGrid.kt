@@ -203,7 +203,9 @@ fun MediaGrid(
         return firstVideoIndex >= 0 && gridIndex == firstVideoIndex
     }
     
-    // Preload videos and images with limited concurrency to avoid thread pool contention
+    // Preload images with limited concurrency to avoid thread pool contention.
+    // Video preloading is handled by TweetListView/VideoManager directional preloads so
+    // hidden grid work does not compete with the primary visible video.
     LaunchedEffect(limitedMediaList, enableRowPreloading) {
         if (!enableRowPreloading) return@LaunchedEffect
         // Delay preloading so fast-scrolling cancels before starting heavy work
@@ -211,31 +213,16 @@ fun MediaGrid(
         val preloadSemaphore = kotlinx.coroutines.sync.Semaphore(2) // Max 2 concurrent preloads
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
-            val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
-            when {
-                (mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO) &&
-                        !VideoManager.isVideoPreloaded(item.mid) -> {
-                    launch(Dispatchers.IO) {
-                        preloadSemaphore.acquire()
-                        try {
-                            VideoManager.preloadVideo(context, item.mid, mediaUrl, item.type)
-                        } catch (e: Exception) {
-                            Timber.tag("MediaGrid").e(e, "Failed to preload video: ${item.mid}")
-                        } finally {
-                            preloadSemaphore.release()
-                        }
-                    }
-                }
-                mediaType == MediaType.Image -> {
-                    launch(Dispatchers.IO) {
-                        preloadSemaphore.acquire()
-                        try {
-                            ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
-                        } catch (e: Exception) {
-                            Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
-                        } finally {
-                            preloadSemaphore.release()
-                        }
+            if (mediaType == MediaType.Image) {
+                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                launch(Dispatchers.IO) {
+                    preloadSemaphore.acquire()
+                    try {
+                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
+                    } catch (e: Exception) {
+                        Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
+                    } finally {
+                        preloadSemaphore.release()
                     }
                 }
             }

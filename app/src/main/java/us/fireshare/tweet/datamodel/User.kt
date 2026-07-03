@@ -5,6 +5,7 @@ import com.google.gson.annotations.Expose
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.network.HproseClientPool
@@ -13,9 +14,8 @@ import us.fireshare.tweet.network.HproseClientPool
 @Serializable
 data class User(
     @Expose var baseUrl: String? = null,
-    @Expose var writableUrl: String? = null,
-    // Not @Expose — not persisted; used for 5-minute TTL on the resolved writable URL.
-    var writableUrlResolvedAt: Long? = null,
+    @Transient
+    var writableUrl: String? = null,
     @Expose val mid: MimeiId,
     @Expose var name: String? = null,
     @Expose var username: String? = null,
@@ -182,19 +182,12 @@ data class User(
     }
 
     /**
-     * Resolve writable URL from hostIds and reset writableClient if needed
+     * Resolve writable URL from hostIds and reset writableClient if needed.
+     * Writable routes can change, so this intentionally never returns a cached URL.
      */
     suspend fun resolveWritableUrl(): String? {
-        // Return cached URL if it was resolved within the last 5 minutes.
-        val ttlMs = 5 * 60 * 1000L
-        val resolvedAt = writableUrlResolvedAt
-        if (!writableUrl.isNullOrEmpty() && resolvedAt != null &&
-            System.currentTimeMillis() - resolvedAt < ttlMs) {
-            return writableUrl
-        }
         clearWritableClient()
         writableUrl = null
-        writableUrlResolvedAt = null
 
         suspend fun tryResolve(): String? {
             if (hostIds.isNullOrEmpty()) {
@@ -256,7 +249,6 @@ data class User(
                 }
 
                 writableUrl = urlString
-                writableUrlResolvedAt = System.currentTimeMillis()
                 return urlString
             } else {
                 Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")

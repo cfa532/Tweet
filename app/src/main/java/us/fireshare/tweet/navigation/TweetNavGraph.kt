@@ -22,7 +22,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -98,7 +97,6 @@ fun TweetNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
     val shouldShowMainFeedNewTweetsBanner =
         currentRoute?.contains("TweetFeed") == true
-    val newTweetsBannerTopPadding = 100.dp
     
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
@@ -323,7 +321,6 @@ fun TweetNavGraph(
                     onAutoHide = tweetFeedViewModel::dismissNewTweetsBanner,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = newTweetsBannerTopPadding)
                         .zIndex(1500f)
                 )
             }

@@ -381,7 +381,7 @@ class MediaUploadService(
     private suspend fun isConversionServerAvailable(): Boolean {
         return try {
             Timber.tag(TAG).d(
-                "Checking HLS conversion server - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}"
+                "Checking HLS conversion server - cloudDrivePort: ${appUser.cloudDrivePort}"
             )
 
             if (appUser.cloudDrivePort <= 0) {
@@ -389,12 +389,10 @@ class MediaUploadService(
                 return false
             }
 
-            if (appUser.writableUrl.isNullOrEmpty()) {
-                val resolvedUrl = appUser.resolveWritableUrl()
-                if (resolvedUrl.isNullOrEmpty()) {
-                    Timber.tag(TAG).w("Cannot resolve writableUrl for HLS conversion server")
-                    return false
-                }
+            val resolvedUrl = appUser.resolveWritableUrl()
+            if (resolvedUrl.isNullOrEmpty()) {
+                Timber.tag(TAG).w("Cannot resolve writableUrl for HLS conversion server")
+                return false
             }
 
             val tusServerUrl = appUser.tusServerUrl ?: run {
@@ -440,8 +438,6 @@ class MediaUploadService(
                 lastError = "Failed to resolve writableUrl (attempt $attempt/3)"
                 Timber.tag(TAG).w(lastError)
                 if (attempt < 3) {
-                    // Invalidate cache so next attempt re-resolves a fresh IP.
-                    appUser.writableUrlResolvedAt = null
                     delay((1000 * attempt).milliseconds)
                 }
             }
@@ -449,6 +445,10 @@ class MediaUploadService(
         
         if (resolvedUrl.isNullOrEmpty()) {
             Timber.tag(TAG).e("Failed to resolve writableUrl after 3 attempts")
+            return null
+        }
+        val writableClient = appUser.writableClient ?: run {
+            Timber.tag(TAG).e("Writable client not available after resolving writableUrl: $resolvedUrl")
             return null
         }
 
@@ -468,7 +468,7 @@ class MediaUploadService(
                     if (chunkCount % 10 == 0) {
                         Timber.tag(TAG).d("Upload progress: $chunkCount chunks, ${offset / 1024}KB uploaded")
                     }
-                    request["fsid"] = appUser.writableClient?.runMApp(
+                    request["fsid"] = writableClient.runMApp(
                         "upload_ipfs",
                         request.toMap(), listOf(buffer)
                     )
@@ -487,7 +487,7 @@ class MediaUploadService(
             referenceId?.let { request["referenceid"] = it }
 
             Timber.tag(TAG).d("Calling final upload_ipfs to complete upload...")
-            val cid = appUser.writableClient?.runMApp<String?>("upload_ipfs", request.toMap())
+            val cid = writableClient.runMApp<String?>("upload_ipfs", request.toMap())
             Timber.tag(TAG).d("Final upload_ipfs returned: ${cid ?: "null"}")
             if (cid == null) {
                 Timber.tag(TAG).e("Final upload_ipfs returned null")

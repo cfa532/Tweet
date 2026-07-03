@@ -407,7 +407,7 @@ class VideoPlaybackCoordinator(
         }
         refreshViewportVisibilityFromGeometry()
         rebuildVisibilitySetsFromRatios()
-        reconcilePlaybackForCurrentVisibility()
+        reconcilePlaybackForCurrentVisibility(reassertRetainedPrimary = true)
     }
 
     /**
@@ -640,7 +640,10 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
+    private fun reconcilePlaybackForCurrentVisibility(
+        replayCurrentPrimary: Boolean = false,
+        reassertRetainedPrimary: Boolean = false
+    ) {
         if (isPaused || !isFeedVisible) return
         if (VideoManager.isImageFullScreenActive()) return
         if (isScrollInProgress) {
@@ -661,7 +664,7 @@ class VideoPlaybackCoordinator(
 
         primaryVideoId?.let { primaryId ->
             if (primaryId in continuePlaybackVideoIds || isProtectedUserRequestedPrimary(primaryId)) {
-                if (replayCurrentPrimary && primaryId in playableVideoIds) {
+                if ((replayCurrentPrimary || reassertRetainedPrimary) && primaryId in playableVideoIds) {
                     emitPlayForPrimary(videoMetaMap[primaryId] ?: return@let)
                 }
                 return
