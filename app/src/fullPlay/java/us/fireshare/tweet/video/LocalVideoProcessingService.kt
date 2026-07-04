@@ -517,7 +517,7 @@ class LocalVideoProcessingService(
                 Timber.tag(TAG).d("  Resolution: ${targetWidth}x${targetHeight} (${targetResolution}p)")
                 Timber.tag(TAG).d("  Bitrate: $targetBitrate (standardized)")
                 Timber.tag(TAG).d("  Duration: ${duration}ms")
-                Timber.tag(TAG).d("  Purpose: Unified format for 32MB routing decision")
+                Timber.tag(TAG).d("  Purpose: Unified format for 50MB routing decision")
                 Timber.tag(TAG).d("========================================================")
                 
                 NormalizationResult.Success(

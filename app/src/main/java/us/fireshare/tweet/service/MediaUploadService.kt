@@ -46,7 +46,7 @@ class MediaUploadService(
 
     companion object {
         private const val TAG = "MediaUploadService"
-        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 32L * 1024L * 1024L
+        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 50L * 1024L * 1024L
     }
 
     private data class NormalizedVideo(
@@ -184,7 +184,7 @@ class MediaUploadService(
      * Route normal video uploads like iOS:
      * - Mini uploads directly because it does not include FFmpeg.
      * - Full/play normalize to MP4 first.
-     * - Normalized videos up to 32MB upload as progressive MP4.
+     * - Normalized videos up to 50MB upload as progressive MP4.
      * - Larger videos use HLS when the cloud drive service is configured.
      */
     private suspend fun processVideoWithRouting(
@@ -209,7 +209,7 @@ class MediaUploadService(
                 Timber.tag(TAG).d("Normalized video size: ${normalizedVideo.sizeBytes / (1024 * 1024)}MB")
 
                 if (normalizedVideo.sizeBytes <= PROGRESSIVE_VIDEO_THRESHOLD_BYTES) {
-                    Timber.tag(TAG).d("Normalized video <=32MB, uploading as progressive MP4")
+                    Timber.tag(TAG).d("Normalized video <=50MB, uploading as progressive MP4")
                     return uploadToIPFSOriginal(
                         normalizedVideo.uri,
                         fileName,
@@ -242,7 +242,7 @@ class MediaUploadService(
                     )
                 }
 
-                Timber.tag(TAG).d("Normalized video >32MB, uploading through HLS path")
+                Timber.tag(TAG).d("Normalized video >50MB, uploading through HLS path")
                 val processingService = LocalVideoProcessingService(context, httpClient, appUser)
                 when (val result = processingService.processNormalizedVideo(
                     uri = normalizedVideo.uri,
