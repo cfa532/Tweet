@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
@@ -182,7 +181,6 @@ class MediaUploadService(
 
     /**
      * Route normal video uploads like iOS:
-     * - Mini uploads directly because it does not include FFmpeg.
      * - Full/play normalize to MP4 first.
      * - Normalized videos up to 50MB upload as progressive MP4.
      * - Larger videos use HLS when the cloud drive service is configured.
@@ -194,12 +192,6 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            // Mini version: Skip FFmpeg processing, upload directly to IPFS
-            if (BuildConfig.IS_MINI_VERSION) {
-                Timber.tag(TAG).d("Mini version detected: Uploading video directly without local processing")
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
-            }
-
             val originalFileSize = getFileSize(uri) ?: 0L
             val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             val normalizedVideo = normalizeVideoToFile(uri)
@@ -292,12 +284,6 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            // Safety check: Mini version should never call this method (no FFmpeg)
-            if (BuildConfig.IS_MINI_VERSION) {
-                Timber.tag(TAG).w("Mini version attempted to call normalizeAndUploadVideo - uploading directly")
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
-            }
-
             val normalizedVideo = normalizeVideoToFile(uri)
             if (normalizedVideo == null) {
                 Timber.tag(TAG).d("Falling back to uploading original video as progressive video")

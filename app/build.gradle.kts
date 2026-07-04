@@ -30,9 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 138   // Full release version code. Must be increased each time,
-                            // and higher than mini version code.
-                            // So full version can override mini version. 
+        versionCode = 138
         versionName = "68"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -124,30 +122,15 @@ android {
         create("full") {
             dimension = "version"
             versionNameSuffix = ""
-            // Full version uses default versionCode from defaultConfig (currently 70)
-            // No override - will use defaultConfig versionCode
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport
                 abiFilters += listOf("arm64-v8a")
             }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
         }
-        
-        create("mini") {
-            dimension = "version"
-            versionNameSuffix = "-mini"
-            versionCode = 87  // Mini version code. Must be smaller than full version's code
-            ndk {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "true")
-            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
-            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
-        }
-        
+
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
@@ -157,7 +140,6 @@ android {
                 //noinspection ChromeOsAbiSupport
                 abiFilters += listOf("arm64-v8a")
             }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
             // Play version is based on full version but with different settings
@@ -216,7 +198,7 @@ kotlin {
 }
 
 tasks.configureEach {
-    val isNonPlayVariantTask = name.contains("Full") || name.contains("Mini")
+    val isNonPlayVariantTask = name.contains("Full")
     val isFirebaseTask = name.contains("GoogleServices") || name.contains("Crashlytics")
     if (isNonPlayVariantTask && isFirebaseTask) {
         enabled = false
@@ -225,7 +207,7 @@ tasks.configureEach {
 
 dependencies {
     // FFmpeg Kit for local video processing.
-    // Included in full and play versions, excluded in mini version
+    // Included in full and play versions.
     "fullImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
     "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
     "playImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))

@@ -17,24 +17,19 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,14 +39,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import kotlinx.coroutines.launch
-import timber.log.Timber
-import us.fireshare.tweet.ActivityViewModel
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.service.BadgeStateManager
@@ -85,9 +76,7 @@ fun BottomNavigationBar(
 ) {
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
-    val activityViewModel = hiltViewModel<ActivityViewModel>()
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
-    var showUpgradeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val guestReminderText = stringResource(R.string.guest_reminder)
     val coroutineScope = rememberCoroutineScope()
@@ -256,21 +245,7 @@ fun BottomNavigationBar(
                                 }
                                 return@clickable
                             }
-                            
-                            // Check upgrade requirement before navigating to compose
-                            if (item.route == NavTweet.ComposeTweet && BuildConfig.IS_MINI_VERSION) {
-                                Timber.tag("UpgradeCheck")
-                                    .d("Mini version detected - isGuest: ${appUser.isGuest()}, tweetCount: ${appUser.tweetCount}")
-                                if (!appUser.isGuest() && appUser.tweetCount > 5) {
-                                    Timber.tag("UpgradeCheck").d("Showing upgrade dialog")
-                                    showUpgradeDialog = true
-                                    return@clickable
-                                } else {
-                                    Timber.tag("UpgradeCheck")
-                                        .d("Upgrade not required - isGuest: ${appUser.isGuest()}, tweetCount: ${appUser.tweetCount}")
-                                }
-                            }
-                            
+
                             onNavigationClick(item.route)
                         },
                     contentAlignment = Alignment.Center
@@ -301,48 +276,5 @@ fun BottomNavigationBar(
                 }
             }
         }
-    }
-    
-    // Upgrade required dialog
-    if (showUpgradeDialog) {
-        AlertDialog(
-            onDismissRequest = { },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Upgrade,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.upgrade_required_title),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
-            text = {
-                Text(
-                    text = stringResource(R.string.upgrade_required_message)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        // Trigger immediate server upgrade check (no delay)
-                        Timber.tag("UpgradeButton").d("Upgrade button clicked")
-                        activityViewModel.checkForMiniUpgrade(context)
-                    }
-                ) {
-                    Text(stringResource(R.string.upgrade_now))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { }
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
     }
 }

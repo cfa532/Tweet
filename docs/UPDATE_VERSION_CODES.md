@@ -1,132 +1,58 @@
-# How to Update Version Codes
+# How To Update Version Codes
 
 ## Current Configuration
 
-In `app/build.gradle.kts`:
+`app/build.gradle.kts` defines the shared app version in `defaultConfig`:
 
 ```kotlin
 defaultConfig {
-    versionCode = 69  // Used by FULL version
-    versionName = "38"
-}
-
-productFlavors {
-    create("full") {
-        // Uses defaultConfig versionCode (69)
-        // No override
-    }
-    
-    create("mini") {
-        versionCode = 67  // Override for mini
-    }
+    versionCode = 138
+    versionName = "68"
 }
 ```
 
-## How to Change VersionCodes
+Both `full` and `play` use this value unless a flavor overrides it. The former `mini` flavor has been removed.
 
-### Change Full Version VersionCode
+## Change The App Version
 
-Edit `app/build.gradle.kts` line 33:
+Edit `app/build.gradle.kts`:
 
 ```kotlin
 defaultConfig {
-    versionCode = 70  // ← Change this number
-    versionName = "38"
+    versionCode = 139
+    versionName = "69"
 }
 ```
 
-**Full version will use this versionCode.**
-
-### Change Mini Version VersionCode
-
-Edit `app/build.gradle.kts` line 122:
+If Play Store releases need a separate code, update the `play` flavor override:
 
 ```kotlin
-create("mini") {
-    dimension = "version"
-    versionNameSuffix = "-mini"
-    versionCode = 68  // ← Change this number
-    buildConfigField("Boolean", "IS_MINI_VERSION", "true")
+create("play") {
+    versionCode = 139
 }
 ```
 
 ## Rebuild After Changes
 
-After changing versionCode, you MUST clean and rebuild:
-
 ```bash
 cd /Users/cfa532/Documents/GitHub/Tweet
-
-# Clean build cache
 ./gradlew clean
-
-# Rebuild mini version
-./gradlew assembleMiniRelease
-
-# Rebuild full version
 ./gradlew assembleFullRelease
+./gradlew assemblePlayRelease
 ```
 
-## Verify VersionCodes
+## Verify Version Codes
 
 ```bash
-# Check mini
-/Users/cfa532/Library/Android/sdk/build-tools/35.0.0/aapt dump badging \
-  app/build/outputs/apk/mini/release/app-mini-release.apk | grep "versionCode"
+/Users/cfa532/Library/Android/sdk/build-tools/37.0.0/aapt dump badging \
+  app/build/outputs/apk/full/release/app-full-release.apk | grep "versionCode"
 
-# Check full
-/Users/cfa532/Library/Android/sdk/build-tools/35.0.0/aapt dump badging \
-  app/full/release/app-full-release.apk | grep "versionCode"
+/Users/cfa532/Library/Android/sdk/build-tools/37.0.0/aapt dump badging \
+  app/build/outputs/apk/play/release/app-play-release.apk | grep "versionCode"
 ```
 
-## Recommended Version Planning
+## Summary
 
-### For Next Release (v39)
-
-**Option 1: Increment Both**
-```kotlin
-defaultConfig {
-    versionCode = 70  // Full v39
-}
-
-create("mini") {
-    versionCode = 69  // Mini v39
-}
-```
-
-**Option 2: Only Release Full**
-```kotlin
-defaultConfig {
-    versionCode = 70  // Full v39
-}
-
-create("mini") {
-    versionCode = 67  // Keep old mini
-}
-```
-
-## Quick Steps to Fix Your Current Issue
-
-Your APK is showing 68 instead of 69 because of build cache:
-
-```bash
-# 1. Clean everything
-./gradlew clean
-
-# 2. Rebuild full version
-./gradlew assembleFullRelease
-
-# 3. Verify
-/Users/cfa532/Library/Android/sdk/build-tools/35.0.0/aapt dump badging \
-  app/full/release/app-full-release.apk | grep "versionCode"
-
-# Should show: versionCode='69'
-```
-
----
-
-**Summary**: 
-- Full version = defaultConfig.versionCode (line 33)
-- Mini version = mini flavor versionCode (line 122)
-- Always clean build after changing!
-
+- Full version: uses `defaultConfig.versionCode`.
+- Play version: uses the `play` flavor `versionCode` if set, otherwise `defaultConfig.versionCode`.
+- Mini version: removed.

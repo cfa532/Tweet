@@ -246,10 +246,12 @@ class LocalHLSConverter(private val context: Context) {
                 // Use the iOS pixel-based high-quality bitrate.
                 val target720pBitrate = "${highQualityBitrate}k"
 
-                // iOS can safely COPY its VideoToolbox-normalized stream into HLS. Android
-                // MediaCodec output is less predictable for iOS clients, so keep re-encoding
-                // HLS variants and only COPY the intermediate MP4 during the segmenting step.
-                val shouldUseCopyFor720p = false
+                // Reuse the normalized MP4 when this variant does not need scaling. If COPY
+                // fails on a device-specific MediaCodec output, executeFFmpegWithFallback()
+                // keeps the existing re-encode path as the recovery behavior.
+                val shouldUseCopyFor720p = isNormalized && videoResolution?.let { (width, height) ->
+                    width == finalWidth720 && height == finalHeight720
+                } == true
 
                 if (shouldUseCopyFor720p) {
                     Timber.tag(TAG)
@@ -314,9 +316,11 @@ class LocalHLSConverter(private val context: Context) {
             // Use the iOS pixel-based lower-variant bitrate.
             val targetLowerBitrate = "${lowerResolutionBitrate}k"
 
-            // See 720p variant note: Android HLS output is more iOS-compatible when
-            // variants are re-encoded before segmenting.
-            val shouldUseCopyForLower = false
+            // Reuse the normalized MP4 only when the lower variant is already at the target
+            // dimensions. Dual-variant 480p output usually still needs scaling and re-encoding.
+            val shouldUseCopyForLower = isNormalized && videoResolution?.let { (width, height) ->
+                width == finalWidthLower && height == finalHeightLower
+            } == true
 
             if (shouldUseCopyForLower) {
                 Timber.tag(TAG).d("========== 480p VARIANT: COPY CODEC (No Re-encoding) ==========")
