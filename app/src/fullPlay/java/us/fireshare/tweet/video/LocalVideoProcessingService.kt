@@ -83,6 +83,7 @@ class LocalVideoProcessingService(
                 }
                 
                 Timber.tag(TAG).d("Original video size: ${originalFileSize / (1024 * 1024)}MB")
+                val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
                 
                 try {
                     // Step 1: Normalize video
@@ -128,7 +129,8 @@ class LocalVideoProcessingService(
                         fileName, 
                         normalizedSize, 
                         isNormalized,
-                        normalizedResolution
+                        normalizedResolution,
+                        sourceBitrateK
                     )
                 
                 when (hlsResult) {
@@ -214,7 +216,8 @@ class LocalVideoProcessingService(
         referenceId: MimeiId?,
         originalFileSize: Long,
         normalizedSize: Long,
-        normalizedResolution: Int?
+        normalizedResolution: Int?,
+        sourceBitrateK: Int?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
         try {
             val tempDir = createTempDirectory()
@@ -228,7 +231,8 @@ class LocalVideoProcessingService(
                     fileName,
                     normalizedSize,
                     true,
-                    normalizedResolution
+                    normalizedResolution,
+                    sourceBitrateK
                 )
 
                 when (hlsResult) {
@@ -341,22 +345,39 @@ class LocalVideoProcessingService(
     /**
      * Calculate normalization parameters based on video resolution
      * Returns: Pair(targetResolution, targetVideoBitrate)
-     * Uses the same pixel-based bitrate formula as the iOS normalization code.
+     * Uses the same pixel-based bitrate formula as the iOS normalization code,
+     * capped at the source bitrate when it is already lower.
      */
-    private fun calculateNormalizationParams(resolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, String> {
-        return if (resolution > NORMALIZATION_THRESHOLD) {
-            Pair(NORMALIZATION_THRESHOLD, "${REFERENCE_720P_BITRATE}k")
+    private fun calculateNormalizationParams(
+        resolution: Int,
+        videoResolution: Pair<Int, Int>?,
+        sourceBitrateK: Int?
+    ): Pair<Int, String> {
+        val targetResolution: Int
+        val calculatedBitrate: Int
+
+        if (resolution > NORMALIZATION_THRESHOLD) {
+            targetResolution = NORMALIZATION_THRESHOLD
+            calculatedBitrate = REFERENCE_720P_BITRATE
         } else {
-            val proportionalBitrate = if (videoResolution != null) {
+            targetResolution = resolution
+            calculatedBitrate = if (videoResolution != null) {
                 val (width, height) = videoResolution
                 val pixelCount = width * height
-                val calculatedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
-                maxOf(MIN_BITRATE, calculatedBitrate)
+                val pixelBasedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
+                maxOf(MIN_BITRATE, pixelBasedBitrate)
             } else {
                 maxOf(MIN_BITRATE, (REFERENCE_720P_BITRATE * resolution / 720))
             }
-            Pair(resolution, "${proportionalBitrate}k")
         }
+
+        val targetBitrate = if (sourceBitrateK != null && sourceBitrateK > 0 && sourceBitrateK < calculatedBitrate) {
+            sourceBitrateK
+        } else {
+            calculatedBitrate
+        }
+
+        return Pair(targetResolution, "${targetBitrate}k")
     }
 
     /**
@@ -394,6 +415,7 @@ class LocalVideoProcessingService(
             // Get video resolution
             val videoResolution = VideoManager.getVideoResolution(context, uri)
             val resolution = detectResolution(videoResolution)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             
             if (resolution == null) {
                 Timber.tag(TAG).w("Could not detect video resolution, skipping normalization")
@@ -403,7 +425,7 @@ class LocalVideoProcessingService(
             Timber.tag(TAG).d("Detected resolution: ${resolution}p (${videoResolution?.first}x${videoResolution?.second})")
             
             // Calculate normalization parameters with the iOS pixel-based bitrate formula.
-            val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution)
+            val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution, sourceBitrateK)
             
             Timber.tag(TAG).d("Standardization target: ${targetResolution}p @ $targetBitrate video / $AUDIO_BITRATE audio")
             
@@ -443,21 +465,33 @@ class LocalVideoProcessingService(
                 Pair(1280, 720) // Default fallback
             }
             
-            // Build FFmpeg normalization command
-            val command = """
-                -i "${tempInputFile.absolutePath}"
-                -c:v h264_mediacodec
-                -c:a aac
-                -ar 44100
-                -vf "scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2"
-                -b:v $targetBitrate
-                -b:a $AUDIO_BITRATE
-                -pix_fmt yuv420p
-                -g 30
-                -movflags +faststart
-                -y
-                "${normalizedFile.absolutePath}"
-            """.trimIndent().replace(Regex("\\s+"), " ")
+            // Build FFmpeg normalization command. Match iOS: scale only when >720p,
+            // otherwise keep original dimensions and normalize codec/bitrate.
+            val vfFilter = if (resolution > NORMALIZATION_THRESHOLD) {
+                "-vf \"scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2\""
+            } else {
+                ""
+            }
+            val command = listOf(
+                "-fflags +genpts",
+                "-i \"${tempInputFile.absolutePath}\"",
+                "-c:v h264_mediacodec",
+                "-bitrate_mode cbr",
+                "-pix_fmt yuv420p",
+                "-c:a aac",
+                "-ar 44100",
+                vfFilter,
+                "-g 30",
+                "-b:v $targetBitrate",
+                "-maxrate $targetBitrate",
+                "-bufsize $targetBitrate",
+                "-b:a $AUDIO_BITRATE",
+                "-avoid_negative_ts make_zero",
+                "-movflags +faststart",
+                "-metadata:s:v:0 rotate=0",
+                "-y",
+                "\"${normalizedFile.absolutePath}\""
+            ).filter { it.isNotBlank() }.joinToString(" ")
             
             Timber.tag(TAG).d("Executing standardization: ${targetWidth}x${targetHeight} @ $targetBitrate")
             Timber.tag(TAG).d("FFmpeg command: $command")

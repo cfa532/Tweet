@@ -43,7 +43,8 @@ class LocalVideoProcessingService(
         referenceId: MimeiId?,
         originalFileSize: Long,
         normalizedSize: Long,
-        normalizedResolution: Int?
+        normalizedResolution: Int?,
+        sourceBitrateK: Int?
     ): VideoProcessingResult {
         return VideoProcessingResult.Error("Local video processing not available in mini version. Use backend processing instead.")
     }

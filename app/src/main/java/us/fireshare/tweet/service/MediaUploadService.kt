@@ -53,7 +53,8 @@ class MediaUploadService(
         val uri: Uri,
         val file: File,
         val sizeBytes: Long,
-        val resolutionValue: Int?
+        val resolutionValue: Int?,
+        val sourceBitrateK: Int?
     )
 
     private fun getFileTimestamp(uri: Uri): Long {
@@ -200,6 +201,7 @@ class MediaUploadService(
             }
 
             val originalFileSize = getFileSize(uri) ?: 0L
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             val normalizedVideo = normalizeVideoToFile(uri)
                 ?: return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
 
@@ -249,7 +251,8 @@ class MediaUploadService(
                     referenceId = referenceId,
                     originalFileSize = originalFileSize,
                     normalizedSize = normalizedVideo.sizeBytes,
-                    normalizedResolution = normalizedVideo.resolutionValue
+                    normalizedResolution = normalizedVideo.resolutionValue,
+                    sourceBitrateK = normalizedVideo.sourceBitrateK ?: sourceBitrateK
                 )) {
                     is LocalVideoProcessingService.VideoProcessingResult.Success -> result.mimeiFile
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
@@ -330,6 +333,7 @@ class MediaUploadService(
 
             val videoResolution = VideoManager.getVideoResolution(context, uri)
             val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             val needsResampling = (resolutionValue ?: 0) > 720
 
             if (needsResampling) {
@@ -351,7 +355,8 @@ class MediaUploadService(
                         uri = normalizedUri,
                         file = result.outputFile,
                         sizeBytes = result.outputFile.length(),
-                        resolutionValue = normalizedResolution
+                        resolutionValue = normalizedResolution,
+                        sourceBitrateK = sourceBitrateK
                     )
                 }
                 is VideoNormalizer.NormalizationResult.Error -> {

@@ -64,6 +64,14 @@ class LocalHLSConverter(private val context: Context) {
         return finalTimeout
     }
 
+    private fun capBitrateToSource(calculatedBitrateK: Int, sourceBitrateK: Int?): Int {
+        return if (sourceBitrateK != null && sourceBitrateK > 0 && sourceBitrateK < calculatedBitrateK) {
+            sourceBitrateK
+        } else {
+            calculatedBitrateK
+        }
+    }
+
     /**
      * Convert video to HLS format with multiple resolutions
      * Matches iOS behavior: automatically decides between dual variant (720p + 480p) or single variant (480p only)
@@ -75,6 +83,7 @@ class LocalHLSConverter(private val context: Context) {
      * @param fileSizeBytes File size in bytes for determining resolution/bitrate configuration
      * @param isNormalized If true, the input video is already normalized
      * @param normalizedResolution The resolution to which the video was normalized (null if not normalized)
+     * @param sourceBitrateK Original source bitrate cap, used when the normalized intermediate is larger
      * @return Result containing the output directory path and success status
      */
     suspend fun convertToHLS(
@@ -83,7 +92,8 @@ class LocalHLSConverter(private val context: Context) {
         fileName: String,
         fileSizeBytes: Long,
         isNormalized: Boolean = false,
-        normalizedResolution: Int? = null
+        normalizedResolution: Int? = null,
+        sourceBitrateK: Int? = null
     ): HLSConversionResult = withContext(Dispatchers.IO) {
         try {
             Timber.tag(TAG).d("========== SECOND PASS (HLS Segmentation) ==========")
@@ -95,12 +105,13 @@ class LocalHLSConverter(private val context: Context) {
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoResolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+            val bitrateCapK = sourceBitrateK ?: VideoManager.getVideoBitrate(context, inputUri)?.let { it / 1000 }
 
             // Use standard configuration for all video sizes
             val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0)
 
             // Calculate bitrates using the same pixel-based formula as iOS.
-            val highQualityBitrate = when {
+            val calculatedHighQualityBitrate = when {
                 videoResolutionValue != null && videoResolutionValue >= 720 -> REFERENCE_720P_BITRATE
                 videoResolution != null -> {
                     val (width, height) = videoResolution
@@ -115,10 +126,11 @@ class LocalHLSConverter(private val context: Context) {
                     (REFERENCE_720P_BITRATE * ((videoResolutionValue ?: 720).coerceAtMost(720)) / 720)
                 )
             }
+            val highQualityBitrate = capBitrateToSource(calculatedHighQualityBitrate, bitrateCapK)
 
             // Lower variant: always 480p (matches iOS)
             val lowerResolution = 480
-            val lowerResolutionBitrate = if (videoResolution != null) {
+            val calculatedLowerResolutionBitrate = if (videoResolution != null) {
                 val (width, height) = videoResolution
                 val aspectRatio = width.toFloat() / height.toFloat()
                 val (lowerWidth, lowerHeight) = if (aspectRatio < 1.0f) {
@@ -142,10 +154,11 @@ class LocalHLSConverter(private val context: Context) {
                     (REFERENCE_720P_BITRATE * lowerResolution / 720)
                 )
             }
+            val lowerResolutionBitrate = capBitrateToSource(calculatedLowerResolutionBitrate, bitrateCapK)
 
             Timber.tag(TAG).d("File size ${String.format(Locale.US, "%.1f", fileSizeMB)}MB")
             Timber.tag(TAG)
-                .d("High quality: ${videoResolutionValue}p @ ${highQualityBitrate}k, Lower: 480p @ ${lowerResolutionBitrate}k")
+                .d("High quality: ${videoResolutionValue}p @ ${highQualityBitrate}k, Lower: 480p @ ${lowerResolutionBitrate}k, source cap=${bitrateCapK}k")
 
             // Calculate dynamic timeout based on video duration and file size
             val dynamicTimeoutMs = calculateDynamicTimeout(videoDurationMs, fileSizeBytes)
@@ -233,9 +246,9 @@ class LocalHLSConverter(private val context: Context) {
                 // Use the iOS pixel-based high-quality bitrate.
                 val target720pBitrate = "${highQualityBitrate}k"
 
-                // Do not use stream copy for HLS segments on Android uploads. COPY can cut MPEG-TS
-                // segments away from clean IDR boundaries; some players tolerate that, but Pixel
-                // devices can render a black video surface. Re-encoding gives keyframe-aligned HLS.
+                // iOS can safely COPY its VideoToolbox-normalized stream into HLS. Android
+                // MediaCodec output is less predictable for iOS clients, so keep re-encoding
+                // HLS variants and only COPY the intermediate MP4 during the segmenting step.
                 val shouldUseCopyFor720p = false
 
                 if (shouldUseCopyFor720p) {
@@ -301,8 +314,8 @@ class LocalHLSConverter(private val context: Context) {
             // Use the iOS pixel-based lower-variant bitrate.
             val targetLowerBitrate = "${lowerResolutionBitrate}k"
 
-            // Do not use stream copy for HLS segments on Android uploads. Re-encoding is larger/slower
-            // than COPY but produces cleaner HLS for Pixel/ExoPlayer playback.
+            // See 720p variant note: Android HLS output is more iOS-compatible when
+            // variants are re-encoded before segmenting.
             val shouldUseCopyForLower = false
 
             if (shouldUseCopyForLower) {
@@ -514,7 +527,10 @@ class LocalHLSConverter(private val context: Context) {
 
     /**
      * Build FFmpeg command for direct MP4-to-HLS segmentation.
-     * MPEG-TS HLS requires Annex-B H.264 packets, even when the source MP4 is already normalized.
+     *
+     * Android MediaCodec writes H.264 in MP4/AVCC form. iOS playback of MPEG-TS HLS
+     * needs Annex-B parameter sets in the segments, so keep the explicit bitstream
+     * filter here even though the iOS FFmpeg path does not need to spell it out.
      */
     private fun buildCopyToHlsCommand(
         inputPath: String,
@@ -603,11 +619,10 @@ class LocalHLSConverter(private val context: Context) {
         audioBitrate: String
     ): String {
         return """
-            -fflags +genpts+igndts
+            -fflags +genpts
             -i "$inputPath"
-            -map 0:v:0
-            -map 0:a?
             -c:v h264_mediacodec
+            -bitrate_mode cbr
             -pix_fmt yuv420p
             -c:a aac
             -ar 44100
@@ -617,6 +632,7 @@ class LocalHLSConverter(private val context: Context) {
             -bufsize $bitrate
             -b:a $audioBitrate
             -g $HLS_KEYFRAME_INTERVAL
+            -avoid_negative_ts make_zero
             -movflags +faststart
             -metadata:s:v:0 rotate=0
             "$outputPath"

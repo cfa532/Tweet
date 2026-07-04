@@ -57,6 +57,14 @@ class VideoNormalizer(private val context: Context) {
         return finalTimeout
     }
 
+    private fun capBitrateToSource(calculatedBitrateK: Int, sourceBitrateK: Int?): Int {
+        return if (sourceBitrateK != null && sourceBitrateK > 0 && sourceBitrateK < calculatedBitrateK) {
+            sourceBitrateK
+        } else {
+            calculatedBitrateK
+        }
+    }
+
     /**
      * Normalize video with proportional bitrate calculation:
      * - If resolution > 720p: Normalize to 720p with the iOS reference bitrate
@@ -121,15 +129,9 @@ class VideoNormalizer(private val context: Context) {
                 REFERENCE_720P_BITRATE
             }
             
-            // Determine final target bitrate:
-            // If source bitrate is lower than calculated target but higher than minimum, keep source bitrate
-            val targetBitrateK = if (sourceBitrateK != null && 
-                                     sourceBitrateK < calculatedTargetBitrateK && 
-                                     sourceBitrateK >= MIN_BITRATE) {
-                Timber.tag(TAG).d("Using source bitrate ${sourceBitrateK}k (between min ${MIN_BITRATE}k and target ${calculatedTargetBitrateK}k)")
-                sourceBitrateK
-            } else {
-                calculatedTargetBitrateK
+            val targetBitrateK = capBitrateToSource(calculatedTargetBitrateK, sourceBitrateK)
+            if (sourceBitrateK != null && sourceBitrateK > 0 && sourceBitrateK < calculatedTargetBitrateK) {
+                Timber.tag(TAG).d("Keeping lower source bitrate ${sourceBitrateK}k instead of calculated target ${calculatedTargetBitrateK}k")
             }
 
             Timber.tag(TAG).d("Normalization: resolution=$videoResolution (${resolutionValue}p), source bitrate=${sourceBitrateK}k, calculated target=${calculatedTargetBitrateK}k, final target bitrate=${targetBitrateK}k, duration=${videoDurationMs}ms, size=${fileSizeBytes}bytes")
@@ -209,17 +211,20 @@ class VideoNormalizer(private val context: Context) {
             // Default to 720p if resolution unknown
             // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
             return """
+                -fflags +genpts
                 -i "$inputPath" 
                 -c:v h264_mediacodec
+                -bitrate_mode cbr
+                -pix_fmt yuv420p
                 -c:a aac
                 -ar 44100
                 -vf "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -pix_fmt yuv420p
                 -g 30
                 -b:v $targetBitrateStr
                 -b:a 128k
                 -maxrate $targetBitrateStr
                 -bufsize $targetBitrateStr
+                -avoid_negative_ts make_zero
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -253,40 +258,41 @@ class VideoNormalizer(private val context: Context) {
             // Scale down to 720p
             // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
             return """
+                -fflags +genpts
                 -i "$inputPath" 
                 -c:v h264_mediacodec
+                -bitrate_mode cbr
+                -pix_fmt yuv420p
                 -c:a aac
                 -ar 44100
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -pix_fmt yuv420p
                 -g 30
                 -b:v $targetBitrateStr
                 -b:a 128k
                 -maxrate $targetBitrateStr
                 -bufsize $targetBitrateStr
+                -avoid_negative_ts make_zero
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
             """.trimIndent().replace(Regex("\\s+"), " ")
         } else {
             // Keep original resolution but encode with proportional bitrate
-            // Ensure dimensions are even
-            val evenWidth = if (width % 2 == 0) width else width - 1
-            val evenHeight = if (height % 2 == 0) height else height - 1
-            
             // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
             return """
+                -fflags +genpts
                 -i "$inputPath" 
                 -c:v h264_mediacodec
+                -bitrate_mode cbr
+                -pix_fmt yuv420p
                 -c:a aac
                 -ar 44100
-                -vf "scale=$evenWidth:$evenHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -pix_fmt yuv420p
                 -g 30
                 -b:v $targetBitrateStr
                 -b:a 128k
                 -maxrate $targetBitrateStr
                 -bufsize $targetBitrateStr
+                -avoid_negative_ts make_zero
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -310,6 +316,7 @@ class VideoNormalizer(private val context: Context) {
             // Get video resolution and duration for timeout calculation
             val videoResolution = VideoManager.getVideoResolution(context, inputUri)
             val videoDurationMs = VideoManager.getVideoDuration(context, inputUri)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, inputUri)?.let { it / 1000 }
 
             // Calculate file size for timeout calculation
             val fileSizeBytes = try {
@@ -343,7 +350,8 @@ class VideoNormalizer(private val context: Context) {
                     tempInputFile.absolutePath,
                     outputFile.absolutePath,
                     videoResolution,
-                    resampleTo720p
+                    resampleTo720p,
+                    sourceBitrateK
                 )
                 
                 // Execute FFmpeg command asynchronously (dynamic timeout)
@@ -376,7 +384,8 @@ class VideoNormalizer(private val context: Context) {
         inputPath: String,
         outputPath: String,
         videoResolution: Pair<Int, Int>?,
-        resampleTo720p: Boolean
+        resampleTo720p: Boolean,
+        sourceBitrateK: Int?
     ): String {
         val (width, height) = videoResolution ?: Pair(1280, 720)
         
@@ -388,21 +397,24 @@ class VideoNormalizer(private val context: Context) {
             val (targetWidth, targetHeight) = calculate720pDimensions(width, height)
             
             // Determine bitrate based on resolution
-            val bitrate = getBitrateForResolution(targetWidth, targetHeight)
+            val bitrate = "${capBitrateToSource(getBitrateForResolutionK(targetWidth, targetHeight), sourceBitrateK)}k"
             
             // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
             """
+                -fflags +genpts
                 -i "$inputPath" 
                 -c:v h264_mediacodec
+                -bitrate_mode cbr
+                -pix_fmt yuv420p
                 -c:a aac
                 -ar 44100
                 -vf "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease:force_divisible_by=2" 
-                -pix_fmt yuv420p
                 -g 30
                 -b:v $bitrate
                 -b:a 128k
                 -maxrate $bitrate
                 -bufsize $bitrate
+                -avoid_negative_ts make_zero
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -410,20 +422,23 @@ class VideoNormalizer(private val context: Context) {
         } else {
             // Just normalize to standard MP4 without resampling
             // Determine bitrate based on original resolution
-            val bitrate = getBitrateForResolution(width, height)
+            val bitrate = "${capBitrateToSource(getBitrateForResolutionK(width, height), sourceBitrateK)}k"
             
             // Use Android hardware H.264 encoding. Let MediaCodec choose profile/level per device.
             """
+                -fflags +genpts
                 -i "$inputPath" 
                 -c:v h264_mediacodec
+                -bitrate_mode cbr
+                -pix_fmt yuv420p
                 -c:a aac
                 -ar 44100
-                -pix_fmt yuv420p
                 -g 30
                 -b:v $bitrate
                 -b:a 128k
                 -maxrate $bitrate
                 -bufsize $bitrate
+                -avoid_negative_ts make_zero
                 -movflags +faststart
                 -metadata:s:v:0 rotate=0
                 "$outputPath"
@@ -436,7 +451,7 @@ class VideoNormalizer(private val context: Context) {
      * Calculates bitrate proportionally based on pixel count (720p = 921,600 pixels = 2500k)
      * Minimum bitrate: 600k to match iOS
      */
-    private fun getBitrateForResolution(width: Int, height: Int): String {
+    private fun getBitrateForResolutionK(width: Int, height: Int): Int {
         val pixelCount = width * height
 
         // Base: 720p = REFERENCE_720P_BITRATE
@@ -449,7 +464,7 @@ class VideoNormalizer(private val context: Context) {
             ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt().coerceAtLeast(MIN_BITRATE)
         }
 
-        return "${proportionalBitrate}k"
+        return proportionalBitrate
     }
 
     /**
