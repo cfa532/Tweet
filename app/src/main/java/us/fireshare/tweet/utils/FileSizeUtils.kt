@@ -3,6 +3,7 @@ package us.fireshare.tweet.utils
 import android.content.Context
 import android.net.Uri
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.TW_CONST
 import java.text.DecimalFormat
 
 object FileSizeUtils {
@@ -10,7 +11,6 @@ object FileSizeUtils {
     private const val BYTES_PER_MB = BYTES_PER_KB * 1024
     private const val BYTES_PER_GB = BYTES_PER_MB * 1024
     
-    private const val MAX_FILE_SIZE = 512 * BYTES_PER_MB
     private const val LARGE_FILE_THRESHOLD = 50 * BYTES_PER_MB
     private const val VERY_LARGE_FILE_THRESHOLD = 100 * BYTES_PER_MB
     
@@ -46,7 +46,7 @@ object FileSizeUtils {
      * Checks if file size is valid (under limit)
      */
     fun isFileSizeValid(fileSize: Long): Boolean {
-        return fileSize <= MAX_FILE_SIZE
+        return fileSize <= TW_CONST.MAX_FILE_SIZE
     }
     
     /**
@@ -56,7 +56,7 @@ object FileSizeUtils {
         val formattedSize = formatFileSize(fileSize)
         
         return when {
-            fileSize > MAX_FILE_SIZE -> {
+            fileSize > TW_CONST.MAX_FILE_SIZE -> {
                 context.getString(R.string.file_size_warning, formattedSize)
             }
             fileSize > VERY_LARGE_FILE_THRESHOLD -> {
