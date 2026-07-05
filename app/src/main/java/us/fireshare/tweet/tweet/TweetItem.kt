@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -616,7 +615,6 @@ private fun RetweetWithContent(
                 QuotedTweetContent(
                     tweet = tweet,
                     parentEntry = parentEntry,
-                    onTweetUnavailable = onTweetUnavailable,
                     context = context,
                     containerTopY = containerTopY
                 )
@@ -643,7 +641,6 @@ private fun RetweetWithContent(
 private fun QuotedTweetContent(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
-    onTweetUnavailable: ((MimeiId) -> Unit)?,
     context: String = "default",
     containerTopY: Float? = null
 ) {
@@ -739,11 +736,27 @@ private fun QuotedTweetContent(
             }
         }
         else -> {
-            // Original tweet not available - this quoted tweet should be removed from the list
-            LaunchedEffect(Unit) {
-                onTweetUnavailable?.invoke(tweet.mid)
+            // Embedded tweet could not be found/loaded (deleted, network error, etc).
+            // Render the quote tweet card anyway with a placeholder in place of the
+            // missing embedded tweet, instead of dropping the whole tweet from the list.
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier.padding(
+                    start = 4.dp,
+                    top = 8.dp,
+                    end = 8.dp
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.loading_quoted_tweet),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                )
             }
-            Box(modifier = Modifier.size(0.dp))
         }
     }
 }

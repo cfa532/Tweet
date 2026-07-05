@@ -297,6 +297,7 @@
     <string name="cannot_get_followed_user">无法获取被关注的用户</string>
     <string name="missing_host_for_followed_user">被关注用户缺少主机</string>
     <string name="tweet_not_found">找不到推文</string>
+    <string name="loading_quoted_tweet">正在加载引用的推文...</string>
     <string name="only_author_can_update_privacy">只有推文作者可以更新隐私设置</string>
     <string name="not_a_friend_of_the_host">不是主机的朋友</string>
     <string name="no_provider_ip_found">找不到提供者IP</string>
