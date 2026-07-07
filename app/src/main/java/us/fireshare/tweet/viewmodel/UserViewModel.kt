@@ -97,6 +97,11 @@ class UserViewModel @AssistedInject constructor(
     val followers: StateFlow<List<MimeiId>> get() = _followers.asStateFlow()
     private var _followings = MutableStateFlow(emptyList<MimeiId>())
     val followings: StateFlow<List<MimeiId>> get() = _followings.asStateFlow()
+
+    // Once the server list has been fetched in this ViewModel's lifetime, page-0
+    // requests (pull-to-refresh) skip the cached list and hit the server directly.
+    private var followersRefreshedFromServer = false
+    private var followingsRefreshedFromServer = false
     
     // Signal for follow operation failures - emits userId when operation fails
     private val _followOperationFailed = MutableStateFlow<MimeiId?>(null)
@@ -800,17 +805,22 @@ class UserViewModel @AssistedInject constructor(
 
         _followers.value = fans
         _followings.value = followings
+        followersRefreshedFromServer = true
+        followingsRefreshedFromServer = true
 
         // Update the public count variables for UI
         _followersCount.value = fans.size
         _followingsCount.value = followings.size
-        
-        // Update the user object with the correct counts
+
+        // Update the user object with the correct counts and the ID lists,
+        // so both are persisted for instant display on the next access.
         _user.value = user.value.copy(
             followersCount = fans.size,
-            followingCount = followings.size
+            followingCount = followings.size,
+            fansList = fans,
+            followingList = followings
         )
-        
+
         // Update the User singleton for this user (any user, not just appUser)
         User.updateUserInstance(_user.value)
         TweetCacheManager.saveUser(_user.value)
@@ -828,9 +838,33 @@ class UserViewModel @AssistedInject constructor(
         Timber.tag("fetchFollowers").d("fetchFollowers called with pageNumber: $pageNumber")
         return try {
             if (pageNumber == 0) {
-                // For page 0, refresh the entire list
+                // Serve the cached ID list instantly on first access so rows render
+                // without a spinner; the server list is refreshed in the background.
+                // Later page-0 calls (pull-to-refresh) go straight to the server.
+                if (!followersRefreshedFromServer) {
+                    val cachedIds = user.value.fansList
+                        ?: TweetCacheManager.getCachedUser(userId)?.fansList
+                    if (!cachedIds.isNullOrEmpty()) {
+                        Timber.tag("fetchFollowers")
+                            .d("Serving ${cachedIds.size} cached follower IDs, refreshing in background")
+                        _followers.value = cachedIds
+                        _followersCount.value = cachedIds.size
+                        viewModelScope.launch(IO) {
+                            try {
+                                refreshFollowersFromServer()
+                            } catch (e: Exception) {
+                                Timber.tag("fetchFollowers").e(e, "Background follower refresh failed")
+                            }
+                        }
+                        val firstBatch = cachedIds.take(TW_CONST.USER_BATCH_SIZE)
+                        prefetchUsers(firstBatch)
+                        return firstBatch
+                    }
+                }
+
+                // No cached list yet (first-ever access) or explicit refresh.
                 Timber.tag("fetchFollowers").d("Loading all followers for user: ${user.value.mid}")
-                val allFollowers = HproseInstance.getFans(user.value) ?: emptyList()
+                val allFollowers = refreshFollowersFromServer()
                 Timber.tag("fetchFollowers").d("getFans returned: ${allFollowers.size} followers")
 
                 // Check for duplicates in the raw data
@@ -840,19 +874,10 @@ class UserViewModel @AssistedInject constructor(
                         .w("Found duplicate user IDs in raw data: $duplicates")
                 }
 
-                _followers.value = allFollowers
-                
-                // Update the count
-                _followersCount.value = allFollowers.size
-                _user.value = user.value.copy(followersCount = allFollowers.size)
-                
-                // Update the User singleton for this user
-                User.updateUserInstance(_user.value)
-                TweetCacheManager.saveUser(_user.value)
-
                 // Return the first batch of users, filtering out nulls
                 val firstBatch = allFollowers.take(TW_CONST.USER_BATCH_SIZE)
                 Timber.tag("fetchFollowers").d("Returning first batch: ${firstBatch.size} user IDs")
+                prefetchUsers(firstBatch)
                 firstBatch
             } else {
                 // For subsequent pages, return the appropriate slice of already-loaded followers
@@ -869,6 +894,7 @@ class UserViewModel @AssistedInject constructor(
                 } else {
                     Timber.tag("fetchFollowers")
                         .d("Returning slice for page $pageNumber: ${slice.size} user IDs")
+                    prefetchUsers(slice)
                     slice
                 }
             }
@@ -880,26 +906,61 @@ class UserViewModel @AssistedInject constructor(
     }
 
     /**
+     * Fetch the follower ID list from the server, publish it, and persist it on
+     * the user record so the next access renders instantly from cache.
+     */
+    private suspend fun refreshFollowersFromServer(): List<MimeiId> {
+        val allFollowers = HproseInstance.getFans(user.value) ?: emptyList()
+        followersRefreshedFromServer = true
+        _followers.value = allFollowers
+        _followersCount.value = allFollowers.size
+        _user.value = user.value.copy(
+            followersCount = allFollowers.size,
+            fansList = allFollowers
+        )
+        User.updateUserInstance(_user.value)
+        TweetCacheManager.saveUser(_user.value)
+        return allFollowers
+    }
+
+    /**
      * Fetch followings with pagination support
      * Returns List<MimeiId> (null values are filtered out)
      */
     suspend fun fetchFollowings(pageNumber: Int): List<MimeiId> {
         return try {
             if (pageNumber == 0) {
-                // For page 0, refresh the entire list
-                val allFollowings = HproseInstance.getFollowings(user.value)
-                _followings.value = allFollowings
-                
-                // Update the count
-                _followingsCount.value = allFollowings.size
-                _user.value = user.value.copy(followingCount = allFollowings.size)
-                
-                // Update the User singleton for this user
-                User.updateUserInstance(_user.value)
-                TweetCacheManager.saveUser(_user.value)
+                // Serve the cached ID list instantly on first access so rows render
+                // without a spinner; the server list is refreshed in the background.
+                // Later page-0 calls (pull-to-refresh) go straight to the server.
+                if (!followingsRefreshedFromServer) {
+                    val cachedIds = user.value.followingList
+                        ?: TweetCacheManager.getCachedUser(userId)?.followingList
+                    if (!cachedIds.isNullOrEmpty()) {
+                        Timber.tag("fetchFollowings")
+                            .d("Serving ${cachedIds.size} cached following IDs, refreshing in background")
+                        _followings.value = cachedIds
+                        _followingsCount.value = cachedIds.size
+                        viewModelScope.launch(IO) {
+                            try {
+                                refreshFollowingsFromServer()
+                            } catch (e: Exception) {
+                                Timber.tag("fetchFollowings").e(e, "Background following refresh failed")
+                            }
+                        }
+                        val firstBatch = cachedIds.take(TW_CONST.USER_BATCH_SIZE)
+                        prefetchUsers(firstBatch)
+                        return firstBatch
+                    }
+                }
+
+                // No cached list yet (first-ever access) or explicit refresh.
+                val allFollowings = refreshFollowingsFromServer()
 
                 // Return the first batch of users, filtering out nulls
-                allFollowings.take(TW_CONST.USER_BATCH_SIZE)
+                val firstBatch = allFollowings.take(TW_CONST.USER_BATCH_SIZE)
+                prefetchUsers(firstBatch)
+                firstBatch
             } else {
                 // For subsequent pages, return the appropriate slice of already-loaded followings
                 val startIndex = pageNumber * TW_CONST.USER_BATCH_SIZE
@@ -911,15 +972,63 @@ class UserViewModel @AssistedInject constructor(
                     )
                 )
 
-                slice.ifEmpty {
+                if (slice.isEmpty()) {
                     // No more followings to return
                     emptyList()
+                } else {
+                    prefetchUsers(slice)
+                    slice
                 }
             }
         } catch (e: Exception) {
             Timber.tag("fetchFollowings")
                 .e(e, "Error fetching followings for user: ${user.value.mid}")
             emptyList()
+        }
+    }
+
+    /**
+     * Fetch the following ID list from the server, publish it, and persist it on
+     * the user record so the next access renders instantly from cache.
+     */
+    private suspend fun refreshFollowingsFromServer(): List<MimeiId> {
+        val allFollowings = HproseInstance.getFollowings(user.value)
+        followingsRefreshedFromServer = true
+        _followings.value = allFollowings
+        _followingsCount.value = allFollowings.size
+        _user.value = user.value.copy(
+            followingCount = allFollowings.size,
+            followingList = allFollowings
+        )
+        User.updateUserInstance(_user.value)
+        TweetCacheManager.saveUser(_user.value)
+        return allFollowings
+    }
+
+    /**
+     * Warm the user cache for a batch of follower/following IDs. Rows only load
+     * users as they scroll into view, so without this only seen rows ever get
+     * cached. fetchUser returns instantly for fresh cache entries, dedups against
+     * concurrent row-level fetches, and persists fetched users to the database,
+     * so revisits render without network round-trips.
+     */
+    private fun prefetchUsers(userIds: List<MimeiId>) {
+        if (userIds.isEmpty()) return
+        viewModelScope.launch(IO) {
+            userIds.forEach { id ->
+                if (id.isEmpty() || id == TW_CONST.GUEST_ID) return@forEach
+                launch {
+                    try {
+                        userPrefetchSemaphore.withPermit {
+                            fetchUser(id)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("prefetchUsers").d("Prefetch failed for $id: $e")
+                    }
+                }
+            }
         }
     }
 
@@ -1180,6 +1289,7 @@ class UserViewModel @AssistedInject constructor(
 
     companion object {
         private val initUserFetchSemaphore = Semaphore(3)
+        private val userPrefetchSemaphore = Semaphore(3)
     }
 
     private fun publishRefreshedUser(freshUser: User) {
