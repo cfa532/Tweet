@@ -39,6 +39,7 @@ import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.SharedViewModel
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
@@ -260,7 +261,8 @@ fun TweetDropdownMenuItems(
             onClick = {
                 onDismissRequest()
                 applicationScope.launch(IO) {
-                    viewModel.shareTweet(shareContext, isInDetailView = true)
+                    // Dropdown share uses the author's provider-IP entry URL (DEEPLINKING.md)
+                    viewModel.shareTweet(shareContext, linkStyle = ShareLinkStyle.PROVIDER_IP)
                 }
             },
             text = {

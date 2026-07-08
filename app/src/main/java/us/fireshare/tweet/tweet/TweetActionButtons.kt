@@ -46,6 +46,7 @@ import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.utils.CountFormatUtils
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
 private val TweetActionIconSize = 21.dp
@@ -300,7 +301,7 @@ fun ShareButton(
     color: Color? = null,
     parentTweetId: String? = null,
     parentAuthorId: String? = null,
-    isInDetailView: Boolean = false
+    linkStyle: ShareLinkStyle = ShareLinkStyle.WEB_DOMAIN
 ) {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -317,7 +318,7 @@ fun ShareButton(
                 }
             } else
                 scope.launch(Dispatchers.IO) {
-                    viewModel.shareTweet(context, parentTweetId, parentAuthorId, isInDetailView)
+                    viewModel.shareTweet(context, parentTweetId, parentAuthorId, linkStyle)
                 }
         },
         enabled = !isSharing

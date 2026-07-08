@@ -71,6 +71,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.SelectableText
@@ -309,7 +310,8 @@ fun TweetDetailBody(
                         RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        ShareButton(viewModel)
+                        // Detail-view share button uses the check_upgrade domain (DEEPLINKING.md)
+                        ShareButton(viewModel, linkStyle = ShareLinkStyle.WEB_DOMAIN)
                     }
                 }
             }

@@ -69,6 +69,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaGrid
@@ -629,7 +630,8 @@ private fun RetweetWithContent(
                     RetweetButton(viewModel)
                     LikeButton(viewModel)
                     BookmarkButton(viewModel)
-                    ShareButton(viewModel)
+                    // Feed share uses the dtweet.com deep-link format (DEEPLINKING.md)
+                    ShareButton(viewModel, linkStyle = ShareLinkStyle.DEEPLINK)
                 }
             }
         }

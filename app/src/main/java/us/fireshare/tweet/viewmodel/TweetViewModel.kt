@@ -55,6 +55,79 @@ import java.lang.Integer.max
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 
+// Fixed deep-link domain: iOS/Android open the app for these links; the
+// Cloudflare Worker sends browsers to the web app. See DEEPLINKING.md.
+private const val SHARE_DEEPLINK_DOMAIN = "http://dtweet.com"
+
+/**
+ * A base URL is safe to embed in a shared link only if its host is a domain
+ * name or a sound public IPv4. Private ranges, RFC 6598 / Tailscale
+ * (100.64.0.0/10), loopback, link-local, and IPv6 are rejected.
+ */
+private fun isShareSafePublicHost(url: String): Boolean {
+    val hostPort = url.substringAfter("://", url).substringBefore("/")
+    if (hostPort.startsWith("[")) return false                 // bracketed IPv6
+    if (hostPort.count { it == ':' } > 1) return false         // bare IPv6
+    val host = hostPort.substringBefore(":")
+    val match = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""").matchEntire(host)
+        ?: return true                                         // domain name — fine
+    val octets = match.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
+    if (octets.any { it > 255 }) return false
+    val a = octets[0]
+    val b = octets[1]
+    return !(a == 0 || a == 10 || a == 127 || a >= 224 ||
+            (a == 192 && b == 168) ||
+            (a == 172 && b in 16..31) ||
+            (a == 100 && b in 64..127) ||                      // RFC 6598 / Tailscale
+            (a == 169 && b == 254))
+}
+
+private val IPV4_HOST = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
+
+/** True when [url] points at a sound public IPv4 (not a domain name). */
+private fun isPublicIpv4BaseUrl(url: String?): Boolean {
+    if (url.isNullOrBlank()) return false
+    val hostPort = url.substringAfter("://", url).substringBefore("/")
+    if (hostPort.startsWith("[")) return false
+    if (hostPort.count { it == ':' } > 1) return false
+    val host = hostPort.substringBefore(":")
+    return IPV4_HOST.matches(host) && isShareSafePublicHost(url)
+}
+
+/**
+ * Resolve the author's provider-IP base URL for detail-view dropdown sharing.
+ * Domains are ignored — only a cached public IPv4 or a fresh getProviderIP result
+ * is used (mirrors iOS buildDetailShareItems / getIPv4PreferredBaseUrl).
+ */
+private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBaseUrl: String?): String {
+    if (isPublicIpv4BaseUrl(cachedBaseUrl)) return cachedBaseUrl!!
+    if (isPublicIpv4BaseUrl(appUser.baseUrl)) return appUser.baseUrl!!
+
+    try {
+        HproseInstance.getProviderIP(authorId)?.let { providerIP ->
+            return if (providerIP.startsWith("http://") || providerIP.startsWith("https://")) {
+                providerIP
+            } else {
+                "http://$providerIP"
+            }
+        }
+    } catch (e: Exception) {
+        Timber.tag("SHARE").w(e, "Failed to resolve provider IP for share: $authorId")
+    }
+
+    return appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+}
+
+/** Which URL a share action embeds — see DEEPLINKING.md for the policy. */
+enum class ShareLinkStyle {
+    /** `http://dtweet.com/tweet/{mid}/{authorId}` — feed share button */
+    DEEPLINK,
+    /** Domain delivered by the backend's `check_upgrade` — detail-view share button */
+    WEB_DOMAIN,
+    /** The tweet author's provider-IP entry URL — detail-view dropdown menu */
+    PROVIDER_IP
+}
+
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
@@ -568,60 +641,48 @@ class TweetViewModel @AssistedInject constructor(
         context: Context,
         parentTweetId: String? = null,
         parentAuthorId: String? = null,
-        isInDetailView: Boolean = false
+        linkStyle: ShareLinkStyle = ShareLinkStyle.WEB_DOMAIN
     ) {
         _isSharing.value = true
         try {
             // Use current tweet state (which has loaded content) instead of constructor parameter
             val currentTweet = tweetState.value
-            
-            /**
-             * Call to checkUpgrade() also returns a map of environmental variables,
-             * which includes environment variables of the App.
-             * */
-            val map = HproseInstance.checkUpgrade()
-            if (map == null) {
-                return
-            }
-            
-            // Build the share link based on context (similar to iOS implementation)
-            val deepLink = if (isInDetailView) {
-                // In detail view: use author's baseUrl with entry format
-                val baseUrlString = currentTweet.author?.baseUrl ?: appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
-                if (parentTweetId != null && parentAuthorId != null) {
-                    // Comment in detail view: entry format with query parameters in hash
-                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
-                } else {
-                    // Regular tweet in detail view: entry format
-                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+
+            val commentParams = if (parentTweetId != null && parentAuthorId != null) {
+                "?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
+            } else ""
+
+            // Share-URL policy (see DEEPLINKING.md)
+            val deepLink = when (linkStyle) {
+                ShareLinkStyle.DEEPLINK -> {
+                    // Standard deep-link format: the OS opens the app when installed,
+                    // browsers land on the web app via the dtweet.com worker
+                    "$SHARE_DEEPLINK_DOMAIN/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
-            } else if (parentTweetId != null && parentAuthorId != null) {
-                // Comment in feed/list: traditional format with query parameters
-                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                    appUser.domainToShare!!
-                } else {
-                    map["domain"] ?: return
+                ShareLinkStyle.WEB_DOMAIN -> {
+                    /**
+                     * Domain delivered by the backend: checkUpgrade() returns a map of
+                     * environment variables of the App, including "domain".
+                     * */
+                    val map = HproseInstance.checkUpgrade() ?: return
+                    var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                        appUser.domainToShare!!
+                    } else {
+                        map["domain"] ?: return
+                    }
+                    // Ensure domain has http:// protocol prefix
+                    if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                        domain = "http://$domain"
+                    }
+                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
-                // Ensure domain has http:// protocol prefix
-                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
-                    domain = "http://$domain"
-                }
-                "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
-            } else {
-                // In feed/grid: use traditional format
-                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                    appUser.domainToShare!!
-                } else {
-                    map["domain"] ?: return
-                }
-                // Ensure domain has http:// protocol prefix
-                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
-                    domain = "http://$domain"
-                }
-                if (BuildConfig.IS_PLAY_VERSION) {
-                    "http://${BuildConfig.PLAY_SHARE_DOMAIN}/tweet/${currentTweet.mid}/${currentTweet.authorId}"
-                } else {
-                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                ShareLinkStyle.PROVIDER_IP -> {
+                    // Author's provider-IP entry URL (hash-router format).
+                    val baseUrlString = resolveProviderIpBaseUrlForShare(
+                        currentTweet.authorId,
+                        currentTweet.author?.baseUrl
+                    )
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
             }
 
