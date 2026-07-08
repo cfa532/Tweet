@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -256,6 +257,13 @@ fun TweetDropdownMenuItems(
     )
     if (viewModel != null) {
         val shareContext = LocalContext.current
+        val isDetailViewDropdown = contextType == "tweetDetail"
+        val shareMenuIcon = if (isDetailViewDropdown) Icons.Filled.Link else Icons.Filled.Share
+        val shareMenuLabel = if (isDetailViewDropdown) {
+            stringResource(R.string.share_link)
+        } else {
+            stringResource(R.string.share)
+        }
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
@@ -268,13 +276,13 @@ fun TweetDropdownMenuItems(
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = stringResource(R.string.share),
+                        imageVector = shareMenuIcon,
+                        contentDescription = shareMenuLabel,
                         tint = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = stringResource(R.string.share),
+                        text = shareMenuLabel,
                         color = MaterialTheme.colorScheme.secondary
                     )
                 }
