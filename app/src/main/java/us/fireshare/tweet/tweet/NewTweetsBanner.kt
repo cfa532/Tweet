@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -62,7 +63,11 @@ fun NewTweetsBanner(
         visible = visible,
         enter = fadeIn() + slideInVertically { -it / 2 },
         exit = fadeOut() + slideOutVertically { -it / 2 },
+        // Keep the banner below the status bar: the app is edge-to-edge, so without
+        // this inset the pill lands in the status-bar gesture region and misses taps.
         modifier = modifier
+            .statusBarsPadding()
+            .padding(top = 8.dp)
     ) {
         Surface(
             shape = CircleShape,
