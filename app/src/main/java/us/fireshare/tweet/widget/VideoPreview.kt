@@ -392,6 +392,13 @@ fun VideoPreview(
                     "isPlaying changed key=$currentPlayerKey mid=$currentVideoMid isPlaying=$isPlaying playWhenReady=${currentExoPlayer?.playWhenReady}"
                 }
                 currentState.isPlaying = isPlaying
+                // Frames are actually rendering, so any loading/buffering flag left over from
+                // an internal seek (e.g. the end-of-video auto-rewind) is stale — clear it.
+                // onPlaybackStateChanged doesn't fire on replay-after-ended since the state
+                // stays READY, so isLoading otherwise has no reliable reset point there.
+                if (isPlaying) {
+                    currentState.isLoading = false
+                }
             }
             override fun onRenderedFirstFrame() {
                 MediaLog.d("VideoLoading") {
