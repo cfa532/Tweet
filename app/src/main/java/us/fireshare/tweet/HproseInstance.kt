@@ -3834,26 +3834,22 @@ object HproseInstance {
      * @param pageNumber
      * Page-by-page comment fetch that mirrors iOS `fetchComments`.
      *
-     * Returns `Pair(comments, failedIds)`:
-     * - `comments` preserves nil positions for failed parses (so callers can show
-     *   placeholders if they want); each successful entry has its author resolved.
-     * - `failedIds` lists the comment IDs whose payload failed to parse. The
-     *   caller is responsible for triggering `syncComment()` on those, ideally
-     *   batched via `syncMissingComments()` only when the read node differs from
-     *   the write node (matches iOS gating).
-     *
-     * Unlike the previous `getComments`, this does NOT fire an inline
-     * `node_update_mid_by_score` coroutine per failure — that lives in
-     * `syncComment()` so callers can decide when (and whether) to invoke it.
+     * Returns `comments`, preserving nil positions for failed parses (so callers
+     * can show placeholders if they want); each successful entry has its author
+     * resolved. A comment ID that fails to parse here means it either hasn't
+     * synced from the author's write node to the read node yet, or is genuinely
+     * gone — either way, the server (`get_comments`) now handles cleaning up
+     * IDs it can confirm are stale, so the client no longer needs to sync or
+     * retry individual comment IDs itself.
      */
     suspend fun fetchComments(
         tweet: Tweet,
         pageNumber: Int = 0,
         pageSize: Int = 20
-    ): Pair<List<Tweet?>, List<String>> {
+    ): List<Tweet?> {
         if (!isOnline.value) {
             Timber.tag("fetchComments").d("Offline: skipping")
-            return Pair(emptyList(), emptyList())
+            return emptyList()
         }
         return try {
             if (tweet.author == null) {
@@ -3868,12 +3864,12 @@ object HproseInstance {
                 val fetched = fetchUser(tweet.authorId)
                 if (fetched == null || fetched.baseUrl.isNullOrEmpty()) {
                     Timber.tag("fetchComments").e("Cannot resolve author for tweet ${tweet.mid}")
-                    return Pair(emptyList(), emptyList())
+                    return emptyList()
                 }
                 tweet.author = fetched
             }
             val authorService = tweet.author?.hproseService
-                ?: return Pair(emptyList(), emptyList())
+                ?: return emptyList()
 
             val params = mapOf(
                 "aid" to appId,
@@ -3888,7 +3884,6 @@ object HproseInstance {
             val response = unwrapV2Response<List<Map<String, Any>?>>(raw) ?: emptyList()
 
             val comments = mutableListOf<Tweet?>()
-            val failedIds = mutableListOf<String>()
             for (entry in response) {
                 if (entry == null) {
                     comments.add(null)
@@ -3897,7 +3892,6 @@ object HproseInstance {
                 val commentId = entry["mid"] as? String
                 val commentAuthorId = entry["authorId"] as? String
                 if (commentId.isNullOrBlank() || commentAuthorId.isNullOrBlank()) {
-                    commentId?.let { failedIds.add(it) }
                     Timber.tag("fetchComments").w(
                         "Skipping malformed comment payload in tweet ${tweet.mid}: mid=$commentId, authorId=$commentAuthorId"
                     )
@@ -3910,99 +3904,16 @@ object HproseInstance {
                     comment.author = cachedAuthor ?: fetchUser(comment.authorId)
                     comments.add(comment)
                 } catch (e: Exception) {
-                    commentId.let { failedIds.add(it) }
                     Timber.tag("fetchComments").w(
                         "Failed to parse comment in tweet ${tweet.mid}: mid=$commentId, error=${e.message}"
                     )
                     comments.add(null)
                 }
             }
-            Pair(comments, failedIds)
+            comments
         } catch (e: Exception) {
             Timber.tag("fetchComments").e(e, "Error fetching comments for tweet ${tweet.mid}")
-            Pair(emptyList(), emptyList())
-        }
-    }
-
-    /**
-     * SYNC a single comment from the author's home node (hostIds[0]) to the
-     * read node (hostIds[1]), then retry fetching it. Mirrors iOS
-     * `HproseInstance.syncComment`.
-     *
-     * Returns the comment if the retry succeeds. On failure, records the
-     * comment ID in BlackList (eventually blacklisted after repeated failures
-     * across sessions). Callers typically post a `TweetEvent.CommentSynced`
-     * event on success so detail views can append the recovered comment.
-     */
-    suspend fun syncComment(commentId: String, parentTweet: Tweet): Tweet? {
-        if (!isOnline.value) return null
-        val author = parentTweet.author
-            ?: TweetCacheManager.getCachedUser(parentTweet.authorId)
-            ?: fetchUser(parentTweet.authorId)
-            ?: return null
-        val authorService = author.hproseService ?: return null
-        val authorHostId = author.hostIds?.firstOrNull() ?: return null
-
-        return try {
-            runCatching {
-                authorService.runMApp<Any>(
-                    "node_update_mid_by_score",
-                    mapOf(
-                        "aid" to appId,
-                        "ver" to "last",
-                        "version" to "v2",
-                        "hostid" to authorHostId,
-                        "userid" to parentTweet.authorId,
-                        "mid" to commentId
-                    )
-                )
-            }
-            val rawRetry = runCatching {
-                authorService.runMApp<Any>(
-                    "get_tweet",
-                    mapOf(
-                        "aid" to appId,
-                        "ver" to "last",
-                        "version" to "v2",
-                        "tweetid" to commentId,
-                        "appuserid" to appUser.mid
-                    )
-                )
-            }.getOrNull()
-            val retryPayload = unwrapV2Response<Map<String, Any>>(rawRetry, logErrors = false)
-            if (retryPayload == null) {
-                when (val retryMessage = (rawRetry as? Map<*, *>)?.get("message") as? String) {
-                    "Tweet not found", "User not found" -> {
-                        Timber.tag("syncComment").d(
-                            "Retry get_tweet returned expected miss for $commentId: $retryMessage"
-                        )
-                    }
-                    null -> Unit
-                    else -> {
-                        Timber.tag("syncComment").w(
-                            "Retry get_tweet failed for $commentId: $retryMessage"
-                        )
-                    }
-                }
-            }
-            val retried = runCatching {
-                retryPayload?.let { Tweet.from(it) }
-            }.getOrNull()
-            if (retried != null) {
-                BlackList.recordSuccess(commentId)
-                if (retried.author == null) {
-                    retried.author = TweetCacheManager.getCachedUser(retried.authorId)
-                        ?: fetchUser(retried.authorId)
-                }
-                retried
-            } else {
-                BlackList.recordFailure(commentId)
-                null
-            }
-        } catch (e: Exception) {
-            Timber.tag("syncComment").w("Failed to sync comment $commentId: ${e.message}")
-            BlackList.recordFailure(commentId)
-            null
+            emptyList()
         }
     }
 

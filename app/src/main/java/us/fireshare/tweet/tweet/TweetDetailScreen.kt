@@ -207,9 +207,10 @@ fun TweetDetailScreen(
 
     // Pull-to-refresh: the spinner is bound to `doReadTweet()` only — that's
     // the fast READ of the tweet body itself. The paginated comment refresh
-    // (and any follow-up `syncMissingComments`) runs in an independent
-    // coroutine that may keep working after the spinner is gone; new
-    // comments appear at the top via `_comments` updates.
+    // runs in an independent coroutine that may keep working after the
+    // spinner is gone; new comments appear at the top via `_comments` updates.
+    // The server (`get_comments`) now handles cleaning up genuinely-stale
+    // comment IDs itself, so the client no longer needs to sync them.
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
@@ -224,18 +225,12 @@ fun TweetDetailScreen(
                     isRefreshingAtTop = false
                 }
             }
-            // Background comment refresh + optional sync — outlives the spinner.
+            // Background comment refresh — outlives the spinner.
             coroutineScope.launch {
                 withContext(Dispatchers.IO) {
                     viewModel.refreshCommentsPaginated()
                     lastLoadedPage = 0
                     shouldStopPagination = false
-                    val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
-                    if (hostIds.size >= 2 && hostIds[0] != hostIds[1] &&
-                        viewModel.failedCommentIds.value.isNotEmpty()
-                    ) {
-                        viewModel.syncMissingComments()
-                    }
                 }
             }
         }
@@ -405,10 +400,12 @@ fun TweetDetailScreen(
     }
 
     // On open: READ tweet (always). When the author's read node differs from
-    // their write node, also fire SYNC (refresh_tweet) and drain any failed
-    // comment ids. Repeat the SYNC step every 5 minutes (gated by the same
-    // hostIds check, matching iOS). Comments are loaded once by the
-    // LaunchedEffect(tweet.mid) block above — no duplicate page-0 fetch.
+    // their write node, also fire SYNC (refresh_tweet). Repeat the SYNC step
+    // every 5 minutes (gated by the same hostIds check, matching iOS).
+    // Comments are loaded once by the LaunchedEffect(tweet.mid) block above —
+    // no duplicate page-0 fetch. The server (`get_comments`) now handles
+    // cleaning up genuinely-stale comment IDs itself, so the client no longer
+    // needs to sync individual comments.
     LaunchedEffect(Unit) {
         try {
             withContext(Dispatchers.IO) {
@@ -416,7 +413,6 @@ fun TweetDetailScreen(
                 val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
                 if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
                     launch { viewModel.doResyncTweet() }
-                    launch { viewModel.syncMissingComments() }
                 }
                 Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
             }
@@ -427,7 +423,6 @@ fun TweetDetailScreen(
                     val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
                     if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
                         viewModel.doResyncTweet()
-                        viewModel.syncMissingComments()
                         Timber.tag("TweetDetailScreen").d("Periodic SYNC completed")
                     }
                 }

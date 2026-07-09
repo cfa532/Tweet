@@ -148,13 +148,6 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
     private var commentsCacheParentTweetId: MimeiId = tweet.mid
 
-    // Comment IDs whose payload failed to parse on the read node. Mirrors iOS
-    // `failedCommentIds` — populated by `loadComments` / `refreshCommentsPaginated`
-    // and drained by `syncMissingComments`. Only relevant when the author's
-    // hostIds[0] != hostIds[1]; otherwise sync would be a no-op.
-    private val _failedCommentIds = MutableStateFlow<Set<String>>(emptySet())
-    val failedCommentIds: StateFlow<Set<String>> get() = _failedCommentIds.asStateFlow()
-
     private val _mediaGridVideoIndex = MutableStateFlow(-1)
     val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
 
@@ -319,23 +312,19 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     /**
-     * Fetch one page of comments. Tracks failed parses in `_failedCommentIds`
-     * (drained later by `syncMissingComments`) and merges successful comments
-     * into `_comments`. Mirrors iOS `CommentListView` page-load semantics.
+     * Fetch one page of comments and merge successful ones into `_comments`.
+     * Mirrors iOS `CommentListView` page-load semantics.
      *
      * Returns the count of successfully parsed comments on this page.
      * The existing screen logic uses `== 0` as "no more comments", matching
      * the previous `getComments` return contract.
      */
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0, pageSize: Int = 20): Int {
-        val (fetched, failedIds) = HproseInstance.fetchComments(
+        val fetched = HproseInstance.fetchComments(
             tweet,
             pageNumber.toInt(),
             pageSize
         )
-        if (failedIds.isNotEmpty()) {
-            _failedCommentIds.update { it + failedIds }
-        }
         val newComments = fetched.filterNotNull()
 
         _comments.update { currentComments ->
@@ -345,7 +334,7 @@ class TweetViewModel @AssistedInject constructor(
             TweetCacheManager.saveCommentsByParent(commentsCacheParentTweetId, finalComments)
             if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
                 Timber.tag("TweetViewModel").d(
-                    "Merged to ${finalComments.size} total comments (${newComments.size} new, ${failedIds.size} failed)"
+                    "Merged to ${finalComments.size} total comments (${newComments.size} new)"
                 )
             }
             finalComments
@@ -476,8 +465,7 @@ class TweetViewModel @AssistedInject constructor(
         var overlap = false
         try {
             while (!overlap) {
-                val (fetched, failedIds) = HproseInstance.fetchComments(parent, page, pageSize)
-                if (failedIds.isNotEmpty()) _failedCommentIds.update { it + failedIds }
+                val fetched = HproseInstance.fetchComments(parent, page, pageSize)
                 val valid = fetched.filterNotNull()
                 if (valid.isEmpty()) break
 
@@ -501,42 +489,6 @@ class TweetViewModel @AssistedInject constructor(
             Timber.tag("TweetViewModel").d("refreshCommentsPaginated skipped: ${e.message}")
         }
         return all.size
-    }
-
-    /**
-     * Drain `failedCommentIds` by syncing each via the author's home node
-     * (mirrors iOS `syncMissingComments`). Posts `TweetEvent.CommentSynced`
-     * for each recovered comment so observing views can append it.
-     *
-     * Skips entries already blacklisted (avoids hammering known-bad mids).
-     * Safe to call concurrently with other reads — `syncComment` is
-     * idempotent on the server side.
-     */
-    suspend fun syncMissingComments() {
-        val parent = tweetState.value
-        val pending = _failedCommentIds.value.toList()
-        if (pending.isEmpty()) return
-
-        for (commentId in pending) {
-            if (BlackList.isBlacklisted(commentId)) {
-                _failedCommentIds.update { it - commentId }
-                continue
-            }
-            val recovered = HproseInstance.syncComment(commentId, parent)
-            if (recovered != null) {
-                _failedCommentIds.update { it - commentId }
-                // Avoid posting if the comment already arrived via another path.
-                if (_comments.value.none { it.mid == recovered.mid }) {
-                    TweetNotificationCenter.post(
-                        TweetEvent.CommentSynced(recovered, parent.mid)
-                    )
-                }
-            } else {
-                // Avoid tight retry loops for unrecoverable IDs during this session.
-                // If the backend later returns a valid payload, fetchComments will re-add it.
-                _failedCommentIds.update { it - commentId }
-            }
-        }
     }
 
     suspend fun delComment(commentId: MimeiId) {
