@@ -612,15 +612,18 @@ fun VideoPreview(
                 } else 0f
                 val previousVisibilityRatio = state.lastVisibilityRatio
                 val newVisibility = measuredVisibilityRatio > 0f
-                val crossedAutoplayThreshold =
-                    (previousVisibilityRatio >= 0.5f) != (measuredVisibilityRatio >= 0.5f)
-                val crossedContinueThreshold =
-                    (previousVisibilityRatio >= 0.7f) != (measuredVisibilityRatio >= 0.7f)
+                // Matches VideoPlaybackCoordinator.VISIBILITY_THRESHOLD (start == continue
+                // threshold, both 0.5f) — this used to be a separately hardcoded 0.5f/0.7f
+                // pair that drifted out of sync when the coordinator's thresholds were
+                // unified, silently throttling geometry reports around a boundary the
+                // coordinator no longer used.
+                val crossedVisibilityThreshold =
+                    (previousVisibilityRatio >= VideoPlaybackCoordinator.VISIBILITY_THRESHOLD) !=
+                        (measuredVisibilityRatio >= VideoPlaybackCoordinator.VISIBILITY_THRESHOLD)
                 val shouldReportImmediately =
                     !state.hasLastGeometry ||
                         state.isVideoVisible != newVisibility ||
-                        crossedAutoplayThreshold ||
-                        crossedContinueThreshold
+                        crossedVisibilityThreshold
                 val timeSinceLastUpdate = now - state.lastVisibilityUpdate
                 if (!shouldReportImmediately && timeSinceLastUpdate < state.visibilityUpdateThrottleMs) {
                     return@onGloballyPositioned
@@ -629,7 +632,7 @@ fun VideoPreview(
                     MediaLog.d("VideoLoading") {
                         "Visibility geometry key=$playerKey mid=$videoMid ratio=$measuredVisibilityRatio " +
                             "was=${state.lastVisibilityRatio} visible=$newVisibility " +
-                            "crossAuto=$crossedAutoplayThreshold crossContinue=$crossedContinueThreshold"
+                            "crossedThreshold=$crossedVisibilityThreshold"
                     }
                 }
                 state.lastVisibilityUpdate = now
