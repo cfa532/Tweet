@@ -4711,7 +4711,7 @@ object HproseInstance {
     /**
      * Resync user data on the server - matches iOS ProfileView behavior.
      * This triggers a backend operation to refresh the user's data on the server side.
-     * Should be called each time a user profile is opened.
+     * Called explicitly from profile pull-to-refresh rather than on profile open.
      * 
      * @param user The user to resync
      * @return The updated User object and synced tweets from server, or null if failed

@@ -237,7 +237,7 @@ fun TweetListView(
     pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
     onScrolledToTop: (() -> Unit)? = null, // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
     onHeaderVisibilityChange: ((Boolean) -> Unit)? = null,
-    onPullRefresh: (() -> Unit)? = null
+    onPullRefresh: (suspend () -> Unit)? = null
 
 ) {
     // Inject SharedViewModel to get TweetListViewModel

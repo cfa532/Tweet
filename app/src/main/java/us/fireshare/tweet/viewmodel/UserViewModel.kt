@@ -61,7 +61,6 @@ class UserViewModel @AssistedInject constructor(
     
     // Track users with pending operations to prevent race conditions
     private val pendingOperations = mutableSetOf<MimeiId>()
-    private var profileResyncJob: Job? = null
     private val tweetRowTimestamps = mutableMapOf<MimeiId, Long>()
 
     private fun rememberTweetRowTimestamps(tweets: List<Tweet>) {
@@ -264,24 +263,19 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    fun resyncProfileUser(ignoreDebounce: Boolean = false) {
+    suspend fun resyncProfileUser(ignoreDebounce: Boolean = false) {
         val currentUser = _user.value
         if (currentUser.mid != userId || currentUser.baseUrl.isNullOrBlank()) {
             Timber.tag("UserViewModel").d("Profile route not ready for resync user $userId")
             return
         }
 
-        if (profileResyncJob?.isActive == true) {
-            Timber.tag("UserViewModel").d("Profile resync already running for user $userId")
-            return
-        }
-
-        profileResyncJob = viewModelScope.launch(IO) {
+        withContext(IO) {
             try {
                 val resyncResult = HproseInstance.resyncUser(userId, ignoreDebounce)
                 if (resyncResult == null) {
                     Timber.tag("UserViewModel").d("No resynced user returned for $userId")
-                    return@launch
+                    return@withContext
                 }
 
                 val applied = applyResyncedUser(resyncResult.user)

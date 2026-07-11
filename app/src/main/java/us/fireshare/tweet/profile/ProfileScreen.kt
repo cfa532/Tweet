@@ -99,7 +99,6 @@ fun ProfileScreen(
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
-    var didRequestResync by remember(userId) { mutableStateOf(false) }
     var scrollToTopTrigger by remember(userId) { mutableIntStateOf(0) }
     var scrollToTweetTrigger by remember(userId) { mutableIntStateOf(0) }
     var scrollToTweetId by remember(userId) { mutableStateOf<MimeiId?>(null) }
@@ -130,15 +129,6 @@ fun ProfileScreen(
     LaunchedEffect(userId) {
         Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
         viewModel.refreshUserData()
-    }
-
-    // Resync user data after the profile route is available.
-    LaunchedEffect(userId, profileUser.mid, profileUser.baseUrl) {
-        if (didRequestResync || profileUser.mid != userId || profileUser.baseUrl.isNullOrBlank()) {
-            return@LaunchedEffect
-        }
-        didRequestResync = true
-        viewModel.resyncProfileUser()
     }
 
     // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens
