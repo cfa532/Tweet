@@ -230,9 +230,13 @@ fun TweetDetailBody(
                                         isLoadingOriginal = false
                                     }
                                 }
-                                // Refresh from network in the background, update silently
+                                // Reload from the current provider in the background.
                                 val refreshed = withContext(Dispatchers.IO) {
-                                    HproseInstance.refreshTweet(originalTweetId, originalAuthorId)
+                                    HproseInstance.getTweet(
+                                        originalTweetId,
+                                        originalAuthorId,
+                                        bypassCache = true
+                                    )
                                 }
                                 if (refreshed != null) {
                                     originalTweet = refreshed

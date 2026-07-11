@@ -348,8 +348,7 @@ class TweetViewModel @AssistedInject constructor(
      *
      * Uses `get_tweet` with `bypassCache=true` on the author's read node.
      * Never triggers cross-node `refresh_tweet`. Safe to call on screen-open
-     * and pull-to-refresh; pair with `doResyncTweet` only when
-     * `hostIds[0] != hostIds[1]`.
+     * and from the periodic detail-view reload.
      *
      * For a pure retweet (no content + no attachments) refreshes the original
      * tweet's cache so the embedded original sub-view picks it up. For a quoted
@@ -401,8 +400,7 @@ class TweetViewModel @AssistedInject constructor(
      *
      * Calls `refresh_tweet` which the server uses to pull the latest version
      * across nodes via `node_update_mid_by_score`. Heavier than `doReadTweet`,
-     * so only call when the author's `hostIds[0] != hostIds[1]` (on screen
-     * appear and the 5-minute tick).
+     * so the detail screen calls it only from explicit pull-to-refresh.
      */
     suspend fun doResyncTweet() {
         val currentTweet = tweetState.value
