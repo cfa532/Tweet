@@ -192,7 +192,7 @@ fun TweetItem(
     
     val isRetweetWithContent by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
         derivedStateOf { 
-            tweet.originalTweetId != null && 
+            (tweet.originalTweetId != null || tweet.savedParentTweet != null) &&
             (tweet.content?.isNotEmpty() == true || tweet.attachments?.isNotEmpty() == true)
         }
     }
@@ -615,6 +615,7 @@ private fun RetweetWithContent(
                 // Load and display original tweet
                 QuotedTweetContent(
                     tweet = tweet,
+                    embeddedTweet = tweet.savedParentTweet,
                     parentEntry = parentEntry,
                     context = context,
                     containerTopY = containerTopY
@@ -642,14 +643,15 @@ private fun RetweetWithContent(
 @Composable
 private fun QuotedTweetContent(
     tweet: Tweet,
+    embeddedTweet: Tweet? = null,
     parentEntry: NavBackStackEntry,
     context: String = "default",
     containerTopY: Float? = null
 ) {
     // Use remember with a stable key based on originalTweetId to maintain state across recompositions
-    val originalTweetId = tweet.originalTweetId
+    val originalTweetId = embeddedTweet?.mid ?: tweet.originalTweetId
     val cachedOriginalTweet = remember(originalTweetId) {
-        originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
+        embeddedTweet ?: originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
     }
     var originalTweet by remember(originalTweetId) {
         mutableStateOf(cachedOriginalTweet)
@@ -659,18 +661,19 @@ private fun QuotedTweetContent(
     }
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
 
-    LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+    LaunchedEffect(originalTweetId, embeddedTweet?.authorId, tweet.originalAuthorId) {
         originalTweet?.let {
             coordinator.addEmbeddedTweetVideos(tweet.mid, it)
             isLoadingOriginal = false
             return@LaunchedEffect
         }
-        if (originalTweetId != null && tweet.originalAuthorId != null) {
+        val embeddedAuthorId = embeddedTweet?.authorId ?: tweet.originalAuthorId
+        if (originalTweetId != null && embeddedAuthorId != null) {
             try {
                 withContext(IO) {
                     originalTweet = HproseInstance.fetchTweet(
                         originalTweetId,
-                        tweet.originalAuthorId!!
+                        embeddedAuthorId
                     )
                 }
                 // Notify VideoPlaybackCoordinator about the loaded embedded tweet

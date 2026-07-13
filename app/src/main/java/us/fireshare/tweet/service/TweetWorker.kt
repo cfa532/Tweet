@@ -137,6 +137,7 @@ class UploadCommentWorker @AssistedInject constructor(
             val comment = Tweet(
                 mid = TW_CONST.GUEST_ID,  // placeholder
                 authorId = appUser.mid,
+                parentTweetId = parentTweet.mid,
                 content = commentContent,
                 attachments = attachments,
                 timestamp = System.currentTimeMillis()

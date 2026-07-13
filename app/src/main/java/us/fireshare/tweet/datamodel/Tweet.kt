@@ -19,6 +19,7 @@ data class Tweet(
 
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
     var originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet
+    var parentTweetId: MimeiId? = null, // immediate parent for comments and replies
 
     // the following five attributes are for display only. Not stored in database.
     var author: User? = null,
@@ -57,6 +58,7 @@ data class Tweet(
             title: String? = null,
             originalTweetId: String? = null,
             originalAuthorId: String? = null,
+            parentTweetId: String? = null,
             favorites: List<Boolean>? = listOf(false, false, false),
             favoriteCount: Int = 0,
             bookmarkCount: Int = 0,
@@ -72,6 +74,7 @@ data class Tweet(
                     // Update existing instance with new values
                     content?.let { existingInstance.content = it }
                     title?.let { existingInstance.title = it }
+                    parentTweetId?.let { existingInstance.parentTweetId = it }
                     favorites?.let { existingInstance.favorites = it.toMutableList() }
                     existingInstance.favoriteCount = favoriteCount
                     existingInstance.bookmarkCount = bookmarkCount
@@ -91,6 +94,7 @@ data class Tweet(
                     title = title,
                     originalTweetId = originalTweetId,
                     originalAuthorId = originalAuthorId,
+                    parentTweetId = parentTweetId,
                     favorites = favorites?.toMutableList(),
                     favoriteCount = favoriteCount,
                     bookmarkCount = bookmarkCount,
@@ -188,6 +192,7 @@ data class Tweet(
                     title = tweet.title,
                     originalTweetId = tweet.originalTweetId,
                     originalAuthorId = tweet.originalAuthorId,
+                    parentTweetId = tweet.parentTweetId,
                     favorites = tweet.favorites,
                     favoriteCount = tweet.favoriteCount,
                     bookmarkCount = tweet.bookmarkCount,
@@ -227,6 +232,11 @@ data class Tweet(
     @kotlinx.serialization.Transient
     var rowTimestamp: Long? = null
 
+    /** Saved-list-only presentation context; never serialized as retweet state. */
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var savedParentTweet: Tweet? = null
+
     /**
      * Updates the tweet instance with values from another tweet
      */
@@ -234,6 +244,7 @@ data class Tweet(
         // Update all properties except author and originalTweet
         from.content?.let { this.content = it }
         from.title?.let { this.title = it }
+        from.parentTweetId?.let { this.parentTweetId = it }
         from.favorites?.let { this.favorites = it.toMutableList() }
         this.favoriteCount = from.favoriteCount
         this.bookmarkCount = from.bookmarkCount

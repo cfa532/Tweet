@@ -2606,6 +2606,7 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetPayload(tweetJson))
                         tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
+
                         tweet.author = activeUser
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                         // Cache all tweets by their authorId
@@ -3022,7 +3023,6 @@ object HproseInstance {
                     Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Skip private tweets in mainfeed
                 if (tweet.isPrivate) {
                     return@mapNotNull null
@@ -3065,6 +3065,12 @@ object HproseInstance {
             dao.getCachedTweetsByUser(authorId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 if (tweet.authorId.isEmpty() || tweet.authorId != authorId) {
+                    return@mapNotNull null
+                }
+
+                // Comments are authored by their writer but are not top-level
+                // profile tweets. This also hides rows polluted by older toggle code.
+                if (tweet.parentTweetId != null) {
                     return@mapNotNull null
                 }
 
@@ -3114,7 +3120,6 @@ object HproseInstance {
                     Timber.tag("loadCachedBookmarks").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Populate author from user cache
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
@@ -3128,7 +3133,10 @@ object HproseInstance {
                     }
                 }
                 
-                tweet
+                tweet.copy().also { displayTweet ->
+                    displayTweet.author = tweet.author
+                    displayTweet.savedParentTweet = tweet.parentTweetId?.let { TweetCacheManager.getCachedTweet(it) }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("loadCachedBookmarks").e("❌ Error loading cached bookmarks: $e")
@@ -3156,7 +3164,6 @@ object HproseInstance {
                     Timber.tag("loadCachedFavorites").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Populate author from user cache
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
@@ -3170,7 +3177,10 @@ object HproseInstance {
                     }
                 }
                 
-                tweet
+                tweet.copy().also { displayTweet ->
+                    displayTweet.author = tweet.author
+                    displayTweet.savedParentTweet = tweet.parentTweetId?.let { TweetCacheManager.getCachedTweet(it) }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("loadCachedFavorites").e("❌ Error loading cached favorites: $e")
@@ -3545,8 +3555,6 @@ object HproseInstance {
                     val fetchedAuthor = fetchUser(updatedTweet.authorId)
                     updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
                     
-                    // Cache by authorId
-                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
                 }
             } else {
@@ -3614,8 +3622,6 @@ object HproseInstance {
                     val fetchedAuthor = fetchUser(updatedTweet.authorId)
                     updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
                     
-                    // Cache by authorId
-                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
                     return updatedTweet
                 }
             } else {
@@ -3684,6 +3690,44 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetPayload(tweetJson))
                         tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
+                        var savedParentTweet: Tweet? = null
+
+                        // Membership in the saved list is authoritative even when
+                        // the access-node interaction flags are stale.
+                        when (type) {
+                            UserContentType.BOOKMARKS -> tweet.isBookmarked = true
+                            UserContentType.FAVORITES -> tweet.isFavorite = true
+                            else -> Unit
+                        }
+
+                        // Reuse the existing quote-tweet presentation for a saved
+                        // comment, with its immediate parent as embedded context.
+                        if ((type == UserContentType.BOOKMARKS || type == UserContentType.FAVORITES)
+                            && tweet.parentTweetId != null
+                        ) {
+                            try {
+                                val parentRaw = user.hproseService?.runMApp<Any>(
+                                    "get_tweet",
+                                    mapOf(
+                                        "aid" to appId,
+                                        "ver" to "last",
+                                        "version" to "v2",
+                                        "tweetid" to tweet.parentTweetId!!,
+                                        "appuserid" to appUser.mid
+                                    )
+                                )
+                                val parentData = unwrapV2Response<Map<String, Any>>(parentRaw)
+                                if (parentData != null) {
+                                    val parent = Tweet.from(parentData)
+                                    parent.author = TweetCacheManager.getCachedUser(parent.authorId)
+                                        ?: fetchUser(parent.authorId)
+                                    TweetCacheManager.saveTweet(parent, parent.authorId)
+                                    savedParentTweet = parent
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("getUserTweetsByType").w(e, "Parent unavailable for saved comment ${tweet.mid}")
+                            }
+                        }
 
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
                         tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
@@ -3704,7 +3748,11 @@ object HproseInstance {
                         TweetCacheManager.saveTweet(tweet, cacheUserId)
                         Timber.tag("getUserTweetsByType").d("Cached tweet ${tweet.mid} under userId: $cacheUserId (type: ${type.value})")
 
-                        tweet
+                        tweet.copy().also { displayTweet ->
+                            displayTweet.author = tweet.author
+                            displayTweet.rowTimestamp = tweet.rowTimestamp
+                            displayTweet.savedParentTweet = savedParentTweet
+                        }
                     } catch (e: Exception) {
                         Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")
                         null
@@ -3927,19 +3975,24 @@ object HproseInstance {
             throw Exception("No network connection")
         }
         val entry = "add_comment"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "entry" to entry,
-            "tweetid" to tweet.mid,
-            "comment" to Json.encodeToString(comment),
-            "tweetauthorid" to tweet.authorId,
-            "hostid" to (tweet.author?.hostIds?.first() ?: "")
-        )
         return try {
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                val parentAuthor = tweet.author ?: fetchUser(tweet.authorId)
+                    ?: throw IllegalStateException("Parent author ${tweet.authorId} is unavailable")
+                val parentHostId = parentAuthor.hostIds?.firstOrNull()
+                    ?: throw IllegalStateException("Parent author ${tweet.authorId} has no writable host")
+                val params = mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "entry" to entry,
+                    "tweetid" to tweet.mid,
+                    "comment" to Json.encodeToString(comment),
+                    "tweetauthorid" to parentAuthor.mid,
+                    "hostid" to parentHostId
+                )
+                requireWritableClient(parentAuthor, "uploadComment")
+                    .runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("uploadComment").e(e, "Exception calling runMApp for uploadComment, tweetId: ${tweet.mid}")
                 throw e
