@@ -1724,6 +1724,7 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun logout(popBack: () -> Unit) {
         preferenceHelper.setUserId(null)
+        Tweet.clearInteractionOverrides()
         val ip = HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
         appUser = User.getInstance(TW_CONST.GUEST_ID)
         appUser.baseUrl = "http://$ip"

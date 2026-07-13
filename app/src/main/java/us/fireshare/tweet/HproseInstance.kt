@@ -3523,7 +3523,7 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        val author = tweet.author
+        val author = tweet.interactionHostAuthor ?: tweet.author
             ?: throw Exception("Author not available for toggleFavorite")
         val authorClient = requireWritableClient(author, "toggleFavorite")
         return try {
@@ -3549,6 +3549,7 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
+                    updatedTweet.favoriteOverride = updatedTweet.isFavorite
                     
                     // Preserve author from original tweet, or fetch if not available
                     // Don't overwrite with null from fetchUser
@@ -3590,7 +3591,7 @@ object HproseInstance {
             "userhostid" to (appUser.hostIds?.first() ?: "")
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        val author = tweet.author
+        val author = tweet.interactionHostAuthor ?: tweet.author
             ?: throw Exception("Author not available for toggleBookmark")
         val authorClient = requireWritableClient(author, "toggleBookmark")
         return try {
@@ -3616,6 +3617,7 @@ object HproseInstance {
                 if (updatedTweetData != null) {
                     // Create updated tweet from server response
                     val updatedTweet = Tweet.from(updatedTweetData)
+                    updatedTweet.bookmarkOverride = updatedTweet.isBookmarked
                     
                     // Preserve author from original tweet, or fetch if not available
                     // Don't overwrite with null from fetchUser
@@ -3695,8 +3697,14 @@ object HproseInstance {
                         // Membership in the saved list is authoritative even when
                         // the access-node interaction flags are stale.
                         when (type) {
-                            UserContentType.BOOKMARKS -> tweet.isBookmarked = true
-                            UserContentType.FAVORITES -> tweet.isFavorite = true
+                            UserContentType.BOOKMARKS -> {
+                                tweet.isBookmarked = true
+                                tweet.bookmarkOverride = true
+                            }
+                            UserContentType.FAVORITES -> {
+                                tweet.isFavorite = true
+                                tweet.favoriteOverride = true
+                            }
                             else -> Unit
                         }
 
@@ -3947,7 +3955,16 @@ object HproseInstance {
                     continue
                 }
                 try {
+                    val locallyKnown = Tweet.findInstance(commentId)
+                        ?: TweetCacheManager.getCachedTweet(commentId)
+                    val favoriteOverride = locallyKnown?.favoriteOverride
+                    val bookmarkOverride = locallyKnown?.bookmarkOverride
                     val comment = Tweet.from(entry)
+                    favoriteOverride?.let { comment.isFavorite = it }
+                    bookmarkOverride?.let { comment.isBookmarked = it }
+                    comment.favoriteOverride = favoriteOverride
+                    comment.bookmarkOverride = bookmarkOverride
+                    comment.interactionHostAuthor = tweet.author
                     val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
                     comment.author = cachedAuthor ?: fetchUser(comment.authorId)
                     comments.add(comment)

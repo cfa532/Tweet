@@ -119,6 +119,20 @@ data class Tweet(
             }
         }
 
+        @Synchronized
+        fun findInstance(mid: MimeiId): Tweet? = synchronized(instanceLock) { instances[mid] }
+
+        /** Clear interaction state that belongs to the previously logged-in user. */
+        @Synchronized
+        fun clearInteractionOverrides() {
+            synchronized(instanceLock) {
+                instances.values.forEach { tweet ->
+                    tweet.favoriteOverride = null
+                    tweet.bookmarkOverride = null
+                }
+            }
+        }
+
         /**
          * Creates a Tweet from a dictionary returned by the network call
          */
@@ -236,6 +250,19 @@ data class Tweet(
     @kotlin.jvm.Transient
     @kotlinx.serialization.Transient
     var savedParentTweet: Tweet? = null
+
+    /** Author whose root stores this comment; used for comment interactions. */
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var interactionHostAuthor: User? = null
+
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var favoriteOverride: Boolean? = null
+
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var bookmarkOverride: Boolean? = null
 
     /**
      * Updates the tweet instance with values from another tweet
