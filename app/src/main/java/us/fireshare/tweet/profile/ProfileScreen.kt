@@ -117,22 +117,13 @@ fun ProfileScreen(
     val orientationActivity = context as? Activity
     orientationActivity?.let { OrientationManager.lockToPortrait(it) }
 
-    // Load tweets when screen opens (on IO dispatcher to avoid blocking main thread
-    // with synchronous Hprose network calls, especially when user's IP has changed)
+    // Cached profile state is published by the ViewModel first. The single background
+    // load then health-checks/repairs the route before any profile server reads.
     LaunchedEffect(userId) {
         withContext(Dispatchers.IO) {
             viewModel.initLoad()
         }
     }
-
-    // Refresh user data when screen opens (in background, non-blocking)
-    LaunchedEffect(userId) {
-        Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
-        viewModel.refreshUserData()
-    }
-
-    // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens
-    // and when exiting profile editor, appUserState is already updated by the save operation.
 
 
 

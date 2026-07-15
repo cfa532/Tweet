@@ -22,6 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -162,7 +163,18 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun initLoad() {
         try {
-            Timber.tag("initLoad").d("Starting initial load for user: ${user.value.mid}")
+            val profileUser = user.first { it.mid == userId }
+            Timber.tag("initLoad").d("Starting health-first profile load for user: $userId")
+
+            val routeIsReady = HproseInstance.validateAndRepairProfileRoute(profileUser)
+            if (!routeIsReady) {
+                Timber.tag("initLoad").w("No health-verified route for $userId; keeping cached profile")
+                return
+            }
+
+            // The route is now health-verified. Refresh user fields before loading
+            // pinned and regular tweets so every server read uses the same route.
+            refreshUserDataFromServer()
 
             // Load first page (page 0) which includes pinned tweets
             // getTweets loads cached tweets FIRST, then network
@@ -220,46 +232,51 @@ class UserViewModel @AssistedInject constructor(
      */
     fun refreshUserData() {
         viewModelScope.launch(IO) {
-            try {
-                Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
-                val previousBaseUrl = _user.value.baseUrl
-                
-                // Try the route we already have first. If that IP is stale,
-                // fetchUser will retry through getProviderIP and update NodePool.
-                val refreshedUser = fetchUser(userId, baseUrl = previousBaseUrl, maxRetries = 2, forceRefresh = true)
-                
-                if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    val routeChanged = previousBaseUrl != refreshedUser.baseUrl
-
-                    // Update user state
-                    _user.value = refreshedUser
-                    
-                    // If this is the app user, sync with appUser singleton
-                    if (userId == appUser.mid) {
-                        User.updateUserInstance(refreshedUser)
-                        // Set appUser to the updated singleton instance
-                        appUser = User.getInstance(refreshedUser.mid)
-                    }
-                    
-                    // Update count variables
-                    _bookmarksCount.value = refreshedUser.bookmarksCount
-                    _favoritesCount.value = refreshedUser.favoritesCount
-                    _followersCount.value = refreshedUser.followersCount
-                    _followingsCount.value = refreshedUser.followingCount
-                    _tweetCount.value = refreshedUser.tweetCount
-
-                    if (routeChanged || _tweets.value.isEmpty()) {
-                        Timber.tag("refreshUserData").d("Route changed or tweets empty; refreshing profile tweets without clearing existing list")
-                        getTweets(0)
-                    }
-                    
-                    Timber.tag("refreshUserData").d("✅ Refreshed user data for: ${refreshedUser.name}")
-                } else {
-                    Timber.tag("refreshUserData").w("Failed to fetch valid user data for userId: $userId")
-                }
-            } catch (e: Exception) {
-                Timber.tag("refreshUserData").e(e, "Error refreshing user data for userId: $userId")
+            val routeChanged = refreshUserDataFromServer() ?: return@launch
+            if (routeChanged || _tweets.value.isEmpty()) {
+                Timber.tag("refreshUserData").d("Route changed or tweets empty; refreshing profile tweets without clearing existing list")
+                getTweets(0)
             }
+        }
+    }
+
+    private suspend fun refreshUserDataFromServer(): Boolean? {
+        return try {
+            Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
+            val previousBaseUrl = _user.value.baseUrl
+            val refreshedUser = fetchUser(
+                userId,
+                baseUrl = previousBaseUrl,
+                maxRetries = 2,
+                forceRefresh = true
+            )
+
+            if (refreshedUser != null && !refreshedUser.isGuest()) {
+                val routeChanged = previousBaseUrl != refreshedUser.baseUrl
+                _user.value = refreshedUser
+
+                if (userId == appUser.mid) {
+                    User.updateUserInstance(refreshedUser)
+                    appUser = User.getInstance(refreshedUser.mid)
+                }
+
+                _bookmarksCount.value = refreshedUser.bookmarksCount
+                _favoritesCount.value = refreshedUser.favoritesCount
+                _followersCount.value = refreshedUser.followersCount
+                _followingsCount.value = refreshedUser.followingCount
+                _tweetCount.value = refreshedUser.tweetCount
+
+                Timber.tag("refreshUserData").d("✅ Refreshed user data for: ${refreshedUser.name}")
+                routeChanged
+            } else {
+                Timber.tag("refreshUserData").w("Failed to fetch valid user data for userId: $userId")
+                null
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("refreshUserData").e(e, "Error refreshing user data for userId: $userId")
+            null
         }
     }
 
@@ -1282,12 +1299,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     companion object {
-        private val initUserFetchSemaphore = Semaphore(3)
         private val userPrefetchSemaphore = Semaphore(3)
-    }
-
-    private fun publishRefreshedUser(freshUser: User) {
-        _user.value = freshUser
     }
 
     init {
@@ -1304,7 +1316,7 @@ class UserViewModel @AssistedInject constructor(
                     appUser
                 } else {
                     // Use cached user data if available, otherwise create skeleton
-                    cachedUser ?: User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl)
+                    cachedUser ?: User.getInstance(userId)
                 }
 
                 // Set cached/initial user data immediately for instant UI display
@@ -1326,38 +1338,10 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
 
-                // Show cached user immediately, then refresh route/data in the background.
-                // baseUrl="" forces fetchUser to bypass stale cached baseUrl and resolve
-                // the read node (hostIds[1]) through NodePool/getHostIP.
-                if (userId != appUser.mid) {
-                    launch(IO) {
-                        try {
-                            val freshUser = initUserFetchSemaphore.withPermit {
-                                fetchUser(
-                                    userId,
-                                    baseUrl = "",
-                                    maxRetries = 2,
-                                    forceRefresh = true
-                                )
-                            }
-                            if (freshUser != null) {
-                                publishRefreshedUser(freshUser)
-
-                                // Update count variables with fresh data
-                                _bookmarksCount.value = freshUser.bookmarksCount
-                                _favoritesCount.value = freshUser.favoritesCount
-                                _followersCount.value = freshUser.followersCount
-                                _followingsCount.value = freshUser.followingCount
-                                _tweetCount.value = freshUser.tweetCount
-
-                                Timber.tag("UserViewModel").d("✅ Updated user $userId with fresh data")
-                            } else {
-                                Timber.tag("UserViewModel").w("⚠️ Failed to fetch fresh user data for $userId")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("UserViewModel").e("Error updating user data for $userId: $e")
-                        }
-                    }
+                // Cached profile state is ready to render before the profile-open
+                // health check and server refresh begin.
+                if (!initialUser.username.isNullOrBlank() || _tweets.value.isNotEmpty()) {
+                    initState.value = false
                 }
 
                 if (userId == appUser.mid) {

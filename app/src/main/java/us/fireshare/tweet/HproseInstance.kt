@@ -1535,7 +1535,11 @@ object HproseInstance {
      * 3. If no healthy IPs found AND appUser unhealthy -> try via entry IP
      * 4. Update NodePool with successful result
      * */
-    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = HproseInstance.v4Only.toString()): String? {
+    suspend fun getHostIP(
+        nodeId: MimeiId,
+        v4Only: String = HproseInstance.v4Only.toString(),
+        forceHealthCheck: Boolean = false
+    ): String? {
         if (!isOnline.value) {
             Timber.tag("getHostIP").d("Offline: skipping")
             return null
@@ -1547,7 +1551,7 @@ object HproseInstance {
             // Verify the cached IP is still healthy before returning
             val fullUrl = "http://$poolIP"
             
-            if (isServerHealthy(fullUrl)) {
+            if (isServerHealthy(fullUrl, useCache = !forceHealthCheck)) {
                 // Still healthy - use it!
                 Timber.tag("getHostIP").d("✓ Found healthy node $nodeId in NodePool: $poolIP")
                 return poolIP
@@ -1559,7 +1563,7 @@ object HproseInstance {
             }
         }
 
-        val requestKey = "$nodeId|$v4Only"
+        val requestKey = "$nodeId|$v4Only|$forceHealthCheck"
         val request = hostIPRequestsMutex.withLock {
             hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
                 val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
@@ -2005,6 +2009,89 @@ object HproseInstance {
                     "attempted=$attemptedBaseUrl current=$currentPoolIP"
             )
         }
+    }
+
+    /**
+     * Validate the cached read route when a profile opens. Cached profile data remains
+     * visible while this runs. A healthy route is retained; an unhealthy route is
+     * removed from NodePool and replaced before profile RPCs continue.
+     *
+     * @return true when a health-verified route is ready for server refresh.
+     */
+    suspend fun validateAndRepairProfileRoute(user: User): Boolean {
+        if (!isOnline.value) {
+            Timber.tag("ProfileRoute").d("Offline: keeping cached profile for ${user.mid}")
+            return false
+        }
+
+        val currentBaseUrl = user.baseUrl?.trim()?.removeSuffix("/")
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+
+        if (!currentBaseUrl.isNullOrBlank()) {
+            Timber.tag("ProfileRoute").d("Fresh health check for ${user.mid} at $currentBaseUrl")
+            if (isServerHealthy(currentBaseUrl, useCache = false)) {
+                Timber.tag("ProfileRoute").d("Current route is healthy for ${user.mid}; refreshing profile data")
+                return true
+            }
+
+            Timber.tag("ProfileRoute").w("Current route is unhealthy for ${user.mid}: $currentBaseUrl")
+            invalidateIPCache(currentBaseUrl)
+            if (accessNodeMid != null) {
+                val pooledIP = NodePool.getIPFromNodeId(accessNodeMid)
+                if (pooledIP != null &&
+                    normalizeIPHealthCacheKey(pooledIP) == normalizeIPHealthCacheKey(currentBaseUrl)
+                ) {
+                    NodePool.removeNode(accessNodeMid)
+                }
+            }
+            HproseClientPool.clearClient(currentBaseUrl)
+        }
+
+        val replacementIP = try {
+            accessNodeMid?.let {
+                getHostIP(it, forceHealthCheck = true)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("ProfileRoute").w(e, "Failed to resolve replacement route for ${user.mid}")
+            null
+        }
+
+        val resolvedIP = replacementIP ?: try {
+            getProviderIP(user.mid)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("ProfileRoute").w(e, "Provider fallback failed for ${user.mid}")
+            null
+        }
+
+        if (resolvedIP.isNullOrBlank()) {
+            Timber.tag("ProfileRoute").w("No healthy replacement route for ${user.mid}; keeping cached profile")
+            return false
+        }
+
+        val replacementBaseUrl = if (resolvedIP.startsWith("http://") || resolvedIP.startsWith("https://")) {
+            resolvedIP.removeSuffix("/")
+        } else {
+            "http://${resolvedIP.removeSuffix("/")}"
+        }
+        val oldBaseUrl = user.baseUrl
+        if (oldBaseUrl != replacementBaseUrl) {
+            oldBaseUrl?.let(HproseClientPool::clearClient)
+            user.baseUrl = replacementBaseUrl
+            if (user.mid == appUser.mid) {
+                notifyAppUserChanged(oldBaseUrl, user.avatar)
+            }
+            TweetCacheManager.saveUser(user)
+        }
+        if (accessNodeMid != null) {
+            NodePool.updateNodeIP(accessNodeMid, resolvedIP)
+        }
+
+        Timber.tag("ProfileRoute").d("Route ready for ${user.mid}: $replacementBaseUrl")
+        return true
     }
 
     private fun setUserBaseUrlForRequest(user: User, newBaseUrl: String) {
