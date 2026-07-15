@@ -1,5 +1,6 @@
 package us.fireshare.tweet.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -225,9 +226,12 @@ fun FollowingItem(
     )
     Row(
         modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !user.isGuest()) {
+                navController.navigate(NavTweet.UserProfile(user.mid))
+            }
             .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
             .wrapContentHeight(Alignment.CenterVertically)
-            .fillMaxWidth()
     ) {
         IconButton(
             onClick = {
