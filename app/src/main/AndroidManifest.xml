@@ -62,7 +62,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
+            <intent-filter android:autoVerify="${appLinkAutoVerify}">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -71,7 +71,7 @@
                 <data android:scheme="http" />
                 <data android:scheme="https" />
                 <data android:host="fireshare.uk" />
-                <data android:host="dtweet.com" />
+                <data android:host="${publicDeepLinkHost}" />
                 <data android:pathPattern="/tweet/.*" />
                 <data android:pathPattern="/user/.*" />
                 <data android:pathPattern="/profile/.*" />

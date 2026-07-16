@@ -44,6 +44,8 @@ android {
         // This ensures APP_ID is always defined and prevents any inheritance issues
         buildConfigField("String", "APP_ID", "\"\"")
         buildConfigField("String", "BASE_URL", "\"\"")
+        manifestPlaceholders["appLinkAutoVerify"] = "true"
+        manifestPlaceholders["publicDeepLinkHost"] = "dtweet.com"
     }
     
     signingConfigs {
@@ -93,6 +95,8 @@ android {
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
             buildConfigField("String", "ENTRY_URLS", "\"VQ3xCeguhlAF1jY7zfn-HM_Vrad\"")
+            manifestPlaceholders["appLinkAutoVerify"] = "false"
+            manifestPlaceholders["publicDeepLinkHost"] = "debug.dtweet.invalid"
         }
         release {
             signingConfig = signingConfigs.getByName("release")
@@ -113,6 +117,8 @@ android {
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"mKOihoVuFnQ2xt33R51KTQXSBkX\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
+            manifestPlaceholders["appLinkAutoVerify"] = "true"
+            manifestPlaceholders["publicDeepLinkHost"] = "dtweet.com"
         }
     }
     
