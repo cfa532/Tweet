@@ -79,6 +79,34 @@ class UserViewModel @AssistedInject constructor(
     private var _user = MutableStateFlow(User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
     val user: StateFlow<User> get() = _user.asStateFlow()
 
+    private fun setUserState(nextUser: User) {
+        val currentUser = _user.value
+        val userForState = nextUser.copy()
+
+        // User equality is intentionally keyed only by mid, but UI rows need an
+        // emission when a placeholder and a real user share that same mid.
+        if (currentUser.mid == userForState.mid && hasRenderableUserChange(currentUser, userForState)) {
+            _user.value = User(mid = TW_CONST.GUEST_ID, baseUrl = userForState.baseUrl ?: appUser.baseUrl)
+        }
+
+        _user.value = userForState
+    }
+
+    private fun hasRenderableUserChange(currentUser: User, nextUser: User): Boolean {
+        return currentUser.username != nextUser.username ||
+            currentUser.name != nextUser.name ||
+            currentUser.avatar != nextUser.avatar ||
+            currentUser.profile != nextUser.profile ||
+            currentUser.baseUrl != nextUser.baseUrl ||
+            currentUser.tweetCount != nextUser.tweetCount ||
+            currentUser.followingCount != nextUser.followingCount ||
+            currentUser.followersCount != nextUser.followersCount ||
+            currentUser.bookmarksCount != nextUser.bookmarksCount ||
+            currentUser.favoritesCount != nextUser.favoritesCount ||
+            currentUser.fansList != nextUser.fansList ||
+            currentUser.followingList != nextUser.followingList
+    }
+
     // unpinned tweets
     private val _tweets = MutableStateFlow<List<Tweet>>(emptyList())
     val tweets: StateFlow<List<Tweet>> get() = _tweets.asStateFlow()
@@ -253,7 +281,7 @@ class UserViewModel @AssistedInject constructor(
 
             if (refreshedUser != null && !refreshedUser.isGuest()) {
                 val routeChanged = previousBaseUrl != refreshedUser.baseUrl
-                _user.value = refreshedUser
+                setUserState(refreshedUser)
 
                 if (userId == appUser.mid) {
                     User.updateUserInstance(refreshedUser)
@@ -327,7 +355,7 @@ class UserViewModel @AssistedInject constructor(
             resyncedUser.copy()
         }
 
-        _user.value = userForState
+        setUserState(userForState)
 
         if (userId == appUser.mid) {
             User.updateUserInstance(resyncedUser)
@@ -540,7 +568,7 @@ class UserViewModel @AssistedInject constructor(
                 val updatedAppUser = appUser.copy(avatar = avatarId)
                 User.updateUserInstance(updatedAppUser)
                 appUser = User.getInstance(updatedAppUser.mid)
-                _user.value = user.value.copy(avatar = avatarId)
+                setUserState(user.value.copy(avatar = avatarId))
                 Timber.tag("updateAvatar").d("State updated on Main thread, new avatar ID: $avatarId")
             }
             
@@ -642,7 +670,7 @@ class UserViewModel @AssistedInject constructor(
         }
         val newCount = if (newFollowingState) previousCount + 1 else previousCount - 1
         _followingsCount.value = newCount
-        _user.value = user.value.copy(followingCount = newCount)
+        setUserState(user.value.copy(followingCount = newCount))
 
         // Mirror iOS: maintain appUser.followingList and target user's fansList /
         // followersCount in sync. These are the source of truth other screens
@@ -697,7 +725,7 @@ class UserViewModel @AssistedInject constructor(
                             else (listOf(subjectUserId) + list).toSet().toList()
                         }
                         _followingsCount.value = previousCount
-                        _user.value = user.value.copy(followingCount = previousCount)
+                        setUserState(user.value.copy(followingCount = previousCount))
 
                         if (userId == appUser.mid) {
                             // Restore exactly from snapshots — covers the cases where
@@ -733,7 +761,7 @@ class UserViewModel @AssistedInject constructor(
                             val reconciledCount =
                                 if (serverIsFollowing) previousCount + 1 else previousCount - 1
                             _followingsCount.value = reconciledCount
-                            _user.value = user.value.copy(followingCount = reconciledCount)
+                            setUserState(user.value.copy(followingCount = reconciledCount))
 
                             if (userId == appUser.mid) {
                                 // Apply the server-truth diff against the snapshot,
@@ -825,12 +853,12 @@ class UserViewModel @AssistedInject constructor(
 
         // Update the user object with the correct counts and the ID lists,
         // so both are persisted for instant display on the next access.
-        _user.value = user.value.copy(
+        setUserState(user.value.copy(
             followersCount = fans.size,
             followingCount = followings.size,
             fansList = fans,
             followingList = followings
-        )
+        ))
 
         // Update the User singleton for this user (any user, not just appUser)
         User.updateUserInstance(_user.value)
@@ -925,10 +953,10 @@ class UserViewModel @AssistedInject constructor(
         followersRefreshedFromServer = true
         _followers.value = allFollowers
         _followersCount.value = allFollowers.size
-        _user.value = user.value.copy(
+        setUserState(user.value.copy(
             followersCount = allFollowers.size,
             fansList = allFollowers
-        )
+        ))
         User.updateUserInstance(_user.value)
         TweetCacheManager.saveUser(_user.value)
         return allFollowers
@@ -1007,10 +1035,10 @@ class UserViewModel @AssistedInject constructor(
         followingsRefreshedFromServer = true
         _followings.value = allFollowings
         _followingsCount.value = allFollowings.size
-        _user.value = user.value.copy(
+        setUserState(user.value.copy(
             followingCount = allFollowings.size,
             followingList = allFollowings
-        )
+        ))
         User.updateUserInstance(_user.value)
         TweetCacheManager.saveUser(_user.value)
         return allFollowings
@@ -1030,8 +1058,13 @@ class UserViewModel @AssistedInject constructor(
                 if (id.isEmpty() || id == TW_CONST.GUEST_ID) return@forEach
                 launch {
                     try {
-                        userPrefetchSemaphore.withPermit {
+                        val fetchedUser = userPrefetchSemaphore.withPermit {
                             fetchUser(id)
+                        }
+                        fetchedUser?.let { user ->
+                            TweetNotificationCenter.post(
+                                TweetEvent.UserDataUpdated(user.copy())
+                            )
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1126,7 +1159,7 @@ class UserViewModel @AssistedInject constructor(
         val serverBookmarksCount = appUser.bookmarksCount
         
         // Update the user state with server data
-        _user.value = appUser
+        setUserState(appUser)
 
         // Update the public bookmarks count for UI with server count
         _bookmarksCount.value = serverBookmarksCount
@@ -1251,7 +1284,7 @@ class UserViewModel @AssistedInject constructor(
         val serverFavoritesCount = appUser.favoritesCount
         
         // Update the user state with server data
-        _user.value = appUser
+        setUserState(appUser)
 
         // Update the public favorites count for UI with server count
         _favoritesCount.value = serverFavoritesCount
@@ -1305,6 +1338,22 @@ class UserViewModel @AssistedInject constructor(
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications()
+
+        if (userId != TW_CONST.GUEST_ID) {
+            viewModelScope.launch {
+                TweetCacheManager.getUserStateFlow(userId).collect { cachedUser ->
+                    if (cachedUser != null && !cachedUser.username.isNullOrBlank()) {
+                        val updatedUser = cachedUser.copy()
+                        setUserState(updatedUser)
+                        _bookmarksCount.value = updatedUser.bookmarksCount
+                        _favoritesCount.value = updatedUser.favoritesCount
+                        _followersCount.value = updatedUser.followersCount
+                        _followingsCount.value = updatedUser.followingCount
+                        _tweetCount.value = updatedUser.tweetCount
+                    }
+                }
+            }
+        }
         
         if (userId != TW_CONST.GUEST_ID) {
             // Use applicationScope to prevent cancellation during app initialization
@@ -1316,18 +1365,21 @@ class UserViewModel @AssistedInject constructor(
                     appUser
                 } else {
                     // Use cached user data if available, otherwise create skeleton
-                    cachedUser ?: User.getInstance(userId)
+                    cachedUser?.copy() ?: User.getInstance(userId).copy()
                 }
 
-                // Set cached/initial user data immediately for instant UI display
-                _user.value = initialUser
+                // Set cached/initial user data immediately for instant UI display,
+                // but do not let a late skeleton overwrite a user delivered by cache observation.
+                if (!initialUser.username.isNullOrBlank() || _user.value.username.isNullOrBlank()) {
+                    setUserState(initialUser)
 
-                // Initialize count variables from user data
-                _bookmarksCount.value = initialUser.bookmarksCount
-                _favoritesCount.value = initialUser.favoritesCount
-                _followersCount.value = initialUser.followersCount
-                _followingsCount.value = initialUser.followingCount
-                _tweetCount.value = initialUser.tweetCount
+                    // Initialize count variables from user data
+                    _bookmarksCount.value = initialUser.bookmarksCount
+                    _favoritesCount.value = initialUser.favoritesCount
+                    _followersCount.value = initialUser.followersCount
+                    _followingsCount.value = initialUser.followingCount
+                    _tweetCount.value = initialUser.tweetCount
+                }
 
                 // Load cached tweets immediately for instant UI display
                 if (userId != TW_CONST.GUEST_ID) {
@@ -1352,7 +1404,7 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         } else {
-            _user.value = appUser
+            setUserState(appUser)
 
             // Initialize count variables from appUser data
             _bookmarksCount.value = appUser.bookmarksCount
@@ -1365,7 +1417,7 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun getUser() {
         fetchUser(userId, maxRetries = 2)?.let {
-            _user.value = it
+            setUserState(it)
         }
     }
 
@@ -1377,7 +1429,7 @@ class UserViewModel @AssistedInject constructor(
     fun refreshFromAppUser() {
         if (userId == appUser.mid) {
             Timber.tag("UserViewModel").d("Refreshing user data from appUser for current user: ${appUser.mid}")
-            _user.value = appUser
+            setUserState(appUser)
             
             // Update all count variables to match appUser
             _bookmarksCount.value = appUser.bookmarksCount
@@ -1396,7 +1448,7 @@ class UserViewModel @AssistedInject constructor(
         viewModelScope.launch(IO) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
             if (cachedUser != null) {
-                _user.value = cachedUser
+                setUserState(cachedUser)
                 _bookmarksCount.value = cachedUser.bookmarksCount
                 _favoritesCount.value = cachedUser.favoritesCount
                 _followersCount.value = cachedUser.followersCount
@@ -1674,7 +1726,7 @@ class UserViewModel @AssistedInject constructor(
                 appUser = User.getInstance(loggedInUser.mid)
                 preferenceHelper.setUserId(appUser.mid)
                 HproseInstance.markAppUserInitializedAfterLogin()
-                _user.value = appUser
+                setUserState(appUser)
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
@@ -1787,7 +1839,7 @@ class UserViewModel @AssistedInject constructor(
                 val updatedUser = appUser.copy(baseUrl = "http://$ip")
                 User.updateUserInstance(updatedUser, true)
                 appUser = User.getInstance(updatedUser.mid)
-                _user.value = user.value.copy(baseUrl = "http://$ip")
+                setUserState(user.value.copy(baseUrl = "http://$ip"))
             } ?: run {
                 hostIdError.value = context.getString(R.string.node_not_found)
                 isLoading.value = false
@@ -2003,7 +2055,7 @@ class UserViewModel @AssistedInject constructor(
                         // Update user data if this is the current user
                         if (event.user.mid == userId) {
                             val updatedUser = event.user.copy()
-                            _user.value = updatedUser
+                            setUserState(updatedUser)
                             _bookmarksCount.value = updatedUser.bookmarksCount
                             _favoritesCount.value = updatedUser.favoritesCount
                             _followersCount.value = updatedUser.followersCount
