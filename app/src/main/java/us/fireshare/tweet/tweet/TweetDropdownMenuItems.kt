@@ -39,6 +39,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -68,10 +69,12 @@ fun TweetDropdownMenuItems(
 
     val activity = LocalActivity.current as ComponentActivity
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
+    val navController = LocalNavController.current
     val context = LocalContext.current
     // Capture string resources at composable level to avoid Android Studio warnings
     val deleteFailedText = stringResource(R.string.delete_failed)
     val networkErrorText = stringResource(R.string.network_error_connection_lost)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Show delete button based on context
     val shouldShowDeleteButton = when (contextType) {
@@ -90,6 +93,11 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(0.8f),
             onClick = {
+                if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                    onDismissRequest()
+                    return@DropdownMenuItem
+                }
+
                 // Validate that we can actually delete this tweet
                 if (tweet.mid.isBlank()) {
                     Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: tweet.mid is null or blank")
@@ -200,6 +208,11 @@ fun TweetDropdownMenuItems(
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
+                if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                    onDismissRequest()
+                    return@DropdownMenuItem
+                }
+
                 appUserViewModel.viewModelScope.launch(IO) {
                     onDismissRequest()
                     appUserViewModel.pinToTop(tweet)

@@ -1,6 +1,5 @@
 package us.fireshare.tweet.tweet
 
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
@@ -32,18 +31,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.ShareLinkStyle
@@ -52,13 +48,6 @@ import us.fireshare.tweet.viewmodel.TweetViewModel
 private val TweetActionIconSize = 21.dp
 private val TweetActionButtonWidth = 54.dp
 private val TweetActionShareButtonWidth = 48.dp
-
-suspend fun guestWarning(context: Context, navController: NavController? = null, message: String) {
-    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-    // Navigate to login after a short delay
-    delay(1000)
-    navController?.navigate(NavTweet.Login)
-}
 
 @Composable
 fun CommentButton(
@@ -79,10 +68,7 @@ fun CommentButton(
     IconButton(
         modifier = Modifier.width(TweetActionButtonWidth),
         onClick = {
-            if (appUser.isGuest()) {
-                viewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
-                }
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
                 return@IconButton
             }
 
@@ -141,22 +127,20 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
     IconButton(
         modifier = Modifier.width(TweetActionButtonWidth),
         onClick = {
-            if (appUser.isGuest()) {
-                viewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
-                }
-            } else {
-                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        // The retweet will be added to feed automatically via notification system
-                        viewModel.retweetTweet()
-                        Timber.tag("RetweetButton").d("Retweet action completed")
-                    } catch (e: Exception) {
-                        Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
-                        // Show error message to user
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
-                        }
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                return@IconButton
+            }
+
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    // The retweet will be added to feed automatically via notification system
+                    viewModel.retweetTweet()
+                    Timber.tag("RetweetButton").d("Retweet action completed")
+                } catch (e: Exception) {
+                    Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
+                    // Show error message to user
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -201,16 +185,15 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     IconButton(
         modifier = Modifier.width(TweetActionButtonWidth),
         onClick = {
-            if (appUser.isGuest()) {
-                viewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                return@IconButton
+            }
+
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.toggleFavorite { tweet, isFavorite ->
+                    appUserViewModel.updateFavorite(tweet, isFavorite)
                 }
-            } else
-                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    viewModel.toggleFavorite { tweet, isFavorite ->
-                        appUserViewModel.updateFavorite(tweet, isFavorite)
-                    }
-                }
+            }
         }
     ) {
         Row(
@@ -255,16 +238,15 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     IconButton(
         modifier = Modifier.width(TweetActionButtonWidth),
         onClick = {
-            if (appUser.isGuest()) {
-                viewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                return@IconButton
+            }
+
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                viewModel.toggleBookmark { tweet, isBookmarked ->
+                    appUserViewModel.updateBookmark(tweet, isBookmarked)
                 }
-            } else
-                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                    viewModel.toggleBookmark { tweet, isBookmarked ->
-                        appUserViewModel.updateBookmark(tweet, isBookmarked)
-                    }
-                }
+            }
         }
     ) {
         Row(
@@ -312,14 +294,13 @@ fun ShareButton(
     IconButton(
         modifier = Modifier.width(TweetActionShareButtonWidth),
         onClick = {
-            if (appUser.isGuest()) {
-                viewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
-                }
-            } else
-                scope.launch(Dispatchers.IO) {
-                    viewModel.shareTweet(context, parentTweetId, parentAuthorId, linkStyle)
-                }
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                return@IconButton
+            }
+
+            scope.launch(Dispatchers.IO) {
+                viewModel.shareTweet(context, parentTweetId, parentAuthorId, linkStyle)
+            }
         },
         enabled = !isSharing
     ) {

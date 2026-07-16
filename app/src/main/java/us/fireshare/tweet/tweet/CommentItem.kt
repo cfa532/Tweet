@@ -58,6 +58,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaGrid
@@ -216,10 +217,12 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     var expanded by remember(comment.mid) { mutableStateOf(false) }
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState()
         ?: remember { mutableStateOf(null) }
+    val navController = LocalNavController.current
     val context = LocalContext.current
     
     // Capture string resource at composable level to avoid context capture warnings
     val deleteFailedMessage = stringResource(R.string.comment_delete_failed)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
     LaunchedEffect(comment.mid) {
@@ -253,6 +256,11 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                 DropdownMenuItem(
                     modifier = Modifier.alpha(0.9f),
                     onClick = {
+                        if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                            expanded = false
+                            return@DropdownMenuItem
+                        }
+
                         // Dismiss popup immediately for better UX
                         expanded = false
 

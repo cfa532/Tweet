@@ -29,7 +29,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
-import us.fireshare.tweet.tweet.guestWarning
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -74,10 +74,7 @@ fun ToggleFollowingButton(
     DebouncedButton(
         text = if (localFollowState) stringResource(R.string.unfollow) else stringResource(R.string.follow),
         onClick = {
-            if (appUser.isGuest()) {
-                appUserViewModel.viewModelScope.launch {
-                    guestWarning(context, navController, guestReminderText)
-                }
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
                 return@DebouncedButton
             }
 

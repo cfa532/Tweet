@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
@@ -61,6 +63,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
+    val context = LocalContext.current
+    val guestReminderText = stringResource(R.string.guest_reminder)
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
 
@@ -155,8 +159,11 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }
         },
         actions = {
-            if (!appUser.isGuest() && appUser.mid != user.mid) {
+            if (appUser.mid != user.mid) {
                 IconButton(onClick = {
+                    if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                        return@IconButton
+                    }
                     navController.navigate(NavTweet.ChatBox(user.mid))
                 }) {
                     Icon(
