@@ -1015,7 +1015,8 @@ class TweetViewModel @AssistedInject constructor(
         updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
     ) {
         val isFavorite = tweetState.value.isFavorite
-        _tweetState.value.isFavorite = !isFavorite
+        val desiredFavorite = !isFavorite
+        _tweetState.value.isFavorite = desiredFavorite
         _tweetState.value = tweetState.value.copy(
             favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
             else tweetState.value.favoriteCount + 1,
@@ -1024,7 +1025,7 @@ class TweetViewModel @AssistedInject constructor(
         /**
          * Get the actual server response and update with real data.
          * */
-        val updatedTweet = HproseInstance.toggleFavorite(tweetState.value)
+        val updatedTweet = HproseInstance.toggleFavorite(tweetState.value, desiredFavorite)
 
         // Check if the operation failed (if the tweet state didn't change)
         if (updatedTweet.isFavorite == isFavorite) {
@@ -1055,7 +1056,8 @@ class TweetViewModel @AssistedInject constructor(
      * */
     suspend fun toggleBookmark(updateAppUser: (Tweet, Boolean) -> Unit) {
         val hasBookmarked = tweetState.value.isBookmarked
-        _tweetState.value.isBookmarked = !hasBookmarked
+        val desiredBookmark = !hasBookmarked
+        _tweetState.value.isBookmarked = desiredBookmark
         _tweetState.value = tweetState.value.copy(
             bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
             else tweetState.value.bookmarkCount + 1,
@@ -1065,7 +1067,7 @@ class TweetViewModel @AssistedInject constructor(
          * Get the actual server response and update with real data.
          * If backend fails, the original value will be restored.
          * */
-        val updatedTweet = HproseInstance.toggleBookmark(tweetState.value)
+        val updatedTweet = HproseInstance.toggleBookmark(tweetState.value, desiredBookmark)
 
         // Check if the operation failed (if the tweet state didn't change)
         if (updatedTweet.isBookmarked == hasBookmarked) {

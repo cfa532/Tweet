@@ -3567,7 +3567,7 @@ object HproseInstance {
     /**
      * Load favorite status of the tweet by appUser.
      * */
-    suspend fun toggleFavorite(tweet: Tweet): Tweet {
+    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet {
         if (!isOnline.value) {
             Timber.tag("toggleFavorite").d("Offline: skipping")
             throw Exception("No network connection")
@@ -3580,7 +3580,8 @@ object HproseInstance {
             "appuserid" to appUser.mid,
             "tweetid" to tweet.mid,
             "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: "")
+            "userhostid" to (appUser.hostIds?.first() ?: ""),
+            "isfavorite" to isFavorite
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
         val author = tweet.interactionHostAuthor ?: tweet.author
@@ -3635,7 +3636,7 @@ object HproseInstance {
     /**
      * Load bookmark status of the tweet by appUser.
      * */
-    suspend fun toggleBookmark(tweet: Tweet): Tweet {
+    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet {
         if (!isOnline.value) {
             Timber.tag("toggleBookmark").d("Offline: skipping")
             throw Exception("No network connection")
@@ -3648,7 +3649,8 @@ object HproseInstance {
             "userid" to appUser.mid,
             "tweetid" to tweet.mid,
             "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: "")
+            "userhostid" to (appUser.hostIds?.first() ?: ""),
+            "isbookmarked" to isBookmarked
         )
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
         val author = tweet.interactionHostAuthor ?: tweet.author
