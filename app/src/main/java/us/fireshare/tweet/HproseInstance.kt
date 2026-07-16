@@ -2780,22 +2780,10 @@ object HproseInstance {
             // Check cache first using TweetCacheManager
             val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
             if (cachedTweet != null) {
-                // Return cached tweet immediately with cached author
-                cachedTweet.author = TweetCacheManager.getCachedUser(authorId)
-
-                // Update author asynchronously in background
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val freshAuthor = fetchUser(authorId)
-                        if (freshAuthor != null) {
-                            cachedTweet.author = freshAuthor
-                            Timber.tag("fetchTweet").d("✅ Updated cached tweet $tweetId with fresh author")
-                        } else {
-                            Timber.tag("fetchTweet").w("⚠️ Failed to fetch fresh author for cached tweet $tweetId, authorId: $authorId")
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("fetchTweet").e("Error updating author for cached tweet $tweetId: $e")
-                    }
+                // The caller observes the returned Tweet reference, not later field mutations.
+                // Resolve a missing author before returning so embedded tweets render reliably.
+                if (cachedTweet.author == null) {
+                    cachedTweet.author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
                 }
 
                 return cachedTweet
@@ -2812,10 +2800,9 @@ object HproseInstance {
 
             // Get cached author for immediate use
             val cachedAuthor = TweetCacheManager.getCachedUser(authorId)
+            val authorForApi = fetchUser(authorId) ?: cachedAuthor
 
             val rawResponse = try {
-                // Try to get the author for the API call, but don't block on it
-                val authorForApi = fetchUser(authorId) ?: cachedAuthor
                 authorForApi?.hproseService?.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("fetchTweet").e(e, "Exception calling runMApp for fetchTweet, tweetId: $tweetId, authorId: $authorId")
@@ -2827,29 +2814,15 @@ object HproseInstance {
                 recordReliabilitySuccessTweet(tweetId)
 
                 Tweet.from(it).apply {
-                    // Set cached author immediately
-                    this.author = cachedAuthor
+                    // Attach the author before returning; Compose will not observe a later
+                    // mutation of this plain Tweet property from a background coroutine.
+                    this.author = authorForApi
 
                     // Cache tweet by authorId, not appUser.mid
                     TweetCacheManager.saveTweet(
                         this,
                         userId = authorId
                     )
-
-                    // Update author asynchronously in background
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val freshAuthor = fetchUser(authorId)
-                            if (freshAuthor != null) {
-                                this@apply.author = freshAuthor
-                                Timber.tag("fetchTweet").d("✅ Updated fetched tweet $tweetId with fresh author")
-                            } else {
-                                Timber.tag("fetchTweet").w("⚠️ Failed to fetch fresh author for tweet $tweetId, authorId: $authorId")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("fetchTweet").e("Error updating author for fetched tweet $tweetId: $e")
-                        }
-                    }
                 }
             }
         } catch (e: Exception) {
