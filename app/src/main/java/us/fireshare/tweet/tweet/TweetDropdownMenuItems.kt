@@ -14,11 +14,17 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -75,6 +81,7 @@ fun TweetDropdownMenuItems(
     val deleteFailedText = stringResource(R.string.delete_failed)
     val networkErrorText = stringResource(R.string.network_error_connection_lost)
     val guestReminderText = stringResource(R.string.guest_reminder)
+    var showDeleteConfirmation by remember(tweet.mid) { mutableStateOf(false) }
 
     // Show delete button based on context
     val shouldShowDeleteButton = when (contextType) {
@@ -122,70 +129,7 @@ fun TweetDropdownMenuItems(
                     return@DropdownMenuItem
                 }
 
-                // Dismiss menu immediately for better UX
-                onDismissRequest()
-
-                // OPTIMISTIC DELETE: Tweet will be removed from UI immediately
-                // If deletion fails, it will be restored and error shown
-                applicationScope.launch(IO) {
-                    try {
-                        Timber.tag("TweetDropdownMenuItems").d("Starting optimistic deletion of tweet: ${tweet.mid}")
-                        
-                        tweetFeedViewModel.delTweet(tweet.mid, appUserViewModel) {
-                            // Deletion completed successfully
-                            Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
-
-                            // Update retweet count of original tweet if this is a retweet
-                            if (originTweetViewModel != null) {
-                                applicationScope.launch(IO) {
-                                    HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
-                                        // Cache updated original tweet by authorId (matches iOS)
-                                        HproseInstance.updateCachedTweet(updatedOriginTweet, userId = updatedOriginTweet.authorId)
-                                        originTweetViewModel.updateRetweetCount(updatedOriginTweet)
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        // Deletion failed - tweet has been restored
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Failed to delete tweet: ${e.message}")
-                        
-                        // Show error toast on Main thread
-                        withContext(Main) {
-                            val errorMessage = e.message ?: deleteFailedText
-                            // Clean up the error message
-                            val displayMessage = when {
-                                errorMessage.contains("Failed to delete tweet:") -> {
-                                    // Extract the actual error after the prefix
-                                    errorMessage.substringAfter("Failed to delete tweet: ").let {
-                                        if (it.length > 80) it.take(80) + "..." else it
-                                    }
-                                }
-                                errorMessage.length > 80 -> errorMessage.take(80) + "..."
-                                else -> errorMessage
-                            }
-                            
-                            Toast.makeText(
-                                context,
-                                "$deleteFailedText: $displayMessage",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    } catch (e: Throwable) {
-                        // Catch any other errors (including cancellation exceptions)
-                        Timber.tag("TweetDropdownMenuItems")
-                            .e(e, "Unexpected error deleting tweet: ${e.message}")
-                        
-                        withContext(Main) {
-                            Toast.makeText(
-                                context,
-                                deleteFailedText,
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                }
+                showDeleteConfirmation = true
             },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -199,6 +143,90 @@ fun TweetDropdownMenuItems(
                         text = stringResource(R.string.delete),
                         color = MaterialTheme.colorScheme.error
                     )
+                }
+            }
+        )
+    }
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmation = false
+                onDismissRequest()
+            },
+            title = { Text(stringResource(R.string.delete_tweet_confirmation_title)) },
+            text = { Text(stringResource(R.string.delete_tweet_confirmation_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDismissRequest()
+                        // Preserve the existing optimistic delete behavior, but
+                        // only begin it after explicit confirmation.
+                        applicationScope.launch(IO) {
+                            try {
+                                Timber.tag("TweetDropdownMenuItems").d("Starting optimistic deletion of tweet: ${tweet.mid}")
+
+                                tweetFeedViewModel.delTweet(tweet.mid, appUserViewModel) {
+                                    Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
+
+                                    if (originTweetViewModel != null) {
+                                        applicationScope.launch(IO) {
+                                            HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
+                                                HproseInstance.updateCachedTweet(updatedOriginTweet, userId = updatedOriginTweet.authorId)
+                                                originTweetViewModel.updateRetweetCount(updatedOriginTweet)
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("TweetDropdownMenuItems")
+                                    .e(e, "Failed to delete tweet: ${e.message}")
+
+                                withContext(Main) {
+                                    val errorMessage = e.message ?: deleteFailedText
+                                    val displayMessage = when {
+                                        errorMessage.contains("Failed to delete tweet:") -> {
+                                            errorMessage.substringAfter("Failed to delete tweet: ").let {
+                                                if (it.length > 80) it.take(80) + "..." else it
+                                            }
+                                        }
+                                        errorMessage.length > 80 -> errorMessage.take(80) + "..."
+                                        else -> errorMessage
+                                    }
+
+                                    Toast.makeText(
+                                        context,
+                                        "$deleteFailedText: $displayMessage",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            } catch (e: Throwable) {
+                                Timber.tag("TweetDropdownMenuItems")
+                                    .e(e, "Unexpected error deleting tweet: ${e.message}")
+
+                                withContext(Main) {
+                                    Toast.makeText(
+                                        context,
+                                        deleteFailedText,
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteConfirmation = false
+                    onDismissRequest()
+                }) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )

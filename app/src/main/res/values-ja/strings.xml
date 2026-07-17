@@ -42,6 +42,10 @@
     <string name="upload_file">ファイルをアップロード</string>
     <string name="play_video">動画を再生</string>
     <string name="cancel">キャンセル</string>
+    <string name="delete_tweet_confirmation_title">ツイートを削除しますか？</string>
+    <string name="delete_tweet_confirmation_message">このツイートは完全に削除されます。この操作は元に戻せません。</string>
+    <string name="delete_comment_confirmation_title">コメントを削除しますか？</string>
+    <string name="delete_comment_confirmation_message">このコメントは完全に削除されます。この操作は元に戻せません。</string>
     <string name="photo_mode">写真モード</string>
     <string name="video_mode">動画モード</string>
     <string name="copy_tweet_id">ツイートIDをコピー</string>
