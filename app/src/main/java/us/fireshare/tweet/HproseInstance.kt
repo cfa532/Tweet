@@ -268,6 +268,13 @@ object HproseInstance {
         }
     }
 
+    /** Relationship timestamps may be decoded as any Number subtype or a numeric String. */
+    private fun relationshipTimestamp(value: Any?): Long = when (value) {
+        is Number -> value.toLong()
+        is String -> value.toLongOrNull() ?: value.toDoubleOrNull()?.toLong() ?: 0L
+        else -> 0L
+    }
+
     private fun isTweetNotFoundDeleteFailure(error: Throwable? = null, response: Any? = null): Boolean {
         return isTweetNotFoundMessage(error?.message)
                 || isTweetNotFoundMessage(error?.localizedMessage)
@@ -2144,7 +2151,7 @@ object HproseInstance {
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
                 NodePool.updateFromUser(user)
                 
@@ -2224,7 +2231,7 @@ object HproseInstance {
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String }
                 NodePool.updateFromUser(user)
                 
