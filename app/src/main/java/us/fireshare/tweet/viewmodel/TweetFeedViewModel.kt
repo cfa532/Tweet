@@ -16,9 +16,11 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +43,7 @@ import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
+import us.fireshare.tweet.service.MainFeedCheckWorker
 import us.fireshare.tweet.service.UploadTweetWorker
 import java.lang.ref.WeakReference
 import javax.inject.Inject
@@ -198,10 +201,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     private var hasEnteredBackground = false
     private var behindBannerRefreshJob: Job? = null
+    // Generation 0 is cold start; every foreground return creates a new session.
+    // The opening stays pending until the home-host RunMApp is about to start.
+    private val mainFeedSessionLock = Any()
+    private var mainFeedSessionGeneration = 0L
+    private var openedMainFeedSessionGeneration = -1L
+    @Volatile private var mainFeedSessionOpeningJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             if (hasEnteredBackground) {
                 hasEnteredBackground = false
+                val sessionGeneration = beginMainFeedSession()
+                scheduleMainFeedSessionOpening(TW_CONST.PAGE_SIZE, sessionGeneration)
                 refreshFeedDirectlyAfterForeground()
             }
         }
@@ -213,6 +224,33 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     private fun shouldCheckNewTweetsBehindBanner(): Boolean {
         return isInitialized && HproseInstance.isOnline.value
+    }
+
+    private fun beginMainFeedSession(): Long {
+        val sessionGeneration = synchronized(mainFeedSessionLock) {
+            mainFeedSessionGeneration++
+            mainFeedSessionGeneration
+        }
+        mainFeedSessionOpeningJob?.cancel()
+        mainFeedSessionOpeningJob = null
+        return sessionGeneration
+    }
+
+    private fun currentMainFeedSessionGeneration(): Long = synchronized(mainFeedSessionLock) {
+        mainFeedSessionGeneration
+    }
+
+    private fun consumeMainFeedOpening(generation: Long): Boolean = synchronized(mainFeedSessionLock) {
+        if (generation != mainFeedSessionGeneration || openedMainFeedSessionGeneration == generation) {
+            false
+        } else {
+            openedMainFeedSessionGeneration = generation
+            true
+        }
+    }
+
+    private fun isMainFeedOpeningConsumed(generation: Long): Boolean = synchronized(mainFeedSessionLock) {
+        openedMainFeedSessionGeneration == generation
     }
 
     init {
@@ -431,7 +469,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed after foreground")
             } finally {
-                refreshFollowingTweets(TW_CONST.PAGE_SIZE)
                 behindBannerRefreshJob = null
             }
         }
@@ -462,7 +499,65 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         return visibleTweets
     }
 
-    fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE, deferNewTweets: Boolean = false) {
+    private fun scheduleMainFeedSessionOpening(
+        pageSize: Int = TW_CONST.PAGE_SIZE,
+        generation: Long = currentMainFeedSessionGeneration()
+    ) {
+        if (generation != currentMainFeedSessionGeneration() ||
+            isMainFeedOpeningConsumed(generation) ||
+            mainFeedSessionOpeningJob?.isActive == true
+        ) return
+
+        mainFeedSessionOpeningJob = applicationScope.launch(IO) {
+            // TweetApplication registers its process observer before this ViewModel,
+            // so its foreground reschedule is the latest WorkManager operation here.
+            // Do not let the opening RPC race the cancellation/replacement.
+            while (generation == currentMainFeedSessionGeneration() &&
+                !MainFeedCheckWorker.waitForLatestReschedule()
+            ) {
+                delay(1_000)
+            }
+
+            while (generation == currentMainFeedSessionGeneration() &&
+                !isMainFeedOpeningConsumed(generation)
+            ) {
+                if (appUser.isGuest()) return@launch
+                if (!HproseInstance.isOnline.value || followingTweetsJob?.isActive == true) {
+                    delay(1_000)
+                    continue
+                }
+
+                var rpcStarted = false
+                try {
+                    val followingTweetsWithNulls = HproseInstance.getFollowingTweetsForSessionOpening(
+                        pageSize = pageSize,
+                        onRpcStarted = {
+                            val consumed = consumeMainFeedOpening(generation)
+                            rpcStarted = consumed
+                            consumed
+                        }
+                    )
+                    if (!rpcStarted) {
+                        delay(1_000)
+                        continue
+                    }
+                    stageFollowingTweets(followingTweetsWithNulls)
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("TweetFeedViewModel").e(e, "Error opening main-feed session: ${e.message}")
+                    if (rpcStarted) return@launch
+                    delay(1_000)
+                }
+            }
+        }
+    }
+
+    fun refreshFollowingTweets(
+        pageSize: Int = TW_CONST.PAGE_SIZE,
+        deferNewTweets: Boolean = false
+    ) {
         if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value || appUser.isGuest()) {
             return
         }
@@ -486,12 +581,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     }
                 )
 
-                val followingTweets = followingTweetsWithNulls.filterNotNull()
-                rememberTweetRowTimestamps(followingTweets)
-
-                withContext(Main) {
-                    updateNewTweetsSnapshot(followingTweets)
-                }
+                stageFollowingTweets(followingTweetsWithNulls)
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
             } finally {
@@ -500,8 +590,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    private suspend fun stageFollowingTweets(followingTweetsWithNulls: List<Tweet?>) {
+        val followingTweets = followingTweetsWithNulls.filterNotNull()
+        rememberTweetRowTimestamps(followingTweets)
+        withContext(Main) {
+            updateNewTweetsSnapshot(followingTweets)
+        }
+    }
+
     override fun onCleared() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(appForegroundObserver)
+        mainFeedSessionOpeningJob?.cancel()
         super.onCleared()
     }
 
@@ -569,6 +668,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             return result
         } else {
             // For regular users: call getTweetFeed() to get tweets from backend
+            if (pageNumber == 0) {
+                scheduleMainFeedSessionOpening(pageSize)
+            }
             // Immediately merge cached tweets if they're not already in the list
             if (!deferNewTweets) {
                 _tweets.update { currentTweets ->
@@ -668,9 +770,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
              * val followingTweets = deferredFollowing.await()
              * // Process both results together
              * */
-            if (pageNumber == 0) {
-                refreshFollowingTweets(pageSize, deferNewTweets = deferNewTweets)
-            }
             return responseTweets
         }
         } finally {

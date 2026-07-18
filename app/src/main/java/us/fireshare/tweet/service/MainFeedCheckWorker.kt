@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
@@ -122,16 +123,35 @@ class MainFeedCheckWorker @AssistedInject constructor(
         private const val TAG = "MainFeedCheckWorker"
         private const val UNIQUE_WORK_NAME = "MainFeedCheck"
         private const val CHECK_INTERVAL_MINUTES = 5L
+        @Volatile private var latestRescheduleOperation: Operation? = null
 
-        fun reschedule(context: Context) {
-            enqueue(context, ExistingWorkPolicy.REPLACE)
+        fun reschedule(context: Context): Operation {
+            return enqueue(context, ExistingWorkPolicy.REPLACE).also {
+                latestRescheduleOperation = it
+            }
+        }
+
+        /**
+         * Called from the main-feed session job on its IO dispatcher. Waiting for
+         * WorkManager's operation guarantees the old repeat request was replaced
+         * before update_following_tweets can start.
+         */
+        fun waitForLatestReschedule(): Boolean {
+            val operation = latestRescheduleOperation ?: return false
+            return try {
+                operation.result.get()
+                true
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "Failed waiting for main feed reschedule")
+                false
+            }
         }
 
         private fun scheduleNext(context: Context) {
             enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE)
         }
 
-        private fun enqueue(context: Context, policy: ExistingWorkPolicy) {
+        private fun enqueue(context: Context, policy: ExistingWorkPolicy): Operation {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
@@ -141,7 +161,7 @@ class MainFeedCheckWorker @AssistedInject constructor(
                 .setConstraints(constraints)
                 .build()
 
-            WorkManager.getInstance(context).enqueueUniqueWork(
+            return WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
                 policy,
                 request

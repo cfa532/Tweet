@@ -355,19 +355,19 @@ object HproseInstance {
     private var entryResolveCache: EntryResolveCache? = null
     private var entryResolveFailureCache: EntryResolveFailureCache? = null
 
-    private val heavyCallDebounceMutex = Mutex()
+    private val heavyCallDebounceLock = Any()
     private val heavyCallLastRunAtMs = mutableMapOf<String, Long>()
 
-    private suspend fun shouldRunHeavyCall(
+    private fun shouldRunHeavyCall(
         key: String,
         tag: String,
         ignoreDebounce: Boolean = false
     ): Boolean {
         val now = System.currentTimeMillis()
-        return heavyCallDebounceMutex.withLock {
+        return synchronized(heavyCallDebounceLock) {
             if (ignoreDebounce) {
                 heavyCallLastRunAtMs[key] = now
-                return@withLock true
+                return@synchronized true
             }
 
             val lastRunAt = heavyCallLastRunAtMs[key]
@@ -376,7 +376,7 @@ object HproseInstance {
                 if (elapsed < HEAVY_CALL_INTERVAL_MS) {
                     val remainingSeconds = (HEAVY_CALL_INTERVAL_MS - elapsed + 999) / 1000
                     Timber.tag(tag).d("Skipping heavy call; ${remainingSeconds}s left in debounce window")
-                    return@withLock false
+                    return@synchronized false
                 }
             }
 
@@ -2327,6 +2327,36 @@ object HproseInstance {
         entry: String = "get_tweet_feed",
         maxRetries: Int = 5,
         onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
+    ): List<Tweet?> = getTweetFeedInternal(
+        pageNumber = pageNumber,
+        pageSize = pageSize,
+        entry = entry,
+        maxRetries = maxRetries,
+        onRetry = onRetry
+    )
+
+    // Keeps the public feed API stable while exposing the exact RunMApp start
+    // boundary needed to consume one foreground session safely.
+    internal suspend fun getFollowingTweetsForSessionOpening(
+        pageSize: Int,
+        onRpcStarted: () -> Boolean
+    ): List<Tweet?> = getTweetFeedInternal(
+        pageNumber = 0,
+        pageSize = pageSize,
+        entry = "update_following_tweets",
+        maxRetries = 0,
+        ignoreFollowingTweetsDebounce = true,
+        onRpcStarted = onRpcStarted
+    )
+
+    private suspend fun getTweetFeedInternal(
+        pageNumber: Int,
+        pageSize: Int,
+        entry: String,
+        maxRetries: Int,
+        onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null,
+        ignoreFollowingTweetsDebounce: Boolean = false,
+        onRpcStarted: (() -> Boolean)? = null
     ): List<Tweet?> {
         if (!isOnline.value) {
             Timber.tag("getTweetFeed").d("Offline: skipping network call for page $pageNumber")
@@ -2335,16 +2365,11 @@ object HproseInstance {
 
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
+        val isFollowingTweetUpdate = entry == "update_following_tweets"
 
         // For guest users, if no alpha IDs are configured, return empty list
-        if (appUser.isGuest() && alphaIds.isEmpty()) {
-            Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
-            return emptyList()
-        }
-
-        if (entry == "update_following_tweets" &&
-            !shouldRunHeavyCall("update_following_tweets:${appUser.mid}", "getTweetFeed")
-        ) {
+        if (appUser.isGuest() && (alphaIds.isEmpty() || isFollowingTweetUpdate)) {
+            Timber.tag("getTweetFeed").d("Guest user: skipping $entry")
             return emptyList()
         }
         
@@ -2394,6 +2419,19 @@ object HproseInstance {
                 }
                 
                 val feedService = getTweetFeedService(entry)
+                if (isFollowingTweetUpdate) {
+                    if (appUser.isGuest() || onRpcStarted?.invoke() == false) {
+                        return emptyList()
+                    }
+                    if (!shouldRunHeavyCall(
+                            "update_following_tweets:${appUser.mid}",
+                            "getTweetFeed",
+                            ignoreDebounce = ignoreFollowingTweetsDebounce
+                        )
+                    ) {
+                        return emptyList()
+                    }
+                }
                 val response = try {
                     feedService?.runMApp<Map<String, Any>>(entry, params)
                 } catch (e: Exception) {
