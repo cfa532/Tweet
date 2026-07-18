@@ -23,6 +23,7 @@ import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.VideoManager
@@ -46,6 +47,7 @@ class MediaUploadService(
     companion object {
         private const val TAG = "MediaUploadService"
         private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 50L * 1024L * 1024L
+        private const val UPLOAD_IPFS_TIMEOUT_MS = 120_000
     }
 
     private data class NormalizedVideo(
@@ -438,7 +440,10 @@ class MediaUploadService(
             Timber.tag(TAG).e("Failed to resolve writableUrl after 3 attempts")
             return null
         }
-        val writableClient = appUser.writableClient ?: run {
+        val writableClient = HproseClientPool.getWritableClient(
+            resolvedUrl,
+            UPLOAD_IPFS_TIMEOUT_MS
+        ) ?: run {
             Timber.tag(TAG).e("Writable client not available after resolving writableUrl: $resolvedUrl")
             return null
         }

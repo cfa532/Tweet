@@ -155,8 +155,8 @@ data class User(
         get() {
             val currentWritableUrl = writableUrl ?: return null
 
-            // Pooled, shared writable client targeting hostIds[0] (extended timeout
-            // for long-running mutations like file uploads).
+            // Pooled, shared writable client targeting hostIds[0] with the ordinary
+            // mutation timeout. Long-running operations request their own timeout class.
             return HproseClientPool.getWritableClient(currentWritableUrl)
         }
 

@@ -224,6 +224,10 @@ object NodePool {
 @Suppress("UNCHECKED_CAST")
 object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
+    private const val ADD_TWEET_TIMEOUT_MS = 60_000
+    private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
+    private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
+    private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
     const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
@@ -1942,12 +1946,21 @@ object HproseInstance {
         }
     }
 
-    private suspend fun requireWritableClient(user: User, operation: String): HproseService {
+    private suspend fun requireWritableClient(
+        user: User,
+        operation: String,
+        timeoutMillis: Int? = null
+    ): HproseService {
         val writableUrl = user.resolveWritableUrl()
         if (writableUrl.isNullOrBlank()) {
             throw IllegalStateException("$operation failed: writableUrl could not be resolved for user ${user.mid}")
         }
-        return user.writableClient
+        val client = if (timeoutMillis == null) {
+            user.writableClient
+        } else {
+            HproseClientPool.getWritableClient(writableUrl, timeoutMillis)
+        }
+        return client
             ?: throw IllegalStateException("$operation failed: writable client not available for $writableUrl")
     }
 
@@ -2353,13 +2366,16 @@ object HproseInstance {
         
         var lastFailureWasTimeout = false
 
+        // update_following_tweets is a heavy mutation and must not be retried.
+        val effectiveMaxRetries = if (entry == "update_following_tweets") 0 else maxRetries
+
         // Retry logic
-        for (attempt in 0..maxRetries) {
+        for (attempt in 0..effectiveMaxRetries) {
             try {
                 val forceRefresh = attempt > 0
                 if (forceRefresh) {
                     // Notify UI about retry attempt
-                    onRetry?.invoke(attempt, maxRetries)
+                    onRetry?.invoke(attempt, effectiveMaxRetries)
 
                     if (lastFailureWasTimeout) {
                         Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: previous feed call timed out; keeping current appUser baseUrl: ${appUser.baseUrl}")
@@ -2381,7 +2397,7 @@ object HproseInstance {
                 val response = try {
                     feedService?.runMApp<Map<String, Any>>(entry, params)
                 } catch (e: Exception) {
-                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     throw e
                 }
 
@@ -2389,7 +2405,7 @@ object HproseInstance {
                 val success = response?.get("success") as? Boolean
                 if (success != true) {
                     val serverMessage = response?.get("message") as? String
-                    Timber.tag("getTweetFeed").w("Feed failed: ${serverMessage ?: "Unknown error occurred"} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").w("Feed failed: ${serverMessage ?: "Unknown error occurred"} (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     
                     // Throw exception to trigger retry logic for server failures
                     // This allows baseUrl refresh and retry on different nodes
@@ -2479,7 +2495,7 @@ object HproseInstance {
                 
                 // Success! Return the result
                 if (attempt > 0) {
-                    Timber.tag("getTweetFeed").d("✅ Successfully fetched tweets after retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").d("✅ Successfully fetched tweets after retry (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                 }
                 return result
                 
@@ -2487,12 +2503,12 @@ object HproseInstance {
                 lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
-                if (isNetworkError && attempt < maxRetries) {
+                if (isNetworkError && attempt < effectiveMaxRetries) {
                     val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                     if (lastFailureWasTimeout) {
-                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying same route (attempt ${attempt + 1}/${maxRetries + 1})")
+                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying same route (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     } else {
-                        Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                        Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     }
                     delay(delayMs.milliseconds)
                     continue
@@ -2502,8 +2518,8 @@ object HproseInstance {
                 Timber.tag("getTweetFeed").e("Exception: $e")
                 Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
                 
-                if (attempt >= maxRetries) {
-                    Timber.tag("getTweetFeed").e("❌ All retry attempts exhausted after ${maxRetries + 1} attempts")
+                if (attempt >= effectiveMaxRetries) {
+                    Timber.tag("getTweetFeed").e("❌ Feed request failed after ${effectiveMaxRetries + 1} attempt(s)")
                 }
             }
         }
@@ -2531,7 +2547,11 @@ object HproseInstance {
         val homeHostId = hostIds.getOrNull(0)
 
         if (!homeHostId.isNullOrBlank()) {
-            val homeService = requireWritableClient(appUser, "update_following_tweets")
+            val homeService = requireWritableClient(
+                appUser,
+                "update_following_tweets",
+                UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS
+            )
             Timber.tag("getTweetFeed").d(
                 "Routing update_following_tweets to appUser home host $homeHostId"
             )
@@ -3316,7 +3336,7 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            val client = requireWritableClient(appUser, "uploadTweet")
+            val client = requireWritableClient(appUser, "uploadTweet", ADD_TWEET_TIMEOUT_MS)
             val rawResponse = try {
                 client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
@@ -3443,7 +3463,7 @@ object HproseInstance {
             // returns a Java-Map-backed object that wrapResponse mishandles),
             // making a clearly successful operation look like failure on the
             // client. By calling the home node directly we never hit it.
-            val homeService = requireWritableClient(appUser, "toggleFollowing")
+            val homeService = requireWritableClient(appUser, "toggleFollowing", TOGGLE_MUTATION_TIMEOUT_MS)
             Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}, homeHostId=${appUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
@@ -3593,7 +3613,7 @@ object HproseInstance {
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
         val author = tweet.interactionHostAuthor ?: tweet.author
             ?: throw Exception("Author not available for toggleFavorite")
-        val authorClient = requireWritableClient(author, "toggleFavorite")
+        val authorClient = requireWritableClient(author, "toggleFavorite", TOGGLE_MUTATION_TIMEOUT_MS)
         return try {
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
@@ -3662,7 +3682,7 @@ object HproseInstance {
         // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
         val author = tweet.interactionHostAuthor ?: tweet.author
             ?: throw Exception("Author not available for toggleBookmark")
-        val authorClient = requireWritableClient(author, "toggleBookmark")
+        val authorClient = requireWritableClient(author, "toggleBookmark", TOGGLE_MUTATION_TIMEOUT_MS)
         return try {
             val rawResponse = try {
                 authorClient.runMApp<Map<String, Any>>(entry, params)
@@ -3949,7 +3969,7 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         // Mutation: route through appUser's writable host (hostIds[0]).
-        val client = requireWritableClient(appUser, "deleteAccount")
+        val client = requireWritableClient(appUser, "deleteAccount", DELETE_ACCOUNT_TIMEOUT_MS)
         val rawResponse = client.runMApp<Any>(entry, params)
         return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
     }
