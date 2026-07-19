@@ -1,291 +1,186 @@
-# FullScreenVideoPlayer Documentation
+# Fullscreen Video Playback
 
 ## Overview
 
-The `FullScreenVideoPlayer` component provides an immersive full-screen video viewing experience with auto-replay functionality, independent mute state management, and efficient player reuse from MediaPreview.
+Android fullscreen video playback is an independently managed playback surface. The current route is:
 
-## Current Implementation
+1. `MediaItemView` prepares the video-list context and navigates to `MediaViewer`.
+2. `MediaBrowser` renders `IndependentFullScreenPlayer` for video media.
+3. `IndependentFullScreenPlayer` owns the fullscreen UI and observes `FullScreenPlayerManager.playerFlow`.
+4. `FullScreenPlayerManager` owns the active `ExoPlayer`, playlist progression, audio policy, recovery monitoring, and cleanup.
+5. `VideoManager` suspends feed work and can transfer a prepared player out of feed ownership.
 
-### Player Listener Management
-```kotlin
-// Create a single listener that will be properly managed
-val playerListener = remember {
-    object : androidx.media3.common.Player.Listener {
-        // ... listener implementation
-    }
-}
+`IndependentFullScreenPlayer` is the active fullscreen implementation used by `MediaBrowser`. The overloads in `FullScreenVideoPlayer.kt` are legacy/alternate components and are not the primary `MediaBrowser` path described here.
 
-// Add and remove listener properly
-DisposableEffect(exoPlayer) {
-    exoPlayer.addListener(playerListener)
-    onDispose {
-        exoPlayer.removeListener(playerListener)
-    }
-}
-```
+## Ownership Model
 
-### Coroutine Cancellation
-```kotlin
-LaunchedEffect(autoPlay) {
-    if (autoPlay) {
-        while (isActive) { // Automatically cancelled when composable is disposed
-            delay(500)
-            // ... playback check logic
-        }
-    }
-}
-```
+Fullscreen playback must have one player owner. Android implements that rule in one of two ways:
 
-### VideoManager Cleanup
-```kotlin
-// In TweetApplication.onTerminate()
-override fun onTerminate() {
-    super.onTerminate()
-    VideoManager.stopMemoryMonitoring()
-    VideoManager.releaseAllVideos()
-    applicationScope.cancel()
-}
-```
+- Claim a prepared player from `VideoManager` and move it into `FullScreenPlayerManager` ownership.
+- Create a new fullscreen-owned player when no claimable player exists.
 
-## Key Features
+A claimed player is not left inside the feed cache. `VideoManager.takePlayerForFullScreen()`:
 
-### IPFS-Aware Fullscreen Playback
-- Treat slow buffering as normal on IPFS.
-- Suspend feed/preload work when fullscreen starts so the active video gets bandwidth.
-- Monitor player progress during fullscreen buffering. If `currentPosition` or `bufferedPosition` advances, keep waiting.
-- Only nudge playback after a no-progress grace window; avoid player recreation unless there is a real player error.
+- removes the player from `videoPlayers`;
+- cancels its preload work;
+- removes active, visible, preloaded, and coordinator tracking;
+- clears player-access and preload metadata;
+- increments the player generation so stale feed composables re-evaluate;
+- clears the old video surface; and
+- pauses playback before returning the player to fullscreen.
 
-### 1. **Auto-Replay Functionality**
-- **Automatic restart**: Videos automatically restart when they end in full screen mode
-- **Configurable**: Can be enabled/disabled via the `autoReplay` parameter
-- **Seamless experience**: No interruption in playback during replay
+This is an ownership transfer, not shared access. Feed and fullscreen controllers do not intentionally drive the same `ExoPlayer` at the same time.
 
-### 2. **Independent Mute State Management**
-- **Full screen unmuted**: Videos are always unmuted (volume = 1f) in full screen mode
-- **State preservation**: Original mute state is stored when entering full screen
-- **State restoration**: Original mute state is restored when exiting full screen
-- **No interference**: Full screen mute state doesn't affect MediaPreview mute state
+## Entry Flow
 
-### 3. **Efficient Player Reuse**
-- **Shared instances**: Reuses the same ExoPlayer instance from MediaPreview
-- **State preservation**: Maintains current playback position and state
-- **Memory optimization**: Prevents creation of duplicate player instances
-- **Smooth transitions**: No interruption when switching between preview and full screen
+When a user taps a video, `MediaItemView` builds `MediaViewerParams` and prepares the fullscreen list:
 
-## Component Parameters
+- Feed and comment video surfaces synchronize their coordinator list to `FullScreenPlayerManager`, then stop coordinator-driven playback.
+- The main video in tweet detail is intentionally outside the comments coordinator, so it seeds fullscreen from the exact media payload.
+- Feed/preload work is suspended for the selected video.
+- The selected video is paused before navigation.
+- Navigation opens `NavTweet.MediaViewer`.
 
-```kotlin
-@Composable
-fun FullScreenVideoPlayer(
-    videoMid: MimeiId,                    // Unique video identifier
-    videoUrl: String,                     // Video URL
-    onClose: () -> Unit,                  // Callback when user exits full screen
-    autoPlay: Boolean = true,             // Auto-start playback when entering full screen (default)
-    enableImmersiveMode: Boolean = true,  // Enable immersive mode (hide system bars)
-    autoReplay: Boolean = true,           // Auto-replay when video ends
-    onHorizontalSwipe: ((direction: Int) -> Unit)? = null // Horizontal swipe navigation
-)
-```
+`MediaBrowser` verifies that the manager's list contains the tapped video. If it does, that cross-surface list is used. Otherwise, it falls back to the video items carried in `MediaViewerParams`.
 
-## Usage Examples
+## Player Acquisition
 
-### Basic Usage
-```kotlin
-FullScreenVideoPlayer(
-    videoMid = videoMid,
-    videoUrl = videoUrl,
-    onClose = { /* Handle exit */ }
-)
-```
+`FullScreenPlayerManager.playCurrentVideo()` performs the following sequence:
 
-### With Custom Settings
-```kotlin
-FullScreenVideoPlayer(
-    videoMid = videoMid,
-    videoUrl = videoUrl,
-    onClose = { /* Handle exit */ },
-    autoReplay = true,
-    enableImmersiveMode = true,
-    onHorizontalSwipe = { direction ->
-        // Handle horizontal swipe navigation
-        when (direction) {
-            -1 -> navigateToPrevious()
-            1 -> navigateToNext()
-        }
-    }
-)
-```
+1. Protect the current video and up to two neighboring videos from cleanup.
+2. Mark the current media ID as fullscreen-owned.
+3. Suspend feed preloading and pause competing feed players.
+4. Pause any cached player stored under the current media ID.
+5. Try `VideoManager.takePlayerForFullScreen(videoMid)`.
+6. If a prepared player is claimed, prepare it and switch fullscreen to it.
+7. Otherwise, resolve the media URL and create a new fullscreen player.
 
-## Mute State Handling
+The fallback player uses fullscreen-specific buffering values:
 
-### Entering Full Screen
-1. **Store original state**: Captures the current volume level (0f = muted, 1f = unmuted)
-2. **Set to unmuted**: Forces volume to 1f for full screen experience
-3. **Preserve playback**: Maintains current playback position and state
+- minimum buffer: 30 seconds;
+- maximum buffer: 30 seconds;
+- initial playback buffer: 1.5 seconds;
+- rebuffer playback threshold: 8 seconds; and
+- no feed-style video width, height, or bitrate cap.
 
-### During Full Screen
-- **Always unmuted**: Volume remains at 1f regardless of original state
-- **Independent control**: User can adjust volume using system controls
-- **No interference**: Changes don't affect the original MediaPreview state
+HLS URLs are resolved before player creation so the fullscreen path does not repeatedly guess playlist filenames.
 
-### Exiting Full Screen
-1. **Restore original state**: Sets volume back to original level (0f or 1f)
-2. **Preserve position**: Maintains current playback position
-3. **Resume playback**: Continues from where it left off in MediaPreview
+## Switching Videos
 
-## Auto-Replay Implementation
+`FullScreenPlayerManager.switchToPlayer()` is the single ownership boundary for an active fullscreen player. It:
 
-### When Auto-Replay is Enabled
-```kotlin
-override fun onPlaybackStateChanged(playbackState: Int) {
-    when (playbackState) {
-        androidx.media3.common.Player.STATE_ENDED -> {
-            if (autoReplay) {
-                exoPlayer.seekTo(0)
-                exoPlayer.playWhenReady = true
-                exoPlayer.play()
-            }
-        }
-    }
-}
-```
+- clears the previous fullscreen media marker;
+- marks the new media ID as fullscreen-owned;
+- removes the old auto-advance listener;
+- releases the old player when it differs from the incoming player;
+- publishes the new player through `playerFlow`;
+- forces `volume = 1f`;
+- sets `playWhenReady = true`;
+- installs the auto-advance listener;
+- starts progress monitoring; and
+- warms the next video's cache/metadata.
 
-### When Auto-Replay is Disabled
-- **Sequential playback**: Notifies VideoManager for playlist handling
-- **Manual control**: User must manually restart the video
-- **Integration**: Works with VideoManager's sequential playback system
+Only one fullscreen `ExoPlayer` is kept active. Warming the next item does not create a second fullscreen player.
 
-## Player Reuse Strategy
+## Audio Policy
 
-### Getting Player Instance
-```kotlin
-val exoPlayer = remember(videoMid) {
-    // Get existing player from VideoManager
-    val existingPlayer = VideoManager.getVideoPlayer(context, videoMid, videoUrl)
-    
-    // Store original state
-    originalMuteState = existingPlayer.volume == 0f
-    wasPlayingBefore = existingPlayer.playWhenReady
-    
-    existingPlayer
-}
-```
+Fullscreen playback is always audible unless the device or system audio state prevents output.
 
-### State Preservation
-- **Playback position**: Maintains current time position
-- **Playback state**: Preserves play/pause state
-- **Volume state**: Stores original mute state for restoration
-- **Buffer state**: Keeps existing buffered content
+- A claimed player is set to `volume = 1f` before it becomes active.
+- Every player is set to `volume = 1f` again at the final switch boundary.
+- The feed's saved speaker-mute preference is not written by fullscreen.
 
-## Integration with VideoManager
+The current implementation does not restore a claimed player's previous volume on exit. The fullscreen player is released during cleanup, and the feed later acquires its own player using the feed mute policy.
 
-### Player Retrieval
-- **State preservation**: Uses `VideoManager.getVideoPlayer()` to get existing player
-- **Memory management**: Leverages VideoManager's memory optimization
-- **Error handling**: Benefits from VideoManager's error recovery
+## Controls and Buffering UI
 
-### State Management
-- **Active tracking**: VideoManager tracks active video instances
-- **Memory cleanup**: Automatic cleanup of unused players
-- **Sequential playback**: Integration with playlist functionality
+`IndependentFullScreenPlayer` uses Media3's native `PlayerView` controls:
 
-## User Interaction
+- `useController = true`;
+- `controllerAutoShow = false`;
+- tapping the player surface lets `PlayerView` show or hide its controls;
+- tapping play or pause is handled by the native controller;
+- controller visibility drives the tweet-information overlay; and
+- the overlay includes close, next, and previous actions.
 
-### Gesture Controls
-- **Tap**: Toggle control visibility
-- **Vertical drag-to-exit (both variants)**:
-  - Drag down to dismiss the fullscreen player
-  - Exit threshold: ~220f of downward drag (tunable)
-  - Visuals while dragging:
-    - `translationY = verticalDragOffset`
-    - `scaleX/scaleY = (1f - verticalDragOffset/800f).coerceAtLeast(0.8f)`
-    - `alpha = 1f - (verticalDragOffset/500f).coerceAtMost(0.3f)`
-- **Horizontal drag (videoUrl variant only, optional)**: Triggers `onHorizontalSwipe(direction)` when |drag| > 100f
+The information overlay starts visible and its Compose state is set to hidden after three seconds. Native `PlayerView` retains its own controller timeout behavior; its visibility callback updates the same overlay state whenever the native controller shows or hides. The player uses `SHOW_BUFFERING_WHEN_PLAYING`, so the native buffering indicator is tied to active playback rather than a normal paused state.
 
-### Visual Feedback
-- **Unified drag animation** (same as `IndependentFullScreenPlayer`): moderate shrink (min 0.8f), fade, and follow-the-finger translation
-- **Control fade**: Auto-hide controls after 2 seconds
-- **Exit animation**: Smooth transition when exiting full screen
+## Gestures and Presentation
 
-## Variants and Behavior
+Fullscreen presentation:
 
-There are two overloads of `FullScreenVideoPlayer`:
+- hides system bars;
+- allows device rotation while active;
+- restores system bars on exit; and
+- locks orientation back to portrait when disposed.
 
-1) `FullScreenVideoPlayer(existingPlayer: ExoPlayer, ...)`
-   - Reuses an existing player instance
-   - Vertical drag-to-exit with the unified translation/scale/alpha formula above
+Vertical gestures provide navigation and dismissal:
 
-2) `FullScreenVideoPlayer(videoUrl: String, ...)`
-   - Manages its own full screen player
-   - Supports both vertical drag-to-exit (unified visuals) and optional horizontal swipe (`onHorizontalSwipe`)
+- a large downward drag closes fullscreen;
+- an upward drag advances to the next video when multiple videos are available;
+- a single-video fullscreen closes after a qualifying vertical gesture; and
+- smaller downward drags snap back.
 
-Both variants now share the same drag scaling algorithm as `IndependentFullScreenPlayer` for consistent feel.
+The video follows the drag with translation and scales down to a minimum of `0.8f` for visual feedback.
 
-## Error Handling
+## Playlist Behavior
 
-### Player Errors
-- **Graceful degradation**: Logs errors without crashing
-- **Fallback support**: Leverages VideoManager's fallback mechanisms
-- **User feedback**: Maintains responsive UI during errors
+The fullscreen playlist can come from the active video coordinator or from the exact media payload passed through navigation.
 
-### Network Issues
-- **Buffering indicators**: Shows loading state during network delays
-- **Error recovery**: Automatic retry through VideoManager
-- **Offline support**: Works with cached content
+- `playNextVideo()` advances until the end of the list; reaching the end stops playback.
+- `playPreviousVideo()` moves backward and wraps from the first item to the last.
+- Natural playback completion automatically calls `playNextVideo()` unless a manual navigation transition is already in progress.
+- The manager protects the current item and two neighbors on each side from cleanup.
+- Only the next video's cache and metadata are warmed.
 
-## Performance Considerations
+## Slow-Network Recovery
 
-### Memory Management
-- **Player reuse**: Prevents duplicate player instances
-- **State preservation**: Avoids unnecessary player resets
-- **Automatic cleanup**: VideoManager handles memory optimization
-- **Listener cleanup**: Proper removal of player listeners
-- **Coroutine cancellation**: Automatic cancellation of background tasks
+Slow IPFS buffering is treated as normal while playback or buffered data continues to advance.
 
-### Battery Optimization
-- **Efficient playback**: Reuses existing buffered content
-- **State tracking**: Minimal overhead for state management
-- **Resource sharing**: Shared player instances reduce resource usage
-- **Background task management**: Proper cleanup prevents unnecessary background work
+The progress monitor checks every two seconds. It waits while either playback position or buffered position makes progress. If the player intends to play but neither value advances for 15 seconds, the manager nudges the existing player by seeking to its current position, preparing it if idle, and restoring `playWhenReady = true`.
 
-## Best Practices
+The monitor does not recreate a player merely because it is buffering. Player creation is reserved for the initial fallback path, video changes, or explicit player-error recovery elsewhere in the playback stack.
 
-### Implementation
-1. **Always use VideoManager**: Leverage centralized player management
-2. **Preserve state**: Use `getVideoPlayer()` for full screen
-3. **Handle mute state**: Always restore original mute state on exit
-4. **Enable auto-replay**: Provide better user experience in full screen
-5. **Clean up listeners**: Always remove player listeners in `DisposableEffect`
-6. **Use isActive**: Check coroutine state before running loops
+## App Lifecycle
 
-### User Experience
-1. **Smooth transitions**: Ensure no interruption during mode switches
-2. **Consistent behavior**: Maintain predictable mute state behavior
-3. **Responsive controls**: Provide immediate feedback to user actions
-4. **Accessibility**: Support system volume controls and accessibility features
+When the app enters `ON_PAUSE` or `ON_STOP`, fullscreen records whether playback should resume, then pauses the active player.
 
-## Troubleshooting
+On `ON_START` or `ON_RESUME`, playback resumes only when it was active before the lifecycle pause and the video has not ended.
 
-### Common Issues
-1. **Volume not restored**: Check if `originalMuteState` is properly captured
-2. **Auto-replay not working**: Verify `autoReplay` parameter is set to `true`
-3. **Player not reusing**: Ensure `VideoManager.getVideoPlayer()` is used
-4. **State loss**: Check if player state is being reset unnecessarily
+## Exit and Cleanup
 
-### Debug Logging
-- **State changes**: Logs playback state transitions
-- **Mute state**: Logs mute state restoration
-- **Player reuse**: Logs when existing players are reused
-- **Error handling**: Logs player errors and recovery attempts
-- **Memory management**: Logs memory cleanup operations
+Disposing `IndependentFullScreenPlayer` pauses the active player and calls `FullScreenPlayerManager.cleanup()`.
 
-## Future Enhancements
+Cleanup:
 
-### Potential Improvements
-1. **Custom controls**: Add custom video controls overlay
-2. **Picture-in-picture**: Support for PiP mode
-3. **Quality selection**: Dynamic quality switching
-4. **Subtitle support**: Display video subtitles
-5. **Playback speed**: Variable playback speed controls
-6. **Memory profiling**: Add memory usage monitoring and alerts
-7. **Background playback**: Support for background audio playback
+- removes the auto-advance listener;
+- pauses and stops the player;
+- clears its video surface and media items;
+- releases the player;
+- cancels progress monitoring;
+- clears `playerFlow`;
+- clears fullscreen ownership and protected-video markers;
+- clears playlist, URL, index, callback, and loading state; and
+- invalidates pending loads by incrementing the load generation.
+
+The fullscreen player is not returned to the feed. When navigation exposes the feed again, feed composables reacquire or create players under normal feed ownership and apply the saved feed mute preference.
+
+## Source Map
+
+- `app/src/main/java/us/fireshare/tweet/tweet/MediaItemView.kt`: tap handling, list synchronization, feed stop, and navigation.
+- `app/src/main/java/us/fireshare/tweet/widget/MediaBrowser.kt`: media-route resolution and `IndependentFullScreenPlayer` presentation.
+- `app/src/main/java/us/fireshare/tweet/widget/IndependentFullScreenPlayer.kt`: native controls, overlay, gestures, lifecycle, rotation, and disposal.
+- `app/src/main/java/us/fireshare/tweet/widget/FullScreenPlayerManager.kt`: exclusive player ownership, loading, audio, playlist, monitoring, and cleanup.
+- `app/src/main/java/us/fireshare/tweet/widget/VideoManager.kt`: feed suspension, player claiming, generation invalidation, and fullscreen protection.
+
+## Invariants
+
+When changing fullscreen playback, preserve these invariants:
+
+1. A fullscreen player has one active owner.
+2. A claimed player is removed from feed tracking before fullscreen uses it.
+3. Feed and preload activity do not compete with the active fullscreen target.
+4. Fullscreen playback sets its own audible volume without changing the feed mute preference.
+5. Pausing through native controls does not represent buffering.
+6. Stale asynchronous loads cannot replace the current fullscreen video.
+7. Cleanup releases fullscreen resources and clears ownership markers.
