@@ -47,12 +47,6 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FollowUserWorker
 
-internal fun shouldResyncProfileUser(hostIds: List<MimeiId>?): Boolean {
-    val rootHostId = hostIds?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return false
-    val accessNodeId = hostIds.getOrNull(1) ?: rootHostId
-    return accessNodeId != rootHostId
-}
-
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
     @Assisted val userId: MimeiId
@@ -318,10 +312,6 @@ class UserViewModel @AssistedInject constructor(
         val currentUser = _user.value
         if (currentUser.mid != userId || currentUser.baseUrl.isNullOrBlank()) {
             Timber.tag("UserViewModel").d("Profile route not ready for resync user $userId")
-            return
-        }
-        if (!shouldResyncProfileUser(currentUser.hostIds)) {
-            Timber.tag("UserViewModel").d("Skipping resync for $userId: current read node is already root host")
             return
         }
 
