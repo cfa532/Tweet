@@ -42,8 +42,9 @@ Comment shares append `?fromComment=true&parentTweetId={mid}&parentAuthorId={mid
   `publicDeepLinkHost=debug.dtweet.invalid` and `appLinkAutoVerify=false` so
   the debug app cannot steal production `dtweet.com` links.
 - `app/src/main/AndroidManifest.xml` — app-link intent filter with
-  `fireshare.uk` plus `${publicDeepLinkHost}` and path patterns `/tweet/.*`,
-  `/user/.*`, `/profile/.*`.
+  `${publicDeepLinkHost}` and path patterns `/tweet/.*`, `/user/.*`,
+  `/profile/.*`. Release resolves that host to `dtweet.com`; debug resolves it
+  to `debug.dtweet.invalid`.
 - `app/src/main/java/us/fireshare/tweet/HproseInstance.kt` — `check_upgrade`
   supplies the share domain for the detail-view share button.
 - `viewmodel/TweetViewModel.kt` — `ShareLinkStyle` enum + `shareTweet`;
@@ -59,10 +60,21 @@ Package `us.fireshare.tweet`; fingerprints:
 - Local upload key `tweet_keystore.jks` (`42:B9:90:AF…`) — sideloaded release
   builds (both `play` and `full` flavors share the applicationId)
 
+The release `assetlinks.json` entry for `dtweet.com` must include both
+relations:
+
+- `delegate_permission/common.handle_all_urls`
+- `delegate_permission/common.get_login_creds`
+
+`common.get_login_creds` is required for Google Play credential sharing.
+
 Do not include `us.fireshare.tweet.debug` or the debug keystore fingerprint in
 the public `dtweet.com` `assetlinks.json`. If both release and debug are
 verified for the same host, Android may open the debug app for production
 links.
+
+Do not keep `fireshare.uk` in Android app-link filters. `dtweet.com` is the
+public app-link host now.
 
 Verify on a device: `adb shell pm get-app-links us.fireshare.tweet`
 (dtweet.com should show `verified`).
