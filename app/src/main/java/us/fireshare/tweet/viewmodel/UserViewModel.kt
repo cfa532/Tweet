@@ -46,6 +46,13 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.service.FollowUserWorker
+import java.util.concurrent.ConcurrentHashMap
+
+enum class SavedMutationUpdatePhase {
+    OPTIMISTIC,
+    CONFIRMED,
+    ROLLBACK
+}
 
 @HiltViewModel(assistedFactory = UserViewModel.UserViewModelFactory::class)
 class UserViewModel @AssistedInject constructor(
@@ -141,6 +148,8 @@ class UserViewModel @AssistedInject constructor(
     val bookmarks: StateFlow<List<Tweet>> get() = _bookmarks.asStateFlow()
     private val _favorites = MutableStateFlow<List<Tweet>>(emptyList())
     val favorites: StateFlow<List<Tweet>> get() = _favorites.asStateFlow()
+    private val optimisticBookmarkStates = ConcurrentHashMap<MimeiId, Boolean>()
+    private val optimisticFavoriteStates = ConcurrentHashMap<MimeiId, Boolean>()
 
     // Track if initial server load completed (to trigger scroll to top after cached data)
     private val _bookmarksInitialLoadComplete = MutableStateFlow(false)
@@ -1081,16 +1090,6 @@ class UserViewModel @AssistedInject constructor(
      * Returns List<Tweet?> for pagination logic
      * */
     suspend fun getBookmarks(pageNumber: Int): List<Tweet?> {
-        // Load cached bookmarks first for instant display (only on initial load, not refresh)
-        // Skip cache if bookmarks list already has items to avoid reordering during refresh
-        if (pageNumber == 0 && userId == appUser.mid && _bookmarks.value.isEmpty()) {
-            val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
-            if (cachedBookmarks.isNotEmpty()) {
-                _bookmarks.value = cachedBookmarks
-                Timber.tag("getBookmarks").d("📦 Loaded ${cachedBookmarks.size} cached bookmarks")
-            }
-        }
-        
         // Ensure we have the latest user data before loading bookmarks
         if (userId == appUser.mid) {
             refreshFromAppUser()
@@ -1108,24 +1107,46 @@ class UserViewModel @AssistedInject constructor(
 
         // Filter out null elements and get valid tweets
         val validTweets = tweetsWithNulls.filterNotNull()
+            .onEach { tweet ->
+                optimisticBookmarkStates[tweet.mid]?.let { optimisticState ->
+                    tweet.isBookmarked = optimisticState
+                    tweet.bookmarkOverride = optimisticState
+                    if (!optimisticState) {
+                        TweetCacheManager.removeTweetFromCache(
+                            tweet.mid,
+                            TweetCacheManager.getBookmarksCacheId(appUser.mid)
+                        )
+                    }
+                }
+            }
+            .filter { optimisticBookmarkStates[it.mid] != false }
+        val displayTweets = if (pageNumber == 0) {
+            val serverIds = validTweets.mapTo(mutableSetOf()) { it.mid }
+            val optimisticAdditions = _bookmarks.value.filter {
+                optimisticBookmarkStates[it.mid] == true && it.mid !in serverIds
+            }
+            optimisticAdditions + validTweets
+        } else {
+            validTweets
+        }
 
         Timber.tag("getBookmarks")
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list and preserve server order
-            _bookmarks.value = validTweets
+            _bookmarks.value = displayTweets
             // Signal that initial server load is complete (for scroll-to-top)
             _bookmarksInitialLoadComplete.value = true
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list while preserving order
             _bookmarks.update { currentBookmarks ->
-                val newTweetsMap = validTweets.associateBy { it.mid }
+                val newTweetsMap = displayTweets.associateBy { it.mid }
                 val updatedBookmarks = currentBookmarks.map { bookmark ->
                     newTweetsMap[bookmark.mid] ?: bookmark
                 }
-                val finalBookmarks = (updatedBookmarks + validTweets)
+                val finalBookmarks = (updatedBookmarks + displayTweets)
                     .distinctBy { it.mid }
 
                 // Don't override the count - it should come from server data, not local list size
@@ -1137,66 +1158,74 @@ class UserViewModel @AssistedInject constructor(
         return tweetsWithNulls
     }
 
+    suspend fun loadInitialBookmarksFromCache() {
+        if (userId != appUser.mid || _bookmarks.value.isNotEmpty()) return
+        val cachedBookmarks = HproseInstance.loadCachedBookmarks(0, TW_CONST.PAGE_SIZE)
+            .filter { optimisticBookmarkStates[it.mid] != false }
+        if (cachedBookmarks.isNotEmpty()) {
+            _bookmarks.value = cachedBookmarks
+            Timber.tag("getBookmarks").d("📦 Loaded ${cachedBookmarks.size} cached bookmarks")
+        }
+    }
+
     /**
-     * Update in-memory bookmark data for display.
-     * This method now uses server data instead of optimistic updates.
+     * Update bookmark membership, counts, and list cache immediately.
      *
      * @param tweet The tweet to bookmark or unbookmark
      * @param isBookmarked True to add bookmark, false to remove bookmark
      */
-    fun updateBookmark(tweet: Tweet, isBookmarked: Boolean) {
-        // Get current user state for logging
-        val currentUser = user.value
+    fun updateBookmark(
+        tweet: Tweet,
+        isBookmarked: Boolean,
+        phase: SavedMutationUpdatePhase
+    ) {
+        val previousIds = appUser.bookmarkedTweets.orEmpty()
+        if (phase != SavedMutationUpdatePhase.CONFIRMED) {
+            appUser.bookmarksCount = maxOf(
+                0,
+                appUser.bookmarksCount + if (isBookmarked) 1 else -1
+            )
+        }
+        appUser.bookmarkedTweets = if (isBookmarked) {
+            listOf(tweet.mid) + previousIds.filterNot { it == tweet.mid }
+        } else {
+            previousIds.filterNot { it == tweet.mid }
+        }
 
-        // Log the operation details for debugging
-        Timber.tag("UserViewModel")
-            .d("updateBookmark: Current bookmarks count: ${currentUser.bookmarksCount}")
-        Timber.tag("UserViewModel").d("updateBookmark: Current user ID: ${currentUser.mid}")
-        Timber.tag("UserViewModel").d("updateBookmark: Tweet author ID: ${tweet.authorId}")
-        Timber.tag("UserViewModel").d("updateBookmark: Is bookmark action: $isBookmarked")
+        when (phase) {
+            SavedMutationUpdatePhase.OPTIMISTIC ->
+                optimisticBookmarkStates[tweet.mid] = isBookmarked
+            SavedMutationUpdatePhase.ROLLBACK ->
+                optimisticBookmarkStates.remove(tweet.mid)
+            SavedMutationUpdatePhase.CONFIRMED -> Unit
+        }
 
-        // Use the server's updated user data (appUser) instead of calculating locally
-        val serverBookmarksCount = appUser.bookmarksCount
-        
-        // Update the user state with server data
+        if (isBookmarked) {
+            _bookmarks.update { current ->
+                listOf(tweet) + current.filterNot { it.mid == tweet.mid }
+            }
+            TweetCacheManager.saveTweet(
+                tweet,
+                TweetCacheManager.getBookmarksCacheId(appUser.mid)
+            )
+        } else {
+            _bookmarks.update { current -> current.filterNot { it.mid == tweet.mid } }
+            TweetCacheManager.removeTweetFromCache(
+                tweet.mid,
+                TweetCacheManager.getBookmarksCacheId(appUser.mid)
+            )
+        }
+
         setUserState(appUser)
-
-        // Update the public bookmarks count for UI with server count
-        _bookmarksCount.value = serverBookmarksCount
-
-        // Update other count variables to match appUser (but don't override bookmarks count)
+        _bookmarksCount.value = appUser.bookmarksCount
         _favoritesCount.value = appUser.favoritesCount
         _followersCount.value = appUser.followersCount
         _followingsCount.value = appUser.followingCount
         _tweetCount.value = appUser.tweetCount
 
-        // Update the bookmarks list based on server response
-        if (isBookmarked) {
-            // Add tweet to the beginning of bookmarks list if not already present
-            _bookmarks.update { bs -> 
-                if (bs.any { it.mid == tweet.mid }) bs else listOf(tweet) + bs 
-            }
-            Timber.tag("UserViewModel")
-                .d("Server bookmark: User bookmarked tweet ${tweet.mid}, server bookmarks count: $serverBookmarksCount")
-        } else {
-            // Remove tweet from bookmarks list
-            _bookmarks.update { bs -> bs.filterNot { it.mid == tweet.mid } }
-            Timber.tag("UserViewModel")
-                .d("Server bookmark: User unbookmarked tweet ${tweet.mid}, server bookmarks count: $serverBookmarksCount")
-        }
-
-        // Log the final updated bookmark count
-        Timber.tag("UserViewModel")
-            .d("Server bookmark: Updated user bookmarksCount: ${appUser.bookmarksCount}")
-
-        // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
-            Timber.tag("UserViewModel")
-                .d("updateBookmark: Saving user to cache with bookmarksCount: ${appUser.bookmarksCount}")
             TweetCacheManager.saveUser(appUser)
-            Timber.tag("UserViewModel").d("updateBookmark: User saved to cache successfully")
-            
-            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.TweetBookmarked(tweet, isBookmarked))
             TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }
@@ -1206,16 +1235,6 @@ class UserViewModel @AssistedInject constructor(
      * Returns List<Tweet?> for pagination logic
      * */
     suspend fun getFavorites(pageNumber: Int): List<Tweet?> {
-        // Load cached favorites first for instant display (only on initial load, not refresh)
-        // Skip cache if favorites list already has items to avoid reordering during refresh
-        if (pageNumber == 0 && userId == appUser.mid && _favorites.value.isEmpty()) {
-            val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
-            if (cachedFavorites.isNotEmpty()) {
-                _favorites.value = cachedFavorites
-                Timber.tag("getFavorites").d("📦 Loaded ${cachedFavorites.size} cached favorites")
-            }
-        }
-        
         // Ensure we have the latest user data before loading favorites
         if (userId == appUser.mid) {
             refreshFromAppUser()
@@ -1233,24 +1252,46 @@ class UserViewModel @AssistedInject constructor(
 
         // Filter out null elements and get valid tweets
         val validTweets = tweetsWithNulls.filterNotNull()
+            .onEach { tweet ->
+                optimisticFavoriteStates[tweet.mid]?.let { optimisticState ->
+                    tweet.isFavorite = optimisticState
+                    tweet.favoriteOverride = optimisticState
+                    if (!optimisticState) {
+                        TweetCacheManager.removeTweetFromCache(
+                            tweet.mid,
+                            TweetCacheManager.getFavoritesCacheId(appUser.mid)
+                        )
+                    }
+                }
+            }
+            .filter { optimisticFavoriteStates[it.mid] != false }
+        val displayTweets = if (pageNumber == 0) {
+            val serverIds = validTweets.mapTo(mutableSetOf()) { it.mid }
+            val optimisticAdditions = _favorites.value.filter {
+                optimisticFavoriteStates[it.mid] == true && it.mid !in serverIds
+            }
+            optimisticAdditions + validTweets
+        } else {
+            validTweets
+        }
 
         Timber.tag("getFavorites")
             .d("Received ${tweetsWithNulls.size} tweets (${validTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
 
         if (pageNumber == 0) {
             // For refresh (page 0), replace the list and preserve server order
-            _favorites.value = validTweets
+            _favorites.value = displayTweets
             // Signal that initial server load is complete (for scroll-to-top)
             _favoritesInitialLoadComplete.value = true
             // Don't override the count - it should come from server data, not local list size
         } else {
             // For load more (page > 0), append to the list while preserving order
             _favorites.update { currentFavorites ->
-                val newTweetsMap = validTweets.associateBy { it.mid }
+                val newTweetsMap = displayTweets.associateBy { it.mid }
                 val updatedFavorites = currentFavorites.map { favorite ->
                     newTweetsMap[favorite.mid] ?: favorite
                 }
-                val finalFavorites = (updatedFavorites + validTweets)
+                val finalFavorites = (updatedFavorites + displayTweets)
                     .distinctBy { it.mid }
 
                 // Don't override the count - it should come from server data, not local list size
@@ -1262,66 +1303,74 @@ class UserViewModel @AssistedInject constructor(
         return tweetsWithNulls
     }
 
+    suspend fun loadInitialFavoritesFromCache() {
+        if (userId != appUser.mid || _favorites.value.isNotEmpty()) return
+        val cachedFavorites = HproseInstance.loadCachedFavorites(0, TW_CONST.PAGE_SIZE)
+            .filter { optimisticFavoriteStates[it.mid] != false }
+        if (cachedFavorites.isNotEmpty()) {
+            _favorites.value = cachedFavorites
+            Timber.tag("getFavorites").d("📦 Loaded ${cachedFavorites.size} cached favorites")
+        }
+    }
+
     /**
-     * Update in-memory favorite data for display.
-     * This method now uses server data instead of optimistic updates.
+     * Update favorite membership, counts, and list cache immediately.
      *
      * @param tweet The tweet to favorite or unfavorite
      * @param isFavorite True to add favorite, false to remove favorite
      */
-    fun updateFavorite(tweet: Tweet, isFavorite: Boolean) {
-        // Get current user state for logging
-        val currentUser = user.value
+    fun updateFavorite(
+        tweet: Tweet,
+        isFavorite: Boolean,
+        phase: SavedMutationUpdatePhase
+    ) {
+        val previousIds = appUser.favoriteTweets.orEmpty()
+        if (phase != SavedMutationUpdatePhase.CONFIRMED) {
+            appUser.favoritesCount = maxOf(
+                0,
+                appUser.favoritesCount + if (isFavorite) 1 else -1
+            )
+        }
+        appUser.favoriteTweets = if (isFavorite) {
+            listOf(tweet.mid) + previousIds.filterNot { it == tweet.mid }
+        } else {
+            previousIds.filterNot { it == tweet.mid }
+        }
 
-        // Log the operation details for debugging
-        Timber.tag("UserViewModel")
-            .d("updateFavorite: Current favorites count: ${currentUser.favoritesCount}")
-        Timber.tag("UserViewModel").d("updateFavorite: Current user ID: ${currentUser.mid}")
-        Timber.tag("UserViewModel").d("updateFavorite: Tweet author ID: ${tweet.authorId}")
-        Timber.tag("UserViewModel").d("updateFavorite: Is favorite action: $isFavorite")
+        when (phase) {
+            SavedMutationUpdatePhase.OPTIMISTIC ->
+                optimisticFavoriteStates[tweet.mid] = isFavorite
+            SavedMutationUpdatePhase.ROLLBACK ->
+                optimisticFavoriteStates.remove(tweet.mid)
+            SavedMutationUpdatePhase.CONFIRMED -> Unit
+        }
 
-        // Use the server's updated user data (appUser) instead of calculating locally
-        val serverFavoritesCount = appUser.favoritesCount
-        
-        // Update the user state with server data
+        if (isFavorite) {
+            _favorites.update { current ->
+                listOf(tweet) + current.filterNot { it.mid == tweet.mid }
+            }
+            TweetCacheManager.saveTweet(
+                tweet,
+                TweetCacheManager.getFavoritesCacheId(appUser.mid)
+            )
+        } else {
+            _favorites.update { current -> current.filterNot { it.mid == tweet.mid } }
+            TweetCacheManager.removeTweetFromCache(
+                tweet.mid,
+                TweetCacheManager.getFavoritesCacheId(appUser.mid)
+            )
+        }
+
         setUserState(appUser)
-
-        // Update the public favorites count for UI with server count
-        _favoritesCount.value = serverFavoritesCount
-
-        // Update other count variables to match appUser (but don't override favorites count)
+        _favoritesCount.value = appUser.favoritesCount
         _bookmarksCount.value = appUser.bookmarksCount
         _followersCount.value = appUser.followersCount
         _followingsCount.value = appUser.followingCount
         _tweetCount.value = appUser.tweetCount
 
-        // Update the favorites list based on server response
-        if (isFavorite) {
-            // Add tweet to the beginning of favorites list if not already present
-            _favorites.update { bs -> 
-                if (bs.any { it.mid == tweet.mid }) bs else listOf(tweet) + bs 
-            }
-            Timber.tag("UserViewModel")
-                .d("Server favorite: User favorited tweet ${tweet.mid}, server favorites count: $serverFavoritesCount")
-        } else {
-            // Remove tweet from favorites list
-            _favorites.update { bs -> bs.filterNot { it.mid == tweet.mid } }
-            Timber.tag("UserViewModel")
-                .d("Server favorite: User unfavorited tweet ${tweet.mid}, server favorites count: $serverFavoritesCount")
-        }
-
-        // Log the final updated favorite count
-        Timber.tag("UserViewModel")
-            .d("Server favorite: Updated user favoritesCount: ${appUser.favoritesCount}")
-
-        // Persist changes to cache immediately in background
         viewModelScope.launch(IO) {
-            Timber.tag("UserViewModel")
-                .d("updateFavorite: Saving user to cache with favoritesCount: ${appUser.favoritesCount}")
             TweetCacheManager.saveUser(appUser)
-            Timber.tag("UserViewModel").d("updateFavorite: User saved to cache successfully")
-            
-            // Notify other ViewModels that user data has been updated
+            TweetNotificationCenter.post(TweetEvent.TweetLiked(tweet, isFavorite))
             TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
         }
     }

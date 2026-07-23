@@ -1012,30 +1012,43 @@ class TweetViewModel @AssistedInject constructor(
      * Update favorite count and icon right away for better user experience.
      * */
     suspend fun toggleFavorite(
-        updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
+        updateAppUser: (Tweet, Boolean, SavedMutationUpdatePhase) -> Unit
     ) {
-        val isFavorite = tweetState.value.isFavorite
+        val originalTweet = tweetState.value.copy(
+            favorites = tweetState.value.favorites?.toMutableList()
+        )
+        val isFavorite = originalTweet.isFavorite
         val desiredFavorite = !isFavorite
-        _tweetState.value.isFavorite = desiredFavorite
-        _tweetState.value = tweetState.value.copy(
-            favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
-            else tweetState.value.favoriteCount + 1,
+        val optimisticTweet = originalTweet.copy(
+            favorites = originalTweet.favorites?.toMutableList(),
+            favoriteCount = if (isFavorite) max(0, originalTweet.favoriteCount - 1)
+            else originalTweet.favoriteCount + 1,
+        )
+        optimisticTweet.isFavorite = desiredFavorite
+        optimisticTweet.favoriteOverride = desiredFavorite
+        _tweetState.value = optimisticTweet
+        updateAppUser(
+            optimisticTweet,
+            desiredFavorite,
+            SavedMutationUpdatePhase.OPTIMISTIC
         )
 
-        /**
-         * Get the actual server response and update with real data.
-         * */
-        val updatedTweet = HproseInstance.toggleFavorite(tweetState.value, desiredFavorite)
-
-        // Check if the operation failed (if the tweet state didn't change)
-        if (updatedTweet.isFavorite == isFavorite) {
-            // Revert optimistic changes on failure
-            _tweetState.value.isFavorite = isFavorite
-            _tweetState.value = tweetState.value.copy(
-                favoriteCount = if (isFavorite) tweetState.value.favoriteCount + 1
-                else max(0, tweetState.value.favoriteCount - 1),
+        try {
+            val updatedTweet = HproseInstance.toggleFavorite(optimisticTweet, desiredFavorite)
+                ?: throw Exception("Favorite mutation failed")
+            _tweetState.value = updatedTweet
+            updateAppUser(
+                updatedTweet,
+                desiredFavorite,
+                SavedMutationUpdatePhase.CONFIRMED
             )
-            // Show error toast - check both WeakReference and Context are available
+        } catch (e: Exception) {
+            _tweetState.value = originalTweet
+            updateAppUser(
+                originalTweet,
+                isFavorite,
+                SavedMutationUpdatePhase.ROLLBACK
+            )
             val context = notificationContextRef?.get()
             if (context != null) {
                 Toast.makeText(
@@ -1044,40 +1057,51 @@ class TweetViewModel @AssistedInject constructor(
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        } else {
-            _tweetState.value = updatedTweet
-            // Update UserViewModel with the updated appUser data from server
-            updateAppUser(updatedTweet, updatedTweet.isFavorite)
+            Timber.tag("toggleFavorite").e(e, "Failed to update favorite ${originalTweet.mid}")
         }
     }
 
     /**
      * Update bookmark count and icon right away for better user experience.
      * */
-    suspend fun toggleBookmark(updateAppUser: (Tweet, Boolean) -> Unit) {
-        val hasBookmarked = tweetState.value.isBookmarked
+    suspend fun toggleBookmark(
+        updateAppUser: (Tweet, Boolean, SavedMutationUpdatePhase) -> Unit
+    ) {
+        val originalTweet = tweetState.value.copy(
+            favorites = tweetState.value.favorites?.toMutableList()
+        )
+        val hasBookmarked = originalTweet.isBookmarked
         val desiredBookmark = !hasBookmarked
-        _tweetState.value.isBookmarked = desiredBookmark
-        _tweetState.value = tweetState.value.copy(
-            bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
-            else tweetState.value.bookmarkCount + 1,
+        val optimisticTweet = originalTweet.copy(
+            favorites = originalTweet.favorites?.toMutableList(),
+            bookmarkCount = if (hasBookmarked) max(0, originalTweet.bookmarkCount - 1)
+            else originalTweet.bookmarkCount + 1,
+        )
+        optimisticTweet.isBookmarked = desiredBookmark
+        optimisticTweet.bookmarkOverride = desiredBookmark
+        _tweetState.value = optimisticTweet
+        updateAppUser(
+            optimisticTweet,
+            desiredBookmark,
+            SavedMutationUpdatePhase.OPTIMISTIC
         )
 
-        /**
-         * Get the actual server response and update with real data.
-         * If backend fails, the original value will be restored.
-         * */
-        val updatedTweet = HproseInstance.toggleBookmark(tweetState.value, desiredBookmark)
-
-        // Check if the operation failed (if the tweet state didn't change)
-        if (updatedTweet.isBookmarked == hasBookmarked) {
-            // Revert optimistic changes on failure
-            _tweetState.value.isBookmarked = hasBookmarked
-            _tweetState.value = tweetState.value.copy(
-                bookmarkCount = if (hasBookmarked) tweetState.value.bookmarkCount + 1
-                else max(0, tweetState.value.bookmarkCount - 1),
+        try {
+            val updatedTweet = HproseInstance.toggleBookmark(optimisticTweet, desiredBookmark)
+                ?: throw Exception("Bookmark mutation failed")
+            _tweetState.value = updatedTweet
+            updateAppUser(
+                updatedTweet,
+                desiredBookmark,
+                SavedMutationUpdatePhase.CONFIRMED
             )
-            // Show error toast - check both WeakReference and Context are available
+        } catch (e: Exception) {
+            _tweetState.value = originalTweet
+            updateAppUser(
+                originalTweet,
+                hasBookmarked,
+                SavedMutationUpdatePhase.ROLLBACK
+            )
             val context = notificationContextRef?.get()
             if (context != null) {
                 Toast.makeText(
@@ -1086,10 +1110,7 @@ class TweetViewModel @AssistedInject constructor(
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        } else {
-            _tweetState.value = updatedTweet
-            // Update UserViewModel with the updated appUser data from server
-            updateAppUser(updatedTweet, updatedTweet.isBookmarked)
+            Timber.tag("toggleBookmark").e(e, "Failed to update bookmark ${originalTweet.mid}")
         }
     }
 

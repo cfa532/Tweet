@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -85,13 +86,19 @@ fun UserFavorites(
         viewModel.startListeningToNotifications()
     }
 
-    // Only load favorites if the list is empty (initial load)
-    // TweetListView handles pagination, so we don't reload on navigation back
+    // Hydrate an empty list from cache, then refresh page 0 whenever the screen opens.
+    // TweetListView handles subsequent pagination.
     LaunchedEffect(Unit) {
         if (favorites.isEmpty()) {
             withContext(Dispatchers.IO) {
-                viewModel.getFavorites(0) // Load first page only if empty
+                viewModel.loadInitialFavoritesFromCache()
             }
+            // Give Compose one frame to display cached rows before starting the
+            // normal access-node refresh.
+            withFrameNanos { }
+        }
+        withContext(Dispatchers.IO) {
+            viewModel.getFavorites(0)
         }
     }
 

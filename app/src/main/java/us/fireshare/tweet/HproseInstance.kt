@@ -3629,141 +3629,203 @@ object HproseInstance {
         }
     }
 
-    /**
-     * Load favorite status of the tweet by appUser.
-     * */
-    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet {
-        if (!isOnline.value) {
-            Timber.tag("toggleFavorite").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        val entry = "toggle_favorite"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "appuserid" to appUser.mid,
-            "tweetid" to tweet.mid,
-            "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: ""),
-            "isfavorite" to isFavorite
-        )
-        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        val author = tweet.interactionHostAuthor ?: tweet.author
-            ?: throw Exception("Author not available for toggleFavorite")
-        val authorClient = requireWritableClient(author, "toggleFavorite", TOGGLE_MUTATION_TIMEOUT_MS)
-        return try {
-            val rawResponse = try {
-                authorClient.runMApp<Map<String, Any>>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("toggleFavorite").e(e, "Exception calling runMApp for toggleFavorite, tweetId: ${tweet.mid}")
-                throw e
-            }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+    private enum class SavedTweetList(
+        val fallbackEntry: String,
+        val stateParameter: String
+    ) {
+        FAVORITES("toggle_favorite_by_user", "isfavorite"),
+        BOOKMARKS("toggle_bookmark_by_user", "isbookmarked")
+    }
 
-            if (response != null) {
-                // Handle successful response with updated user and tweet data
-                val updatedUserData = response["user"] as? Map<String, Any>
-                val updatedTweetData = response["tweet"] as? Map<String, Any>
-                
-                if (updatedUserData != null) {
-                    // Update appUser directly from the response data
-                    appUser.from(updatedUserData)
-                    TweetCacheManager.saveUser(appUser)
+    @Suppress("UNCHECKED_CAST")
+    private fun unwrapNestedV2Map(response: Any?): Map<String, Any>? {
+        var current = response
+        repeat(3) {
+            val map = current as? Map<String, Any> ?: return null
+            when (map["success"]) {
+                false -> return null
+                true -> {
+                    val data = map["data"]
+                    if (data is Map<*, *>) {
+                        current = data
+                    } else {
+                        return map
+                    }
                 }
-                
-                if (updatedTweetData != null) {
-                    // Create updated tweet from server response
-                    val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.favoriteOverride = updatedTweet.isFavorite
-                    
-                    // Preserve author from original tweet, or fetch if not available
-                    // Don't overwrite with null from fetchUser
-                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
-                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
-                    
-                    return updatedTweet
-                }
-            } else {
-                // Handle error response
-                val error = rawResponse?.get("message") as? String
-                Timber.tag("toggleFavorite").e("Favorite toggle failed: $error")
+                else -> return map
             }
-            
-            // Fallback to original tweet if parsing fails
-            tweet
-        } catch (e: Exception) {
-            Timber.tag("toggleFavorite").e(e)
-            tweet
+        }
+        return current as? Map<String, Any>
+    }
+
+    private fun savedTweetCacheKey(list: SavedTweetList): MimeiId = when (list) {
+        SavedTweetList.FAVORITES -> TweetCacheManager.getFavoritesCacheId(appUser.mid)
+        SavedTweetList.BOOKMARKS -> TweetCacheManager.getBookmarksCacheId(appUser.mid)
+    }
+
+    private suspend fun removeSavedTweetFromAppUser(
+        tweetId: MimeiId,
+        list: SavedTweetList
+    ) {
+        val client = requireWritableClient(
+            appUser,
+            list.fallbackEntry,
+            TOGGLE_MUTATION_TIMEOUT_MS
+        )
+        val rawResponse = client.runMApp<Map<String, Any>>(
+            list.fallbackEntry,
+            mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "userid" to appUser.mid,
+                "tweetid" to tweetId,
+                list.stateParameter to false,
+                "skipcontentsync" to true
+            )
+        )
+        val updatedUserData = unwrapNestedV2Map(rawResponse)
+            ?: throw IllegalStateException("${list.fallbackEntry} returned invalid user data")
+        appUser.from(updatedUserData)
+        TweetCacheManager.saveUser(appUser)
+        TweetCacheManager.removeTweetFromCache(tweetId, savedTweetCacheKey(list))
+    }
+
+    private fun optimisticSavedTweetResult(
+        tweet: Tweet,
+        list: SavedTweetList
+    ): Tweet = tweet.copy(
+        favorites = tweet.favorites?.toMutableList()
+    ).also { updatedTweet ->
+        when (list) {
+            SavedTweetList.FAVORITES -> {
+                updatedTweet.isFavorite = false
+                updatedTweet.favoriteOverride = false
+            }
+            SavedTweetList.BOOKMARKS -> {
+                updatedTweet.isBookmarked = false
+                updatedTweet.bookmarkOverride = false
+            }
         }
     }
 
     /**
-     * Load bookmark status of the tweet by appUser.
-     * */
-    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet {
-        if (!isOnline.value) {
-            Timber.tag("toggleBookmark").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        val entry = "toggle_bookmark"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "userid" to appUser.mid,
-            "tweetid" to tweet.mid,
-            "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: ""),
-            "isbookmarked" to isBookmarked
-        )
-        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        val author = tweet.interactionHostAuthor ?: tweet.author
-            ?: throw Exception("Author not available for toggleBookmark")
-        val authorClient = requireWritableClient(author, "toggleBookmark", TOGGLE_MUTATION_TIMEOUT_MS)
-        return try {
-            val rawResponse = try {
-                authorClient.runMApp<Map<String, Any>>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("toggleBookmark").e(e, "Exception calling runMApp for toggleBookmark, tweetId: ${tweet.mid}")
-                throw e
-            }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+     * Toggle favorite on the author's root. Removal falls back to the app
+     * user's root when the tweet author is missing or no longer writable.
+     */
+    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? {
+        if (!isOnline.value) throw Exception("No network connection")
 
-            if (response != null) {
-                // Handle successful response with updated user and tweet data
-                val updatedUserData = response["user"] as? Map<String, Any>
-                val updatedTweetData = response["tweet"] as? Map<String, Any>
-                
-                if (updatedUserData != null) {
-                    // Update appUser directly from the response data
-                    appUser.from(updatedUserData)
-                    TweetCacheManager.saveUser(appUser)
-                }
-                
-                if (updatedTweetData != null) {
-                    // Create updated tweet from server response
-                    val updatedTweet = Tweet.from(updatedTweetData)
-                    updatedTweet.bookmarkOverride = updatedTweet.isBookmarked
-                    
-                    // Preserve author from original tweet, or fetch if not available
-                    // Don't overwrite with null from fetchUser
-                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
-                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
-                    
-                    return updatedTweet
-                }
-            } else {
-                // Handle error response
-                val error = rawResponse?.get("message") as? String
-                Timber.tag("toggleBookmark").e("Bookmark toggle failed: $error")
+        try {
+            val author = tweet.interactionHostAuthor ?: tweet.author
+                ?: throw Exception("Author not available for toggleFavorite")
+            val authorClient = requireWritableClient(
+                author,
+                "toggleFavorite",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
+            val rawResponse = authorClient.runMApp<Map<String, Any>>(
+                "toggle_favorite",
+                mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "appuserid" to appUser.mid,
+                    "tweetid" to tweet.mid,
+                    "authorid" to tweet.authorId,
+                    "userhostid" to (appUser.hostIds?.first() ?: ""),
+                    "isfavorite" to isFavorite
+                )
+            )
+            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+                ?: throw IllegalStateException("toggle_favorite returned invalid data")
+            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+                appUser.from(updatedUserData)
+                TweetCacheManager.saveUser(appUser)
             }
-            
-            // Fallback to original tweet if parsing fails
-            tweet
-        } catch (e: Exception) {
-            Timber.tag("toggleBookmark").e(e)
-            tweet
+            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+                Tweet.from(updatedTweetData).also {
+                    it.favoriteOverride = it.isFavorite
+                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+                }
+            }
+            if (!isFavorite) {
+                TweetCacheManager.removeTweetFromCache(
+                    tweet.mid,
+                    savedTweetCacheKey(SavedTweetList.FAVORITES)
+                )
+            }
+            return updatedTweet
+                ?: if (!isFavorite) optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+                else throw IllegalStateException("toggle_favorite did not return a tweet")
+        } catch (primaryError: Exception) {
+            if (isFavorite) throw primaryError
+            Timber.tag("toggleFavorite").w(
+                primaryError,
+                "Author mutation failed; removing ${tweet.mid} from app user favorites"
+            )
+            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.FAVORITES)
+            return optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+        }
+    }
+
+    /**
+     * Toggle bookmark on the author's root. Removal falls back to the app
+     * user's root when the tweet author is missing or no longer writable.
+     */
+    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? {
+        if (!isOnline.value) throw Exception("No network connection")
+
+        try {
+            val author = tweet.interactionHostAuthor ?: tweet.author
+                ?: throw Exception("Author not available for toggleBookmark")
+            val authorClient = requireWritableClient(
+                author,
+                "toggleBookmark",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
+            val rawResponse = authorClient.runMApp<Map<String, Any>>(
+                "toggle_bookmark",
+                mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "userid" to appUser.mid,
+                    "tweetid" to tweet.mid,
+                    "authorid" to tweet.authorId,
+                    "userhostid" to (appUser.hostIds?.first() ?: ""),
+                    "isbookmarked" to isBookmarked
+                )
+            )
+            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+                ?: throw IllegalStateException("toggle_bookmark returned invalid data")
+            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+                appUser.from(updatedUserData)
+                TweetCacheManager.saveUser(appUser)
+            }
+            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+                Tweet.from(updatedTweetData).also {
+                    it.bookmarkOverride = it.isBookmarked
+                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+                }
+            }
+            if (!isBookmarked) {
+                TweetCacheManager.removeTweetFromCache(
+                    tweet.mid,
+                    savedTweetCacheKey(SavedTweetList.BOOKMARKS)
+                )
+            }
+            return updatedTweet
+                ?: if (!isBookmarked) optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
+                else throw IllegalStateException("toggle_bookmark did not return a tweet")
+        } catch (primaryError: Exception) {
+            if (isBookmarked) throw primaryError
+            Timber.tag("toggleBookmark").w(
+                primaryError,
+                "Author mutation failed; removing ${tweet.mid} from app user bookmarks"
+            )
+            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.BOOKMARKS)
+            return optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
         }
     }
 
@@ -3808,6 +3870,15 @@ object HproseInstance {
                 UserContentType.BOOKMARKS -> TweetCacheManager.getBookmarksCacheId(user.mid)
                 UserContentType.FAVORITES -> TweetCacheManager.getFavoritesCacheId(user.mid)
                 else -> user.mid // Regular tweets cached by authorId
+            }
+
+            // Page 0 is authoritative for the saved-list cache shown on screen
+            // open. Replace only this membership bucket so removed or nullified
+            // saved tweets cannot reappear on the next cache-first render.
+            if (pageNumber == 0 && response != null &&
+                (type == UserContentType.BOOKMARKS || type == UserContentType.FAVORITES)
+            ) {
+                TweetCacheManager.clearTweetCache(cacheUserId)
             }
 
             response?.map { tweetJson ->

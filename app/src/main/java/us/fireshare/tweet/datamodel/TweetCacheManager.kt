@@ -240,6 +240,41 @@ object TweetCacheManager {
     }
 
     /**
+     * Remove one tweet from one list cache without deleting copies used by
+     * profiles, the main feed, or the other saved list.
+     */
+    fun removeTweetFromCache(tweetId: MimeiId, cacheKey: MimeiId) {
+        synchronized(cacheLock) {
+            memoryCache.remove(tweetMemoryKey(tweetId, cacheKey))
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                HproseInstance.dao.deleteCachedTweetFromCache(tweetId, cacheKey)
+            } catch (e: Exception) {
+                Timber.tag("TweetCacheManager")
+                    .e(e, "Failed to remove $tweetId from cache $cacheKey")
+            }
+        }
+    }
+
+    /**
+     * Clear one list bucket without deleting copies used by profiles, the main
+     * feed, or another saved list. The caller can then repopulate the bucket
+     * from an authoritative page-0 response.
+     */
+    suspend fun clearTweetCache(cacheKey: MimeiId) = withContext(Dispatchers.IO) {
+        synchronized(cacheLock) {
+            val iterator = memoryCache.entries.iterator()
+            while (iterator.hasNext()) {
+                if (iterator.next().value.uid == cacheKey) {
+                    iterator.remove()
+                }
+            }
+        }
+        HproseInstance.dao.deleteCachedTweetsFromCache(cacheKey)
+    }
+
+    /**
      * Evict least recently used tweet entries from memory cache until at or below capacity.
      * Caller must hold [cacheLock]. Database is unchanged; only in-memory cache is trimmed.
      */

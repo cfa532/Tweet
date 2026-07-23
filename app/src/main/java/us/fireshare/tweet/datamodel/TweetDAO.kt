@@ -153,15 +153,15 @@ interface CachedTweetDao {
 
     /**
      * Get cached tweets by user ID.
-     * For bookmarks and favorites, order by cache timestamp to preserve server order
-     * (cache timestamp reflects the order they were saved, which matches server order).
-     * For regular tweets, order by tweet creation timestamp.
+     * Bookmarks and favorites are written sequentially in server order, so their
+     * cache timestamps must be read oldest-first. Regular tweet buckets continue
+     * to use newest-first tweet creation time.
      */
     @Query("SELECT * FROM CachedTweet WHERE uid = :userId " +
             "ORDER BY " +
             "CASE " +
-            "  WHEN uid LIKE 'bookmark_list_%' THEN timestamp " +
-            "  WHEN uid LIKE 'favorite_list_%' THEN timestamp " +
+            "  WHEN uid LIKE 'bookmark_list_%' THEN -timestamp " +
+            "  WHEN uid LIKE 'favorite_list_%' THEN -timestamp " +
             "  ELSE tweetTimestamp " +
             "END DESC " +
             "LIMIT :count OFFSET :offset")
@@ -198,6 +198,9 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedTweet WHERE mid = :tweetId AND uid = :cacheKey")
     fun deleteCachedTweetFromCache(tweetId: MimeiId, cacheKey: MimeiId)
+
+    @Query("DELETE FROM CachedTweet WHERE uid = :cacheKey")
+    fun deleteCachedTweetsFromCache(cacheKey: MimeiId)
 }
 
 @Database(entities = [CachedTweet::class, CachedUser::class, BlacklistEntry::class], version = 14, exportSchema = false)
