@@ -400,7 +400,7 @@ fun TweetDetailScreen(
     LaunchedEffect(Unit) {
         try {
             withContext(Dispatchers.IO) {
-                viewModel.doReadTweet()
+                viewModel.doReadTweet(allowRecoveryOnMissingPayload = true)
                 Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
             }
             while (isActive) {

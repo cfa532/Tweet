@@ -162,6 +162,18 @@ class TweetViewModel @AssistedInject constructor(
     // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
 
+    private fun Tweet.hasDisplayPayload(): Boolean {
+        return !content.isNullOrBlank() ||
+            !title.isNullOrBlank() ||
+            !attachments.isNullOrEmpty() ||
+            originalTweetId != null
+    }
+
+    private fun applyFetchedTweet(fetched: Tweet) {
+        _tweetState.value = fetched
+        _attachments.value = fetched.attachments
+    }
+
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {
         // Extract media ID (CID) from URL to use as key
         val mediaId = extractMediaIdFromUrl(url)
@@ -354,7 +366,7 @@ class TweetViewModel @AssistedInject constructor(
      * tweet's cache so the embedded original sub-view picks it up. For a quoted
      * retweet refreshes both the wrapper and the original in parallel.
      */
-    suspend fun doReadTweet() {
+    suspend fun doReadTweet(allowRecoveryOnMissingPayload: Boolean = false) {
         val currentTweet = tweetState.value
         val originalId = currentTweet.originalTweetId
         val originalAuthor = currentTweet.originalAuthorId
@@ -379,16 +391,23 @@ class TweetViewModel @AssistedInject constructor(
                         val originalJob = async {
                             HproseInstance.getTweet(originalId, originalAuthor, bypassCache = true)
                         }
-                        wrapperJob.await()?.let { _tweetState.value = it }
+                        wrapperJob.await()?.let { applyFetchedTweet(it) }
                         originalJob.await()
                     }
                 }
             } else {
-                HproseInstance.getTweet(
+                val fetched = HproseInstance.getTweet(
                     currentTweet.mid,
                     currentTweet.authorId,
                     bypassCache = true
-                )?.let { _tweetState.value = it }
+                )
+                if (fetched != null) {
+                    applyFetchedTweet(fetched)
+                } else if (allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()) {
+                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
+                        applyFetchedTweet(refreshed)
+                    }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("TweetViewModel").e(e, "doReadTweet failed for ${currentTweet.mid}")
