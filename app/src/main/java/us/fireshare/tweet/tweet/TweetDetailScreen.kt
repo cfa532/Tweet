@@ -1,6 +1,7 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
@@ -81,6 +82,7 @@ import androidx.compose.ui.draw.alpha
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
@@ -140,6 +142,25 @@ fun TweetDetailScreen(
     
     // Prevent double-exit when back button is tapped multiple times
     var isNavigatingBack by remember { mutableStateOf(false) }
+
+    fun navigateBackWithHomeFallback() {
+        if (isNavigatingBack) return
+
+        isNavigatingBack = true
+        val didPop = navController.popBackStack()
+        if (!didPop) {
+            navController.navigate(NavTweet.TweetFeed) {
+                popUpTo(navController.graph.startDestinationId) {
+                    inclusive = true
+                }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    BackHandler {
+        navigateBackWithHomeFallback()
+    }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -467,10 +488,7 @@ fun TweetDetailScreen(
                 // Always-visible back button – independent of scroll-driven alpha
                 IconButton(
                     onClick = {
-                        if (!isNavigatingBack) {
-                            isNavigatingBack = true
-                            navController.popBackStack()
-                        }
+                        navigateBackWithHomeFallback()
                     },
                     enabled = !isNavigatingBack,
                     modifier = Modifier.align(Alignment.CenterStart)

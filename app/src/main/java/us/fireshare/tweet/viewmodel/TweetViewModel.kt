@@ -170,8 +170,17 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     private fun applyFetchedTweet(fetched: Tweet) {
-        _tweetState.value = fetched
-        _attachments.value = fetched.attachments
+        val currentTweet = _tweetState.value
+        val resolvedAuthor = fetched.author ?: currentTweet.author
+        val resolvedTweet = if (resolvedAuthor != null && fetched.author == null) {
+            fetched.copy(author = resolvedAuthor)
+        } else {
+            fetched
+        }
+
+        resolvedTweet.author?.let { TweetCacheManager.saveUser(it) }
+        _tweetState.value = resolvedTweet
+        _attachments.value = resolvedTweet.attachments
     }
 
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {
@@ -236,8 +245,7 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null && cachedTweet.author != null) {
-                        _tweetState.value = cachedTweet
-                        _attachments.value = cachedTweet.attachments
+                        applyFetchedTweet(cachedTweet)
                         return@launch
                     }
                 }
@@ -248,6 +256,7 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.authorId != null) {
                     cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
                     if (cachedUser != null) {
+                        TweetCacheManager.saveUser(cachedUser)
                         val tweetWithAuthor = tweet.copy(author = cachedUser)
                         _tweetState.value = tweetWithAuthor
                     }
@@ -261,6 +270,7 @@ class TweetViewModel @AssistedInject constructor(
                     try {
                         author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
                         if (author != null) {
+                            TweetCacheManager.saveUser(author)
                             val tweetWithAuthor = tweet.copy(author = author)
                             _tweetState.value = tweetWithAuthor
                         } else {
@@ -277,8 +287,7 @@ class TweetViewModel @AssistedInject constructor(
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
                     HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)?.let { fetched ->
-                        _tweetState.value = fetched
-                        _attachments.value = fetched.attachments
+                        applyFetchedTweet(fetched)
                     } ?: run {
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
@@ -443,7 +452,7 @@ class TweetViewModel @AssistedInject constructor(
                         }
                         wrapperJob.await()?.let { refreshed ->
                             if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
-                                _tweetState.value = refreshed
+                                applyFetchedTweet(refreshed)
                             }
                         }
                         originalJob.await()
@@ -452,7 +461,7 @@ class TweetViewModel @AssistedInject constructor(
             } else {
                 HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
                     if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
-                        _tweetState.value = refreshed
+                        applyFetchedTweet(refreshed)
                     }
                 }
             }
@@ -1184,7 +1193,7 @@ class TweetViewModel @AssistedInject constructor(
                                     .d("CommentUploaded event received for tweet ${tweetState.value.mid}, comment ${event.comment.mid}, author ${event.comment.authorId}, current user ${appUser.mid}")
 
                                 // Update the tweet state with new comment count
-                                _tweetState.value = event.parentTweet
+                                applyFetchedTweet(event.parentTweet)
 
                                 // Add the new comment to the comments list
                                 _comments.update { currentComments ->
@@ -1238,7 +1247,7 @@ class TweetViewModel @AssistedInject constructor(
                         is TweetEvent.TweetUpdated -> {
                             // Update tweet if this is the same tweet
                             if (event.tweet.mid == tweetState.value.mid) {
-                                _tweetState.value = event.tweet
+                                applyFetchedTweet(event.tweet)
                             }
                         }
 
@@ -1260,7 +1269,7 @@ class TweetViewModel @AssistedInject constructor(
                                     .d("This tweet (${tweetState.value.mid}) was restored, clearing deleted flag")
                                 // Clear deleted flag and update tweet state
                                 _tweetDeleted.value = false
-                                _tweetState.value = event.tweet
+                                applyFetchedTweet(event.tweet)
                             }
                         }
 

@@ -96,7 +96,8 @@ fun TweetDetailBody(
     val authorStateFlow = remember(tweet.authorId) {
         TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
-    val author by authorStateFlow.collectAsState()
+    val cachedAuthor by authorStateFlow.collectAsState()
+    val author = cachedAuthor ?: tweet.author
 
     Surface(
         // Apply border to the entire TweetBlock

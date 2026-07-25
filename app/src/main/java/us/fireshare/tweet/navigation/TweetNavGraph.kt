@@ -76,7 +76,20 @@ fun TweetNavGraph(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
-    var startDestination: NavTweet = NavTweet.TweetFeed
+    val initialDeepLinkDestination = remember { parseDeepLink(appLinkIntent) }
+    val initialDeepLinkUri = remember { appLinkIntent?.data?.toString() }
+    val startDestination = remember {
+        initialDeepLinkDestination ?: if (appUser.isGuest()) {
+            val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
+            if (alphaId != null) {
+                NavTweet.UserProfile(alphaId)
+            } else {
+                NavTweet.TweetFeed
+            }
+        } else {
+            NavTweet.TweetFeed
+        }
+    }
     val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
@@ -101,32 +114,10 @@ fun TweetNavGraph(
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
-    // Parse deep link from intent
-    val deepLinkDestination = remember(appLinkIntent) {
-        parseDeepLink(appLinkIntent)
-    }
-    
-    // Track the last processed intent URI to avoid duplicate navigation
-    var lastProcessedUri by remember { mutableStateOf<String?>(null) }
-    
-    // Set initial destination if deep link is present
-    if (deepLinkDestination != null) {
-        val currentUri = appLinkIntent?.data?.toString()
-        if (currentUri != lastProcessedUri) {
-            // This is either initial load or a new deep link
-            if (lastProcessedUri == null) {
-                // Initial load - set start destination
-                startDestination = deepLinkDestination
-                lastProcessedUri = currentUri
-            } else {
-                // New deep link while app is running - will be handled by LaunchedEffect
-            }
-        }
-    } else if (appUser.isGuest()) {
-        val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
-        if (alphaId != null) {
-            startDestination = NavTweet.UserProfile(alphaId)
-        }
+    // Track the last processed intent URI to avoid duplicate navigation. A cold-start
+    // deeplink is already represented by startDestination, so mark it processed here.
+    var lastProcessedUri by remember {
+        mutableStateOf(if (initialDeepLinkDestination != null) initialDeepLinkUri else null)
     }
     
     // Handle deep link navigation when app is already running (onNewIntent)
