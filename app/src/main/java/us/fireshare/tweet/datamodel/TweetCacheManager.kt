@@ -170,6 +170,10 @@ object TweetCacheManager {
                     Timber.e("Error saving tweet to database: $e")
                 }
             }
+
+            // Keep the shared user/avatar flow in sync for embedded tweets loaded
+            // outside the normal feed path. saveUser validates identity before writing.
+            tweet.author?.let { saveUser(it) }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")
         }
