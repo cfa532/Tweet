@@ -100,6 +100,7 @@ class TweetActivity : ComponentActivity() {
                 if (isAppReady) {
                     TweetNavGraph(
                         appLinkIntent = activityViewModel.currentIntent.value,
+                        appLinkIntentSequence = activityViewModel.currentIntentSequence.value,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -157,7 +158,6 @@ class TweetActivity : ComponentActivity() {
         }
         
         // Handle initial intent
-        activityViewModel.currentIntent.value = intent
         handleIntent(intent)
 
         UpgradeDownloadState.installCompletedUpgrade(this, fromForeground = true)
@@ -175,6 +175,7 @@ class TweetActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
             activityViewModel.currentIntent.value = intent
+            activityViewModel.currentIntentSequence.value += 1
         }
     }
 
@@ -301,6 +302,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
     private val _isDownloading = MutableStateFlow(false)
     val systemDomainToShare = mutableStateOf<String?>(null)
     val currentIntent = mutableStateOf<Intent?>(null)
+    val currentIntentSequence = mutableStateOf(0L)
 
     /**
      * Load entry URLs from BuildConfig.ENTRY_URLS.

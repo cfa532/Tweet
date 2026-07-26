@@ -73,11 +73,11 @@ val LocalNavController = compositionLocalOf<NavController> {
 @Composable
 fun TweetNavGraph(
     appLinkIntent: Intent?,
+    appLinkIntentSequence: Long,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
     val initialDeepLinkDestination = remember { parseDeepLink(appLinkIntent) }
-    val initialDeepLinkUri = remember { appLinkIntent?.data?.toString() }
     val startDestination = remember {
         initialDeepLinkDestination ?: if (appUser.isGuest()) {
             val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
@@ -114,30 +114,23 @@ fun TweetNavGraph(
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
-    // Track the last processed intent URI to avoid duplicate navigation. A cold-start
-    // deeplink is already represented by startDestination, so mark it processed here.
-    var lastProcessedUri by remember {
-        mutableStateOf(if (initialDeepLinkDestination != null) initialDeepLinkUri else null)
+    // Track the last processed deeplink event. A cold-start deeplink is already
+    // represented by startDestination, so mark the startup event processed here.
+    var lastProcessedDeepLinkSequence by remember {
+        mutableStateOf(if (initialDeepLinkDestination != null) appLinkIntentSequence else 0L)
     }
     
     // Handle deep link navigation when app is already running (onNewIntent)
-    LaunchedEffect(appLinkIntent?.data?.toString()) {
-        val currentUri = appLinkIntent?.data?.toString()
-        if (currentUri != null && currentUri != lastProcessedUri) {
-            val destination = parseDeepLink(appLinkIntent)
-            if (destination != null) {
-                // Navigate to deep link, clearing back stack to root
-                navController.navigate(destination) {
-                    popUpTo(navController.graph.startDestinationId) {
-                        inclusive = false
-                    }
-                    launchSingleTop = true
-                }
-                lastProcessedUri = currentUri
+    LaunchedEffect(appLinkIntentSequence) {
+        if (appLinkIntentSequence != 0L &&
+            appLinkIntentSequence != lastProcessedDeepLinkSequence
+        ) {
+            parseDeepLink(appLinkIntent)?.let { destination ->
+                navController.openExternalDeepLink(destination)
+                lastProcessedDeepLinkSequence = appLinkIntentSequence
+            } ?: run {
+                lastProcessedDeepLinkSequence = appLinkIntentSequence
             }
-        } else if (currentUri == null && lastProcessedUri == null) {
-            // Initial load without deep link - mark as processed
-            lastProcessedUri = ""
         }
     }
 
@@ -319,9 +312,18 @@ fun TweetNavGraph(
     }
 }
 
+private fun NavHostController.openExternalDeepLink(destination: NavTweet.DeepLink) {
+    navigate(destination) {
+        popUpTo(graph.startDestinationId) {
+            inclusive = true
+        }
+        launchSingleTop = true
+    }
+}
+
 /**
  * Parse deep link from intent
- * Expected URL format: http://fireshare.uk/tweet/{tweetId}/{authorId}
+ * Expected URL format: http://dtweet.com/tweet/{tweetId}/{authorId}
  */
 private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     if (intent?.action != Intent.ACTION_VIEW) {
