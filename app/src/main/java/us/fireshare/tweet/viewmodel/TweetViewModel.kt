@@ -171,16 +171,32 @@ class TweetViewModel @AssistedInject constructor(
 
     private fun applyFetchedTweet(fetched: Tweet) {
         val currentTweet = _tweetState.value
-        val resolvedAuthor = fetched.author ?: currentTweet.author
-        val resolvedTweet = if (resolvedAuthor != null && fetched.author == null) {
-            fetched.copy(author = resolvedAuthor)
-        } else {
-            fetched
+        val resolvedTweet = fetched.copy(
+            author = fetched.author ?: currentTweet.author,
+            favorites = fetched.favorites?.toMutableList(),
+            attachments = fetched.attachments?.map { it.copy() }
+        ).also { snapshot ->
+            // Keep presentation-only context while detaching mutable payload
+            // from the list-owned Tweet instance.
+            snapshot.rowTimestamp = fetched.rowTimestamp
+            snapshot.savedParentTweet = fetched.savedParentTweet
+            snapshot.interactionHostAuthor = fetched.interactionHostAuthor
+            snapshot.favoriteOverride = fetched.favoriteOverride
+            snapshot.bookmarkOverride = fetched.bookmarkOverride
         }
 
         resolvedTweet.author?.let { TweetCacheManager.saveUser(it) }
         _tweetState.value = resolvedTweet
         _attachments.value = resolvedTweet.attachments
+    }
+
+    /**
+     * Refresh an existing row ViewModel when its owning list receives a newer
+     * snapshot of the same tweet.
+     */
+    fun updateFromList(updatedTweet: Tweet) {
+        if (updatedTweet.mid != tweetState.value.mid) return
+        applyFetchedTweet(updatedTweet)
     }
 
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {

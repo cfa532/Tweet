@@ -108,12 +108,27 @@ private fun rememberTweetRowViewModel(tweet: Tweet, key: String = tweet.mid): Tw
         }
     }
 
-    return hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         viewModelStoreOwner = owner,
         key = key
     ) { factory ->
         factory.create(tweet)
     }
+
+    // The owner is intentionally stable for the row's lifetime, so Hilt will
+    // not call the factory again when the feed replaces this tweet after an
+    // update from detail view. Push the new list snapshot into the existing VM.
+    // Deep-copy attachments for the effect key because Tweet and attachment
+    // fields are mutable and can otherwise change without changing identity.
+    val tweetUpdateKey = tweet.copy(
+        favorites = tweet.favorites?.toMutableList(),
+        attachments = tweet.attachments?.map { it.copy() }
+    )
+    LaunchedEffect(tweetUpdateKey) {
+        viewModel.updateFromList(tweet)
+    }
+
+    return viewModel
 }
 
 @RequiresApi(Build.VERSION_CODES.R)
