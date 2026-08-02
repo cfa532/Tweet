@@ -1439,9 +1439,10 @@ class UserViewModel @AssistedInject constructor(
                     }
                 }
 
-                // Cached profile state is ready to render before the profile-open
-                // health check and server refresh begin.
-                if (!initialUser.username.isNullOrBlank() || _tweets.value.isNotEmpty()) {
+                // Keep the tweet list loading until the first network request has
+                // completed when there are no cached tweets. A cached user record
+                // alone must not make the empty-state label visible prematurely.
+                if (_tweets.value.isNotEmpty()) {
                     initState.value = false
                 }
 

@@ -72,19 +72,24 @@ object HproseClientPool {
      * Uses round-robin to distribute requests across up to CLIENTS_PER_URL clients
      * 
      * @param baseUrl The base URL of the node/server
+     * @param timeoutMillis Timeout class for this pooled client
      * @return HproseService client for the node, or null if creation fails
      */
-    fun getRegularClient(baseUrl: String): HproseService? {
+    fun getRegularClient(
+        baseUrl: String,
+        timeoutMillis: Int = DEFAULT_CLIENT_TIMEOUT
+    ): HproseService? {
         if (baseUrl.isBlank()) {
             Timber.tag(TAG).w("Cannot create client for blank baseUrl")
             return null
         }
         
         val normalizedUrl = normalizeUrl(baseUrl)
+        val poolKey = regularPoolKey(normalizedUrl, timeoutMillis)
         
         // Try to get existing client first (read lock)
         regularLock.read {
-            regularClients[normalizedUrl]?.let { pool ->
+            regularClients[poolKey]?.let { pool ->
                 if (pool.clients.isNotEmpty()) {
                     // Round-robin selection
                     val clientInfo = pool.clients[pool.nextClientIndex % pool.clients.size]
@@ -100,7 +105,7 @@ object HproseClientPool {
         
         // Create new client if pool doesn't exist or isn't full (write lock)
         return regularLock.write {
-            val pool = regularClients.getOrPut(normalizedUrl) { ClientPool() }
+            val pool = regularClients.getOrPut(poolKey) { ClientPool() }
             
             // If pool already has clients, use round-robin
             if (pool.clients.isNotEmpty()) {
@@ -123,7 +128,7 @@ object HproseClientPool {
             if (pool.clients.size < CLIENTS_PER_URL) {
                 try {
                     val client = HproseClient.create("$normalizedUrl/webapi/")
-                    client.timeout = DEFAULT_CLIENT_TIMEOUT
+                    client.timeout = timeoutMillis
                     val service = client.useService(HproseService::class.java)
                     
                     val clientInfo = ClientInfo(
@@ -274,7 +279,7 @@ object HproseClientPool {
             }
         } else {
             regularLock.write {
-                regularClients[normalizedUrl]?.let { pool ->
+                regularPoolKeys(normalizedUrl).mapNotNull { regularClients[it] }.forEach { pool ->
                     // Decrement reference count for all clients in pool
                     pool.clients.forEach { clientInfo ->
                         clientInfo.referenceCount = maxOf(0, clientInfo.referenceCount - 1)
@@ -294,7 +299,7 @@ object HproseClientPool {
         val normalizedUrl = normalizeUrl(baseUrl)
         
         regularLock.write {
-            regularClients.remove(normalizedUrl)?.let { pool ->
+            regularPoolKeys(normalizedUrl).mapNotNull { regularClients.remove(it) }.forEach { pool ->
                 Timber.tag(TAG).d("Cleared regular client pool for node: $normalizedUrl (${pool.clients.size} clients)")
             }
         }
@@ -312,6 +317,15 @@ object HproseClientPool {
      */
     private fun normalizeUrl(url: String): String {
         return url.trim().removeSuffix("/")
+    }
+
+    private fun regularPoolKey(normalizedUrl: String, timeoutMillis: Int): String {
+        return "$normalizedUrl|$timeoutMillis"
+    }
+
+    private fun regularPoolKeys(normalizedUrl: String): List<String> {
+        val prefix = "$normalizedUrl|"
+        return regularClients.keys.filter { it.startsWith(prefix) }
     }
 
     private fun writablePoolKey(normalizedUrl: String, timeoutMillis: Int): String {

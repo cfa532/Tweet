@@ -227,6 +227,7 @@ object HproseInstance {
     private const val ADD_TWEET_TIMEOUT_MS = 60_000
     private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
     private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
+    private const val GET_TWEET_FEED_TIMEOUT_MS = 15_000
     private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
     const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
     private var _appId: MimeiId = BuildConfig.APP_ID
@@ -1549,7 +1550,8 @@ object HproseInstance {
     suspend fun getHostIP(
         nodeId: MimeiId,
         v4Only: String = HproseInstance.v4Only.toString(),
-        forceHealthCheck: Boolean = false
+        forceHealthCheck: Boolean = false,
+        excludedIP: String? = null
     ): String? {
         if (!isOnline.value) {
             Timber.tag("getHostIP").d("Offline: skipping")
@@ -1558,7 +1560,8 @@ object HproseInstance {
 
         // Step 1: Check NodePool for known IPs and verify health
         val poolIP = NodePool.getIPFromNodeId(nodeId)
-        if (poolIP != null) {
+        val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
+        if (poolIP != null && normalizeIPHealthCacheKey(poolIP) != excludedKey) {
             // Verify the cached IP is still healthy before returning
             val fullUrl = "http://$poolIP"
             
@@ -1572,13 +1575,17 @@ object HproseInstance {
                 NodePool.removeNode(nodeId)
                 // Fall through to Step 2
             }
+        } else if (poolIP != null) {
+            Timber.tag("getHostIP").d(
+                "Skipping pooled IP $poolIP for node $nodeId during alternate-route lookup"
+            )
         }
 
-        val requestKey = "$nodeId|$v4Only|$forceHealthCheck"
+        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|${excludedKey.orEmpty()}"
         val request = hostIPRequestsMutex.withLock {
             hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
                 val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
-                    resolveHostIPAfterPoolMiss(nodeId, v4Only)
+                    resolveHostIPAfterPoolMiss(nodeId, v4Only, excludedIP)
                 }
                 newRequest.invokeOnCompletion {
                     TweetApplication.applicationScope.launch {
@@ -1597,10 +1604,14 @@ object HproseInstance {
         return request.await()
     }
 
-    private suspend fun resolveHostIPAfterPoolMiss(nodeId: MimeiId, v4Only: String): String? {
+    private suspend fun resolveHostIPAfterPoolMiss(
+        nodeId: MimeiId,
+        v4Only: String,
+        excludedIP: String?
+    ): String? {
         // Step 2: Try lookup using appUser's client
         try {
-            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService)
+            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService, excludedIP)
             if (hostIP != null) {
                 // Successfully resolved healthy IP
                 NodePool.updateNodeIP(nodeId, hostIP)
@@ -1631,7 +1642,7 @@ object HproseInstance {
                 val entryIP = findEntryIP()
                 val entryClient = HproseClientPool.getRegularClient("http://$entryIP")
                 
-                val hostIP = _getHostIP(nodeId, v4Only, entryClient)
+                val hostIP = _getHostIP(nodeId, v4Only, entryClient, excludedIP)
                 if (hostIP != null) {
                     NodePool.updateNodeIP(nodeId, hostIP)
                     Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP, updated NodePool")
@@ -1658,7 +1669,8 @@ object HproseInstance {
     private suspend fun _getHostIP(
         nodeId: MimeiId, 
         v4Only: String = HproseInstance.v4Only.toString(),
-        hproseService: HproseService? = appUser.hproseService
+        hproseService: HproseService? = appUser.hproseService,
+        excludedIP: String? = null
     ): String? {
         val entry = "get_node_ips"
         val params = mapOf("aid" to appId, "ver" to "last", "version" to "v2", "nodeid" to nodeId, "v4only" to v4Only)
@@ -1668,11 +1680,15 @@ object HproseInstance {
         
         // If ipArray is valid, try each IP and return the best one
         if (!ipArray.isNullOrEmpty()) {
-            val ipCount = ipArray.size
-            val ipList = ipArray.joinToString(", ")
+            val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
+            val candidateIPs = ipArray.filterNot {
+                normalizeIPHealthCacheKey(it) == excludedKey
+            }
+            val ipCount = candidateIPs.size
+            val ipList = candidateIPs.joinToString(", ")
             Timber.tag("getHostIP").d("Received $ipCount IP(s) for node $nodeId: [$ipList]")
             
-            val bestIP = tryIpAddresses(ipArray, "getHostIP($nodeId)")
+            val bestIP = tryIpAddresses(candidateIPs, "getHostIP($nodeId)")
             
             if (bestIP != null) {
                 Timber.tag("getHostIP").d("Found healthy IP for node $nodeId: $bestIP")
@@ -2325,7 +2341,7 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = 5,
         entry: String = "get_tweet_feed",
-        maxRetries: Int = 5,
+        maxRetries: Int = 1,
         onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
     ): List<Tweet?> = getTweetFeedInternal(
         pageNumber = pageNumber,
@@ -2335,28 +2351,12 @@ object HproseInstance {
         onRetry = onRetry
     )
 
-    // Keeps the public feed API stable while exposing the exact RunMApp start
-    // boundary needed to consume one foreground session safely.
-    internal suspend fun getFollowingTweetsForSessionOpening(
-        pageSize: Int,
-        onRpcStarted: () -> Boolean
-    ): List<Tweet?> = getTweetFeedInternal(
-        pageNumber = 0,
-        pageSize = pageSize,
-        entry = "update_following_tweets",
-        maxRetries = 0,
-        ignoreFollowingTweetsDebounce = true,
-        onRpcStarted = onRpcStarted
-    )
-
     private suspend fun getTweetFeedInternal(
         pageNumber: Int,
         pageSize: Int,
         entry: String,
         maxRetries: Int,
-        onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null,
-        ignoreFollowingTweetsDebounce: Boolean = false,
-        onRpcStarted: (() -> Boolean)? = null
+        onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
     ): List<Tweet?> {
         if (!isOnline.value) {
             Timber.tag("getTweetFeed").d("Offline: skipping network call for page $pageNumber")
@@ -2403,7 +2403,7 @@ object HproseInstance {
                     onRetry?.invoke(attempt, effectiveMaxRetries)
 
                     if (lastFailureWasTimeout) {
-                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: previous feed call timed out; keeping current appUser baseUrl: ${appUser.baseUrl}")
+                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: using alternate appUser baseUrl: ${appUser.baseUrl}")
                     } else {
                         Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
                         // Refresh appUser's baseUrl on non-timeout retry
@@ -2420,13 +2420,12 @@ object HproseInstance {
                 
                 val feedService = getTweetFeedService(entry)
                 if (isFollowingTweetUpdate) {
-                    if (appUser.isGuest() || onRpcStarted?.invoke() == false) {
+                    if (appUser.isGuest()) {
                         return emptyList()
                     }
                     if (!shouldRunHeavyCall(
                             "update_following_tweets:${appUser.mid}",
-                            "getTweetFeed",
-                            ignoreDebounce = ignoreFollowingTweetsDebounce
+                            "getTweetFeed"
                         )
                     ) {
                         return emptyList()
@@ -2538,13 +2537,25 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
                 lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < effectiveMaxRetries) {
+                    if (lastFailureWasTimeout && !isFollowingTweetUpdate) {
+                        val switchedRoute = switchAppUserFeedRouteAfterTimeout(appUser.baseUrl)
+                        if (!switchedRoute) {
+                            Timber.tag("getTweetFeed").w(
+                                "Feed timed out and no alternate reachable route was found; not retrying the same address"
+                            )
+                            throw e
+                        }
+                    }
                     val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
                     if (lastFailureWasTimeout) {
-                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying same route (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
+                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying alternate route (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     } else {
                         Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     }
@@ -2559,6 +2570,7 @@ object HproseInstance {
                 if (attempt >= effectiveMaxRetries) {
                     Timber.tag("getTweetFeed").e("❌ Feed request failed after ${effectiveMaxRetries + 1} attempt(s)")
                 }
+                throw e
             }
         }
         
@@ -2578,7 +2590,11 @@ object HproseInstance {
      */
     private suspend fun getTweetFeedService(entry: String): HproseService? {
         if (entry != "update_following_tweets") {
-            return appUser.hproseService
+            val baseUrl = appUser.baseUrl ?: return null
+            return HproseClientPool.getRegularClient(
+                baseUrl,
+                GET_TWEET_FEED_TIMEOUT_MS
+            )
         }
 
         val hostIds = appUser.hostIds.orEmpty()
@@ -2597,6 +2613,44 @@ object HproseInstance {
         }
 
         throw IllegalStateException("update_following_tweets failed: appUser has no home host")
+    }
+
+    /**
+     * A successful health probe does not guarantee that every RPC is usable on
+     * that address. After get_tweet_feed times out, try another advertised and
+     * reachable address for the same access node. The attempted address is only
+     * excluded from this lookup; it is not marked unhealthy or blacklisted.
+     */
+    private suspend fun switchAppUserFeedRouteAfterTimeout(attemptedBaseUrl: String?): Boolean {
+        val accessNodeMid = appUser.hostIds?.getOrNull(1) ?: return false
+        if (attemptedBaseUrl.isNullOrBlank()) return false
+
+        val alternateIP = try {
+            getHostIP(
+                accessNodeMid,
+                forceHealthCheck = true,
+                excludedIP = attemptedBaseUrl
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("getTweetFeed").w(e, "Alternate feed-route lookup failed")
+            null
+        } ?: return false
+        val alternateBaseUrl = normalizeHealthCheckUrl(alternateIP).removeSuffix("/")
+        if (normalizeIPHealthCacheKey(alternateBaseUrl) == normalizeIPHealthCacheKey(attemptedBaseUrl)) {
+            return false
+        }
+
+        val oldBaseUrl = appUser.baseUrl
+        appUser.baseUrl = alternateBaseUrl
+        notifyAppUserChanged(oldBaseUrl, appUser.avatar)
+        NodePool.updateNodeIP(accessNodeMid, alternateIP)
+        TweetCacheManager.saveUser(appUser)
+        Timber.tag("getTweetFeed").d(
+            "Switched appUser feed route after timeout: $attemptedBaseUrl -> $alternateBaseUrl"
+        )
+        return true
     }
 
     /**
