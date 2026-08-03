@@ -45,6 +45,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.MediaGrid
@@ -75,7 +76,8 @@ fun TweetItemBody(
     val authorStateFlow = remember(tweet.authorId) {
         TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
-    val author by authorStateFlow.collectAsState()
+    val cachedAuthor by authorStateFlow.collectAsState()
+    val author = cachedAuthor ?: tweet.author
 
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }
@@ -351,7 +353,8 @@ fun TweetItemBody(
                         RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        ShareButton(viewModel)
+                        // Feed share uses the dtweet.com deep-link format (DEEPLINKING.md)
+                        ShareButton(viewModel, linkStyle = ShareLinkStyle.DEEPLINK)
                     }
                 }
             }
@@ -367,7 +370,7 @@ fun TweetHeaderText(
     modifier: Modifier = Modifier
 ) {
     val primaryColor = MaterialTheme.colorScheme.onSurface
-    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant
     val safeUsername = username?.takeIf { it.isNotBlank() } ?: "unknown"
 
     Text(

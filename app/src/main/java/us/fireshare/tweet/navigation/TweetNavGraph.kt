@@ -6,9 +6,13 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -16,13 +20,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +50,7 @@ import us.fireshare.tweet.profile.UserBookmarks
 import us.fireshare.tweet.profile.UserFavorites
 import us.fireshare.tweet.service.SearchScreen
 import us.fireshare.tweet.service.SearchViewModel
+import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.ComposeCommentScreen
 import us.fireshare.tweet.tweet.ComposeTweetScreen
 import us.fireshare.tweet.tweet.TweetDetailScreen
@@ -65,10 +73,23 @@ val LocalNavController = compositionLocalOf<NavController> {
 @Composable
 fun TweetNavGraph(
     appLinkIntent: Intent?,
+    appLinkIntentSequence: Long,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
-    var startDestination: NavTweet = NavTweet.TweetFeed
+    val initialDeepLinkDestination = remember { parseDeepLink(appLinkIntent) }
+    val startDestination = remember {
+        initialDeepLinkDestination ?: if (appUser.isGuest()) {
+            val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
+            if (alphaId != null) {
+                NavTweet.UserProfile(alphaId)
+            } else {
+                NavTweet.TweetFeed
+            }
+        } else {
+            NavTweet.TweetFeed
+        }
+    }
     val activity = LocalActivity.current as ComponentActivity
     val sharedViewModel: SharedViewModel = hiltViewModel()
     sharedViewModel.appUserViewModel =
@@ -79,65 +100,47 @@ fun TweetNavGraph(
         }
     // Use activity-scoped TweetFeedViewModel to ensure single instance across the app
     val tweetFeedViewModel: TweetFeedViewModel = hiltViewModel(viewModelStoreOwner = activity)
+    val pendingNewTweets by tweetFeedViewModel.pendingNewTweets.collectAsState()
+    val renderedTweets by tweetFeedViewModel.tweets.collectAsState()
+    val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweets) {
+        tweetFeedViewModel.visiblePendingNewTweetsSnapshot()
+    }
+    val showNewTweetsBanner by tweetFeedViewModel.showNewTweetsBanner.collectAsState()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val shouldShowMainFeedNewTweetsBanner =
+        currentRoute?.contains("TweetFeed") == true
     
     // Initialize TweetListViewModel
     sharedViewModel.tweetListViewModel = hiltViewModel<TweetListViewModel>()
 
-    // Parse deep link from intent
-    val deepLinkDestination = remember(appLinkIntent) {
-        parseDeepLink(appLinkIntent)
-    }
-    
-    // Track the last processed intent URI to avoid duplicate navigation
-    var lastProcessedUri by remember { mutableStateOf<String?>(null) }
-    
-    // Set initial destination if deep link is present
-    if (deepLinkDestination != null) {
-        val currentUri = appLinkIntent?.data?.toString()
-        if (currentUri != lastProcessedUri) {
-            // This is either initial load or a new deep link
-            if (lastProcessedUri == null) {
-                // Initial load - set start destination
-                startDestination = deepLinkDestination
-                lastProcessedUri = currentUri
-            } else {
-                // New deep link while app is running - will be handled by LaunchedEffect
-            }
-        }
-    } else if (appUser.isGuest()) {
-        val alphaId = getAlphaIds().firstOrNull { it.isNotBlank() }
-        if (alphaId != null) {
-            startDestination = NavTweet.UserProfile(alphaId)
-        }
+    // Track the last processed deeplink event. A cold-start deeplink is already
+    // represented by startDestination, so mark the startup event processed here.
+    var lastProcessedDeepLinkSequence by remember {
+        mutableStateOf(if (initialDeepLinkDestination != null) appLinkIntentSequence else 0L)
     }
     
     // Handle deep link navigation when app is already running (onNewIntent)
-    LaunchedEffect(appLinkIntent?.data?.toString()) {
-        val currentUri = appLinkIntent?.data?.toString()
-        if (currentUri != null && currentUri != lastProcessedUri) {
-            val destination = parseDeepLink(appLinkIntent)
-            if (destination != null) {
-                // Navigate to deep link, clearing back stack to root
-                navController.navigate(destination) {
-                    popUpTo(navController.graph.startDestinationId) {
-                        inclusive = false
-                    }
-                    launchSingleTop = true
-                }
-                lastProcessedUri = currentUri
+    LaunchedEffect(appLinkIntentSequence) {
+        if (appLinkIntentSequence != 0L &&
+            appLinkIntentSequence != lastProcessedDeepLinkSequence
+        ) {
+            parseDeepLink(appLinkIntent)?.let { destination ->
+                navController.openExternalDeepLink(destination)
+                lastProcessedDeepLinkSequence = appLinkIntentSequence
+            } ?: run {
+                lastProcessedDeepLinkSequence = appLinkIntentSequence
             }
-        } else if (currentUri == null && lastProcessedUri == null) {
-            // Initial load without deep link - mark as processed
-            lastProcessedUri = ""
         }
     }
 
     CompositionLocalProvider(LocalNavController provides navController) {
-        NavHost(
-            modifier = modifier,
-            navController = navController,
-            startDestination = startDestination
-        ) {
+        Box(modifier = modifier) {
+            NavHost(
+                modifier = Modifier.fillMaxSize(),
+                navController = navController,
+                startDestination = startDestination
+            ) {
             composable<NavTweet.TweetFeed> {
                 TweetFeedScreen(navController, it, 0, tweetFeedViewModel)
             }
@@ -240,7 +243,12 @@ fun TweetNavGraph(
                 val scope = rememberCoroutineScope()
                 LoginScreen(register) {
                     scope.launch(Dispatchers.Main) {
-                        navController.popBackStack()
+                        navController.navigate(NavTweet.TweetFeed) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
                     }
                 }
             }
@@ -283,13 +291,39 @@ fun TweetNavGraph(
                 val authorId = it.toRoute<NavTweet.DeepLink>().authorId
                 TweetDetailScreen(authorId, tweetId, parentEntry)
             }
+            }
+
+            if (shouldShowMainFeedNewTweetsBanner) {
+                NewTweetsBanner(
+                    pendingTweets = visiblePendingNewTweets,
+                    visible = showNewTweetsBanner && visiblePendingNewTweets.isNotEmpty(),
+                    onClick = {
+                        tweetFeedViewModel.applyPendingNewTweets()
+                        BottomBarState.opacity = 0.98f
+                        BottomBarState.homeTapTrigger++
+                    },
+                    onAutoHide = tweetFeedViewModel::dismissNewTweetsBanner,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(1500f)
+                )
+            }
         }
+    }
+}
+
+private fun NavHostController.openExternalDeepLink(destination: NavTweet.DeepLink) {
+    navigate(destination) {
+        popUpTo(graph.startDestinationId) {
+            inclusive = true
+        }
+        launchSingleTop = true
     }
 }
 
 /**
  * Parse deep link from intent
- * Expected URL format: http://fireshare.uk/tweet/{tweetId}/{authorId}
+ * Expected URL format: http://dtweet.com/tweet/{tweetId}/{authorId}
  */
 private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     if (intent?.action != Intent.ACTION_VIEW) {

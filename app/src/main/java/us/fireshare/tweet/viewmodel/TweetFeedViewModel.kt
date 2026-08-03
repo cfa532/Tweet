@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -17,6 +16,7 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -70,6 +69,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     
     // Track if ViewModel has been initialized to prevent race conditions
     private var isInitialized = false
+    @Volatile
+    private var isMainFeedAtTop = true
     private val tweetRowTimestamps = mutableMapOf<MimeiId, Long>()
 
     private fun rememberTweetRowTimestamps(tweets: List<Tweet>) {
@@ -115,21 +116,56 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private fun queuePendingNewTweets(incomingTweets: List<Tweet>) {
-        val visibleTweetIds = _tweets.value.map { it.mid }.toSet()
-        val existingPendingIds = _pendingNewTweets.value.map { it.mid }.toSet()
-        val trulyNewTweets = incomingTweets.filter { tweet ->
-            !tweet.isPrivate && tweet.mid !in visibleTweetIds && tweet.mid !in existingPendingIds
-        }
+    private fun isNewerThanCurrentFeedTop(tweet: Tweet): Boolean {
+        val topTweet = _tweets.value.firstOrNull() ?: return true
+        val tweetTimestamp = tweet.feedOrderingTimestamp()
+        val topTimestamp = topTweet.feedOrderingTimestamp()
+        return tweetTimestamp > topTimestamp ||
+            (tweetTimestamp == topTimestamp && tweet.mid > topTweet.mid)
+    }
 
-        if (trulyNewTweets.isNotEmpty()) {
-            _pendingNewTweets.update { pendingTweets ->
-                mergeAndSortTweets(pendingTweets, trulyNewTweets)
-            }
-            _showNewTweetsBanner.value = true
-        } else if (_pendingNewTweets.value.isNotEmpty()) {
-            _showNewTweetsBanner.value = true
+    private fun isPendingNewFeedTweet(tweet: Tweet, visibleTweetIds: Set<MimeiId>): Boolean {
+        return !tweet.isPrivate &&
+            tweet.mid !in visibleTweetIds &&
+            isNewerThanCurrentFeedTop(tweet)
+    }
+
+    private fun updateNewTweetsSnapshot(incomingTweets: List<Tweet>) {
+        val visibleTweetIds = _tweets.value.map { it.mid }.toSet()
+        val snapshot = (_pendingNewTweets.value + incomingTweets)
+            .distinctBy { tweet -> tweet.mid }
+            .filter { tweet -> isPendingNewFeedTweet(tweet, visibleTweetIds) }
+            .sortedByDescending { tweet -> tweet.feedOrderingTimestamp() }
+
+        _pendingNewTweets.value = snapshot
+        _showNewTweetsBanner.value = snapshot.isNotEmpty()
+
+        val cacheKey = TweetCacheManager.getMainFeedCacheId(appUser.mid)
+        snapshot.forEach { tweet ->
+            TweetCacheManager.saveTweet(tweet, cacheKey)
         }
+        Timber.tag("TweetFeedViewModel").d("New tweet banner snapshot: ${snapshot.size} unrendered candidate(s)")
+    }
+
+    private fun processMainFeedRefreshTweets(incomingTweets: List<Tweet>, reason: String) {
+        rememberTweetRowTimestamps(incomingTweets)
+        if (isMainFeedAtTop) {
+            clearPendingNewTweets()
+            mergeTopPageTweetsIntoFeed(incomingTweets)
+            Timber.tag("TweetFeedViewModel")
+                .d("$reason: feed at top, merged ${incomingTweets.size} get_tweet_feed tweet(s) immediately")
+        } else {
+            updateNewTweetsSnapshot(incomingTweets)
+            Timber.tag("TweetFeedViewModel")
+                .d("$reason: feed not at top, staged ${incomingTweets.size} get_tweet_feed tweet(s) behind banner")
+        }
+    }
+
+    fun visiblePendingNewTweetsSnapshot(): List<Tweet> {
+        val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
+        return _pendingNewTweets.value
+            .filter { tweet -> isPendingNewFeedTweet(tweet, visibleTweetIds) }
+            .sortedByDescending { tweet -> tweet.feedOrderingTimestamp() }
     }
 
     private fun clearPendingNewTweets() {
@@ -139,43 +175,52 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     fun applyPendingNewTweets() {
         val pendingTweets = _pendingNewTweets.value
-        if (pendingTweets.isNotEmpty()) {
-            mergeTopPageTweetsIntoFeed(pendingTweets)
+        val visibleTweetIds = _tweets.value.map { tweet -> tweet.mid }.toSet()
+        val tweetsToApply = pendingTweets.filter { tweet ->
+            isPendingNewFeedTweet(tweet, visibleTweetIds)
         }
+        val staleCount = pendingTweets.size - tweetsToApply.size
+
+        if (tweetsToApply.isNotEmpty()) {
+            mergeTopPageTweetsIntoFeed(tweetsToApply)
+        }
+
         clearPendingNewTweets()
+        Timber.tag("TweetFeedViewModel")
+            .d("Applied ${tweetsToApply.size} pending main feed tweet(s), dropped $staleCount stale")
     }
 
     fun dismissNewTweetsBanner() {
         _showNewTweetsBanner.value = false
     }
 
-    private var feedRefreshTimerJob: Job? = null
-    private var nextFeedRefreshRunAtMs: Long = 0L
+    fun setMainFeedAtTop(isAtTop: Boolean) {
+        isMainFeedAtTop = isAtTop
+    }
+
     private var hasEnteredBackground = false
-    private var foregroundRefreshJob: Job? = null
+    private var behindBannerRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             if (hasEnteredBackground) {
                 hasEnteredBackground = false
-                scheduleNextFeedRefreshFromNow()
                 refreshFeedDirectlyAfterForeground()
             }
-            startFeedRefreshTimer()
         }
 
         override fun onStop(owner: LifecycleOwner) {
             hasEnteredBackground = true
-            stopFeedRefreshTimer()
         }
+    }
+
+    private fun shouldCheckNewTweetsBehindBanner(): Boolean {
+        return isInitialized && HproseInstance.isOnline.value
     }
 
     init {
         // Start listening to notifications immediately when ViewModel is created
         startListeningToNotifications() // Will be updated with context later
         ProcessLifecycleOwner.get().lifecycle.addObserver(appForegroundObserver)
-        if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            startFeedRefreshTimer()
-        }
         
         // Don't load tweets immediately - wait for explicit initialization
         // This prevents race conditions with HproseInstance initialization
@@ -224,8 +269,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     } else {
                         Timber.tag("TweetFeedViewModel").d("Fetching fresh tweets from server...")
                     }
-                    // Always attempt a refresh when online. Internal retry/fallback logic
-                    // will keep cached data on failure and prevents permanent spinner lock.
+                    // App open shows fresh tweets directly. Foreground return and timer
+                    // checks use the banner path.
                     refresh(0)
                 }
             } catch (e: Exception) {
@@ -341,17 +386,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    private suspend fun waitForAppUser(timeoutMillis: Long = 10000L) {
+    private suspend fun waitForAppUser(
+        timeoutMillis: Long = 10000L,
+        timeoutAction: String = "using entry IP"
+    ): Boolean {
         val startTime = System.currentTimeMillis()
         Timber.tag("TweetFeedViewModel").d("Waiting for appUser to be fully initialized (timeout: ${timeoutMillis}ms)")
         while (!HproseInstance.isAppUserInitialized.value && System.currentTimeMillis() - startTime < timeoutMillis) {
             kotlinx.coroutines.delay(200)
         }
         val elapsed = System.currentTimeMillis() - startTime
-        if (!HproseInstance.isAppUserInitialized.value) {
-            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, using entry IP")
+        return if (!HproseInstance.isAppUserInitialized.value) {
+            Timber.tag("TweetFeedViewModel").w("Timeout waiting for appUser initialization after ${elapsed}ms, $timeoutAction")
+            false
         } else {
             Timber.tag("TweetFeedViewModel").d("appUser initialized after ${elapsed}ms: ${appUser.baseUrl}")
+            true
         }
     }
 
@@ -360,93 +410,72 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val minimumTweetsBeforeStoppingInitialLoad = 4
     private val maxAutoLoadedInitialPages = 200
 
-    private fun scheduleNextFeedRefreshFromNow() {
-        nextFeedRefreshRunAtMs = System.currentTimeMillis() + HproseInstance.HEAVY_CALL_INTERVAL_MS
-    }
-
     private fun refreshFeedDirectlyAfterForeground() {
-        if (!isInitialized || !HproseInstance.isOnline.value) {
+        refreshFeedAfterForeground(reason = "Foreground return")
+    }
+
+    private fun refreshFeedAfterForeground(reason: String) {
+        if (!shouldCheckNewTweetsBehindBanner()) {
             return
         }
 
-        if (foregroundRefreshJob?.isActive == true) {
+        if (behindBannerRefreshJob?.isActive == true) {
             return
         }
 
-        foregroundRefreshJob = applicationScope.launch(IO) {
+        behindBannerRefreshJob = applicationScope.launch(IO) {
             try {
-                Timber.tag("TweetFeedViewModel").d("Foreground return: checking latest tweets behind banner")
-                refresh(0, deferNewTweets = true)
-            } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed on foreground")
-            } finally {
-                foregroundRefreshJob = null
-            }
-        }
-    }
-
-    private fun startFeedRefreshTimer() {
-        if (feedRefreshTimerJob?.isActive == true) {
-            return
-        }
-
-        if (nextFeedRefreshRunAtMs == 0L) {
-            scheduleNextFeedRefreshFromNow()
-        }
-
-        feedRefreshTimerJob = applicationScope.launch(IO) {
-            while (isActive) {
-                val waitMs = (nextFeedRefreshRunAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
-                delay(waitMs)
-                if (!isActive) {
-                    break
+                Timber.tag("TweetFeedViewModel").d("$reason: checking latest main feed tweets with get_tweet_feed")
+                val freshTweets = fetchTopMainFeedTweetsForForeground(TW_CONST.PAGE_SIZE)
+                withContext(Main) {
+                    processMainFeedRefreshTweets(freshTweets, reason)
                 }
-
-                refresh(0, deferNewTweets = true)
-                scheduleNextFeedRefreshFromNow()
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Error refreshing feed after foreground")
+            } finally {
+                behindBannerRefreshJob = null
             }
         }
     }
 
-    private fun stopFeedRefreshTimer() {
-        feedRefreshTimerJob?.cancel()
-        feedRefreshTimerJob = null
+    private suspend fun fetchTopMainFeedTweetsForForeground(pageSize: Int): List<Tweet> {
+        if (!waitForAppUser(timeoutAction = "skipping foreground feed refresh")) {
+            return emptyList()
+        }
+
+        if (appUser.isGuest()) {
+            return emptyList()
+        }
+
+        val feedTweets = HproseInstance.getTweetFeed(
+            pageNumber = 0,
+            pageSize = pageSize,
+        ).filterNotNull()
+
+        fetchAndStageFollowingTweets(pageSize)
+
+        val visibleTweets = feedTweets
+            .distinctBy { tweet -> tweet.mid }
+            .filterNot { tweet -> tweet.isPrivate }
+
+        rememberTweetRowTimestamps(visibleTweets)
+        Timber.tag("TweetFeedViewModel").d(
+            "Foreground get_tweet_feed candidates: raw=${feedTweets.size}, unique=${visibleTweets.size}, feedAtTop=$isMainFeedAtTop"
+        )
+        return visibleTweets
     }
 
-    fun refreshFollowingTweets(pageSize: Int = TW_CONST.PAGE_SIZE, deferNewTweets: Boolean = false) {
-        if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value) {
+    fun refreshFollowingTweets(
+        pageSize: Int = TW_CONST.PAGE_SIZE,
+        deferNewTweets: Boolean = false
+    ) {
+        if (followingTweetsJob?.isActive == true || !HproseInstance.isOnline.value || appUser.isGuest()) {
             return
         }
 
         followingTweetsJob = applicationScope.launch(IO) {
             try {
-                val followingTweetsWithNulls = HproseInstance.getTweetFeed(
-                    pageNumber = 0,
-                    pageSize = pageSize,
-                    entry = "update_following_tweets",
-                    onRetry = { attempt, maxRetries ->
-                        if (_tweets.value.isEmpty()) {
-                            viewModelScope.launch(Main) {
-                                val context = contextRef.get()
-                                if (context != null) {
-                                    val message = context.getString(R.string.retrying, attempt, maxRetries)
-                                    _retryMessage.value = message
-                                }
-                            }
-                        }
-                    }
-                )
-
-                val followingTweets = followingTweetsWithNulls.filterNotNull()
-                rememberTweetRowTimestamps(followingTweets)
-
-                withContext(Main) {
-                    if (deferNewTweets) {
-                        queuePendingNewTweets(followingTweets)
-                    } else {
-                        mergeTweetsIntoFeed(followingTweets)
-                    }
-                }
+                fetchAndStageFollowingTweets(pageSize)
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
             } finally {
@@ -455,9 +484,33 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    private suspend fun fetchAndStageFollowingTweets(pageSize: Int) {
+        if (!HproseInstance.isOnline.value || appUser.isGuest()) return
+
+        try {
+            val followingTweetsWithNulls = HproseInstance.getTweetFeed(
+                pageNumber = 0,
+                pageSize = pageSize,
+                entry = "update_following_tweets"
+            )
+            stageFollowingTweets(followingTweetsWithNulls)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").e(e, "Error loading following tweets: ${e.message}")
+        }
+    }
+
+    private suspend fun stageFollowingTweets(followingTweetsWithNulls: List<Tweet?>) {
+        val followingTweets = followingTweetsWithNulls.filterNotNull()
+        rememberTweetRowTimestamps(followingTweets)
+        withContext(Main) {
+            updateNewTweetsSnapshot(followingTweets)
+        }
+    }
+
     override fun onCleared() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(appForegroundObserver)
-        stopFeedRefreshTimer()
         super.onCleared()
     }
 
@@ -593,38 +646,19 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("MainFeed").d("🌐 Network returned raw=${tweetsWithNulls.size}, valid=${validTweets.size} tweets")
             }
 
-            if (deferNewTweets) {
-                queuePendingNewTweets(validTweets)
+            val responseTweets = if (deferNewTweets) {
+                updateNewTweetsSnapshot(validTweets)
+                tweetsWithNulls
             } else if (pageNumber == 0) {
                 mergeTopPageTweetsIntoFeed(validTweets)
+                tweetsWithNulls
             } else {
                 mergeTweetsIntoFeed(validTweets)
+                tweetsWithNulls
             }
 
-            /**
-             * Check for new tweets of followings when page number is 0
-             * Run in separate coroutine to avoid blocking main tweet loading
-             * Use applicationScope to ensure it continues even if composable leaves scope
-             * Added request deduplication to prevent multiple simultaneous requests
-             * 
-             * PERFORMANCE OPTIMIZATION NOTE:
-             * Consider combining this with the main tweet feed call for better performance:
-             * 
-             * // Option 1: Backend modification (recommended)
-             * val combinedResponse = HproseInstance.getCombinedTweetFeed(appUser, pageNumber, pageSize)
-             * // Process both mainTweets and followingTweets from single response
-             * 
-             * // Option 2: Client-side concurrent calls
-             * val deferredMain = async { HproseInstance.getTweetFeed(...) }
-             * val deferredFollowing = async { HproseInstance.getTweetFeed(..., "update_following_tweets") }
-             * val mainTweets = deferredMain.await()
-             * val followingTweets = deferredFollowing.await()
-             * // Process both results together
-             * */
-            if (pageNumber == 0) {
-                refreshFollowingTweets(pageSize, deferNewTweets = deferNewTweets)
-            }
-            return tweetsWithNulls
+            if (pageNumber == 0) fetchAndStageFollowingTweets(pageSize)
+            return responseTweets
         }
         } finally {
             if (lockedPageZero) {
@@ -677,7 +711,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
                 if (deferNewTweets) {
-                    queuePendingNewTweets(validTweets)
+                    updateNewTweetsSnapshot(validTweets)
                 } else if (pageNumber == 0) {
                     mergeTopPageTweetsIntoFeed(validTweets)
                 } else {
@@ -719,7 +753,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             Timber.tag("GetTweets").d("🔍 Valid tweets (non-null): ${validTweets.size}")
 
             if (deferNewTweets) {
-                queuePendingNewTweets(validTweets)
+                updateNewTweetsSnapshot(validTweets)
             } else if (pageNumber == 0) {
                 mergeTopPageTweetsIntoFeed(validTweets)
             } else {
@@ -865,15 +899,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         var errorMessage: String? = null
         try {
             Timber.tag("TweetFeedViewModel").d("Attempting backend deletion of tweet $tweetId")
-            val deletedTweetId = HproseInstance.deleteTweet(tweetId)
-            if (deletedTweetId != null) {
-                // Success - backend confirmed deletion
-                Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
-            } else {
-                deletionFailed = true
-                errorMessage = "Backend returned null"
-                Timber.tag("TweetFeedViewModel").w("Backend deleteTweet returned null for tweetId $tweetId")
-            }
+            val deletedTweetId = HproseInstance.deleteTweet(tweetId, authorId)
+            Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
         } catch (e: Exception) {
             deletionFailed = true
             errorMessage = e.message ?: "Unknown error"
@@ -1038,26 +1065,32 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             try {
                 TweetNotificationCenter.events.collect { event ->
                     when (event) {
+                        is TweetEvent.MainFeedRefreshed -> {
+                            Timber.tag("TweetFeedViewModel").d("Received ${event.tweets.size} get_tweet_feed tweets from background check")
+                            withContext(Main) {
+                                processMainFeedRefreshTweets(event.tweets, "Background get_tweet_feed")
+                            }
+                        }
+
+                        is TweetEvent.MainFeedNewTweetsFound -> {
+                            Timber.tag("TweetFeedViewModel").d("Received ${event.tweets.size} main feed tweets from background check")
+                            rememberTweetRowTimestamps(event.tweets)
+                            withContext(Main) {
+                                updateNewTweetsSnapshot(event.tweets)
+                            }
+                        }
+
                         is TweetEvent.TweetUploaded -> {
                             Timber.tag("TweetFeedViewModel").d("Received TweetUploaded notification for tweet: ${event.tweet.mid}, author: ${event.tweet.authorId}, current user: ${appUser.mid}")
 
                             // Add new tweet to the beginning of the feed
                             val tweetWithAuthor = event.tweet
 
-                            // Show success toast if it's the current user's tweet
-                            val context = notificationContextRef?.get()
-                            if (tweetWithAuthor.authorId == appUser.mid && context != null) {
-                                Timber.tag("TweetFeedViewModel").d("Showing success toast for tweet: ${tweetWithAuthor.mid}")
-                                withContext(Main) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.tweet_uploaded),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                                
-                                // Cache the new tweet for mainfeed under appUser.mid
-                                TweetCacheManager.saveTweet(tweetWithAuthor, appUser.mid)
+                            if (tweetWithAuthor.authorId == appUser.mid) {
+                                TweetCacheManager.saveTweet(
+                                    tweetWithAuthor,
+                                    TweetCacheManager.getMainFeedCacheId(appUser.mid)
+                                )
                             }
 
                             // Update on main thread to ensure UI updates

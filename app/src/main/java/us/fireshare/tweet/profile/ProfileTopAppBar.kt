@@ -32,7 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -43,12 +45,14 @@ import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +63,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     val user by viewModel.user.collectAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
+    val context = LocalContext.current
+    val guestReminderText = stringResource(R.string.guest_reminder)
     val scrollFraction = scrollBehavior?.state?.collapsedFraction ?: 0f
     var showDialog by remember { mutableStateOf(false) }    // show full Avatar image
 
@@ -71,11 +77,14 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(end = 8.dp),
+                    .padding(
+                        start = 0.dp,
+                        end = 8.dp
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(verticalAlignment = Alignment.Top) {
                     if (showDialog) {
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
@@ -86,25 +95,27 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                         onClick = { showDialog = true }
                     )
                     Column(
-                        modifier = Modifier.padding(start = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier = Modifier.padding(start = 8.dp, top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         Text(
                             text = user.name ?: "No one",
-                            fontSize = 15.sp,
+                            fontSize = 18.sp,
                             lineHeight = 16.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "@" + (user.username ?: "NoOne"),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             lineHeight = 16.sp,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(start = 0.dp)
                         )
                         // Show registration date
                         val date = Date(user.timestamp)
-                        val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+                        val dateFormat = SimpleDateFormat("MMM yyyy", LocalLocale.current.platformLocale)
                         Text(
                             text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
                             fontSize = 12.sp,
@@ -148,8 +159,11 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
             }
         },
         actions = {
-            if (!appUser.isGuest() && appUser.mid != user.mid) {
+            if (appUser.mid != user.mid) {
                 IconButton(onClick = {
+                    if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                        return@IconButton
+                    }
                     navController.navigate(NavTweet.ChatBox(user.mid))
                 }) {
                     Icon(

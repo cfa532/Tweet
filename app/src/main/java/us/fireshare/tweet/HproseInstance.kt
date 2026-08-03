@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -75,7 +76,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstance
 
 /**
- * NodePool: performance cache for node IP management
+ * NodePool: session source of truth for node IP management
  * 
  * Key Principles:
  * - Tracks access nodes (hostIds[1]) for READ operations only
@@ -85,9 +86,9 @@ import us.fireshare.tweet.datamodel.User.Companion.getInstance as getUserInstanc
  * - Thread-safe operations with mutex protection
  * 
  * Usage Flow:
- * 1. Try the user's access node once for a fast first read.
- * 2. On a miss or failure, resolve through getProviderIP(), the source of truth.
- * 3. After a successful read, update/replace the node's IP list.
+ * 1. Resolve a user's access node once, then share that node route across users.
+ * 2. Treat NodePool as authoritative during the app session.
+ * 3. Re-resolve only when the node entry is missing or proven stale.
  */
 object NodePool {
     data class NodeInfo(
@@ -150,6 +151,9 @@ object NodePool {
     suspend fun updateNodeIP(nodeMid: MimeiId, newIP: String) = nodeMutex.withLock {
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
+            if (nodeInfo.ips.size == 1 && nodeInfo.hasIP(newIP)) {
+                return@withLock
+            }
             // Replace IP list with new IP
             nodeInfo.ips = mutableListOf(newIP)
             nodeInfo.lastUpdate = System.currentTimeMillis()
@@ -220,6 +224,11 @@ object NodePool {
 @Suppress("UNCHECKED_CAST")
 object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
+    private const val ADD_TWEET_TIMEOUT_MS = 60_000
+    private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
+    private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
+    private const val GET_TWEET_FEED_TIMEOUT_MS = 15_000
+    private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
     const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
@@ -261,6 +270,47 @@ object HproseInstance {
                 @Suppress("UNCHECKED_CAST")
                 response as? T
             }
+        }
+    }
+
+    /** Relationship timestamps may be decoded as any Number subtype or a numeric String. */
+    private fun relationshipTimestamp(value: Any?): Long = when (value) {
+        is Number -> value.toLong()
+        is String -> value.toLongOrNull() ?: value.toDoubleOrNull()?.toLong() ?: 0L
+        else -> 0L
+    }
+
+    private fun isTweetNotFoundDeleteFailure(error: Throwable? = null, response: Any? = null): Boolean {
+        return isTweetNotFoundMessage(error?.message)
+                || isTweetNotFoundMessage(error?.localizedMessage)
+                || stringValues(response).any(::isTweetNotFoundMessage)
+    }
+
+    private fun isTweetNotFoundMessage(message: String?): Boolean {
+        val normalized = message
+            ?.lowercase()
+            ?.replace("_", " ")
+            ?.replace("-", " ")
+            ?: return false
+
+        return normalized.contains("tweet not found") ||
+                normalized.contains("cannot find the tweet") ||
+                normalized.contains("cannot find tweet") ||
+                normalized.contains("tweet does not exist") ||
+                (normalized.contains("tweet") && normalized.contains("not found"))
+    }
+
+    private fun stringValues(value: Any?): Sequence<String> = sequence {
+        when (value) {
+            null -> Unit
+            is Map<*, *> -> value.values.forEach { yieldAll(stringValues(it)) }
+            is Iterable<*> -> value.forEach { yieldAll(stringValues(it)) }
+            is Array<*> -> value.forEach { yieldAll(stringValues(it)) }
+            is Throwable -> {
+                value.message?.let { yield(it) }
+                value.localizedMessage?.let { yield(it) }
+            }
+            else -> yield(value.toString())
         }
     }
     // Use Application context to avoid memory leaks - Application lives for the entire app lifecycle
@@ -306,19 +356,19 @@ object HproseInstance {
     private var entryResolveCache: EntryResolveCache? = null
     private var entryResolveFailureCache: EntryResolveFailureCache? = null
 
-    private val heavyCallDebounceMutex = Mutex()
+    private val heavyCallDebounceLock = Any()
     private val heavyCallLastRunAtMs = mutableMapOf<String, Long>()
 
-    private suspend fun shouldRunHeavyCall(
+    private fun shouldRunHeavyCall(
         key: String,
         tag: String,
         ignoreDebounce: Boolean = false
     ): Boolean {
         val now = System.currentTimeMillis()
-        return heavyCallDebounceMutex.withLock {
+        return synchronized(heavyCallDebounceLock) {
             if (ignoreDebounce) {
                 heavyCallLastRunAtMs[key] = now
-                return@withLock true
+                return@synchronized true
             }
 
             val lastRunAt = heavyCallLastRunAtMs[key]
@@ -327,7 +377,7 @@ object HproseInstance {
                 if (elapsed < HEAVY_CALL_INTERVAL_MS) {
                     val remainingSeconds = (HEAVY_CALL_INTERVAL_MS - elapsed + 999) / 1000
                     Timber.tag(tag).d("Skipping heavy call; ${remainingSeconds}s left in debounce window")
-                    return@withLock false
+                    return@synchronized false
                 }
             }
 
@@ -431,6 +481,12 @@ object HproseInstance {
                     Timber.tag("appUser").e(e, "Error triggering feed refresh after baseUrl sync")
                 }
             }
+        }
+    }
+
+    internal fun markAppUserInitializedAfterLogin() {
+        if (!appUser.isGuest() && !appUser.baseUrl.isNullOrBlank()) {
+            _isAppUserInitialized.value = true
         }
     }
 
@@ -843,19 +899,28 @@ object HproseInstance {
             Timber.tag("initAppEntry")
                 .d("User initialized with cached data. $appId, appUser.baseUrl: ${appUser.baseUrl}")
         } else {
+            val guestUser = appUser
             val alphaIds = getAlphaIds()
-            appUser.followingList = alphaIds
+            guestUser.followingList = alphaIds
             // Ensure baseUrl is set so hproseService is non-null for login (getUserId) calls
-            if (appUser.baseUrl.isNullOrBlank()) {
+            if (guestUser.baseUrl.isNullOrBlank()) {
                 val entryIP = findEntryIP()
-                appUser.baseUrl = "http://$entryIP"
-                Timber.tag("initAppEntry").d("🔍 Guest user: resolved entry IP for baseUrl: ${appUser.baseUrl}")
+                if (preferenceHelper.getUserId() != TW_CONST.GUEST_ID || !appUser.isGuest()) {
+                    Timber.tag("initAppEntry").d("Guest bootstrap finished after login; skipping stale guest state update")
+                    return
+                }
+                guestUser.baseUrl = "http://$entryIP"
+                Timber.tag("initAppEntry").d("🔍 Guest user: resolved entry IP for baseUrl: ${guestUser.baseUrl}")
             }
-            TweetCacheManager.saveUser(appUser)
+            if (preferenceHelper.getUserId() != TW_CONST.GUEST_ID || !appUser.isGuest()) {
+                Timber.tag("initAppEntry").d("Guest bootstrap superseded by login; skipping guest cache/update")
+                return
+            }
+            TweetCacheManager.saveUser(guestUser)
             Timber.tag("initAppEntry").d("🔍 Guest user initialized. appId: $appId")
             Timber.tag("initAppEntry").d("🔍 Guest user alphaIds: $alphaIds")
-            Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${appUser.baseUrl}")
-            Timber.tag("initAppEntry").d("🔍 Guest user mid: ${appUser.mid}")
+            Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${guestUser.baseUrl}")
+            Timber.tag("initAppEntry").d("🔍 Guest user mid: ${guestUser.mid}")
             _isAppUserInitialized.value = true
             // For guest users, also call the callback to show UI
             onBaseUrlReady?.invoke()
@@ -915,15 +980,18 @@ object HproseInstance {
         maxRetries: Int = 2
     ): Pair<Boolean, String?> {
         var lastError: String? = null
+        var lastFailureWasTimeout = false
         
         for (attempt in 0..maxRetries) {
             val forceRefresh = attempt > 0
-            if (forceRefresh) {
+            if (forceRefresh && lastFailureWasTimeout) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: previous sender-node send timed out; keeping current baseUrl")
+            } else if (forceRefresh) {
                 Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing sender's baseUrl")
             }
             
             // Refresh appUser's baseUrl if needed
-            if (forceRefresh) {
+            if (forceRefresh && !lastFailureWasTimeout) {
                 val refreshedUser = fetchUser(appUser.mid, baseUrl = "", forceRefresh = true)
                 if (refreshedUser != null && refreshedUser.baseUrl != appUser.baseUrl) {
                     appUser.baseUrl = refreshedUser.baseUrl
@@ -987,6 +1055,7 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 lastError = e.message ?: applicationContext.getString(R.string.error_network)
                 Timber.tag("sendMessage").e("❌ Error sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message ?: "Network error"}")
                 
@@ -1013,15 +1082,18 @@ object HproseInstance {
     ): Pair<Boolean, String?> {
         var receiptUser: User?
         var lastError: String? = null
+        var lastFailureWasTimeout = false
         
         for (attempt in 0..maxRetries) {
             val forceRefresh = attempt > 0
-            if (forceRefresh) {
+            if (forceRefresh && lastFailureWasTimeout) {
+                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: previous recipient-node send timed out; keeping current baseUrl for userId: $receiptId")
+            } else if (forceRefresh) {
                 Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing recipient's baseUrl for userId: $receiptId")
             }
             
             // Fetch recipient user (with forced refresh on retry)
-            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh) "" else null)
+            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh && !lastFailureWasTimeout) "" else null)
             
             if (receiptUser == null) {
                 val errorMsg = "Recipient user not found"
@@ -1084,6 +1156,7 @@ object HproseInstance {
                     }
                 }
             } catch (e: Exception) {
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 lastError = ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e)
                 Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
                 
@@ -1474,18 +1547,25 @@ object HproseInstance {
      * 3. If no healthy IPs found AND appUser unhealthy -> try via entry IP
      * 4. Update NodePool with successful result
      * */
-    suspend fun getHostIP(nodeId: MimeiId, v4Only: String = HproseInstance.v4Only.toString()): String? {
+    suspend fun getHostIP(
+        nodeId: MimeiId,
+        v4Only: String = HproseInstance.v4Only.toString(),
+        forceHealthCheck: Boolean = false,
+        excludedIP: String? = null
+    ): String? {
         if (!isOnline.value) {
             Timber.tag("getHostIP").d("Offline: skipping")
             return null
         }
+
         // Step 1: Check NodePool for known IPs and verify health
         val poolIP = NodePool.getIPFromNodeId(nodeId)
-        if (poolIP != null) {
+        val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
+        if (poolIP != null && normalizeIPHealthCacheKey(poolIP) != excludedKey) {
             // Verify the cached IP is still healthy before returning
             val fullUrl = "http://$poolIP"
             
-            if (isServerHealthy(fullUrl)) {
+            if (isServerHealthy(fullUrl, useCache = !forceHealthCheck)) {
                 // Still healthy - use it!
                 Timber.tag("getHostIP").d("✓ Found healthy node $nodeId in NodePool: $poolIP")
                 return poolIP
@@ -1495,11 +1575,43 @@ object HproseInstance {
                 NodePool.removeNode(nodeId)
                 // Fall through to Step 2
             }
+        } else if (poolIP != null) {
+            Timber.tag("getHostIP").d(
+                "Skipping pooled IP $poolIP for node $nodeId during alternate-route lookup"
+            )
         }
-        
+
+        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|${excludedKey.orEmpty()}"
+        val request = hostIPRequestsMutex.withLock {
+            hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
+                val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
+                    resolveHostIPAfterPoolMiss(nodeId, v4Only, excludedIP)
+                }
+                newRequest.invokeOnCompletion {
+                    TweetApplication.applicationScope.launch {
+                        hostIPRequestsMutex.withLock {
+                            if (hostIPRequests[requestKey] === newRequest) {
+                                hostIPRequests -= requestKey
+                            }
+                        }
+                    }
+                }
+                hostIPRequests[requestKey] = newRequest
+                newRequest
+            }
+        }
+
+        return request.await()
+    }
+
+    private suspend fun resolveHostIPAfterPoolMiss(
+        nodeId: MimeiId,
+        v4Only: String,
+        excludedIP: String?
+    ): String? {
         // Step 2: Try lookup using appUser's client
         try {
-            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService)
+            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService, excludedIP)
             if (hostIP != null) {
                 // Successfully resolved healthy IP
                 NodePool.updateNodeIP(nodeId, hostIP)
@@ -1530,7 +1642,7 @@ object HproseInstance {
                 val entryIP = findEntryIP()
                 val entryClient = HproseClientPool.getRegularClient("http://$entryIP")
                 
-                val hostIP = _getHostIP(nodeId, v4Only, entryClient)
+                val hostIP = _getHostIP(nodeId, v4Only, entryClient, excludedIP)
                 if (hostIP != null) {
                     NodePool.updateNodeIP(nodeId, hostIP)
                     Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP, updated NodePool")
@@ -1557,7 +1669,8 @@ object HproseInstance {
     private suspend fun _getHostIP(
         nodeId: MimeiId, 
         v4Only: String = HproseInstance.v4Only.toString(),
-        hproseService: HproseService? = appUser.hproseService
+        hproseService: HproseService? = appUser.hproseService,
+        excludedIP: String? = null
     ): String? {
         val entry = "get_node_ips"
         val params = mapOf("aid" to appId, "ver" to "last", "version" to "v2", "nodeid" to nodeId, "v4only" to v4Only)
@@ -1567,11 +1680,15 @@ object HproseInstance {
         
         // If ipArray is valid, try each IP and return the best one
         if (!ipArray.isNullOrEmpty()) {
-            val ipCount = ipArray.size
-            val ipList = ipArray.joinToString(", ")
+            val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
+            val candidateIPs = ipArray.filterNot {
+                normalizeIPHealthCacheKey(it) == excludedKey
+            }
+            val ipCount = candidateIPs.size
+            val ipList = candidateIPs.joinToString(", ")
             Timber.tag("getHostIP").d("Received $ipCount IP(s) for node $nodeId: [$ipList]")
             
-            val bestIP = tryIpAddresses(ipArray, "getHostIP($nodeId)")
+            val bestIP = tryIpAddresses(candidateIPs, "getHostIP($nodeId)")
             
             if (bestIP != null) {
                 Timber.tag("getHostIP").d("Found healthy IP for node $nodeId: $bestIP")
@@ -1783,9 +1900,8 @@ object HproseInstance {
 
         try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val response = (appUser.writableClient ?: appUser.hproseService)
-                ?.runMApp<Map<String, Any>>(entry, params)
+            val response = requireWritableClient(appUser, "updateUserCore")
+                .runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -1838,13 +1954,30 @@ object HproseInstance {
         val request = gson.fromJson(json, Map::class.java)
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val response = appUser.writableClient?.runMApp<MimeiId>(entry, request)
+            val response = requireWritableClient(appUser, "setUserAvatar").runMApp<MimeiId>(entry, request)
             response
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e)
             null
         }
+    }
+
+    private suspend fun requireWritableClient(
+        user: User,
+        operation: String,
+        timeoutMillis: Int? = null
+    ): HproseService {
+        val writableUrl = user.resolveWritableUrl()
+        if (writableUrl.isNullOrBlank()) {
+            throw IllegalStateException("$operation failed: writableUrl could not be resolved for user ${user.mid}")
+        }
+        val client = if (timeoutMillis == null) {
+            user.writableClient
+        } else {
+            HproseClientPool.getWritableClient(writableUrl, timeoutMillis)
+        }
+        return client
+            ?: throw IllegalStateException("$operation failed: writable client not available for $writableUrl")
     }
 
     private suspend fun refreshRelationshipListBaseUrl(
@@ -1868,10 +2001,11 @@ object HproseInstance {
                 Timber.tag(tag).w("Could not refresh baseUrl before relationship-list call for userId: ${user.mid}")
                 false
             } else {
+                val oldBaseUrl = user.baseUrl
                 user.baseUrl = refreshedBaseUrl
-                // Drop any pooled client for this URL so the list call does not reuse
-                // the same connection state that just failed or timed out.
-                user.clearHproseService()
+                if (oldBaseUrl?.let { normalizeIPHealthCacheKey(it) } != normalizeIPHealthCacheKey(refreshedBaseUrl)) {
+                    user.clearHproseService()
+                }
                 Timber.tag(tag).d("Using refreshed baseUrl for relationship-list call: ${user.baseUrl}")
                 true
             }
@@ -1879,6 +2013,126 @@ object HproseInstance {
             Timber.tag(tag).w(e, "Failed to refresh baseUrl before relationship-list call for userId: ${user.mid}")
             false
         }
+    }
+
+    private suspend fun evictNodeRouteAfterFailure(
+        user: User,
+        attemptedBaseUrl: String?,
+        tag: String
+    ) {
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+        if (accessNodeMid == null || attemptedBaseUrl.isNullOrBlank()) return
+
+        // The health check is the source of truth for whether a route should
+        // be invalidated. Drop cached health first so this probe is fresh.
+        Timber.tag(tag).d("Fetch-user timeout to $attemptedBaseUrl; checking route health before changing NodePool")
+        invalidateIPCache(attemptedBaseUrl)
+        if (isServerHealthy(attemptedBaseUrl)) {
+            Timber.tag(tag).d("Keeping node $accessNodeMid in pool; health check passed after failure to $attemptedBaseUrl")
+            return
+        }
+
+        val currentPoolIP = NodePool.getIPFromNodeId(accessNodeMid)
+        val attemptedKey = normalizeIPHealthCacheKey(attemptedBaseUrl)
+        val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
+        if (currentKey == attemptedKey) {
+            Timber.tag(tag).d("Removing unhealthy node $accessNodeMid from pool after failed health check for $attemptedBaseUrl")
+            NodePool.removeNode(accessNodeMid)
+            HproseClientPool.clearClient(attemptedBaseUrl)
+        } else {
+            Timber.tag(tag).d(
+                "Keeping node $accessNodeMid in pool after failed health check for stale route " +
+                    "attempted=$attemptedBaseUrl current=$currentPoolIP"
+            )
+        }
+    }
+
+    /**
+     * Validate the cached read route when a profile opens. Cached profile data remains
+     * visible while this runs. A healthy route is retained; an unhealthy route is
+     * removed from NodePool and replaced before profile RPCs continue.
+     *
+     * @return true when a health-verified route is ready for server refresh.
+     */
+    suspend fun validateAndRepairProfileRoute(user: User): Boolean {
+        if (!isOnline.value) {
+            Timber.tag("ProfileRoute").d("Offline: keeping cached profile for ${user.mid}")
+            return false
+        }
+
+        val currentBaseUrl = user.baseUrl?.trim()?.removeSuffix("/")
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+
+        if (!currentBaseUrl.isNullOrBlank()) {
+            Timber.tag("ProfileRoute").d("Fresh health check for ${user.mid} at $currentBaseUrl")
+            if (isServerHealthy(currentBaseUrl, useCache = false)) {
+                Timber.tag("ProfileRoute").d("Current route is healthy for ${user.mid}; refreshing profile data")
+                return true
+            }
+
+            Timber.tag("ProfileRoute").w("Current route is unhealthy for ${user.mid}: $currentBaseUrl")
+            invalidateIPCache(currentBaseUrl)
+            if (accessNodeMid != null) {
+                val pooledIP = NodePool.getIPFromNodeId(accessNodeMid)
+                if (pooledIP != null &&
+                    normalizeIPHealthCacheKey(pooledIP) == normalizeIPHealthCacheKey(currentBaseUrl)
+                ) {
+                    NodePool.removeNode(accessNodeMid)
+                }
+            }
+            HproseClientPool.clearClient(currentBaseUrl)
+        }
+
+        val replacementIP = try {
+            accessNodeMid?.let {
+                getHostIP(it, forceHealthCheck = true)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("ProfileRoute").w(e, "Failed to resolve replacement route for ${user.mid}")
+            null
+        }
+
+        val resolvedIP = replacementIP ?: try {
+            getProviderIP(user.mid)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("ProfileRoute").w(e, "Provider fallback failed for ${user.mid}")
+            null
+        }
+
+        if (resolvedIP.isNullOrBlank()) {
+            Timber.tag("ProfileRoute").w("No healthy replacement route for ${user.mid}; keeping cached profile")
+            return false
+        }
+
+        val replacementBaseUrl = if (resolvedIP.startsWith("http://") || resolvedIP.startsWith("https://")) {
+            resolvedIP.removeSuffix("/")
+        } else {
+            "http://${resolvedIP.removeSuffix("/")}"
+        }
+        val oldBaseUrl = user.baseUrl
+        if (oldBaseUrl != replacementBaseUrl) {
+            oldBaseUrl?.let(HproseClientPool::clearClient)
+            user.baseUrl = replacementBaseUrl
+            if (user.mid == appUser.mid) {
+                notifyAppUserChanged(oldBaseUrl, user.avatar)
+            }
+            TweetCacheManager.saveUser(user)
+        }
+        if (accessNodeMid != null) {
+            NodePool.updateNodeIP(accessNodeMid, resolvedIP)
+        }
+
+        Timber.tag("ProfileRoute").d("Route ready for ${user.mid}: $replacementBaseUrl")
+        return true
+    }
+
+    private fun setUserBaseUrlForRequest(user: User, newBaseUrl: String) {
+        val normalizedBaseUrl = newBaseUrl.trim().removeSuffix("/")
+        user.baseUrl = normalizedBaseUrl
     }
 
     /**
@@ -1901,15 +2155,18 @@ object HproseInstance {
             "userid" to user.mid
         )
         
+        var lastFailureWasTimeout = false
+
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                if (attempt > 0 || user.hproseService == null) {
+                val shouldRefreshRoute = user.hproseService == null || (attempt > 0 && !lastFailureWasTimeout)
+                if (shouldRefreshRoute) {
                     val routeReady = refreshRelationshipListBaseUrl(
                         user,
                         tag = "getFollowings",
                         reason = if (attempt == 0) "missing route" else "retry after failure",
-                        forceFresh = attempt > 0
+                        forceFresh = attempt > 0 && !lastFailureWasTimeout
                     )
                     if (!routeReady) {
                         if (attempt < maxRetries) {
@@ -1923,7 +2180,7 @@ object HproseInstance {
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
                 NodePool.updateFromUser(user)
                 
@@ -1933,10 +2190,18 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    Timber.tag("getFollowings").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getFollowings").d("Operation timeout detected, retrying same route immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    } else {
+                        Timber.tag("getFollowings").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    }
                     continue
                 }
                 
@@ -1970,15 +2235,18 @@ object HproseInstance {
             "userid" to user.mid
         )
         
+        var lastFailureWasTimeout = false
+
         // Retry logic
         for (attempt in 0..maxRetries) {
             try {
-                if (attempt > 0 || user.hproseService == null) {
+                val shouldRefreshRoute = user.hproseService == null || (attempt > 0 && !lastFailureWasTimeout)
+                if (shouldRefreshRoute) {
                     val routeReady = refreshRelationshipListBaseUrl(
                         user,
                         tag = "getFans",
                         reason = if (attempt == 0) "missing route" else "retry after failure",
-                        forceFresh = attempt > 0
+                        forceFresh = attempt > 0 && !lastFailureWasTimeout
                     )
                     if (!routeReady) {
                         if (attempt < maxRetries) {
@@ -1992,7 +2260,7 @@ object HproseInstance {
                 
                 val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
-                val result = response?.sortedByDescending { (it["value"] as? Int) ?: 0 }
+                val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String }
                 NodePool.updateFromUser(user)
                 
@@ -2002,10 +2270,18 @@ object HproseInstance {
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
                 if (isNetworkError && attempt < maxRetries) {
-                    Timber.tag("getFans").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getFans").d("Operation timeout detected, retrying same route immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    } else {
+                        Timber.tag("getFans").d("Network error detected, refreshing route and retrying immediately (attempt ${attempt + 1}/${maxRetries + 1})")
+                    }
                     continue
                 }
                 
@@ -2065,7 +2341,21 @@ object HproseInstance {
         pageNumber: Int = 0,
         pageSize: Int = 5,
         entry: String = "get_tweet_feed",
-        maxRetries: Int = 5,
+        maxRetries: Int = 1,
+        onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
+    ): List<Tweet?> = getTweetFeedInternal(
+        pageNumber = pageNumber,
+        pageSize = pageSize,
+        entry = entry,
+        maxRetries = maxRetries,
+        onRetry = onRetry
+    )
+
+    private suspend fun getTweetFeedInternal(
+        pageNumber: Int,
+        pageSize: Int,
+        entry: String,
+        maxRetries: Int,
         onRetry: ((attempt: Int, maxRetries: Int) -> Unit)? = null
     ): List<Tweet?> {
         if (!isOnline.value) {
@@ -2075,16 +2365,11 @@ object HproseInstance {
 
         val alphaIds = getAlphaIds()
         val userIdForGuest = if (alphaIds.isNotEmpty()) alphaIds.first() else ""
+        val isFollowingTweetUpdate = entry == "update_following_tweets"
 
         // For guest users, if no alpha IDs are configured, return empty list
-        if (appUser.isGuest() && alphaIds.isEmpty()) {
-            Timber.tag("getTweetFeed").w("No alpha IDs configured for guest user")
-            return emptyList()
-        }
-
-        if (entry == "update_following_tweets" &&
-            !shouldRunHeavyCall("update_following_tweets:${appUser.mid}", "getTweetFeed")
-        ) {
+        if (appUser.isGuest() && (alphaIds.isEmpty() || isFollowingTweetUpdate)) {
+            Timber.tag("getTweetFeed").d("Guest user: skipping $entry")
             return emptyList()
         }
         
@@ -2104,31 +2389,52 @@ object HproseInstance {
             }
         }
         
+        var lastFailureWasTimeout = false
+
+        // update_following_tweets is a heavy mutation and must not be retried.
+        val effectiveMaxRetries = if (entry == "update_following_tweets") 0 else maxRetries
+
         // Retry logic
-        for (attempt in 0..maxRetries) {
+        for (attempt in 0..effectiveMaxRetries) {
             try {
                 val forceRefresh = attempt > 0
                 if (forceRefresh) {
                     // Notify UI about retry attempt
-                    onRetry?.invoke(attempt, maxRetries)
-                    
-                    Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
-                    // Refresh appUser's baseUrl on retry
-                    val refreshedUser = fetchUser(appUser.mid, baseUrl = "")
-                    if (refreshedUser != null) {
-                        // Update appUser's baseUrl (hproseService is computed from baseUrl)
-                        appUser.baseUrl = refreshedUser.baseUrl
-                        Timber.tag("getTweetFeed").d("✅ Refreshed appUser baseUrl: ${appUser.baseUrl}")
+                    onRetry?.invoke(attempt, effectiveMaxRetries)
+
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: using alternate appUser baseUrl: ${appUser.baseUrl}")
                     } else {
-                        Timber.tag("getTweetFeed").w("⚠️ Failed to refresh appUser baseUrl on retry")
+                        Timber.tag("getTweetFeed").d("🔄 Retry attempt $attempt: Refreshing appUser's baseUrl")
+                        // Refresh appUser's baseUrl on non-timeout retry
+                        val refreshedUser = fetchUser(appUser.mid, baseUrl = "")
+                        if (refreshedUser != null) {
+                            // Update appUser's baseUrl (hproseService is computed from baseUrl)
+                            appUser.baseUrl = refreshedUser.baseUrl
+                            Timber.tag("getTweetFeed").d("✅ Refreshed appUser baseUrl: ${appUser.baseUrl}")
+                        } else {
+                            Timber.tag("getTweetFeed").w("⚠️ Failed to refresh appUser baseUrl on retry")
+                        }
                     }
                 }
                 
                 val feedService = getTweetFeedService(entry)
+                if (isFollowingTweetUpdate) {
+                    if (appUser.isGuest()) {
+                        return emptyList()
+                    }
+                    if (!shouldRunHeavyCall(
+                            "update_following_tweets:${appUser.mid}",
+                            "getTweetFeed"
+                        )
+                    ) {
+                        return emptyList()
+                    }
+                }
                 val response = try {
                     feedService?.runMApp<Map<String, Any>>(entry, params)
                 } catch (e: Exception) {
-                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     throw e
                 }
 
@@ -2136,7 +2442,7 @@ object HproseInstance {
                 val success = response?.get("success") as? Boolean
                 if (success != true) {
                     val serverMessage = response?.get("message") as? String
-                    Timber.tag("getTweetFeed").w("Feed failed: ${serverMessage ?: "Unknown error occurred"} (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").w("Feed failed: ${serverMessage ?: "Unknown error occurred"} (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     
                     // Throw exception to trigger retry logic for server failures
                     // This allows baseUrl refresh and retry on different nodes
@@ -2178,7 +2484,7 @@ object HproseInstance {
                     }
                 }
 
-                // Process main tweets - cache mainfeed tweets under appUser.mid
+                // Process main tweets - cache main feed rows under the signed-in user's feed list key.
                 val result = tweetsData?.map { tweetJson ->
                     // If the element is null, keep it as null
                     if (tweetJson == null) {
@@ -2214,8 +2520,7 @@ object HproseInstance {
                             if (tweet.isPrivate) {
                                 null
                             } else {
-                                // Cache mainfeed tweets under appUser.mid
-                                updateCachedTweet(tweet, userId = appUser.mid)
+                                updateCachedTweet(tweet, userId = TweetCacheManager.getMainFeedCacheId(appUser.mid))
                                 tweet
                             }
                         } catch (e: Exception) {
@@ -2227,16 +2532,33 @@ object HproseInstance {
                 
                 // Success! Return the result
                 if (attempt > 0) {
-                    Timber.tag("getTweetFeed").d("✅ Successfully fetched tweets after retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    Timber.tag("getTweetFeed").d("✅ Successfully fetched tweets after retry (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                 }
                 return result
                 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
+                lastFailureWasTimeout = e.hasTimeoutCause()
                 val isNetworkError = ErrorMessageUtils.isNetworkError(e)
                 
-                if (isNetworkError && attempt < maxRetries) {
+                if (isNetworkError && attempt < effectiveMaxRetries) {
+                    if (lastFailureWasTimeout && !isFollowingTweetUpdate) {
+                        val switchedRoute = switchAppUserFeedRouteAfterTimeout(appUser.baseUrl)
+                        if (!switchedRoute) {
+                            Timber.tag("getTweetFeed").w(
+                                "Feed timed out and no alternate reachable route was found; not retrying the same address"
+                            )
+                            throw e
+                        }
+                    }
                     val delayMs = minOf(5000L, 1000L * (1 shl attempt)) // Exponential backoff: 1s, 2s, 4s
-                    Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${maxRetries + 1})")
+                    if (lastFailureWasTimeout) {
+                        Timber.tag("getTweetFeed").d("⏳ Feed operation timeout detected, waiting ${delayMs / 1000}s before retrying alternate route (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
+                    } else {
+                        Timber.tag("getTweetFeed").d("⏳ Network error detected, waiting ${delayMs / 1000}s before retry (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
+                    }
                     delay(delayMs.milliseconds)
                     continue
                 }
@@ -2245,9 +2567,10 @@ object HproseInstance {
                 Timber.tag("getTweetFeed").e("Exception: $e")
                 Timber.tag("getTweetFeed").e("❌ STACK TRACE: ${e.stackTraceToString()}")
                 
-                if (attempt >= maxRetries) {
-                    Timber.tag("getTweetFeed").e("❌ All retry attempts exhausted after ${maxRetries + 1} attempts")
+                if (attempt >= effectiveMaxRetries) {
+                    Timber.tag("getTweetFeed").e("❌ Feed request failed after ${effectiveMaxRetries + 1} attempt(s)")
                 }
+                throw e
             }
         }
         
@@ -2267,35 +2590,67 @@ object HproseInstance {
      */
     private suspend fun getTweetFeedService(entry: String): HproseService? {
         if (entry != "update_following_tweets") {
-            return appUser.hproseService
+            val baseUrl = appUser.baseUrl ?: return null
+            return HproseClientPool.getRegularClient(
+                baseUrl,
+                GET_TWEET_FEED_TIMEOUT_MS
+            )
         }
 
         val hostIds = appUser.hostIds.orEmpty()
         val homeHostId = hostIds.getOrNull(0)
 
         if (!homeHostId.isNullOrBlank()) {
-            appUser.resolveWritableUrl()
-            appUser.writableClient?.let { homeService ->
-                Timber.tag("getTweetFeed").d(
-                    "Routing update_following_tweets to appUser home host $homeHostId"
-                )
-                return homeService
-            }
-
-            val homeIp = getHostIP(homeHostId)
-            val homeService = homeIp?.let { HproseClientPool.getRegularClient("http://$it") }
-            if (homeService != null) {
-                Timber.tag("getTweetFeed").d(
-                    "Routing update_following_tweets to resolved home host $homeHostId"
-                )
-                return homeService
-            }
-            Timber.tag("getTweetFeed").w(
-                "Could not resolve home host $homeHostId for update_following_tweets; falling back to appUser.baseUrl=${appUser.baseUrl}"
+            val homeService = requireWritableClient(
+                appUser,
+                "update_following_tweets",
+                UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS
             )
+            Timber.tag("getTweetFeed").d(
+                "Routing update_following_tweets to appUser home host $homeHostId"
+            )
+            return homeService
         }
 
-        return appUser.hproseService
+        throw IllegalStateException("update_following_tweets failed: appUser has no home host")
+    }
+
+    /**
+     * A successful health probe does not guarantee that every RPC is usable on
+     * that address. After get_tweet_feed times out, try another advertised and
+     * reachable address for the same access node. The attempted address is only
+     * excluded from this lookup; it is not marked unhealthy or blacklisted.
+     */
+    private suspend fun switchAppUserFeedRouteAfterTimeout(attemptedBaseUrl: String?): Boolean {
+        val accessNodeMid = appUser.hostIds?.getOrNull(1) ?: return false
+        if (attemptedBaseUrl.isNullOrBlank()) return false
+
+        val alternateIP = try {
+            getHostIP(
+                accessNodeMid,
+                forceHealthCheck = true,
+                excludedIP = attemptedBaseUrl
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("getTweetFeed").w(e, "Alternate feed-route lookup failed")
+            null
+        } ?: return false
+        val alternateBaseUrl = normalizeHealthCheckUrl(alternateIP).removeSuffix("/")
+        if (normalizeIPHealthCacheKey(alternateBaseUrl) == normalizeIPHealthCacheKey(attemptedBaseUrl)) {
+            return false
+        }
+
+        val oldBaseUrl = appUser.baseUrl
+        appUser.baseUrl = alternateBaseUrl
+        notifyAppUserChanged(oldBaseUrl, appUser.avatar)
+        NodePool.updateNodeIP(accessNodeMid, alternateIP)
+        TweetCacheManager.saveUser(appUser)
+        Timber.tag("getTweetFeed").d(
+            "Switched appUser feed route after timeout: $attemptedBaseUrl -> $alternateBaseUrl"
+        )
+        return true
     }
 
     /**
@@ -2372,6 +2727,7 @@ object HproseInstance {
         }
         var activeUser = user
         var refreshedRoute = false
+        var retriedSameRouteAfterTimeout = false
 
         while (true) {
             try {
@@ -2456,6 +2812,7 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetPayload(tweetJson))
                         tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
+
                         tweet.author = activeUser
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                         // Cache all tweets by their authorId
@@ -2474,6 +2831,16 @@ object HproseInstance {
             NodePool.updateFromUser(activeUser)
             return result
         } catch (e: Exception) {
+            if (e.hasTimeoutCause()) {
+                if (!retriedSameRouteAfterTimeout) {
+                    Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out for ${activeUser.mid}; retrying same route once")
+                    retriedSameRouteAfterTimeout = true
+                    continue
+                }
+                Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out again for ${activeUser.mid}; not refreshing route for operation timeout")
+                throw e
+            }
+
             if (refreshedRoute) {
                 Timber.tag("getTweetsByUser").e("Error fetching tweets for user after route refresh: ${activeUser.mid}: ${e.message}")
                 throw e
@@ -2532,22 +2899,10 @@ object HproseInstance {
             // Check cache first using TweetCacheManager
             val cachedTweet = TweetCacheManager.getCachedTweet(tweetId)
             if (cachedTweet != null) {
-                // Return cached tweet immediately with cached author
-                cachedTweet.author = TweetCacheManager.getCachedUser(authorId)
-
-                // Update author asynchronously in background
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val freshAuthor = fetchUser(authorId)
-                        if (freshAuthor != null) {
-                            cachedTweet.author = freshAuthor
-                            Timber.tag("fetchTweet").d("✅ Updated cached tweet $tweetId with fresh author")
-                        } else {
-                            Timber.tag("fetchTweet").w("⚠️ Failed to fetch fresh author for cached tweet $tweetId, authorId: $authorId")
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("fetchTweet").e("Error updating author for cached tweet $tweetId: $e")
-                    }
+                // The caller observes the returned Tweet reference, not later field mutations.
+                // Resolve a missing author before returning so embedded tweets render reliably.
+                if (cachedTweet.author == null) {
+                    cachedTweet.author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
                 }
 
                 return cachedTweet
@@ -2564,10 +2919,9 @@ object HproseInstance {
 
             // Get cached author for immediate use
             val cachedAuthor = TweetCacheManager.getCachedUser(authorId)
+            val authorForApi = fetchUser(authorId) ?: cachedAuthor
 
             val rawResponse = try {
-                // Try to get the author for the API call, but don't block on it
-                val authorForApi = fetchUser(authorId) ?: cachedAuthor
                 authorForApi?.hproseService?.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("fetchTweet").e(e, "Exception calling runMApp for fetchTweet, tweetId: $tweetId, authorId: $authorId")
@@ -2579,29 +2933,15 @@ object HproseInstance {
                 recordReliabilitySuccessTweet(tweetId)
 
                 Tweet.from(it).apply {
-                    // Set cached author immediately
-                    this.author = cachedAuthor
+                    // Attach the author before returning; Compose will not observe a later
+                    // mutation of this plain Tweet property from a background coroutine.
+                    this.author = authorForApi
 
                     // Cache tweet by authorId, not appUser.mid
                     TweetCacheManager.saveTweet(
                         this,
                         userId = authorId
                     )
-
-                    // Update author asynchronously in background
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val freshAuthor = fetchUser(authorId)
-                            if (freshAuthor != null) {
-                                this@apply.author = freshAuthor
-                                Timber.tag("fetchTweet").d("✅ Updated fetched tweet $tweetId with fresh author")
-                            } else {
-                                Timber.tag("fetchTweet").w("⚠️ Failed to fetch fresh author for tweet $tweetId, authorId: $authorId")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("fetchTweet").e("Error updating author for fetched tweet $tweetId: $e")
-                        }
-                    }
                 }
             }
         } catch (e: Exception) {
@@ -2843,11 +3183,18 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            // Load tweets cached for mainfeed (uid = appUser.mid)
-            val userId = appUser.mid
-            Timber.tag("loadCachedTweets").d("Loading cached tweets for mainfeed user: $userId")
-            
-            dao.getCachedTweetsByUser(userId, startRank, count).mapNotNull { cachedTweet ->
+            val cacheId = TweetCacheManager.getMainFeedCacheId(appUser.mid)
+            Timber.tag("loadCachedTweets").d("Loading cached tweets for main feed cache: $cacheId")
+
+            val primaryRows = dao.getCachedTweetsByUser(cacheId, startRank, count)
+            val cachedRows = if (primaryRows.isEmpty() && startRank == 0) {
+                Timber.tag("loadCachedTweets").d("No rows in $cacheId, trying legacy main feed cache: ${appUser.mid}")
+                dao.getCachedTweetsByUser(appUser.mid, startRank, count)
+            } else {
+                primaryRows
+            }
+
+            cachedRows.mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
@@ -2855,7 +3202,6 @@ object HproseInstance {
                     Timber.tag("loadCachedTweets").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Skip private tweets in mainfeed
                 if (tweet.isPrivate) {
                     return@mapNotNull null
@@ -2887,11 +3233,7 @@ object HproseInstance {
      * Load cached tweets for a specific user profile (filtered by authorId)
      * Used for offline loading of user profile tweets
      * 
-     * For any user profile, we check both cache buckets and filter by authorId:
-     * 1. Mainfeed cache (uid = appUser.mid) - contains tweets from all followings
-     * 2. User's own cache (uid = authorId) - contains tweets cached from their profile
-     * 
-     * This ensures tweets cached from the mainfeed can still be loaded for individual user profiles.
+     * Profiles are keyed by the profile user's mid, independent of the main feed cache.
      */
     suspend fun loadCachedTweetsByAuthor(
         authorId: MimeiId,
@@ -2899,27 +3241,18 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val allCachedTweets = mutableListOf<Tweet>()
-            
-            // Load from mainfeed cache (appUser.mid) and filter by authorId
-            // This ensures we can find tweets that were cached when viewing the mainfeed
-            dao.getCachedTweetsByUser(appUser.mid, 0, count * 3).forEach { cachedTweet ->
+            dao.getCachedTweetsByUser(authorId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
-                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
-                    allCachedTweets.add(tweet)
+                if (tweet.authorId.isEmpty() || tweet.authorId != authorId) {
+                    return@mapNotNull null
                 }
-            }
-            
-            // Also load from user's own cache bucket (userId = authorId) and filter by authorId
-            dao.getCachedTweetsByUser(authorId, 0, count * 3).forEach { cachedTweet ->
-                val tweet = cachedTweet.originalTweet
-                if (tweet.authorId.isNotEmpty() && tweet.authorId == authorId) {
-                    allCachedTweets.add(tweet)
+
+                // Comments are authored by their writer but are not top-level
+                // profile tweets. This also hides rows polluted by older toggle code.
+                if (tweet.parentTweetId != null) {
+                    return@mapNotNull null
                 }
-            }
-            
-            // Populate authors and filter
-            allCachedTweets.mapNotNull { tweet ->
+
                 // Filter out private tweets unless viewing appUser's own profile
                 if (tweet.isPrivate && authorId != appUser.mid) {
                     return@mapNotNull null
@@ -2940,10 +3273,6 @@ object HproseInstance {
 
                 tweet
             }
-                .distinctBy { it.mid }
-                .sortedByDescending { it.timestamp }
-                .drop(startRank)
-                .take(count)
         } catch (e: Exception) {
             Timber.tag("loadCachedTweetsByAuthor").e("Error loading cached tweets by author: $e")
             emptyList()
@@ -2970,7 +3299,6 @@ object HproseInstance {
                     Timber.tag("loadCachedBookmarks").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Populate author from user cache
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
@@ -2984,7 +3312,10 @@ object HproseInstance {
                     }
                 }
                 
-                tweet
+                tweet.copy().also { displayTweet ->
+                    displayTweet.author = tweet.author
+                    displayTweet.savedParentTweet = tweet.parentTweetId?.let { TweetCacheManager.getCachedTweet(it) }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("loadCachedBookmarks").e("❌ Error loading cached bookmarks: $e")
@@ -3012,7 +3343,6 @@ object HproseInstance {
                     Timber.tag("loadCachedFavorites").w("⚠️ Skipping tweet ${tweet.mid} with null/empty authorId")
                     return@mapNotNull null
                 }
-                
                 // Populate author from user cache
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
@@ -3026,7 +3356,10 @@ object HproseInstance {
                     }
                 }
                 
-                tweet
+                tweet.copy().also { displayTweet ->
+                    displayTweet.author = tweet.author
+                    displayTweet.savedParentTweet = tweet.parentTweetId?.let { TweetCacheManager.getCachedTweet(it) }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("loadCachedFavorites").e("❌ Error loading cached favorites: $e")
@@ -3095,10 +3428,9 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val client = appUser.writableClient ?: appUser.hproseService
+            val client = requireWritableClient(appUser, "uploadTweet", ADD_TWEET_TIMEOUT_MS)
             val rawResponse = try {
-                client?.runMApp<Map<String, Any>>(entry, params)
+                client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
                 throw e
@@ -3223,19 +3555,7 @@ object HproseInstance {
             // returns a Java-Map-backed object that wrapResponse mishandles),
             // making a clearly successful operation look like failure on the
             // client. By calling the home node directly we never hit it.
-            //
-            // Falls back to appUser.hproseService if hostId resolution fails,
-            // so the call still goes out (just risks the stale-payload bug).
-            val homeService = appUser.hostIds?.firstOrNull()?.let { hostId ->
-                getHostIP(hostId)?.let { ip ->
-                    HproseClientPool.getRegularClient("http://$ip")
-                }
-            } ?: appUser.hproseService
-
-            if (homeService == null) {
-                Timber.tag("toggleFollowing").e("hproseService is null! Cannot call toggle_following")
-                return null
-            }
+            val homeService = requireWritableClient(appUser, "toggleFollowing", TOGGLE_MUTATION_TIMEOUT_MS)
             Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}, homeHostId=${appUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
@@ -3363,141 +3683,203 @@ object HproseInstance {
         }
     }
 
-    /**
-     * Load favorite status of the tweet by appUser.
-     * */
-    suspend fun toggleFavorite(tweet: Tweet): Tweet {
-        if (!isOnline.value) {
-            Timber.tag("toggleFavorite").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        val entry = "toggle_favorite"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "appuserid" to appUser.mid,
-            "tweetid" to tweet.mid,
-            "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: "")
-        )
-        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        tweet.author?.resolveWritableUrl()
-        return try {
-            val authorClient = tweet.author?.writableClient
-                ?: throw Exception("Author writable client not available for toggleFavorite")
-            val rawResponse = try {
-                authorClient.runMApp<Map<String, Any>>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("toggleFavorite").e(e, "Exception calling runMApp for toggleFavorite, tweetId: ${tweet.mid}")
-                throw e
-            }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+    private enum class SavedTweetList(
+        val fallbackEntry: String,
+        val stateParameter: String
+    ) {
+        FAVORITES("toggle_favorite_by_user", "isfavorite"),
+        BOOKMARKS("toggle_bookmark_by_user", "isbookmarked")
+    }
 
-            if (response != null) {
-                // Handle successful response with updated user and tweet data
-                val updatedUserData = response["user"] as? Map<String, Any>
-                val updatedTweetData = response["tweet"] as? Map<String, Any>
-                
-                if (updatedUserData != null) {
-                    // Update appUser directly from the response data
-                    appUser.from(updatedUserData)
-                    TweetCacheManager.saveUser(appUser)
+    @Suppress("UNCHECKED_CAST")
+    private fun unwrapNestedV2Map(response: Any?): Map<String, Any>? {
+        var current = response
+        repeat(3) {
+            val map = current as? Map<String, Any> ?: return null
+            when (map["success"]) {
+                false -> return null
+                true -> {
+                    val data = map["data"]
+                    if (data is Map<*, *>) {
+                        current = data
+                    } else {
+                        return map
+                    }
                 }
-                
-                if (updatedTweetData != null) {
-                    // Create updated tweet from server response
-                    val updatedTweet = Tweet.from(updatedTweetData)
-                    
-                    // Preserve author from original tweet, or fetch if not available
-                    // Don't overwrite with null from fetchUser
-                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
-                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
-                    
-                    // Cache by authorId
-                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
-                    return updatedTweet
-                }
-            } else {
-                // Handle error response
-                val error = rawResponse?.get("message") as? String
-                Timber.tag("toggleFavorite").e("Favorite toggle failed: $error")
+                else -> return map
             }
-            
-            // Fallback to original tweet if parsing fails
-            tweet
-        } catch (e: Exception) {
-            Timber.tag("toggleFavorite").e(e)
-            tweet
+        }
+        return current as? Map<String, Any>
+    }
+
+    private fun savedTweetCacheKey(list: SavedTweetList): MimeiId = when (list) {
+        SavedTweetList.FAVORITES -> TweetCacheManager.getFavoritesCacheId(appUser.mid)
+        SavedTweetList.BOOKMARKS -> TweetCacheManager.getBookmarksCacheId(appUser.mid)
+    }
+
+    private suspend fun removeSavedTweetFromAppUser(
+        tweetId: MimeiId,
+        list: SavedTweetList
+    ) {
+        val client = requireWritableClient(
+            appUser,
+            list.fallbackEntry,
+            TOGGLE_MUTATION_TIMEOUT_MS
+        )
+        val rawResponse = client.runMApp<Map<String, Any>>(
+            list.fallbackEntry,
+            mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "userid" to appUser.mid,
+                "tweetid" to tweetId,
+                list.stateParameter to false,
+                "skipcontentsync" to true
+            )
+        )
+        val updatedUserData = unwrapNestedV2Map(rawResponse)
+            ?: throw IllegalStateException("${list.fallbackEntry} returned invalid user data")
+        appUser.from(updatedUserData)
+        TweetCacheManager.saveUser(appUser)
+        TweetCacheManager.removeTweetFromCache(tweetId, savedTweetCacheKey(list))
+    }
+
+    private fun optimisticSavedTweetResult(
+        tweet: Tweet,
+        list: SavedTweetList
+    ): Tweet = tweet.copy(
+        favorites = tweet.favorites?.toMutableList()
+    ).also { updatedTweet ->
+        when (list) {
+            SavedTweetList.FAVORITES -> {
+                updatedTweet.isFavorite = false
+                updatedTweet.favoriteOverride = false
+            }
+            SavedTweetList.BOOKMARKS -> {
+                updatedTweet.isBookmarked = false
+                updatedTweet.bookmarkOverride = false
+            }
         }
     }
 
     /**
-     * Load bookmark status of the tweet by appUser.
-     * */
-    suspend fun toggleBookmark(tweet: Tweet): Tweet {
-        if (!isOnline.value) {
-            Timber.tag("toggleBookmark").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        val entry = "toggle_bookmark"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "userid" to appUser.mid,
-            "tweetid" to tweet.mid,
-            "authorid" to tweet.authorId,
-            "userhostid" to (appUser.hostIds?.first() ?: "")
-        )
-        // Route to author's writable node (hostIds[0]). hostIds[0] is stable so no user fetch needed.
-        tweet.author?.resolveWritableUrl()
-        return try {
-            val authorClient = tweet.author?.writableClient
-                ?: throw Exception("Author writable client not available for toggleBookmark")
-            val rawResponse = try {
-                authorClient.runMApp<Map<String, Any>>(entry, params)
-            } catch (e: Exception) {
-                Timber.tag("toggleBookmark").e(e, "Exception calling runMApp for toggleBookmark, tweetId: ${tweet.mid}")
-                throw e
-            }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+     * Toggle favorite on the author's root. Removal falls back to the app
+     * user's root when the tweet author is missing or no longer writable.
+     */
+    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? {
+        if (!isOnline.value) throw Exception("No network connection")
 
-            if (response != null) {
-                // Handle successful response with updated user and tweet data
-                val updatedUserData = response["user"] as? Map<String, Any>
-                val updatedTweetData = response["tweet"] as? Map<String, Any>
-                
-                if (updatedUserData != null) {
-                    // Update appUser directly from the response data
-                    appUser.from(updatedUserData)
-                    TweetCacheManager.saveUser(appUser)
-                }
-                
-                if (updatedTweetData != null) {
-                    // Create updated tweet from server response
-                    val updatedTweet = Tweet.from(updatedTweetData)
-                    
-                    // Preserve author from original tweet, or fetch if not available
-                    // Don't overwrite with null from fetchUser
-                    val fetchedAuthor = fetchUser(updatedTweet.authorId)
-                    updatedTweet.author = fetchedAuthor ?: tweet.author ?: TweetCacheManager.getCachedUser(updatedTweet.authorId)
-                    
-                    // Cache by authorId
-                    updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
-                    return updatedTweet
-                }
-            } else {
-                // Handle error response
-                val error = rawResponse?.get("message") as? String
-                Timber.tag("toggleBookmark").e("Bookmark toggle failed: $error")
+        try {
+            val author = tweet.interactionHostAuthor ?: tweet.author
+                ?: throw Exception("Author not available for toggleFavorite")
+            val authorClient = requireWritableClient(
+                author,
+                "toggleFavorite",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
+            val rawResponse = authorClient.runMApp<Map<String, Any>>(
+                "toggle_favorite",
+                mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "appuserid" to appUser.mid,
+                    "tweetid" to tweet.mid,
+                    "authorid" to tweet.authorId,
+                    "userhostid" to (appUser.hostIds?.first() ?: ""),
+                    "isfavorite" to isFavorite
+                )
+            )
+            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+                ?: throw IllegalStateException("toggle_favorite returned invalid data")
+            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+                appUser.from(updatedUserData)
+                TweetCacheManager.saveUser(appUser)
             }
-            
-            // Fallback to original tweet if parsing fails
-            tweet
-        } catch (e: Exception) {
-            Timber.tag("toggleBookmark").e(e)
-            tweet
+            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+                Tweet.from(updatedTweetData).also {
+                    it.favoriteOverride = it.isFavorite
+                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+                }
+            }
+            if (!isFavorite) {
+                TweetCacheManager.removeTweetFromCache(
+                    tweet.mid,
+                    savedTweetCacheKey(SavedTweetList.FAVORITES)
+                )
+            }
+            return updatedTweet
+                ?: if (!isFavorite) optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+                else throw IllegalStateException("toggle_favorite did not return a tweet")
+        } catch (primaryError: Exception) {
+            if (isFavorite) throw primaryError
+            Timber.tag("toggleFavorite").w(
+                primaryError,
+                "Author mutation failed; removing ${tweet.mid} from app user favorites"
+            )
+            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.FAVORITES)
+            return optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+        }
+    }
+
+    /**
+     * Toggle bookmark on the author's root. Removal falls back to the app
+     * user's root when the tweet author is missing or no longer writable.
+     */
+    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? {
+        if (!isOnline.value) throw Exception("No network connection")
+
+        try {
+            val author = tweet.interactionHostAuthor ?: tweet.author
+                ?: throw Exception("Author not available for toggleBookmark")
+            val authorClient = requireWritableClient(
+                author,
+                "toggleBookmark",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
+            val rawResponse = authorClient.runMApp<Map<String, Any>>(
+                "toggle_bookmark",
+                mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "userid" to appUser.mid,
+                    "tweetid" to tweet.mid,
+                    "authorid" to tweet.authorId,
+                    "userhostid" to (appUser.hostIds?.first() ?: ""),
+                    "isbookmarked" to isBookmarked
+                )
+            )
+            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+                ?: throw IllegalStateException("toggle_bookmark returned invalid data")
+            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+                appUser.from(updatedUserData)
+                TweetCacheManager.saveUser(appUser)
+            }
+            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+                Tweet.from(updatedTweetData).also {
+                    it.bookmarkOverride = it.isBookmarked
+                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+                }
+            }
+            if (!isBookmarked) {
+                TweetCacheManager.removeTweetFromCache(
+                    tweet.mid,
+                    savedTweetCacheKey(SavedTweetList.BOOKMARKS)
+                )
+            }
+            return updatedTweet
+                ?: if (!isBookmarked) optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
+                else throw IllegalStateException("toggle_bookmark did not return a tweet")
+        } catch (primaryError: Exception) {
+            if (isBookmarked) throw primaryError
+            Timber.tag("toggleBookmark").w(
+                primaryError,
+                "Author mutation failed; removing ${tweet.mid} from app user bookmarks"
+            )
+            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.BOOKMARKS)
+            return optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
         }
     }
 
@@ -3544,6 +3926,15 @@ object HproseInstance {
                 else -> user.mid // Regular tweets cached by authorId
             }
 
+            // Page 0 is authoritative for the saved-list cache shown on screen
+            // open. Replace only this membership bucket so removed or nullified
+            // saved tweets cannot reappear on the next cache-first render.
+            if (pageNumber == 0 && response != null &&
+                (type == UserContentType.BOOKMARKS || type == UserContentType.FAVORITES)
+            ) {
+                TweetCacheManager.clearTweetCache(cacheUserId)
+            }
+
             response?.map { tweetJson ->
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
@@ -3553,6 +3944,50 @@ object HproseInstance {
                     try {
                         val tweet = Tweet.from(tweetPayload(tweetJson))
                         tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
+                        var savedParentTweet: Tweet? = null
+
+                        // Membership in the saved list is authoritative even when
+                        // the access-node interaction flags are stale.
+                        when (type) {
+                            UserContentType.BOOKMARKS -> {
+                                tweet.isBookmarked = true
+                                tweet.bookmarkOverride = true
+                            }
+                            UserContentType.FAVORITES -> {
+                                tweet.isFavorite = true
+                                tweet.favoriteOverride = true
+                            }
+                            else -> Unit
+                        }
+
+                        // Reuse the existing quote-tweet presentation for a saved
+                        // comment, with its immediate parent as embedded context.
+                        if ((type == UserContentType.BOOKMARKS || type == UserContentType.FAVORITES)
+                            && tweet.parentTweetId != null
+                        ) {
+                            try {
+                                val parentRaw = user.hproseService?.runMApp<Any>(
+                                    "get_tweet",
+                                    mapOf(
+                                        "aid" to appId,
+                                        "ver" to "last",
+                                        "version" to "v2",
+                                        "tweetid" to tweet.parentTweetId!!,
+                                        "appuserid" to appUser.mid
+                                    )
+                                )
+                                val parentData = unwrapV2Response<Map<String, Any>>(parentRaw)
+                                if (parentData != null) {
+                                    val parent = Tweet.from(parentData)
+                                    parent.author = TweetCacheManager.getCachedUser(parent.authorId)
+                                        ?: fetchUser(parent.authorId)
+                                    TweetCacheManager.saveTweet(parent, parent.authorId)
+                                    savedParentTweet = parent
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag("getUserTweetsByType").w(e, "Parent unavailable for saved comment ${tweet.mid}")
+                            }
+                        }
 
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
                         tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
@@ -3573,7 +4008,11 @@ object HproseInstance {
                         TweetCacheManager.saveTweet(tweet, cacheUserId)
                         Timber.tag("getUserTweetsByType").d("Cached tweet ${tweet.mid} under userId: $cacheUserId (type: ${type.value})")
 
-                        tweet
+                        tweet.copy().also { displayTweet ->
+                            displayTweet.author = tweet.author
+                            displayTweet.rowTimestamp = tweet.rowTimestamp
+                            displayTweet.savedParentTweet = savedParentTweet
+                        }
                     } catch (e: Exception) {
                         Timber.tag("getUserTweetsByType").e("Error decoding tweet: $e")
                         null
@@ -3587,9 +4026,11 @@ object HproseInstance {
     }
 
     /**
-     * Delete a tweet and return the deleted tweetId. Only appUser can delete its own tweet.
+     * Delete a tweet and return the deleted tweetId.
+     * The backend decides whether to permanently delete the tweet or remove it
+     * from the current user's personal lists.
      */
-    suspend fun deleteTweet(tweetId: MimeiId): MimeiId? {
+    suspend fun deleteTweet(tweetId: MimeiId, tweetAuthorId: MimeiId = appUser.mid): MimeiId {
         if (!isOnline.value) {
             Timber.tag("deleteTweet").d("Offline: skipping")
             throw Exception("No network connection")
@@ -3605,23 +4046,52 @@ object HproseInstance {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
-            "version" to "v2",
+            "version" to "v3",
             "userid" to appUser.mid,
+            "authorid" to tweetAuthorId,
             "tweetid" to tweetId
         )
+
+        suspend fun refreshAppUserAfterDelete() {
+            try {
+                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
+                if (refreshedUser != null && !refreshedUser.isGuest()) {
+                    // Update singleton and set appUser to it
+                    User.updateUserInstance(refreshedUser, true)
+                    appUser = getInstance(refreshedUser.mid)
+
+                    // Notify other ViewModels that user data has been updated
+                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
+                }
+            } catch (e: Exception) {
+                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
+            }
+        }
+
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val client = appUser.writableClient ?: appUser.hproseService
+            val client = requireWritableClient(appUser, "deleteTweet")
             val rawResponse = try {
-                client?.runMApp<Map<String, Any>>(entry, params)
+                client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
+                if (isTweetNotFoundDeleteFailure(error = e)) {
+                    Timber.tag("deleteTweet")
+                        .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    refreshAppUserAfterDelete()
+                    return tweetId
+                }
                 Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
                 throw e
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
             if (response == null) {
+                if (isTweetNotFoundDeleteFailure(response = rawResponse)) {
+                    Timber.tag("deleteTweet")
+                        .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    refreshAppUserAfterDelete()
+                    return tweetId
+                }
                 val errorMsg = "Delete tweet failed: server returned null response"
                 Timber.tag("deleteTweet").e(errorMsg)
                 throw Exception(errorMsg)
@@ -3636,22 +4106,16 @@ object HproseInstance {
             }
 
             // Refresh appUser from server to get updated tweetCount and other properties
-            try {
-                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
-                if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Update singleton and set appUser to it
-                    User.updateUserInstance(refreshedUser, true)
-                    appUser = getInstance(refreshedUser.mid)
-
-                    // Notify other ViewModels that user data has been updated
-                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
-                }
-            } catch (e: Exception) {
-                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
-            }
+            refreshAppUserAfterDelete()
 
             deletedTweetId
         } catch (e: Exception) {
+            if (isTweetNotFoundDeleteFailure(error = e)) {
+                Timber.tag("deleteTweet")
+                    .d("Tweet $tweetId is already missing on server; treating delete as success")
+                refreshAppUserAfterDelete()
+                return tweetId
+            }
             Timber.tag("deleteTweet").e(e, "Error deleting tweet: ${e.message}")
             Timber.tag("deleteTweet").e("Stack trace: ${e.stackTraceToString()}")
             // Re-throw with original message or provide default
@@ -3668,9 +4132,8 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         // Mutation: route through appUser's writable host (hostIds[0]).
-        appUser.resolveWritableUrl()
-        val client = appUser.writableClient ?: appUser.hproseService
-        val rawResponse = client?.runMApp<Any>(entry, params)
+        val client = requireWritableClient(appUser, "deleteAccount", DELETE_ACCOUNT_TIMEOUT_MS)
+        val rawResponse = client.runMApp<Any>(entry, params)
         return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
     }
 
@@ -3679,26 +4142,22 @@ object HproseInstance {
      * @param pageNumber
      * Page-by-page comment fetch that mirrors iOS `fetchComments`.
      *
-     * Returns `Pair(comments, failedIds)`:
-     * - `comments` preserves nil positions for failed parses (so callers can show
-     *   placeholders if they want); each successful entry has its author resolved.
-     * - `failedIds` lists the comment IDs whose payload failed to parse. The
-     *   caller is responsible for triggering `syncComment()` on those, ideally
-     *   batched via `syncMissingComments()` only when the read node differs from
-     *   the write node (matches iOS gating).
-     *
-     * Unlike the previous `getComments`, this does NOT fire an inline
-     * `node_update_mid_by_score` coroutine per failure — that lives in
-     * `syncComment()` so callers can decide when (and whether) to invoke it.
+     * Returns `comments`, preserving nil positions for failed parses (so callers
+     * can show placeholders if they want); each successful entry has its author
+     * resolved. A comment ID that fails to parse here means it either hasn't
+     * synced from the author's write node to the read node yet, or is genuinely
+     * gone — either way, the server (`get_comments`) now handles cleaning up
+     * IDs it can confirm are stale, so the client no longer needs to sync or
+     * retry individual comment IDs itself.
      */
     suspend fun fetchComments(
         tweet: Tweet,
         pageNumber: Int = 0,
         pageSize: Int = 20
-    ): Pair<List<Tweet?>, List<String>> {
+    ): List<Tweet?> {
         if (!isOnline.value) {
             Timber.tag("fetchComments").d("Offline: skipping")
-            return Pair(emptyList(), emptyList())
+            return emptyList()
         }
         return try {
             if (tweet.author == null) {
@@ -3713,12 +4172,12 @@ object HproseInstance {
                 val fetched = fetchUser(tweet.authorId)
                 if (fetched == null || fetched.baseUrl.isNullOrEmpty()) {
                     Timber.tag("fetchComments").e("Cannot resolve author for tweet ${tweet.mid}")
-                    return Pair(emptyList(), emptyList())
+                    return emptyList()
                 }
                 tweet.author = fetched
             }
             val authorService = tweet.author?.hproseService
-                ?: return Pair(emptyList(), emptyList())
+                ?: return emptyList()
 
             val params = mapOf(
                 "aid" to appId,
@@ -3733,7 +4192,6 @@ object HproseInstance {
             val response = unwrapV2Response<List<Map<String, Any>?>>(raw) ?: emptyList()
 
             val comments = mutableListOf<Tweet?>()
-            val failedIds = mutableListOf<String>()
             for (entry in response) {
                 if (entry == null) {
                     comments.add(null)
@@ -3742,7 +4200,6 @@ object HproseInstance {
                 val commentId = entry["mid"] as? String
                 val commentAuthorId = entry["authorId"] as? String
                 if (commentId.isNullOrBlank() || commentAuthorId.isNullOrBlank()) {
-                    commentId?.let { failedIds.add(it) }
                     Timber.tag("fetchComments").w(
                         "Skipping malformed comment payload in tweet ${tweet.mid}: mid=$commentId, authorId=$commentAuthorId"
                     )
@@ -3750,104 +4207,30 @@ object HproseInstance {
                     continue
                 }
                 try {
+                    val locallyKnown = Tweet.findInstance(commentId)
+                        ?: TweetCacheManager.getCachedTweet(commentId)
+                    val favoriteOverride = locallyKnown?.favoriteOverride
+                    val bookmarkOverride = locallyKnown?.bookmarkOverride
                     val comment = Tweet.from(entry)
+                    favoriteOverride?.let { comment.isFavorite = it }
+                    bookmarkOverride?.let { comment.isBookmarked = it }
+                    comment.favoriteOverride = favoriteOverride
+                    comment.bookmarkOverride = bookmarkOverride
+                    comment.interactionHostAuthor = tweet.author
                     val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
                     comment.author = cachedAuthor ?: fetchUser(comment.authorId)
                     comments.add(comment)
                 } catch (e: Exception) {
-                    commentId.let { failedIds.add(it) }
                     Timber.tag("fetchComments").w(
                         "Failed to parse comment in tweet ${tweet.mid}: mid=$commentId, error=${e.message}"
                     )
                     comments.add(null)
                 }
             }
-            Pair(comments, failedIds)
+            comments
         } catch (e: Exception) {
             Timber.tag("fetchComments").e(e, "Error fetching comments for tweet ${tweet.mid}")
-            Pair(emptyList(), emptyList())
-        }
-    }
-
-    /**
-     * SYNC a single comment from the author's home node (hostIds[0]) to the
-     * read node (hostIds[1]), then retry fetching it. Mirrors iOS
-     * `HproseInstance.syncComment`.
-     *
-     * Returns the comment if the retry succeeds. On failure, records the
-     * comment ID in BlackList (eventually blacklisted after repeated failures
-     * across sessions). Callers typically post a `TweetEvent.CommentSynced`
-     * event on success so detail views can append the recovered comment.
-     */
-    suspend fun syncComment(commentId: String, parentTweet: Tweet): Tweet? {
-        if (!isOnline.value) return null
-        val author = parentTweet.author
-            ?: TweetCacheManager.getCachedUser(parentTweet.authorId)
-            ?: fetchUser(parentTweet.authorId)
-            ?: return null
-        val authorService = author.hproseService ?: return null
-        val authorHostId = author.hostIds?.firstOrNull() ?: return null
-
-        return try {
-            runCatching {
-                authorService.runMApp<Any>(
-                    "node_update_mid_by_score",
-                    mapOf(
-                        "aid" to appId,
-                        "ver" to "last",
-                        "version" to "v2",
-                        "hostid" to authorHostId,
-                        "userid" to parentTweet.authorId,
-                        "mid" to commentId
-                    )
-                )
-            }
-            val rawRetry = runCatching {
-                authorService.runMApp<Any>(
-                    "get_tweet",
-                    mapOf(
-                        "aid" to appId,
-                        "ver" to "last",
-                        "version" to "v2",
-                        "tweetid" to commentId,
-                        "appuserid" to appUser.mid
-                    )
-                )
-            }.getOrNull()
-            val retryPayload = unwrapV2Response<Map<String, Any>>(rawRetry, logErrors = false)
-            if (retryPayload == null) {
-                when (val retryMessage = (rawRetry as? Map<*, *>)?.get("message") as? String) {
-                    "Tweet not found", "User not found" -> {
-                        Timber.tag("syncComment").d(
-                            "Retry get_tweet returned expected miss for $commentId: $retryMessage"
-                        )
-                    }
-                    null -> Unit
-                    else -> {
-                        Timber.tag("syncComment").w(
-                            "Retry get_tweet failed for $commentId: $retryMessage"
-                        )
-                    }
-                }
-            }
-            val retried = runCatching {
-                retryPayload?.let { Tweet.from(it) }
-            }.getOrNull()
-            if (retried != null) {
-                BlackList.recordSuccess(commentId)
-                if (retried.author == null) {
-                    retried.author = TweetCacheManager.getCachedUser(retried.authorId)
-                        ?: fetchUser(retried.authorId)
-                }
-                retried
-            } else {
-                BlackList.recordFailure(commentId)
-                null
-            }
-        } catch (e: Exception) {
-            Timber.tag("syncComment").w("Failed to sync comment $commentId: ${e.message}")
-            BlackList.recordFailure(commentId)
-            null
+            emptyList()
         }
     }
 
@@ -3861,19 +4244,24 @@ object HproseInstance {
             throw Exception("No network connection")
         }
         val entry = "add_comment"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "entry" to entry,
-            "tweetid" to tweet.mid,
-            "comment" to Json.encodeToString(comment),
-            "tweetauthorid" to tweet.authorId,
-            "hostid" to (tweet.author?.hostIds?.first() ?: "")
-        )
         return try {
             val rawResponse = try {
-                appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                val parentAuthor = tweet.author ?: fetchUser(tweet.authorId)
+                    ?: throw IllegalStateException("Parent author ${tweet.authorId} is unavailable")
+                val parentHostId = parentAuthor.hostIds?.firstOrNull()
+                    ?: throw IllegalStateException("Parent author ${tweet.authorId} has no writable host")
+                val params = mapOf(
+                    "aid" to appId,
+                    "ver" to "last",
+                    "version" to "v2",
+                    "entry" to entry,
+                    "tweetid" to tweet.mid,
+                    "comment" to Json.encodeToString(comment),
+                    "tweetauthorid" to parentAuthor.mid,
+                    "hostid" to parentHostId
+                )
+                requireWritableClient(parentAuthor, "uploadComment")
+                    .runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("uploadComment").e(e, "Exception calling runMApp for uploadComment, tweetId: ${tweet.mid}")
                 throw e
@@ -4175,7 +4563,6 @@ object HproseInstance {
                     Timber.tag("fetchUser").d("📥 Hydrated singleton from cached user before fetch: userId: $userId")
                 } else {
                     if (user.baseUrl.isNullOrEmpty()) user.baseUrl = cachedUser.baseUrl
-                    if (user.writableUrl.isNullOrEmpty()) user.writableUrl = cachedUser.writableUrl
                     if (user.name == null) user.name = cachedUser.name
                     if (user.avatar == null) user.avatar = cachedUser.avatar
                     if (user.email == null) user.email = cachedUser.email
@@ -4221,28 +4608,37 @@ object HproseInstance {
      * @return true if successful, throws exception otherwise
      */
     private suspend fun processUserDataResponse(user: User, response: Map<*, *>, skipRetryAndBlacklist: Boolean): Boolean {
+        @Suppress("UNCHECKED_CAST")
+        val typedResponse = response as Map<String, Any>
+        val candidate = user.copy()
+        candidate.from(typedResponse)
+
+        if (!isValidUserData(candidate)) {
+            Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${candidate.mid}, username: ${candidate.username}")
+            if (!skipRetryAndBlacklist) {
+                recordReliabilityFailureUser(user.mid)
+            }
+            throw InvalidUserDataException("Invalid user data received for userId: ${user.mid}")
+        }
+
+        user.from(typedResponse)
         if (!skipRetryAndBlacklist) {
             recordReliabilitySuccessUser(user.mid)
         }
-        user.from(response as Map<String, Any>)
-        
-        if (isValidUserData(user)) {
-            return true
-        } else {
-            Timber.tag("updateUserFromServer").w("❌ INVALID USER DATA: userId: ${user.mid}, mid: ${user.mid}, username: ${user.username}")
-            throw Exception("Invalid user data received")
-        }
+        return true
     }
+
+    private class InvalidUserDataException(message: String) : Exception(message)
 
 
     /**
      * Resolves and updates user's baseUrl (for first attempt or retries).
      * 
      * NodePool Integration:
-     * - First attempt: try NodePool once as a performance hint.
-     * - NodePool miss: try the cached baseUrl once because dynamic IPs rarely change.
-     * - Forced refresh and retry attempts: resolve through getProviderIP().
-     * - After successful resolution: update NodePool with the fresh IP.
+     * - NodePool is the app-session source of truth for read-node routing.
+     * - First attempt uses the access-node entry from NodePool when available.
+     * - Re-resolution is a repair path for a missing or proven-stale node entry.
+     * - After successful resolution, update NodePool so all users on that node share it.
      */
     private suspend fun resolveAndUpdateBaseUrl(
         user: User, 
@@ -4257,8 +4653,7 @@ object HproseInstance {
             val accessNodeMid = user.hostIds?.getOrNull(1)
             val poolIP = accessNodeMid?.let { NodePool.getIPFromNodeId(it) }
             if (poolIP != null) {
-                user.baseUrl = "http://$poolIP"
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, "http://$poolIP")
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP by access node: $poolIP for userId: ${user.mid}")
                 return
             }
@@ -4268,15 +4663,13 @@ object HproseInstance {
             // NodePool is trusted only once for performance.
             val poolIP = NodePool.getIPFromNode(user)
             if (poolIP != null) {
-                user.baseUrl = "http://$poolIP"
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, "http://$poolIP")
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using NodePool IP once: $poolIP for userId: ${user.mid}")
                 return
             }
 
             if (!originalBaseUrl.isNullOrBlank()) {
-                user.baseUrl = originalBaseUrl
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, originalBaseUrl)
                 Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - NodePool miss; trying cached baseUrl once for userId: ${user.mid}")
                 return
             }
@@ -4284,7 +4677,8 @@ object HproseInstance {
             Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - No cached route for userId: ${user.mid}; resolving provider IP")
         }
         
-        // Resolve fresh IP (retry attempts or forced refresh)
+        // Direct read-node discovery is the strongest fallback for known users:
+        // baseUrl may be stale, while hostIds[1] identifies the node that serves reads.
         val reason = if (attempt > 1) {
             "retry attempt - resolving fresh IP"
         } else {
@@ -4293,6 +4687,23 @@ object HproseInstance {
                 hasExpired -> "forcing fresh IP resolution (user cache expired, baseUrl also considered expired)"
                 else -> "no baseUrl"
             }
+        }
+
+        val accessNodeMid = user.hostIds?.getOrNull(1)
+        if (accessNodeMid != null) {
+            Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving read node $accessNodeMid for userId: ${user.mid}, reason: $reason")
+            val accessIP = getHostIP(accessNodeMid)
+            if (!accessIP.isNullOrBlank()) {
+                val newBaseUrl = if (accessIP.startsWith("http://") || accessIP.startsWith("https://")) {
+                    accessIP
+                } else {
+                    "http://$accessIP"
+                }
+                setUserBaseUrlForRequest(user, newBaseUrl)
+                Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Using resolved read-node IP: ${user.baseUrl} for userId: ${user.mid}")
+                return
+            }
+            Timber.tag("updateUserFromServer").w("⚠️ getHostIP returned null for read node $accessNodeMid, falling back to provider IP for userId: ${user.mid}")
         }
         
         Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving provider IP for userId: ${user.mid}, old baseUrl: ${user.baseUrl ?: ""}, reason: $reason")
@@ -4306,8 +4717,7 @@ object HproseInstance {
                     "http://$providerIP"
                 }
                 
-                user.baseUrl = newBaseUrl
-                user.clearHproseService()
+                setUserBaseUrlForRequest(user, newBaseUrl)
                 
                 // Update NodePool with newly resolved IP (replaces old IPs for this node)
                 val accessNodeMid = user.hostIds?.getOrNull(1)
@@ -4392,30 +4802,13 @@ object HproseInstance {
                 val success = if (userData != null) {
                     processUserDataResponse(user, userData, skipRetryAndBlacklist)
                 } else {
-                    // unwrapV2Response returned null (either error response or null response)
-                    // MATCH iOS: Clear baseUrl and let retry loop handle it
-                    // This ensures next attempt will resolve fresh IP
-                    Timber.tag("updateUserFromServer").w("❌ NULL RESPONSE (user not found): userId: ${user.mid}, attempt: $attempt/$maxRetries")
-
-                    // Remove unhealthy node from pool (null response indicates node issue)
-                    val accessNodeMid = user.hostIds?.getOrNull(1)
-                    if (accessNodeMid != null) {
-                        Timber.tag("updateUserFromServer").d("Removing node $accessNodeMid from pool after null response")
-                        NodePool.removeNode(accessNodeMid)
+                    // Null/error get_user response means the user data is missing or broken.
+                    // It is not evidence that the node IP is stale.
+                    Timber.tag("updateUserFromServer").w("❌ NULL USER DATA RESPONSE: userId: ${user.mid}, attempt: $attempt/$maxRetries")
+                    if (!skipRetryAndBlacklist) {
+                        recordReliabilityFailureUser(user.mid)
                     }
-
-                    user.baseUrl = null
-
-                    // If this was the last attempt, fail
-                    if (attempt >= maxRetries) {
-                        Timber.tag("updateUserFromServer").e("❌ NULL RESPONSE on final attempt for userId: ${user.mid}")
-                        if (!skipRetryAndBlacklist) {
-                            recordReliabilityFailureUser(user.mid)
-                        }
-                    } else {
-                        Timber.tag("updateUserFromServer").d("Will retry with fresh providerIP on next attempt")
-                    }
-                    false
+                    throw InvalidUserDataException("Null user data received for userId: ${user.mid}")
                 }
                 
                 // On success, replace the access-node fast path with the route
@@ -4439,25 +4832,21 @@ object HproseInstance {
                     Timber.tag("updateUserFromServer").d("🔄 Fetch cancelled for userId: ${user.mid}, attempt: $attempt/$maxRetries")
                     throw e  // Propagate cancellation immediately
                 }
+
+                if (e is InvalidUserDataException) {
+                    Timber.tag("updateUserFromServer").e("❌ USER DATA INVALID: userId: ${user.mid}, error: ${e.message}")
+                    return false
+                }
                 
                 lastError = e
                 Timber.tag("updateUserFromServer").e("❌ USER UPDATE FAILED: userId: ${user.mid}, attempt: $attempt/$maxRetries, error: ${e.message}")
 
-                // Invalidate IP cache so retry's getProviderIP() health check won't
-                // return stale "healthy" for the failed IP
-                invalidateIPCache(user.baseUrl)
-
-                // Remove unhealthy node from pool only for genuine connection failures.
-                // Timeouts and cancellations can be caused by backgrounding/task teardown,
-                // not necessarily an unhealthy node.
-                val isTransient = e is java.net.SocketTimeoutException ||
-                        e.message?.contains("timeout", ignoreCase = true) == true
-                if (!isTransient) {
-                    val accessNodeMid = user.hostIds?.getOrNull(1)
-                    if (accessNodeMid != null) {
-                        Timber.tag("updateUserFromServer").d("Removing unhealthy node $accessNodeMid from pool after failure")
-                        NodePool.removeNode(accessNodeMid)
-                    }
+                if (e.hasTimeoutCause()) {
+                    evictNodeRouteAfterFailure(
+                        user,
+                        user.baseUrl,
+                        "updateUserFromServer"
+                    )
                 }
 
                 if (skipRetryAndBlacklist) {
@@ -4465,21 +4854,12 @@ object HproseInstance {
                 }
 
                 if (attempt < maxRetries) {
-                    Timber.tag("updateUserFromServer").d("Discarded failed route; resolving fresh provider IP immediately")
+                    Timber.tag("updateUserFromServer").d("Retrying get_user after failure; route health will decide whether IP changes")
                 }
             }
         }
         
         Timber.tag("updateUserFromServer").e("❌ ALL RETRIES FAILED: userId: ${user.mid}, maxRetries: $maxRetries")
-
-        // MATCH iOS: Remove node from pool and clear stale baseUrl
-        // so the NEXT fetchUser call forces fresh IP resolution via getProviderIP()
-        val accessNodeMid = user.hostIds?.getOrNull(1)
-        if (accessNodeMid != null && !user.baseUrl.isNullOrEmpty()) {
-            Timber.tag("updateUserFromServer").d("Removing failed node $accessNodeMid from pool after all retries failed")
-            NodePool.removeNode(accessNodeMid)
-        }
-        user.baseUrl = null
 
         if (!skipRetryAndBlacklist && lastError != null) {
             recordReliabilityFailureUser(user.mid)
@@ -4497,6 +4877,8 @@ object HproseInstance {
 
     private val providerIPRequests = mutableMapOf<MimeiId, Deferred<String?>>()
     private val providerIPRequestsMutex = Mutex()
+    private val hostIPRequests = mutableMapOf<String, Deferred<String?>>()
+    private val hostIPRequestsMutex = Mutex()
 
     private fun normalizeIPHealthCacheKey(ipAddress: String): String {
         val trimmed = ipAddress.trim()
@@ -4561,13 +4943,12 @@ object HproseInstance {
     }
 
     /**
-     * Try each IP address in the list in pairs until a healthy one is found
-     * Returns the first healthy IP immediately without waiting for others
-     * Checks IPs in pairs (2 at a time) to avoid overwhelming the network
-     * Uses a short cache to avoid repeated checks
+     * Try each IP address and return the healthy IP whose probe completes first.
+     * Cached unhealthy IPs are skipped briefly, but cached healthy IPs are probed
+     * again so an old cache hit cannot keep selecting a slow route.
      * @param ipAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
-     * @return First healthy IP address, or null if none found
+     * @return Fastest healthy IP address, or null if none found
      */
     private suspend fun tryIpAddresses(ipAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
         if (ipAddresses.isEmpty()) {
@@ -4575,134 +4956,84 @@ object HproseInstance {
         }
 
         if (logPrefix.isNotEmpty()) {
-            Timber.tag("getProviderIP").d("$logPrefix - Testing ${ipAddresses.size} IPs in pairs with cache")
+            Timber.tag("getProviderIP").d("$logPrefix - Racing ${ipAddresses.size} IP health checks")
         }
 
-        // First check cache for any healthy IPs
-        for (ipAddress in ipAddresses) {
-            val cachedHealth = getCachedHealth(ipAddress)
-            if (cachedHealth == true) {
-                if (logPrefix.isNotEmpty()) {
-                    Timber.tag("getProviderIP").d("$logPrefix - IP $ipAddress found healthy in cache")
-                }
-                return@coroutineScope ipAddress
-            }
-        }
+        val activeJobs = ipAddresses.mapIndexed { globalIndex, ipAddress ->
+            async(Dispatchers.IO) {
+                try {
+                    if (getCachedHealth(ipAddress) == false) {
+                        return@async null
+                    }
 
-        // Process IPs in pairs (2 at a time)
-        val pairSize = 2
-        var firstHealthy: String? = null
-        val activeJobs = mutableListOf<Deferred<String?>>()
+                    val testURL = normalizeHealthCheckUrl(ipAddress)
+                    val isHealthy = isServerHealthy(testURL, useCache = false)
+                    cacheIPHealth(ipAddress, isHealthy)
 
-        for (i in ipAddresses.indices step pairSize) {
-            // Check if we already found a healthy IP
-            if (firstHealthy != null) {
-                break
-            }
-
-            // Get the current pair of IPs
-            val endIndex = minOf(i + pairSize, ipAddresses.size)
-            val currentPair = ipAddresses.subList(i, endIndex)
-
-            // Launch jobs for this pair
-            activeJobs.clear()
-            for ((pairIndex, ipAddress) in currentPair.withIndex()) {
-                val globalIndex = i + pairIndex
-                val job = async(Dispatchers.IO) {
-                    try {
-                        // Check cache first (double-check in case another coroutine updated it)
-                        val cachedHealth = getCachedHealth(ipAddress)
-                        if (cachedHealth != null) {
-                            return@async if (cachedHealth) ipAddress else null
+                    if (isHealthy) {
+                        if (logPrefix.isNotEmpty()) {
+                            Timber.tag("getProviderIP").d("$logPrefix - IP ${globalIndex + 1}/${ipAddresses.size} ($ipAddress) is healthy")
                         }
-
-                        // Construct URL with proper IPv6 bracket wrapping
-                        val testURL = if (ipAddress.startsWith("http")) {
-                            ipAddress.trim()
-                        } else {
-                            val trimmedIP = ipAddress.trim()
-                            // Check if this is an IPv6 address that needs bracket wrapping
-                            // IPv6 addresses have MULTIPLE colons, IPv4 with port has only ONE colon
-                            val colonCount = trimmedIP.count { it == ':' }
-                            if (colonCount > 1 && !trimmedIP.startsWith("[")) {
-                                // This is IPv6 - wrap in brackets
-                                val lastColonIndex = trimmedIP.lastIndexOf(":")
-                                val potentialPort = trimmedIP.substring(lastColonIndex + 1)
-                                
-                                // Check if the part after last colon looks like a port (1-65535)
-                                val portNumber = potentialPort.toIntOrNull()
-                                if (portNumber != null && portNumber in 1..65535) {
-                                    // Has port - wrap IP part in brackets
-                                    val ipPart = trimmedIP.take(lastColonIndex)
-                                    "http://[$ipPart]:$portNumber"
-                                } else {
-                                    // No port or doesn't look like port - wrap entire address
-                                    "http://[$trimmedIP]"
-                                }
-                            } else {
-                                // IPv4 (with or without port) or already formatted
-                                "http://$trimmedIP"
-                            }
-                        }
-                        
-                        // Perform health check on this IP using HTTP HEAD (uses cache)
-                        val isHealthy = isServerHealthy(testURL)
-                        
-                        // Cache the result
-                        cacheIPHealth(ipAddress, isHealthy)
-                        
-                        if (isHealthy) {
-                            if (logPrefix.isNotEmpty()) {
-                                Timber.tag("getProviderIP").d("$logPrefix - IP ${globalIndex + 1}/${ipAddresses.size} ($ipAddress) is healthy")
-                            }
-                            ipAddress
-                        } else {
-                            null
-                        }
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        // Health check failed for this IP, cache as unhealthy
-                        cacheIPHealth(ipAddress, false)
+                        ipAddress
+                    } else {
                         null
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    cacheIPHealth(ipAddress, false)
+                    null
                 }
-                activeJobs.add(job)
+            }
+        }.toMutableList()
+
+        while (activeJobs.isNotEmpty()) {
+            val (completedJob, result) = select<Pair<Deferred<String?>, String?>> {
+                activeJobs.forEach { job ->
+                    job.onAwait { job to it }
+                }
             }
 
-            // Wait for the first healthy IP in this pair
-            for ((pairIndex, job) in activeJobs.withIndex()) {
-                try {
-                    val result = job.await()
-                    if (result != null) {
-                        firstHealthy = result
-                        // Cancel all remaining jobs in this pair
-                        for (j in (pairIndex + 1) until activeJobs.size) {
-                            activeJobs[j].cancel()
-                        }
-                        break
-                    }
-                } catch (_: kotlinx.coroutines.CancellationException) {
-                    // Job was cancelled, continue to next
-                    continue
-                } catch (_: Exception) {
-                    // Job failed, continue to next
-                    continue
-                }
+            activeJobs.remove(completedJob)
+            if (result != null) {
+                activeJobs.forEach { it.cancel() }
+                return@coroutineScope result
             }
         }
 
-        if (logPrefix.isNotEmpty() && firstHealthy == null) {
+        if (logPrefix.isNotEmpty()) {
             Timber.tag("getProviderIP").d("$logPrefix - No healthy IPs found among ${ipAddresses.size} addresses")
         }
 
-        firstHealthy
+        null
+    }
+
+    private fun normalizeHealthCheckUrl(ipAddress: String): String {
+        if (ipAddress.startsWith("http")) {
+            return ipAddress.trim()
+        }
+
+        val trimmedIP = ipAddress.trim()
+        val colonCount = trimmedIP.count { it == ':' }
+        if (colonCount > 1 && !trimmedIP.startsWith("[")) {
+            val lastColonIndex = trimmedIP.lastIndexOf(":")
+            val potentialPort = trimmedIP.substring(lastColonIndex + 1)
+            val portNumber = potentialPort.toIntOrNull()
+            return if (portNumber != null && portNumber in 1..65535) {
+                val ipPart = trimmedIP.take(lastColonIndex)
+                "http://[$ipPart]:$portNumber"
+            } else {
+                "http://[$trimmedIP]"
+            }
+        }
+
+        return "http://$trimmedIP"
     }
 
     /**
      * Resync user data on the server - matches iOS ProfileView behavior.
      * This triggers a backend operation to refresh the user's data on the server side.
-     * Should be called each time a user profile is opened.
+     * Called explicitly from profile pull-to-refresh rather than on profile open.
      * 
      * @param user The user to resync
      * @return The updated User object and synced tweets from server, or null if failed
@@ -4837,7 +5168,9 @@ object HproseInstance {
         while (current != null) {
             if (
                 current is java.util.concurrent.TimeoutException ||
-                current.message?.contains("timeout", ignoreCase = true) == true
+                current is java.net.SocketTimeoutException ||
+                current.message?.contains("timeout", ignoreCase = true) == true ||
+                current.message?.contains("timed out", ignoreCase = true) == true
             ) {
                 return true
             }
@@ -4876,7 +5209,7 @@ object HproseInstance {
         // Safety check: never try to get provider IP for GUEST_ID
         if (mid == TW_CONST.GUEST_ID) {
             Timber.tag("getProviderIP").e("❌ Refusing to get provider IP for GUEST_ID")
-            return@coroutineScope findEntryIP()
+            return@coroutineScope null
         }
 
         val request = providerIPRequestsMutex.withLock {
@@ -4888,7 +5221,7 @@ object HproseInstance {
                     TweetApplication.applicationScope.launch {
                         providerIPRequestsMutex.withLock {
                             if (providerIPRequests[mid] === newRequest) {
-                                providerIPRequests.remove(mid)
+                                providerIPRequests -= mid
                             }
                         }
                     }
@@ -4932,7 +5265,7 @@ object HproseInstance {
         Timber.tag("_getProviderIP").d("🔍 Received IPs from server: $ipArray")
 
         // Health check all returned IPs - no pre-filtering needed
-        if (ipArray != null && ipArray.isNotEmpty()) {
+        if (!ipArray.isNullOrEmpty()) {
             Timber.tag("_getProviderIP").d("🔍 Testing ${ipArray.size} IPs via health check")
             return tryIpAddresses(ipArray)
         }
@@ -4964,11 +5297,13 @@ object HproseInstance {
      * @param url The server URL to check
      * @return true if server responds to HEAD request, false otherwise
      */
-    private suspend fun isServerHealthy(url: String): Boolean {
+    private suspend fun isServerHealthy(url: String, useCache: Boolean = true): Boolean {
         // Check cache first to avoid repeated health checks
-        val cachedHealth = getCachedHealth(url)
-        if (cachedHealth != null) {
-            return cachedHealth
+        if (useCache) {
+            val cachedHealth = getCachedHealth(url)
+            if (cachedHealth != null) {
+                return cachedHealth
+            }
         }
         
         // Not in cache, perform actual health check
@@ -5015,11 +5350,10 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            appUser.resolveWritableUrl()
-            val pinClient = appUser.writableClient ?: appUser.hproseService
+            val pinClient = requireWritableClient(appUser, "togglePinnedTweet")
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            when (val rawResponse = pinClient?.runMApp<Any>(entry, params)) {
+            when (val rawResponse = pinClient.runMApp<Any>(entry, params)) {
                 is Boolean -> {
                     // Legacy format: direct boolean response
                     rawResponse

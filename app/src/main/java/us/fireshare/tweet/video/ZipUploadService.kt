@@ -65,12 +65,7 @@ class ZipUploadService(
                 return@withContext ZipProcessingResult.Error("cloudDrivePort not set")
             }
 
-            // Ensure writableUrl is available
-            var writableUrl = appUser.writableUrl
-            if (writableUrl.isNullOrEmpty()) {
-                writableUrl = appUser.resolveWritableUrl()
-            }
-
+            val writableUrl = appUser.resolveWritableUrl()
             if (writableUrl.isNullOrEmpty()) {
                 return@withContext ZipProcessingResult.Error("Writable URL not available")
             }

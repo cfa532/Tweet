@@ -5,6 +5,7 @@ import com.google.gson.annotations.Expose
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.network.HproseClientPool
@@ -13,9 +14,8 @@ import us.fireshare.tweet.network.HproseClientPool
 @Serializable
 data class User(
     @Expose var baseUrl: String? = null,
-    @Expose var writableUrl: String? = null,
-    // Not @Expose — not persisted; used for 5-minute TTL on the resolved writable URL.
-    var writableUrlResolvedAt: Long? = null,
+    @Transient
+    var writableUrl: String? = null,
     @Expose val mid: MimeiId,
     @Expose var name: String? = null,
     @Expose var username: String? = null,
@@ -155,8 +155,8 @@ data class User(
         get() {
             val currentWritableUrl = writableUrl ?: return null
 
-            // Pooled, shared writable client targeting hostIds[0] (extended timeout
-            // for long-running mutations like file uploads).
+            // Pooled, shared writable client targeting hostIds[0] with the ordinary
+            // mutation timeout. Long-running operations request their own timeout class.
             return HproseClientPool.getWritableClient(currentWritableUrl)
         }
 
@@ -182,27 +182,22 @@ data class User(
     }
 
     /**
-     * Resolve writable URL from hostIds and reset writableClient if needed
+     * Resolve writable URL from hostIds and reset writableClient if needed.
+     * Writable routes can change, so this intentionally never returns a cached URL.
      */
     suspend fun resolveWritableUrl(): String? {
-        // Return cached URL if it was resolved within the last 5 minutes.
-        val ttlMs = 5 * 60 * 1000L
-        val resolvedAt = writableUrlResolvedAt
-        if (!writableUrl.isNullOrEmpty() && resolvedAt != null &&
-            System.currentTimeMillis() - resolvedAt < ttlMs) {
-            return writableUrl
-        }
         clearWritableClient()
+        writableUrl = null
 
         suspend fun tryResolve(): String? {
             if (hostIds.isNullOrEmpty()) {
-                return writableUrl
+                return null
             }
 
             val firstHostId = hostIds?.first()
 
             if (firstHostId.isNullOrEmpty()) {
-                return writableUrl
+                return null
             }
 
             val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true")
@@ -220,7 +215,7 @@ data class User(
                             ipv6 to portStr
                         } else {
                             Timber.w("[resolveWritableUrl] Failed to parse IPv6 with port: $hostIP")
-                            return writableUrl
+                            return null
                         }
                     }
                     hostIP.contains(":") && !hostIP.contains("]: ") && !hostIP.contains("[") -> {
@@ -230,20 +225,20 @@ data class User(
                             parts[0] to parts[1]
                         } else {
                             Timber.w("[resolveWritableUrl] Failed to parse IPv4 with port: $hostIP")
-                            return writableUrl
+                            return null
                         }
                     }
                     else -> {
                         // No port specified - cannot construct URL
                         Timber.w("[resolveWritableUrl] No port specified in hostIP: $hostIP")
-                        return writableUrl
+                        return null
                     }
                 }
 
                 val portNumber = port.toIntOrNull()
                 if (portNumber == null || portNumber !in 1..65535) {
                     Timber.w("[resolveWritableUrl] Port $port is not a valid port (1-65535)")
-                    return writableUrl
+                    return null
                 }
 
                 // Construct URL string
@@ -254,18 +249,17 @@ data class User(
                 }
 
                 writableUrl = urlString
-                writableUrlResolvedAt = System.currentTimeMillis()
                 return urlString
             } else {
                 Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
             }
 
-            return writableUrl
+            return null
         }
 
         // First attempt
         val firstAttempt = tryResolve()
-        if (!firstAttempt.isNullOrEmpty() && firstAttempt != writableUrl) {
+        if (!firstAttempt.isNullOrEmpty()) {
             return firstAttempt
         }
         // Retry once if first attempt failed

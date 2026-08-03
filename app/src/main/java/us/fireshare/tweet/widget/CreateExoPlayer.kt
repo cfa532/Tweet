@@ -49,7 +49,7 @@ fun createExoPlayer(
     forceSoftwareDecoder: Boolean = false,
     resolvedHlsUrl: String? = null,
     minBufferMs: Int = 8_000,
-    maxBufferMs: Int = 30_000,
+    maxBufferMs: Int = 12_000,
     bufferForPlaybackMs: Int = 3_000,
     bufferForPlaybackAfterRebufferMs: Int = 3_000,
     maxVideoWidth: Int? = FEED_MAX_VIDEO_DIMENSION,
@@ -101,8 +101,8 @@ fun createExoPlayer(
         }
     }
 
-    // Feed HLS/IPFS streams can arrive in uneven bursts. Keep enough buffer so inline
-    // playback does not start/resume after every tiny refill and immediately stall again.
+    // Feed players should not build large off-screen buffers. Keep a modest cap so inline
+    // playback can bridge short IPFS gaps without holding 30s of media per cached player.
     val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
             minBufferMs,

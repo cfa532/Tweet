@@ -96,6 +96,7 @@ class PlayTweetActivity : ComponentActivity() {
                     ) { innerPadding ->
                         TweetNavGraph(
                             appLinkIntent = activityViewModel.currentIntent.value,
+                            appLinkIntentSequence = activityViewModel.currentIntentSequence.value,
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
@@ -141,7 +142,6 @@ class PlayTweetActivity : ComponentActivity() {
         }
         
         // Handle initial intent
-        activityViewModel.currentIntent.value = intent
         handleIntent(intent)
     }
 
@@ -157,6 +157,7 @@ class PlayTweetActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
             activityViewModel.currentIntent.value = intent
+            activityViewModel.currentIntentSequence.value += 1
         }
     }
 
@@ -201,6 +202,7 @@ class PlayTweetActivity : ComponentActivity() {
 class PlayActivityViewModel: ViewModel() {
     val isAppReady = mutableStateOf(false)
     val currentIntent = mutableStateOf<Intent?>(null)
+    val currentIntentSequence = mutableStateOf(0L)
 
     /**
      * Load entry URLs from BuildConfig.ENTRY_URLS.
@@ -252,4 +254,3 @@ class PlayActivityViewModel: ViewModel() {
         }
     }
 }
-

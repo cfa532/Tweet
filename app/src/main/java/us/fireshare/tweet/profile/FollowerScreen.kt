@@ -1,5 +1,6 @@
 package us.fireshare.tweet.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,26 +32,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
-import timber.log.Timber
-import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TW_CONST
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -136,35 +137,23 @@ fun FollowerItem(
     viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
-    val user by viewModel.user.collectAsState()
+    val viewModelUser by viewModel.user.collectAsState()
+    val cachedUserStateFlow = remember(userId) {
+        TweetCacheManager.getUserStateFlow(userId)
+    }
+    val cachedUser by cachedUserStateFlow.collectAsState()
     val navController = LocalNavController.current
-    var hasTimedOut by remember { mutableStateOf(false) }
-    val loadingTimeoutMs = 10000L // 10 seconds total timeout
 
-    // Simple timeout - remove placeholder after 10 seconds if still loading
     LaunchedEffect(userId) {
-        if (user.username.isNullOrEmpty()) {
-            Timber.tag("FollowerItem").d("Waiting for user load: $userId")
-            kotlinx.coroutines.delay(loadingTimeoutMs)
-            if (user.username.isNullOrEmpty()) {
-                Timber.tag("FollowerItem").w("User load timed out for userId: $userId")
-                try {
-                    HproseInstance.recordReliabilityFailureUser(userId)
-                } catch (e: Exception) {
-                    Timber.tag("FollowerItem").e(e, "Failed to record user load failure for $userId")
-                }
-                hasTimedOut = true
+        if (userId.isNotEmpty() && userId != TW_CONST.GUEST_ID && cachedUser?.username.isNullOrBlank()) {
+            withContext(Dispatchers.IO) {
+                fetchUser(userId)
             }
         }
     }
 
-    // Show placeholder while loading
-    val isLoading = user.username.isNullOrEmpty() && !hasTimedOut
-
-    // Hide item if it timed out
-    if (hasTimedOut) {
-        return
-    }
+    val user = cachedUser?.takeIf { !it.username.isNullOrBlank() } ?: viewModelUser
+    val isLoading = user.username.isNullOrEmpty()
 
     // Show loading placeholder
     if (isLoading) {
@@ -226,9 +215,12 @@ fun FollowerItem(
     )
     Row(
         modifier = Modifier
-            .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-            .wrapContentHeight(Alignment.CenterVertically)
             .fillMaxWidth()
+            .clickable(enabled = !user.isGuest()) {
+                navController.navigate(NavTweet.UserProfile(user.mid))
+            }
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
     ) {
         IconButton(
             onClick = {
@@ -250,25 +242,14 @@ fun FollowerItem(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = user.name ?: "No One",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "@${user.username}",
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-                    }
+                    UserRowIdentityText(
+                        displayName = user.name ?: "No One",
+                        username = user.username
+                    )
                     Text(
                         text = "Joined ${formatUserCreationDate(user.timestamp)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }

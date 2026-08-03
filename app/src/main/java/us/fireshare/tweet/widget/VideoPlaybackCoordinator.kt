@@ -80,7 +80,8 @@ val LocalVideoCoordinator = compositionLocalOf<VideoPlaybackCoordinator> { Video
  * 1. Tracks visible videos in the feed (loadable, playable, and continue-playing sets)
  * 2. Manages playback state for videos
  * 3. Coordinates video playback via notifications/events
- * 4. Starts videos at 50% visible and stops the current video below 70% visible
+ * 4. Starts videos at 50% visible and stops the current video below 50% visible (same
+ *    threshold for both — see KEEP_PLAYING_VISIBILITY_THRESHOLD)
  * 5. Selects primary video based on scroll direction (topmost when scrolling down, bottommost when scrolling up)
  */
 class VideoPlaybackCoordinator(
@@ -91,12 +92,32 @@ class VideoPlaybackCoordinator(
         /** Singleton instance for the main feed, similar to iOS VideoPlaybackCoordinator.shared */
         val shared = VideoPlaybackCoordinator(syncWithFullScreenPlayer = true)
 
-        private const val PLAYBACK_DEBOUNCE_MS = 100L
-        private const val VISIBILITY_THRESHOLD = 0.5f
-        private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = 0.7f
+        /**
+         * Not private: VideoPreview's onGloballyPositioned callback references this directly
+         * so its immediate-report-vs-throttle decision uses the same breakpoint as the
+         * coordinator, instead of a separately hardcoded literal that can drift out of sync
+         * (see VideoPreview.kt history — it had its own hardcoded 0.5f/0.7f pair here that
+         * never got updated when KEEP_PLAYING_VISIBILITY_THRESHOLD below was unified to 0.5f).
+         */
+        internal const val VISIBILITY_THRESHOLD = 0.5f
+        /**
+         * Matches iOS FeedPlaybackTuning.videoContinueVisibilityRatio, which is deliberately
+         * kept equal to the start threshold: "A higher continuation threshold causes
+         * startup/layout samples around 50-70% visible to start, stop, then restart the same
+         * onscreen video." This used to be 0.7f here, independently of VISIBILITY_THRESHOLD,
+         * which reintroduced exactly that thrash on Android.
+         */
+        private const val KEEP_PLAYING_VISIBILITY_THRESHOLD = VISIBILITY_THRESHOLD
         private const val VISIBILITY_UPDATE_DEBOUNCE_MS = 150L
         private const val FOREGROUND_RECONCILE_DELAY_MS = 120L
         private const val VISIBILITY_LOSS_STOP_GRACE_MS = 300L
+        /**
+         * Matches iOS primarySelectionActiveDragDelay. Confirmation window used when a
+         * primary candidate is identified while the user is still actively scrolling,
+         * rather than after the scroll fully stops — see
+         * [identifyPrimaryVideoDuringActiveScroll].
+         */
+        private const val ACTIVE_SCROLL_PRIMARY_SELECTION_DELAY_MS = 500L
     }
 
     // Single reusable coroutine scope to avoid allocating a new CoroutineScope on every event
@@ -165,6 +186,7 @@ class VideoPlaybackCoordinator(
 
     private var scrollDirection: Boolean = true
     private var previousContentOffset: Float = 0f
+    private var isScrollInProgress: Boolean = false
 
     private var playbackDebounceJob: Job? = null
     private var playbackDebounceCandidateId: String? = null
@@ -386,6 +408,37 @@ class VideoPlaybackCoordinator(
         previousContentOffset = currentOffset
     }
 
+    fun updateScrollActivity(isScrolling: Boolean) {
+        if (isScrollInProgress == isScrolling) return
+
+        isScrollInProgress = isScrolling
+        if (isScrolling) {
+            playbackDebounceJob?.cancel()
+            playbackDebounceJob = null
+            playbackDebounceCandidateId = null
+            primaryVideoId?.let { cancelPendingVisibilityLossStop(it) }
+            updateManagerRetainedVideos()
+            MediaLog.d {
+                "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Scroll started; preserving primary=$primaryVideoId"
+            }
+            return
+        }
+
+        // Superseded by the immediate reconciliation below (reconcilePlaybackForCurrentVisibility
+        // starts a primary right away once the scroll is no longer in progress), so any pending
+        // active-scroll confirmation timer for a candidate would otherwise fire redundantly later.
+        playbackDebounceJob?.cancel()
+        playbackDebounceJob = null
+        playbackDebounceCandidateId = null
+
+        MediaLog.d {
+            "VideoPlaybackCoordinator[$managerPlaybackOwnerKey]: Scroll stopped; reconciling primary=$primaryVideoId"
+        }
+        refreshViewportVisibilityFromGeometry()
+        rebuildVisibilitySetsFromRatios()
+        reconcilePlaybackForCurrentVisibility(reassertRetainedPrimary = true)
+    }
+
     /**
      * Update viewport size (called by TweetListView)
      */
@@ -551,7 +604,11 @@ class VideoPlaybackCoordinator(
         nextLoadVisible.forEach { cancelPendingVisibilityLossStop(it) }
 
         (previousLoadVisible - nextLoadVisible).forEach { identifier ->
-            scheduleStopAfterVisibilityLoss(identifier)
+            if (isScrollInProgress && identifier == primaryVideoId) {
+                cancelPendingVisibilityLossStop(identifier)
+            } else {
+                scheduleStopAfterVisibilityLoss(identifier)
+            }
         }
         updateManagerRetainedVideos()
 
@@ -560,6 +617,67 @@ class VideoPlaybackCoordinator(
             .toMutableList()
 
         reconcilePlaybackForCurrentVisibility()
+        identifyPrimaryVideoDuringActiveScroll()
+    }
+
+    /**
+     * Identify a primary candidate as soon as it crosses the visibility threshold during
+     * active scrolling, instead of waiting for the scroll to fully stop. Matches iOS
+     * identifyPrimaryVideoDuringActiveScroll(): identification happens immediately here, but
+     * actually starting playback is withheld behind ACTIVE_SCROLL_PRIMARY_SELECTION_DELAY_MS,
+     * committed only if the same candidate still qualifies once the delay elapses. A fast
+     * scroll that keeps crossing new thresholds just keeps resetting the timer for whichever
+     * candidate is current, rather than starting/stopping on every momentary crossing.
+     *
+     * Never preempts a healthy playing primary (requires primaryVideoId == null), so other
+     * videos are never demoted to non-primary just because a new candidate appeared while
+     * scrolling — they're only demoted once this candidate is confirmed and actually starts.
+     */
+    private fun identifyPrimaryVideoDuringActiveScroll() {
+        if (!isScrollInProgress || isPaused || !isFeedVisible) return
+
+        // reconcilePlaybackForCurrentVisibility — the only thing that would normally notice
+        // the current primary scrolling off-screen and clear primaryVideoId — is entirely
+        // skipped for the whole gesture while isScrollInProgress is true (`if
+        // (isScrollInProgress) return` at its top). But once the primary is genuinely gone
+        // (not just below the continue threshold — fully outside playableVideoIds, so it
+        // can't come back this gesture), leaving primaryVideoId pointed at a now-invisible
+        // video blocks this function's own `primaryVideoId == null` precondition below for
+        // the rest of the scroll — the exact bug this function exists to avoid. Demote it
+        // here so a new candidate can still be identified and confirmed before the scroll
+        // stops.
+        primaryVideoId?.let { primaryId ->
+            if (primaryId !in playableVideoIds) {
+                stopPrimaryVideo(primaryId)
+                setPrimaryVideoId(null)
+            }
+        }
+
+        if (primaryVideoId != null || visibleVideos.isEmpty()) return
+
+        val candidate = identifyPrimaryVideo() ?: return
+
+        // Don't reset an already-running confirmation timer for the same candidate — this
+        // runs on every viewport visibility update during a drag, even when the candidate
+        // hasn't changed. Resetting every call would mean the timer never fires until motion
+        // stops completely, defeating the point of identifying a primary mid-scroll.
+        if (playbackDebounceJob != null && playbackDebounceCandidateId == candidate.identifier) {
+            return
+        }
+
+        playbackDebounceJob?.cancel()
+        playbackDebounceCandidateId = candidate.identifier
+        playbackDebounceJob = scope.launch {
+            delay(ACTIVE_SCROLL_PRIMARY_SELECTION_DELAY_MS)
+            playbackDebounceJob = null
+            playbackDebounceCandidateId = null
+
+            if (isPaused || !isFeedVisible || primaryVideoId != null) return@launch
+            val confirmed = identifyPrimaryVideo() ?: return@launch
+            if (confirmed.identifier != candidate.identifier) return@launch
+
+            startPrimaryVideoPlayback(expectedIdentifier = confirmed.identifier)
+        }
     }
 
     /**
@@ -612,10 +730,17 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun reconcilePlaybackForCurrentVisibility(replayCurrentPrimary: Boolean = false) {
+    private fun reconcilePlaybackForCurrentVisibility(
+        replayCurrentPrimary: Boolean = false,
+        reassertRetainedPrimary: Boolean = false
+    ) {
         if (isPaused || !isFeedVisible) return
+        if (VideoManager.isImageFullScreenActive()) return
+        if (isScrollInProgress) {
+            return
+        }
 
-        if (replayCurrentPrimary && resumePendingPrimaryIfPossible()) {
+        if (replayCurrentPrimary && resumePendingPrimaryIfPossible(requirePlayable = true)) {
             return
         }
 
@@ -629,7 +754,7 @@ class VideoPlaybackCoordinator(
 
         primaryVideoId?.let { primaryId ->
             if (primaryId in continuePlaybackVideoIds || isProtectedUserRequestedPrimary(primaryId)) {
-                if (replayCurrentPrimary && primaryId in playableVideoIds) {
+                if ((replayCurrentPrimary || reassertRetainedPrimary) && primaryId in playableVideoIds) {
                     emitPlayForPrimary(videoMetaMap[primaryId] ?: return@let)
                 }
                 return
@@ -652,11 +777,18 @@ class VideoPlaybackCoordinator(
         }
 
         if (primaryVideoId == null && visibleVideos.isNotEmpty()) {
-            startPlaybackWithDebounce()
+            if (replayCurrentPrimary) {
+                startPrimaryVideoPlayback(playDelayMs = 0L)
+            } else {
+                startPrimaryVideoPlayback(playDelayMs = 0L)
+            }
         }
     }
 
     private fun stopAllVideosIfLayoutIsStable() {
+        if (isScrollInProgress) {
+            return
+        }
         val now = System.currentTimeMillis()
         val timeSinceUserRequest = now - userRequestedPlayAt
         if (timeSinceUserRequest < 500L) {
@@ -673,18 +805,28 @@ class VideoPlaybackCoordinator(
         stopAllVideos()
     }
 
+    /**
+     * Matches iOS identifyPrimaryVideo(): iterate candidates ordered by scroll direction
+     * (topmost-first when scrolling down, bottommost-first when scrolling up), skipping
+     * finished videos outright. A video excluded only because it's the just-demoted
+     * primaryBelowContinueIdentifier is remembered as a fallback rather than dropped — if
+     * layout churn temporarily excluded the previous primary but it's visible enough again
+     * and nothing else qualifies, re-select it instead of going idle.
+     */
     private fun identifyPrimaryVideo(): VideoPlaybackInfo? {
-        val candidates = visibleVideos.filter {
-            it.identifier !in finishedVideoIds &&
-                it.identifier != primaryBelowContinueIdentifier
-        }
-        if (candidates.isEmpty()) return null
+        val orderedVideos = if (scrollDirection) visibleVideos else visibleVideos.asReversed()
 
-        return if (scrollDirection) {
-            candidates.firstOrNull()
-        } else {
-            candidates.lastOrNull()
+        var belowContinueFallback: VideoPlaybackInfo? = null
+        for (video in orderedVideos) {
+            if (video.identifier in finishedVideoIds) continue
+            if (video.identifier == primaryBelowContinueIdentifier) {
+                if (belowContinueFallback == null) belowContinueFallback = video
+                continue
+            }
+            return video
         }
+
+        return belowContinueFallback
     }
 
     private fun List<VideoPlaybackInfo>.sortedByFeedPosition(): List<VideoPlaybackInfo> {
@@ -731,6 +873,13 @@ class VideoPlaybackCoordinator(
                 updateManagerRetainedVideos()
                 MediaLog.d {
                     "VideoPlaybackCoordinator: Canceled visibility-loss stop for ${info.videoMid}; visible again"
+                }
+                return@launch
+            }
+            if (isScrollInProgress && identifier == primaryVideoId) {
+                updateManagerRetainedVideos()
+                MediaLog.d {
+                    "VideoPlaybackCoordinator: Preserved primary ${info.videoMid} during active scroll"
                 }
                 return@launch
             }
@@ -781,30 +930,7 @@ class VideoPlaybackCoordinator(
         return protected
     }
 
-    private fun startPlaybackWithDebounce() {
-        val candidate = identifyPrimaryVideo() ?: return
-        if (playbackDebounceJob?.isActive == true &&
-            playbackDebounceCandidateId == candidate.identifier
-        ) {
-            return
-        }
-
-        playbackDebounceJob?.cancel()
-        playbackDebounceCandidateId = candidate.identifier
-        playbackDebounceJob = scope.launch {
-            delay(PLAYBACK_DEBOUNCE_MS)
-
-            if (visibleVideos.isNotEmpty() &&
-                primaryVideoId == null &&
-                identifyPrimaryVideo()?.identifier == candidate.identifier
-            ) {
-                startPrimaryVideoPlayback(candidate.identifier)
-            }
-            playbackDebounceCandidateId = null
-        }
-    }
-
-    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null) {
+    private fun startPrimaryVideoPlayback(expectedIdentifier: String? = null, playDelayMs: Long = 0L) {
         if (isPaused) return
         if (visibleVideos.isEmpty()) {
             return
@@ -814,6 +940,9 @@ class VideoPlaybackCoordinator(
         if (expectedIdentifier != null && primary.identifier != expectedIdentifier) return
         val previousPrimaryId = primaryVideoId
         setPrimaryVideoId(primary.identifier)
+        if (pendingResumePrimaryId != primary.identifier) {
+            pendingResumePrimaryId = null
+        }
 
         scope.launch {
             if (previousPrimaryId != null && previousPrimaryId != primary.identifier) {
@@ -833,7 +962,9 @@ class VideoPlaybackCoordinator(
                 }
             }
 
-            delay(50L)
+            if (playDelayMs > 0L) {
+                delay(playDelayMs)
+            }
 
             if (primaryVideoId != primary.identifier ||
                 primary.identifier !in playableVideoIds ||
@@ -992,7 +1123,13 @@ class VideoPlaybackCoordinator(
         }
     }
 
-    private fun resumePendingPrimaryIfPossible(): Boolean {
+    private fun resumePendingPrimaryIfPossible(requirePlayable: Boolean = false): Boolean {
+        if (VideoManager.isImageFullScreenActive()) {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped because image fullscreen is active"
+            }
+            return false
+        }
         if (isPaused || !isFeedVisible) {
             MediaLog.d("VideoLoading") {
                 "Coordinator[$managerPlaybackOwnerKey] resume skipped paused=$isPaused visible=$isFeedVisible " +
@@ -1005,6 +1142,16 @@ class VideoPlaybackCoordinator(
             MediaLog.d("VideoLoading") {
                 "Coordinator[$managerPlaybackOwnerKey] resume skipped missing metadata resumeId=$resumeId " +
                     "primary=$primaryVideoId pending=$pendingResumePrimaryId videos=${videoMetaMap.size}"
+            }
+            return false
+        }
+        if (requirePlayable &&
+            resumeId !in playableVideoIds &&
+            (videoVisibilityMap[resumeId] ?: 0f) < VISIBILITY_THRESHOLD
+        ) {
+            MediaLog.d("VideoLoading") {
+                "Coordinator[$managerPlaybackOwnerKey] resume skipped non-playable resumeId=$resumeId " +
+                    "primary=$primaryVideoId pending=$pendingResumePrimaryId playable=$playableVideoIds"
             }
             return false
         }
@@ -1063,6 +1210,7 @@ class VideoPlaybackCoordinator(
         visibleTweetIds = emptySet()
         previousContentOffset = 0f
         scrollDirection = true
+        isScrollInProgress = false
         userRequestedPlayAt = 0L
         videoListBuiltAt = 0L
         hostResumedAt = 0L

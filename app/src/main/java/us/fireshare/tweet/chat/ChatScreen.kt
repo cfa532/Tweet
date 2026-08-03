@@ -55,6 +55,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -94,16 +95,21 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.ChatMessage
+import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.MediaViewerParams
+import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatViewModel
-import us.fireshare.tweet.widget.FullScreenVideoPlayer
+import us.fireshare.tweet.widget.FullScreenPlayerManager
 import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
 import us.fireshare.tweet.widget.VideoManager
+import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -122,15 +128,49 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
+    val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
+    val hasMoreMessages by viewModel.hasMoreMessages.collectAsState()
+    val leadingNonMessageItemCount =
+        (if (isLoadingOlderMessages) 1 else 0) +
+            (if (!hasMoreMessages && chatMessages.isNotEmpty() && !isLoadingOlderMessages) 1 else 0)
+    var didApplyInitialMessageAnchor by remember { mutableStateOf(false) }
+
+    fun openChatVideoInSharedViewer(message: ChatMessage, tappedAttachmentMid: String) {
+        val visualMediaItems = message.attachments.orEmpty()
+            .mapNotNull { attachment ->
+                val type = inferMediaTypeFromAttachment(attachment)
+                if (type != MediaType.Image && type != MediaType.Video && type != MediaType.HLS_VIDEO) {
+                    return@mapNotNull null
+                }
+                MediaItem(
+                    mid = attachment.mid,
+                    url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString(),
+                    type = type
+                )
+            }
+        val startIndex = visualMediaItems.indexOfFirst { it.mid == tappedAttachmentMid }
+            .takeIf { it >= 0 }
+            ?: return
+        val params = MediaViewerParams(
+            mediaItems = visualMediaItems,
+            index = startIndex,
+            tweetId = message.id,
+            authorId = message.authorId
+        )
+        FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
+        VideoManager.suspendFeedActivityForFullScreen(tappedAttachmentMid)
+        VideoManager.pauseVideo(tappedAttachmentMid)
+        navController.navigate(NavTweet.MediaViewer(params))
+    }
     
     // Use visibility-based video loading with debouncing
-    val visibleMessages by remember(listState, chatMessages) {
+    val visibleMessages by remember(listState, chatMessages, leadingNonMessageItemCount) {
         derivedStateOf {
-            val currentVisibleIndex = listState.firstVisibleItemIndex
-            val visibleItemCount = listState.layoutInfo.visibleItemsInfo.size
-            chatMessages.filterIndexed { index, _ ->
-                index >= currentVisibleIndex && index < currentVisibleIndex + visibleItemCount
-            }
+            listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { item ->
+                    chatMessages.getOrNull(item.index - leadingNonMessageItemCount)
+                }
+                .distinctBy { it.id }
         }
     }
 
@@ -158,8 +198,6 @@ fun ChatScreen(
     val shouldScrollToBottom by viewModel.shouldScrollToBottom.collectAsState()
     
     // Pull-to-refresh state
-    val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
-    val hasMoreMessages by viewModel.hasMoreMessages.collectAsState()
     
     // Load older messages when scrolling to top
     LaunchedEffect(remember { derivedStateOf { listState.firstVisibleItemIndex } }) {
@@ -200,13 +238,21 @@ fun ChatScreen(
             pendingScrollJob?.cancel()
             val job = coroutineScope.launch {
                 try {
-                    // With reverseLayout = true, index 0 is the newest message (at bottom)
-                    listState.scrollToItem(0)
+                    val newestMessageIndex = leadingNonMessageItemCount + chatMessages.lastIndex
+                    listState.scrollToItem(newestMessageIndex)
                 } finally {
                     pendingScrollJob = null
                 }
             }
             pendingScrollJob = job
+        }
+    }
+
+    SideEffect {
+        if (!didApplyInitialMessageAnchor && chatMessages.isNotEmpty()) {
+            val newestMessageIndex = leadingNonMessageItemCount + chatMessages.lastIndex
+            listState.requestScrollToItem(newestMessageIndex)
+            didApplyInitialMessageAnchor = true
         }
     }
 
@@ -240,21 +286,11 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to bottom when messages are first loaded
-    LaunchedEffect(Unit) {
-        // With reverseLayout, newest messages automatically appear at bottom
-        // Short delay to ensure LazyColumn is laid out
-        delay(200)
-        if (chatMessages.isNotEmpty()) {
-            listState.scrollToItem(0)
-        }
-    }
-    
     // Scroll to bottom when current user sends a message
     LaunchedEffect(shouldScrollToBottom) {
         if (shouldScrollToBottom && chatMessages.isNotEmpty()) {
-            // Instant scroll to newest message (index 0 with reverseLayout)
-            listState.animateScrollToItem(0)
+            val newestMessageIndex = leadingNonMessageItemCount + chatMessages.lastIndex
+            listState.animateScrollToItem(newestMessageIndex)
             // Reset the flag
             viewModel.resetScrollToBottomFlag()
         }
@@ -319,7 +355,7 @@ fun ChatScreen(
                             .fillMaxSize()
                             .padding(bottom = 80.dp), // Increased padding for new input design
                         state = listState,
-                        reverseLayout = true  // Reverse scroll: newest messages at bottom
+                        verticalArrangement = Arrangement.Top
                     ) {
                         // Show loading indicator at the top when loading older messages
                         if (isLoadingOlderMessages) {
@@ -368,12 +404,14 @@ fun ChatScreen(
                             }
                         }
 
-                        itemsIndexed(chatMessages.reversed()) { index, msg ->
+                        itemsIndexed(
+                            chatMessages,
+                            key = { _, msg -> msg.id }
+                        ) { index, msg ->
                             // Add time divider if more than 1 hour difference from previous message
-                            // Note: With reverseLayout, we're iterating from newest to oldest
                             if (index > 0) {
-                                val previousMessage = chatMessages.reversed()[index - 1]
-                                val timeDifference = previousMessage.timestamp - msg.timestamp  // Reversed comparison
+                                val previousMessage = chatMessages[index - 1]
+                                val timeDifference = msg.timestamp - previousMessage.timestamp
                                 val oneHourInMillis = 60L * 60L * 1000L // 1 hour in milliseconds
 
                                 if (timeDifference > oneHourInMillis) {
@@ -426,9 +464,7 @@ fun ChatScreen(
                                     showFullScreen = true
                                 },
                                 onVideoClick = { attachment ->
-                                    fullScreenAttachment = attachment
-                                    fullScreenMessage = msg // Store message for navigation
-                                    showFullScreen = true
+                                    openChatVideoInSharedViewer(msg, attachment.mid)
                                 }
                             )
                         }
@@ -535,40 +571,7 @@ fun ChatScreen(
                     }
                 }
             }
-            MediaType.Video, MediaType.HLS_VIDEO -> {
-                // Try to get existing player for seamless transition
-                val existingPlayer = VideoManager.transferToFullScreen(attachment.mid)
-                
-                if (existingPlayer != null) {
-                    // Use existing player for seamless transition - create a simple full-screen wrapper
-                    FullScreenVideoPlayer(
-                        existingPlayer = existingPlayer,
-                        videoItem = attachment,
-                        onClose = {
-                            // Return player back to VideoManager when closed
-                            VideoManager.returnFromFullScreen(attachment.mid)
-                            showFullScreen = false
-                            fullScreenAttachment = null
-                            fullScreenBitmap = null
-                            fullScreenMessage = null
-                        },
-                        enableImmersiveMode = true
-                    )
-                } else {
-                    // Fallback to regular full-screen player
-                    FullScreenVideoPlayer(
-                        videoUrl = mediaUrl,
-                        onClose = { 
-                            showFullScreen = false
-                            fullScreenAttachment = null
-                            fullScreenBitmap = null
-                            fullScreenMessage = null
-                        },
-                        enableImmersiveMode = true,
-                        autoReplay = true
-                    )
-                }
-            }
+            MediaType.Video, MediaType.HLS_VIDEO -> Unit
             else -> {
                 // For other file types, do nothing
             }
@@ -587,6 +590,9 @@ fun ChatItem(
 ) {
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+    val guestReminderText = stringResource(R.string.guest_reminder)
     
     // Check if this message is being sent (has placeholder content and no attachments yet, but it's from current user)
     val isSending = isSentByCurrentUser && 
@@ -751,6 +757,10 @@ fun ChatItem(
                         .size(20.dp)
                         .align(Alignment.CenterVertically)
                         .clickable {
+                            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                                return@clickable
+                            }
+
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 viewModel.resendMessage(message)
                             }
@@ -791,7 +801,9 @@ fun ChatInput(
     val hasInput = textState.isNotBlank() || selectedAttachment != null
     val isSending = remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val navController = LocalNavController.current
     val context = LocalContext.current
+    val guestReminderText = stringResource(R.string.guest_reminder)
     
     // Track focus state
     var isFocused by remember { mutableStateOf(false) }
@@ -813,6 +825,10 @@ fun ChatInput(
         val hasCurrentInput = currentText.isNotBlank() || currentAttachment != null
         
         if (hasCurrentInput && !isSending.value) {
+            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                return
+            }
+
             isSending.value = true
             
             // Clear input immediately to show it's been sent
@@ -896,6 +912,9 @@ fun ChatInput(
             // Attachment button
             IconButton(
                 onClick = {
+                    if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                        return@IconButton
+                    }
                     filePickerLauncher.launch(arrayOf("*/*"))
                 },
                 modifier = Modifier.size(40.dp),

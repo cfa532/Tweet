@@ -25,6 +25,7 @@ import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.CleanUpWorker
+import us.fireshare.tweet.service.MainFeedCheckWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.widget.ImageCacheManager
@@ -42,6 +43,7 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         override fun onStart(owner: LifecycleOwner) {
             // App has come to foreground
             Timber.tag("AppLifecycle").d("App came to foreground, online=${HproseInstance.isOnline.value}")
+            MainFeedCheckWorker.reschedule(this@TweetApplication)
             if (!HproseInstance.isOnline.value) {
                 Timber.tag("AppLifecycle").d("Offline: skipping appUser refresh")
                 return
@@ -125,6 +127,10 @@ class TweetApplication : Application(), ComponentCallbacks2 {
             ExistingPeriodicWorkPolicy.KEEP,
             messageCheckRequest
         )
+
+        // Schedule main feed checks. This is a self-rescheduling one-time worker
+        // because WorkManager periodic jobs cannot run every 5 minutes.
+        MainFeedCheckWorker.reschedule(this)
 
         // Video memory monitoring removed - now relies on system memory warnings only
         

@@ -88,6 +88,8 @@ object VideoManager {
     private var hlsFallbackListener: HLSFallbackListener? = null
     private var currentFullScreenVideoMid: MimeiId? = null
     private val fullScreenProtectedVideos = mutableSetOf<MimeiId>()
+    private val imageFullScreenLock = Any()
+    private var imageFullScreenDepth = 0
     
     // ===== HLS FALLBACK LISTENER TRACKING =====
     // Track HLS fallback listeners per player to allow proper cleanup
@@ -124,6 +126,7 @@ object VideoManager {
     private const val MAX_POSTER_BITMAPS = 24
     private const val MIN_FREE_HEAP_FOR_WARM_PRELOAD_BYTES = 64L * 1024L * 1024L
     private const val INACTIVE_PLAYER_RELEASE_GRACE_MS = 1_500L
+    private const val DEBUG_SNAPSHOT_MIN_INTERVAL_MS = 2_000L
 
     // ===== MEMORY MONITORING =====
     // Removed custom memory monitoring - now relies on system warnings only
@@ -136,6 +139,7 @@ object VideoManager {
     private val posterJobs = ConcurrentHashMap<MimeiId, Job>()
     private var inactiveCleanupJob: Job? = null
     private var playerCacheLimitJob: Job? = null
+    private var lastDebugSnapshotAtMs: Long = 0L
     val posterBitmaps = mutableStateMapOf<MimeiId, Bitmap>()
     private val posterAccessTimestamps = ConcurrentHashMap<MimeiId, Long>()
 
@@ -239,6 +243,40 @@ object VideoManager {
         return if (cachedFile.exists()) cachedFile else null
     }
 
+    fun logDebugSnapshot(reason: String) {
+        logVideoDebugSnapshot(reason, force = true)
+    }
+
+    private fun logVideoDebugSnapshot(reason: String, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastDebugSnapshotAtMs < DEBUG_SNAPSHOT_MIN_INTERVAL_MS) return
+        lastDebugSnapshotAtMs = now
+
+        val runtime = Runtime.getRuntime()
+        val usedHeapMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
+        val maxHeapMb = runtime.maxMemory() / (1024L * 1024L)
+        val directionalCount = synchronized(currentDirectionalPreloadVideos) {
+            currentDirectionalPreloadVideos.size
+        }
+        val protectedFullscreenCount = synchronized(fullScreenProtectedVideos) {
+            fullScreenProtectedVideos.size
+        }
+        val hiddenWarmPreloads = preloadedVideos.count { isHiddenWarmPreload(it) }
+        val foregroundPlayers = videoPlayers.keys.count { videoMid ->
+            activeVideos.containsKey(videoMid) || visibleVideos.contains(videoMid)
+        }
+
+        MediaLog.d("VideoMemory") {
+            "reason=$reason players=${videoPlayers.size} foregroundPlayers=$foregroundPlayers " +
+                "active=${activeVideos.size} visible=${visibleVideos.size} " +
+                "preloaded=${preloadedVideos.size} hiddenWarmPreloads=$hiddenWarmPreloads " +
+                "preloadJobs=${preloadJobs.size} preloading=${preloadingVideos.size} queue=${preloadQueue.size} " +
+                "directional=$directionalCount fullscreen=${currentFullScreenVideoMid != null} " +
+                "fullscreenProtected=$protectedFullscreenCount dedicatedFullscreen=${fullScreenPlayer != null} " +
+                "posters=${posterBitmaps.size} heap=${usedHeapMb}/${maxHeapMb}MB"
+        }
+    }
+
     // ===== VISIBILITY-BASED LOADING CONTROL =====
 
     /**
@@ -255,6 +293,7 @@ object VideoManager {
             "Manager visible key=$videoMid visibleCount=${visibleVideoCounts[videoMid]} " +
                 "activeCount=${activeVideos.getOrDefault(videoMid, 0)} players=${videoPlayers.size}"
         }
+        logVideoDebugSnapshot("visible")
     }
 
     /**
@@ -284,29 +323,13 @@ object VideoManager {
                 "fullscreen=${isVideoInFullScreen(videoMid)}"
         }
         if (!isVideoInFullScreen(videoMid) && !stillVisible && !stillActive && !retainedByPlaybackOwner) {
-            // Cancel any ongoing preload/network loading for this video
             cancelPreload(videoMid)
-            videoPlayers[videoMid]?.let { player ->
-                try {
-                    // Save position BEFORE stopping so scroll-back can resume from here.
-                    val pos = player.currentPosition
-                    val dur = player.duration
-                    if (pos > 0) {
-                        savedPositions[videoMid] = if (dur > 0 && pos.toFloat() / dur > 0.9f) 0L else pos
-                    }
-                    player.clearVideoSurface()
-                    player.stop()
-                    MediaLog.d("VideoLoading") {
-                        "Manager stopped invisible player key=$videoMid pos=${player.currentPosition} duration=${player.duration}"
-                    }
-                } catch (e: Exception) {
-                    Timber.e("VideoManager - Error stopping video: $e")
-                }
-            }
+            stopHiddenInactivePlayer(videoMid, reason = "not visible")
             enforcePlayerCacheLimitDeferred()
         } else if (!stillVisible && !stillActive && retainedByPlaybackOwner) {
             MediaLog.d("VideoManager") { "Preserving coordinator-owned player while view is detached: $videoMid" }
         }
+        logVideoDebugSnapshot("not-visible")
     }
 
     /**
@@ -351,6 +374,17 @@ object VideoManager {
             tweets = tweets,
             fallbackBaseUrl = fallbackBaseUrl
         )
+        val visibleMediaIds = loadVisibleVideos.map { it.mid }.toSet()
+
+        if (!startPreloading || direction == PreloadDirection.NONE) {
+            synchronized(currentDirectionalPreloadVideos) {
+                currentDirectionalPreloadVideos.clear()
+                currentDirectionalPreloadVideos.addAll(visibleMediaIds)
+            }
+            cancelStaleVideoPreloads()
+            return
+        }
+
         val directionalVideos = collectDirectionalVideos(
             visibleTweetIndexes = visibleTweetIndexes,
             direction = direction,
@@ -360,7 +394,6 @@ object VideoManager {
         val preloadTargets = directionalVideos
             .distinctBy { it.mid }
             .take(preloadCount)
-        val visibleMediaIds = loadVisibleVideos.map { it.mid }.toSet()
         val protectedIds = (preloadTargets.map { it.mid } + visibleMediaIds).toSet()
 
         synchronized(currentDirectionalPreloadVideos) {
@@ -369,8 +402,6 @@ object VideoManager {
         }
 
         cancelStaleVideoPreloads()
-
-        if (!startPreloading || direction == PreloadDirection.NONE) return
 
         cleanupInactivePlayersDeferred()
         enforcePlayerCacheLimitDeferred()
@@ -612,6 +643,25 @@ object VideoManager {
             isVideoProtectedForFullScreen(videoMid)
     }
 
+    private fun stopHiddenInactivePlayer(videoMid: MimeiId, reason: String) {
+        if (isPlayerReleaseProtected(videoMid, protectRecentlyInactive = false)) return
+        val player = videoPlayers[videoMid] ?: return
+        try {
+            val pos = player.currentPosition
+            val dur = player.duration
+            if (pos > 0) {
+                savedPositions[videoMid] = if (dur > 0 && pos.toFloat() / dur > 0.9f) 0L else pos
+            }
+            player.clearVideoSurface()
+            player.stop()
+        } catch (e: Exception) {
+            Timber.e("VideoManager - Error stopping hidden inactive player: $e")
+        }
+        MediaLog.d("VideoLoading") {
+            "Manager stopped hidden inactive player key=$videoMid reason=$reason"
+        }
+    }
+
     private fun clearCoordinatorTrackingForVideo(videoMid: MimeiId) {
         coordinatorPrimaryVideos.remove(videoMid)
         coordinatorRetainedVideosByOwner.keys.toList().forEach { ownerKey ->
@@ -703,6 +753,7 @@ object VideoManager {
         MediaLog.d("VideoLoading") {
             "Stopped all preloading releasePreloadedPlayers=$releasePreloadedPlayers players=${videoPlayers.size}"
         }
+        logVideoDebugSnapshot("stop-preloading", force = true)
     }
 
     /**
@@ -741,6 +792,44 @@ object VideoManager {
         MediaLog.d("VideoManager") {
             "Suspended feed activity for fullscreen $protecting; released ${stalePreloadedPlayers.size} preloaded players"
         }
+    }
+
+    fun suspendFeedActivityForImageFullScreen(imageMid: MimeiId) {
+        synchronized(imageFullScreenLock) {
+            imageFullScreenDepth++
+        }
+        stopAllPreloading()
+
+        val stalePreloadedPlayers = videoPlayers.keys.filter { videoMid ->
+            preloadedVideos.contains(videoMid) && activeVideos.getOrDefault(videoMid, 0) == 0
+        }
+        stalePreloadedPlayers.forEach { videoMid ->
+            releasePlayer(videoMid)
+        }
+
+        videoPlayers.values.forEach { player ->
+            try {
+                player.playWhenReady = false
+                player.pause()
+            } catch (e: Exception) {
+                Timber.tag("VideoManager").w("Error pausing feed player for image fullscreen: ${e.message}")
+            }
+        }
+
+        MediaLog.d("VideoManager") {
+            "Suspended feed video activity for image fullscreen $imageMid; released ${stalePreloadedPlayers.size} preloaded players"
+        }
+    }
+
+    fun clearImageFullScreen(imageMid: MimeiId) {
+        synchronized(imageFullScreenLock) {
+            imageFullScreenDepth = (imageFullScreenDepth - 1).coerceAtLeast(0)
+        }
+        MediaLog.d("VideoManager") { "Cleared image fullscreen video suspension for $imageMid" }
+    }
+
+    fun isImageFullScreenActive(): Boolean {
+        return synchronized(imageFullScreenLock) { imageFullScreenDepth > 0 }
     }
 
     // ===== PLAYER MANAGEMENT =====
@@ -818,6 +907,9 @@ object VideoManager {
             }
         }.also { player ->
             touchPlayer(videoMid)
+            if (!isReusing) {
+                logVideoDebugSnapshot("player-created")
+            }
             MediaLog.d("VideoLoading") {
                 "Manager return player key=$videoMid reuse=$isReusing state=${playerStateName(player.playbackState)} " +
                     "playWhenReady=${player.playWhenReady} active=${activeVideos.getOrDefault(videoMid, 0)} " +
@@ -915,6 +1007,7 @@ object VideoManager {
             if (newCount == 0) {
                 activeVideos.remove(videoMid)
                 inactiveSinceTimestamps[videoMid] = System.currentTimeMillis()
+                stopHiddenInactivePlayer(videoMid, reason = "inactive")
             } else {
                 activeVideos[videoMid] = newCount
             }
@@ -987,6 +1080,7 @@ object VideoManager {
                 removeHlsFallbackListener(player)
                 player.clearVideoSurface()
                 player.stop()
+                player.clearMediaItems()
                 player.release()
                 MediaLog.d("VideoManager") { "✅ PLAYER RELEASED: Successfully released player" }
             } catch (e: Exception) {
@@ -1518,6 +1612,31 @@ object VideoManager {
         autoReplayListener = null
     }
 
+    /**
+     * Drop loaded fullscreen media buffers while keeping the reusable fullscreen player object.
+     */
+    fun trimFullScreenPlayerMedia() {
+        val player = fullScreenPlayer ?: return
+        try {
+            autoReplayListener?.let { listener ->
+                try {
+                    player.removeListener(listener)
+                } catch (_: Exception) { }
+            }
+            autoReplayListener = null
+            removeHlsFallbackListener(player)
+            player.playWhenReady = false
+            player.pause()
+            player.clearVideoSurface()
+            player.stop()
+            player.clearMediaItems()
+            currentVideoUrl = null
+            MediaLog.d("VideoManager") { "Trimmed fullscreen media while keeping fullscreen player" }
+        } catch (e: Exception) {
+            Timber.tag("VideoManager").w("Error trimming fullscreen media: ${e.message}")
+        }
+    }
+
     // ===== MEMORY MANAGEMENT =====
 
     /**
@@ -1543,6 +1662,7 @@ object VideoManager {
             "Handled memory pressure level=$level releaseVisibleFeedPlayers=$releaseVisibleFeedPlayers " +
                 "playersBefore=$beforeCount playersAfter=${videoPlayers.size}"
         )
+        logVideoDebugSnapshot("memory-pressure", force = true)
     }
 
     /**
@@ -1676,27 +1796,16 @@ object VideoManager {
     }
     
     /**
-     * Clean up truly inactive video players (not being used by any Composable)
-     * This prevents memory leaks by releasing players that are no longer referenced
+     * Keep inactive players stopped and cached unless the player cache is over limit.
+     * Over-limit cleanup is handled by [enforcePlayerCacheLimit], which releases LRU
+     * players while preserving active, visible, retained, fullscreen, and recent players.
      */
     fun cleanupInactivePlayers() {
-        val inactivePlayers = videoPlayers.keys.filter { videoMid ->
-            !isPlayerReleaseProtected(videoMid)
-        }
-
-        if (inactivePlayers.isNotEmpty()) {
-            MediaLog.d("VideoManager") { "🧹 CLEANUP: Releasing ${inactivePlayers.size} inactive players" }
-            MediaLog.d("VideoLoading") {
-                "Manager cleanup inactive=$inactivePlayers active=${activeVideos.keys} visible=${visibleVideos}"
-            }
-            inactivePlayers.forEach { videoMid ->
-                releasePlayer(videoMid)
-            }
-        }
+        enforcePlayerCacheLimit()
     }
 
     /**
-     * Deferred version of [cleanupInactivePlayers]. Waits briefly before cleaning up
+     * Deferred version of [cleanupInactivePlayers]. Waits briefly before enforcing limits
      * so that incoming screens have time to mark their players as active/visible.
      * This prevents a race condition during navigation where the outgoing screen's
      * onDispose releases players that the incoming screen just created.
@@ -1774,6 +1883,7 @@ object VideoManager {
         synchronized(fullScreenProtectedVideos) {
             fullScreenProtectedVideos.remove(videoMid)
         }
+        logVideoDebugSnapshot("player-released", force = true)
     }
     
     /**

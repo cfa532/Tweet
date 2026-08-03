@@ -70,7 +70,7 @@ signingConfigs {
 ```bash
 export KEYSTORE_PASSWORD="your-store-password"
 export KEY_PASSWORD="your-key-password"
-./gradlew assembleMiniRelease
+./gradlew assembleFullRelease
 ```
 
 **Option B: gradle.properties (Local)**
@@ -110,10 +110,10 @@ With debug signing, you get:
 
 ```
 app/build/outputs/apk/
-├── mini/release/
-│   └── app-mini-release-unsigned.apk  # Actually signed with debug key
-└── full/release/
-    └── app-full-release-unsigned.apk  # Actually signed with debug key
+├── full/release/
+│   └── app-full-release.apk
+└── play/release/
+    └── app-play-release.apk
 ```
 
 Despite the "-unsigned" filename, these APKs **are signed** with the debug key and can be installed on devices.
@@ -124,7 +124,7 @@ Despite the "-unsigned" filename, these APKs **are signed** with the debug key a
 ```bash
 # Check if APK is signed
 jarsigner -verify -verbose -certs \
-  app/build/outputs/apk/mini/release/app-mini-release-unsigned.apk
+  app/build/outputs/apk/full/release/app-full-release.apk
 ```
 
 ### Current Status
@@ -157,8 +157,8 @@ jarsigner -verify -verbose -certs \
 ### Development (Debug Signing)
 ```bash
 # Current setup - uses debug signing
-./gradlew assembleMiniRelease
 ./gradlew assembleFullRelease
+./gradlew assemblePlayRelease
 ```
 
 ### Production (Your Keystore)
@@ -166,12 +166,11 @@ jarsigner -verify -verbose -certs \
 # After configuring production keystore
 export KEYSTORE_PASSWORD="your-password"
 export KEY_PASSWORD="your-key-password"
-./gradlew assembleMiniRelease
 ./gradlew assembleFullRelease
+./gradlew assemblePlayRelease
 ```
 
 ---
 
 **Current Status**: Debug signing (development/testing)
 **Production Ready**: Update keystore configuration before Play Store release
-

@@ -96,6 +96,7 @@
     <string name="cannot_get_followed_user">無法獲取被關注的用戶</string>
     <string name="missing_host_for_followed_user">被關注用戶缺少主機</string>
     <string name="tweet_not_found">找不到推文</string>
+    <string name="loading_quoted_tweet">正在載入引用的推文...</string>
     <string name="only_author_can_update_privacy">只有推文作者可以更新隱私設置</string>
     <string name="not_a_friend_of_the_host">不是主機的朋友</string>
     <string name="no_provider_ip_found">找不到提供者IP</string>

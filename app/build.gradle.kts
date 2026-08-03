@@ -30,10 +30,8 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 132    // Full release version code. Must be increased each time,
-                            // and higher than mini version code.
-                            // So full version can override mini version. 
-        versionName = "64"  // compared with App Mimei version to check for upgrade.
+        versionCode = 147
+        versionName = "71"  // compared with App Mimei version to check for upgrade.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -46,13 +44,20 @@ android {
         // This ensures APP_ID is always defined and prevents any inheritance issues
         buildConfigField("String", "APP_ID", "\"\"")
         buildConfigField("String", "BASE_URL", "\"\"")
+        manifestPlaceholders["appLinkAutoVerify"] = "true"
+        manifestPlaceholders["publicDeepLinkHost"] = "dtweet.com"
     }
     
     signingConfigs {
-        // Debug signing config (automatically available)
+        create("debugLocal") {
+            storeFile = rootProject.file("debug-keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         
         create("release") {
-            // Load from keystore.properties file or fall back to debug signing
+            // Load from keystore.properties file or fall back to local debug signing
             if (keystorePropertiesFile.exists()) {
                 // Use rootProject.file() since keystore is in project root, not app/ directory
                 storeFile = rootProject.file(keystoreProperties["KEYSTORE_FILE"].toString())
@@ -60,17 +65,18 @@ android {
                 keyAlias = keystoreProperties["KEY_ALIAS"].toString()
                 keyPassword = keystoreProperties["KEY_PASSWORD"].toString()
             } else {
-                // Fallback to debug signing if keystore.properties doesn't exist
-                storeFile = signingConfigs.getByName("debug").storeFile
-                storePassword = signingConfigs.getByName("debug").storePassword
-                keyAlias = signingConfigs.getByName("debug").keyAlias
-                keyPassword = signingConfigs.getByName("debug").keyPassword
+                // Fallback to local debug signing if keystore.properties doesn't exist
+                storeFile = signingConfigs.getByName("debugLocal").storeFile
+                storePassword = signingConfigs.getByName("debugLocal").storePassword
+                keyAlias = signingConfigs.getByName("debugLocal").keyAlias
+                keyPassword = signingConfigs.getByName("debugLocal").keyPassword
             }
         }
     }
     
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName("debugLocal")
             applicationIdSuffix = ".debug"
 //            isMinifyEnabled = true
 //            isShrinkResources = true
@@ -89,6 +95,8 @@ android {
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"6IQc_t22JUub1TEgDP9Fo_Boosm\"")
             buildConfigField("String", "ENTRY_URLS", "\"VQ3xCeguhlAF1jY7zfn-HM_Vrad\"")
+            manifestPlaceholders["appLinkAutoVerify"] = "false"
+            manifestPlaceholders["publicDeepLinkHost"] = "debug.dtweet.invalid"
         }
         release {
             signingConfig = signingConfigs.getByName("release")
@@ -109,6 +117,8 @@ android {
             buildConfigField("String", "PACKAGE_ID", "\"9OCLYP-SXzen3e171-Ei_6N3Gwl\"")
             buildConfigField("String", "ALPHA_ID", "\"mKOihoVuFnQ2xt33R51KTQXSBkX\"")
             buildConfigField("String", "ENTRY_URLS", "\"dSXMdZNrpMw0xJQEbxPZn5nnLBK\"")
+            manifestPlaceholders["appLinkAutoVerify"] = "true"
+            manifestPlaceholders["publicDeepLinkHost"] = "dtweet.com"
         }
     }
     
@@ -118,40 +128,24 @@ android {
         create("full") {
             dimension = "version"
             versionNameSuffix = ""
-            // Full version uses default versionCode from defaultConfig (currently 70)
-            // No override - will use defaultConfig versionCode
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport
                 abiFilters += listOf("arm64-v8a")
             }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
         }
-        
-        create("mini") {
-            dimension = "version"
-            versionNameSuffix = "-mini"
-            versionCode = 87  // Mini version code. Must be smaller than full version's code
-            ndk {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "true")
-            buildConfigField("Boolean", "IS_PLAY_VERSION", "false")
-            buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"\"")
-        }
-        
+
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 132  // Play version code increased for release
+            versionCode = 147  // Play version code increased for release
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport
                 abiFilters += listOf("arm64-v8a")
             }
-            buildConfigField("Boolean", "IS_MINI_VERSION", "false")
             buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
             buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
             // Play version is based on full version but with different settings
@@ -210,7 +204,7 @@ kotlin {
 }
 
 tasks.configureEach {
-    val isNonPlayVariantTask = name.contains("Full") || name.contains("Mini")
+    val isNonPlayVariantTask = name.contains("Full")
     val isFirebaseTask = name.contains("GoogleServices") || name.contains("Crashlytics")
     if (isNonPlayVariantTask && isFirebaseTask) {
         enabled = false
@@ -219,7 +213,7 @@ tasks.configureEach {
 
 dependencies {
     // FFmpeg Kit for local video processing.
-    // Included in full and play versions, excluded in mini version
+    // Included in full and play versions.
     "fullImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))
     "fullImplementation"("com.arthenica:smart-exception-java:0.2.1")
     "playImplementation"(files("libs/ffmpeg-kit-16kb-mediacodec-arm64.aar"))

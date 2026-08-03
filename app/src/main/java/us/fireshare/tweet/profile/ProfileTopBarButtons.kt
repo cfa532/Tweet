@@ -29,8 +29,8 @@ import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TweetCacheManager
-import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.ProfileEditor
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
@@ -56,7 +56,7 @@ fun ProfileTopBarButton(
     
     // Capture string resources at composable level
     val followOperationFailedText = stringResource(R.string.follow_operation_failed)
-    val loginFollowText = stringResource(R.string.login_follow)
+    val guestReminderText = stringResource(R.string.guest_reminder)
     val editText = stringResource(R.string.edit)
     val unfollowText = stringResource(R.string.unfollow)
 
@@ -99,44 +99,39 @@ fun ProfileTopBarButton(
             when (buttonText) {
                 editText -> navController.navigate(ProfileEditor)
                 else -> {
-                    if (!appUser.isGuest()) {
-                        // Optimistically update followingList and enqueue worker
-                        appUserViewModel.toggleFollowingOptimistic(
-                            user.mid,
-                            appUser.mid,
-                            context,
-                            updateTweetFeed = { isFollowingResult ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
-                                    
-                                    // Refresh user data for the followed/unfollowed user
-                                    try {
-                                        // Get fresh user data from server and cache it
-                                        fetchUser(user.mid, forceRefresh = true)?.let { refreshedUser ->
-                                            TweetCacheManager.saveUser(refreshedUser)
-                                            // Refresh the current viewmodel's user data
-                                            viewModel.refreshUserData()
-                                            Timber.tag("ProfileTopBarButtons").d("Refreshed user data for: ${user.mid}")
-                                        }
-                                    } catch (e: Exception) {
-                                        Timber.tag("ProfileTopBarButtons").e("Failed to refresh user data for ${user.mid}: $e")
+                    if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                        return@DebouncedButton
+                    }
+
+                    // Optimistically update followingList and enqueue worker
+                    appUserViewModel.toggleFollowingOptimistic(
+                        user.mid,
+                        appUser.mid,
+                        context,
+                        updateTweetFeed = { isFollowingResult ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
+
+                                // Refresh user data for the followed/unfollowed user
+                                try {
+                                    // Get fresh user data from server and cache it
+                                    fetchUser(user.mid, forceRefresh = true)?.let { refreshedUser ->
+                                        TweetCacheManager.saveUser(refreshedUser)
+                                        // Refresh the current viewmodel's user data
+                                        viewModel.refreshUserData()
+                                        Timber.tag("ProfileTopBarButtons").d("Refreshed user data for: ${user.mid}")
                                     }
-                                }
-                            },
-                            rollbackTweetFeed = { attemptedIsFollowing ->
-                                viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                    tweetFeedViewModel.rollbackFollowingsTweets(user.mid, attemptedIsFollowing)
+                                } catch (e: Exception) {
+                                    Timber.tag("ProfileTopBarButtons").e("Failed to refresh user data for ${user.mid}: $e")
                                 }
                             }
-                        )
-                    } else {
-                        Toast.makeText(context, loginFollowText, Toast.LENGTH_LONG).show()
-                        // Navigate to login after a short delay
-                        viewModel.viewModelScope.launch {
-                            kotlinx.coroutines.delay(500)
-                            navController.navigate(NavTweet.Login)
+                        },
+                        rollbackTweetFeed = { attemptedIsFollowing ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                tweetFeedViewModel.rollbackFollowingsTweets(user.mid, attemptedIsFollowing)
+                            }
                         }
-                    }
+                    )
                 }
             }
         },

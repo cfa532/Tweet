@@ -2,8 +2,6 @@ package us.fireshare.tweet.video
 
 import android.content.Context
 import android.net.Uri
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,7 +12,6 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.VideoManager
 import java.io.File
-import java.io.FileOutputStream
 
 /**
  * Main service that orchestrates local video processing:
@@ -31,15 +28,6 @@ class LocalVideoProcessingService(
     companion object {
         private const val TAG = "LocalVideoProcessingService"
         private const val TEMP_DIR_PREFIX = "hls_conversion_"
-        
-        // Matches iOS VideoConversionService: 720p reference bitrate with a minimum floor.
-        private const val REFERENCE_720P_BITRATE = 2500
-        private const val REFERENCE_720P_PIXELS = 921600
-        private const val MIN_BITRATE = 600
-        private const val AUDIO_BITRATE = "128k"
-        
-        // Normalization constants
-        private const val NORMALIZATION_THRESHOLD = 720 // Videos >720p get normalized to 720p
     }
 
     private val hlsConverter = LocalHLSConverter(context)
@@ -47,7 +35,7 @@ class LocalVideoProcessingService(
     private val zipUploadService = ZipUploadService(context, httpClient, appUser)
 
     /**
-     * Process video locally: normalize, convert to HLS, compress, and upload
+     * Process video locally: normalize first, then convert to HLS, compress, and upload.
      * Matches iOS behavior: automatically decides between dual variant (720p + 480p) or single variant (480p)
      * 
      * @param uri Input video URI
@@ -62,146 +50,64 @@ class LocalVideoProcessingService(
         fileTimestamp: Long,
         referenceId: MimeiId?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
+        try {
+            val originalFileSize = calculateFileSize(uri)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
+            val videoResolution = VideoManager.getVideoResolution(context, uri)
+            val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
+            val needsResampling = (resolutionValue ?: 0) > 720
+            val tempDir = createTempDirectory()
+
             try {
-                // Create temporary directory for processing
-                val tempDir = createTempDirectory()
-                
-                // Calculate original file size
-                val originalFileSize = withContext(Dispatchers.IO) {
-                    try {
-                        var size = 0L
-                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                            val buffer = ByteArray(8192) // 8KB buffer
-                            var bytesRead: Int
-                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                                size += bytesRead
-                            }
-                        }
-                        size
-                    } catch (e: Exception) {
-                        Timber.tag(TAG).e(e, "Failed to calculate video file size")
-                        0L
-                    }
-                }
-                
-                Timber.tag(TAG).d("Original video size: ${originalFileSize / (1024 * 1024)}MB")
-                
-                try {
-                    // Step 1: Normalize video
-                    val normalizationResult = normalizeVideo(uri, fileName, tempDir)
-                    
-                    val processUri: Uri
-                    val normalizedSize: Long
-                    val isNormalized: Boolean
-                    val normalizedResolution: Int?
-                    
-                    when (normalizationResult) {
-                        is NormalizationResult.Success -> {
-                            Timber.tag(TAG).d("Video normalized: ${normalizationResult.normalizedResolution}p @ ${normalizationResult.normalizedBitrate}, size=${normalizationResult.sizeBytes / (1024 * 1024)}MB")
-                            processUri = normalizationResult.uri
-                            normalizedSize = normalizationResult.sizeBytes
-                            isNormalized = true
-                            normalizedResolution = normalizationResult.normalizedResolution
-                        }
-                        is NormalizationResult.Skipped -> {
-                            Timber.tag(TAG).d("Normalization skipped, using original video")
-                            processUri = normalizationResult.originalUri
-                            normalizedSize = originalFileSize
-                            isNormalized = false
-                            normalizedResolution = null
-                        }
-                        is NormalizationResult.Failed -> {
-                            Timber.tag(TAG).w("Normalization failed, using original video")
-                            processUri = normalizationResult.originalUri
-                            normalizedSize = originalFileSize
-                            isNormalized = false
-                            normalizedResolution = null
-                        }
-                    }
-                    
-                    Timber.tag(TAG).d("HLS route selected for video upload; normalized size=${normalizedSize / (1024 * 1024)}MB")
-                    
-                    // Step 2: Convert video to HLS format
-                    // Variant selection (dual vs single) is automatically determined based on resolution
-                    // Matches iOS logic: >480p → dual variant (720p + 480p), ≤480p → single variant (480p)
-                    val hlsResult = hlsConverter.convertToHLS(
-                        processUri, 
-                        tempDir, 
-                        fileName, 
-                        normalizedSize, 
-                        isNormalized,
-                        normalizedResolution
-                    )
-                
-                when (hlsResult) {
-                    is LocalHLSConverter.HLSConversionResult.Success -> {
-                        // Compress HLS files into zip
-                        val zipFile = File(tempDir.parent, "${fileName}_hls.zip")
-                        val zipResult = zipCompressor.compressHLSDirectory(hlsResult.outputDirectory, zipFile)
-                        
-                        when (zipResult) {
-                            is ZipCompressor.ZipCompressionResult.Success -> {
-                                // Clean up HLS directory immediately after ZIP creation to free disk space
-                                try {
-                                    Timber.tag(TAG).d("Cleaning up HLS directory after ZIP creation: ${hlsResult.outputDirectory.absolutePath}")
-                                    hlsResult.outputDirectory.deleteRecursively()
-                                } catch (e: Exception) {
-                                    Timber.tag(TAG).w("Failed to clean up HLS directory: ${e.message}")
-                                }
+                val normalizedFile = File(tempDir, "normalized_${fileName}.mp4")
+                val normalizer = VideoNormalizer(context)
 
-                                // Upload zip to /process-zip endpoint and poll for completion
-                                val processingResult = zipUploadService.uploadZipFile(
-                                    zipResult.zipFile,
-                                    fileName,
-                                    referenceId
-                                )
-                                
-                                when (processingResult) {
-                                    is ZipUploadService.ZipProcessingResult.Success -> {
-                                        // Clean up ZIP file after successful processing to free disk space
-                                        try {
-                                            Timber.tag(TAG).d("Cleaning up ZIP file after successful processing: ${zipResult.zipFile.absolutePath}")
-                                            zipResult.zipFile.delete()
-                                        } catch (e: Exception) {
-                                            Timber.tag(TAG).w("Failed to clean up ZIP file: ${e.message}")
-                                        }
+                when (val result = normalizer.normalizeVideo(uri, normalizedFile, needsResampling)) {
+                    is VideoNormalizer.NormalizationResult.Success -> {
+                        val normalizedUri = Uri.fromFile(result.outputFile)
+                        val normalizedResolution = VideoManager.getVideoResolutionValue(
+                            VideoManager.getVideoResolution(context, normalizedUri)
+                        )
 
-                                        // Get aspect ratio for the result
-                                        val aspectRatio = VideoManager.getVideoAspectRatio(context, uri)
-
-                                        Timber.tag(TAG).d("HLS video processed: ${processingResult.cid}")
-                                        VideoProcessingResult.Success(
-                                            MimeiFileType(
-                                                processingResult.cid,
-                                                MediaType.HLS_VIDEO,
-                                                originalFileSize,
-                                                fileName,
-                                                fileTimestamp,
-                                                aspectRatio
-                                            )
-                                        )
-                                    }
-                                    is ZipUploadService.ZipProcessingResult.Error -> {
-                                        VideoProcessingResult.Error("Processing failed: ${processingResult.message}")
-                                    }
-                                }
-                            }
-                            is ZipCompressor.ZipCompressionResult.Error -> {
-                                VideoProcessingResult.Error("Compression failed: ${zipResult.message}")
-                            }
-                        }
+                        processNormalizedVideo(
+                            uri = normalizedUri,
+                            fileName = fileName,
+                            fileTimestamp = fileTimestamp,
+                            referenceId = referenceId,
+                            originalFileSize = originalFileSize,
+                            normalizedSize = result.outputFile.length(),
+                            normalizedResolution = normalizedResolution,
+                            sourceBitrateK = sourceBitrateK
+                        )
                     }
-                    is LocalHLSConverter.HLSConversionResult.Error -> {
-                        VideoProcessingResult.Error("HLS conversion failed: ${hlsResult.message}")
+                    is VideoNormalizer.NormalizationResult.Error -> {
+                        Timber.tag(TAG).w("Video normalization failed before HLS: ${result.message}")
+                        VideoProcessingResult.Error("Normalization failed: ${result.message}")
                     }
                 }
             } finally {
-                // Clean up temporary directory
                 cleanupTempDirectory(tempDir)
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error during video processing")
             VideoProcessingResult.Error("Processing error: ${e.message}")
+        }
+    }
+
+    private fun calculateFileSize(uri: Uri): Long {
+        return try {
+            var size = 0L
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    size += bytesRead
+                }
+            }
+            size
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to calculate video file size")
+            0L
         }
     }
 
@@ -216,7 +122,8 @@ class LocalVideoProcessingService(
         referenceId: MimeiId?,
         originalFileSize: Long,
         normalizedSize: Long,
-        normalizedResolution: Int?
+        normalizedResolution: Int?,
+        sourceBitrateK: Int?
     ): VideoProcessingResult = withContext(Dispatchers.IO) {
         try {
             val tempDir = createTempDirectory()
@@ -230,7 +137,8 @@ class LocalVideoProcessingService(
                     fileName,
                     normalizedSize,
                     true,
-                    normalizedResolution
+                    normalizedResolution,
+                    sourceBitrateK
                 )
 
                 when (hlsResult) {
@@ -321,218 +229,6 @@ class LocalVideoProcessingService(
         } catch (e: Exception) {
             Timber.tag(TAG).w(e, "Failed to clean up temporary directory")
         }
-    }
-
-    /**
-     * Detect video resolution based on orientation
-     * Landscape (width ≥ height): resolution = HEIGHT
-     * Portrait (width < height): resolution = WIDTH
-     */
-    private fun detectResolution(videoResolution: Pair<Int, Int>?): Int? {
-        if (videoResolution == null) return null
-        val (width, height) = videoResolution
-        return if (width >= height) {
-            // Landscape: resolution = height
-            height
-        } else {
-            // Portrait: resolution = width
-            width
-        }
-    }
-
-    /**
-     * Calculate normalization parameters based on video resolution
-     * Returns: Pair(targetResolution, targetVideoBitrate)
-     * Uses the same pixel-based bitrate formula as the iOS normalization code.
-     */
-    private fun calculateNormalizationParams(resolution: Int, videoResolution: Pair<Int, Int>?): Pair<Int, String> {
-        return if (resolution > NORMALIZATION_THRESHOLD) {
-            Pair(NORMALIZATION_THRESHOLD, "${REFERENCE_720P_BITRATE}k")
-        } else {
-            val proportionalBitrate = if (videoResolution != null) {
-                val (width, height) = videoResolution
-                val pixelCount = width * height
-                val calculatedBitrate = ((pixelCount.toDouble() / REFERENCE_720P_PIXELS) * REFERENCE_720P_BITRATE).toInt()
-                maxOf(MIN_BITRATE, calculatedBitrate)
-            } else {
-                maxOf(MIN_BITRATE, (REFERENCE_720P_BITRATE * resolution / 720))
-            }
-            Pair(resolution, "${proportionalBitrate}k")
-        }
-    }
-
-    /**
-     * Normalize video to target resolution and bitrate
-     * Returns URI of normalized video file, or original URI if normalization fails
-     */
-    private suspend fun normalizeVideo(
-        uri: Uri,
-        fileName: String,
-        tempDir: File
-    ): NormalizationResult = withContext(Dispatchers.IO) {
-        try {
-            Timber.tag(TAG).d("========== FIRST NORMALIZATION (Standardization) ==========")
-            
-            // Get original video file size
-            val originalFileSize = withContext(Dispatchers.IO) {
-                try {
-                    var size = 0L
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            size += bytesRead
-                        }
-                    }
-                    size
-                } catch (e: Exception) {
-                    Timber.tag(TAG).e(e, "Failed to calculate original file size")
-                    0L
-                }
-            }
-            
-            Timber.tag(TAG).d("Original video: ${originalFileSize / (1024 * 1024)}MB")
-            
-            // Get video resolution
-            val videoResolution = VideoManager.getVideoResolution(context, uri)
-            val resolution = detectResolution(videoResolution)
-            
-            if (resolution == null) {
-                Timber.tag(TAG).w("Could not detect video resolution, skipping normalization")
-                return@withContext NormalizationResult.Skipped(uri)
-            }
-            
-            Timber.tag(TAG).d("Detected resolution: ${resolution}p (${videoResolution?.first}x${videoResolution?.second})")
-            
-            // Calculate normalization parameters with the iOS pixel-based bitrate formula.
-            val (targetResolution, targetBitrate) = calculateNormalizationParams(resolution, videoResolution)
-            
-            Timber.tag(TAG).d("Standardization target: ${targetResolution}p @ $targetBitrate video / $AUDIO_BITRATE audio")
-            
-            // If already at target resolution, check if we need to normalize bitrate
-            if (resolution <= NORMALIZATION_THRESHOLD && resolution == targetResolution) {
-                // For videos ≤720p, we still normalize to ensure consistent bitrate and format
-                // before the HLS pass decides whether to copy or re-encode the variant.
-                Timber.tag(TAG).d("Video ≤720p at target resolution, standardizing format/bitrate for HLS")
-            } else if (resolution > NORMALIZATION_THRESHOLD) {
-                Timber.tag(TAG).d("Video >720p, downscaling to 720p for standardization")
-            }
-            
-            // Create normalized video file
-            val normalizedFile = File(tempDir, "normalized_${fileName}.mp4")
-            
-            // Copy input to temp file for processing
-            val tempInputFile = File(tempDir, "input_${fileName}.mp4")
-            copyUriToFile(uri, tempInputFile)
-            
-            // Calculate target dimensions maintaining aspect ratio
-            val (targetWidth, targetHeight) = if (videoResolution != null) {
-                val (width, height) = videoResolution
-                val aspectRatio = width.toFloat() / height.toFloat()
-                
-                if (width >= height) {
-                    // Landscape: target height = targetResolution
-                    val w = (targetResolution * aspectRatio).toInt()
-                    val evenW = if (w % 2 == 0) w else w - 1
-                    Pair(evenW, targetResolution)
-                } else {
-                    // Portrait: target width = targetResolution
-                    val h = (targetResolution / aspectRatio).toInt()
-                    val evenH = if (h % 2 == 0) h else h - 1
-                    Pair(targetResolution, evenH)
-                }
-            } else {
-                Pair(1280, 720) // Default fallback
-            }
-            
-            // Build FFmpeg normalization command
-            val command = """
-                -i "${tempInputFile.absolutePath}"
-                -c:v h264_mediacodec
-                -c:a aac
-                -ar 44100
-                -vf "scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2"
-                -b:v $targetBitrate
-                -b:a $AUDIO_BITRATE
-                -pix_fmt yuv420p
-                -g 30
-                -movflags +faststart
-                -y
-                "${normalizedFile.absolutePath}"
-            """.trimIndent().replace(Regex("\\s+"), " ")
-            
-            Timber.tag(TAG).d("Executing standardization: ${targetWidth}x${targetHeight} @ $targetBitrate")
-            Timber.tag(TAG).d("FFmpeg command: $command")
-            
-            // Execute FFmpeg
-            val startTime = System.currentTimeMillis()
-            val session = FFmpegKit.execute(command)
-            val returnCode = session.returnCode
-            val duration = System.currentTimeMillis() - startTime
-            
-            // Clean up temp input file
-            tempInputFile.delete()
-            
-            if (ReturnCode.isSuccess(returnCode)) {
-                val normalizedSize = normalizedFile.length()
-                val sizeDiff = normalizedSize - originalFileSize
-                val sizeChangePercent = if (originalFileSize > 0) {
-                    ((sizeDiff.toFloat() / originalFileSize) * 100).toInt()
-                } else 0
-                
-                Timber.tag(TAG).d("FIRST NORMALIZATION SUCCESS:")
-                Timber.tag(TAG).d("  Original: ${originalFileSize / (1024 * 1024)}MB")
-                Timber.tag(TAG).d("  Normalized: ${normalizedSize / (1024 * 1024)}MB ($sizeChangePercent%)")
-                Timber.tag(TAG).d("  Resolution: ${targetWidth}x${targetHeight} (${targetResolution}p)")
-                Timber.tag(TAG).d("  Bitrate: $targetBitrate (standardized)")
-                Timber.tag(TAG).d("  Duration: ${duration}ms")
-                Timber.tag(TAG).d("  Purpose: Unified format for 32MB routing decision")
-                Timber.tag(TAG).d("========================================================")
-                
-                NormalizationResult.Success(
-                    uri = Uri.fromFile(normalizedFile),
-                    file = normalizedFile,
-                    sizeBytes = normalizedSize,
-                    normalizedResolution = targetResolution,
-                    normalizedBitrate = targetBitrate
-                )
-            } else {
-                val logs = session.allLogsAsString
-                Timber.tag(TAG).e("Normalization failed: $logs")
-                // Clean up failed normalized file
-                normalizedFile.delete()
-                NormalizationResult.Failed(uri)
-            }
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error during video normalization")
-            NormalizationResult.Failed(uri)
-        }
-    }
-
-    /**
-     * Copy URI content to file
-     */
-    private fun copyUriToFile(uri: Uri, outputFile: File) {
-        context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            FileOutputStream(outputFile).use { outputStream ->
-                inputStream.copyTo(outputStream)
-            }
-        } ?: throw Exception("Could not open input stream from URI: $uri")
-    }
-
-    /**
-     * Result of video normalization
-     */
-    private sealed class NormalizationResult {
-        data class Success(
-            val uri: Uri,
-            val file: File,
-            val sizeBytes: Long,
-            val normalizedResolution: Int,
-            val normalizedBitrate: String
-        ) : NormalizationResult()
-        data class Skipped(val originalUri: Uri) : NormalizationResult()
-        data class Failed(val originalUri: Uri) : NormalizationResult()
     }
 
     /**

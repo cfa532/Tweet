@@ -39,7 +39,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -137,8 +136,8 @@ fun ComposeTweetScreen(
     // Handle send action
     val onSendClick = {
         if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-            // Check full version: if non-guest user has > 10 tweets and no cloudDrivePort, require node setup
-            if (!BuildConfig.IS_MINI_VERSION && !appUser.isGuest() && appUser.tweetCount > 10 && appUser.cloudDrivePort == 0) {
+            // Require node setup after the free posting threshold.
+            if (!appUser.isGuest() && appUser.tweetCount > 10 && appUser.cloudDrivePort == 0) {
                 showNodeRequiredDialog = true
             }
             else {

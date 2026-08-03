@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.PowerManager
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
@@ -24,6 +25,7 @@ import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
@@ -135,6 +137,7 @@ class UploadCommentWorker @AssistedInject constructor(
             val comment = Tweet(
                 mid = TW_CONST.GUEST_ID,  // placeholder
                 authorId = appUser.mid,
+                parentTweetId = parentTweet.mid,
                 content = commentContent,
                 attachments = attachments,
                 timestamp = System.currentTimeMillis()
@@ -316,6 +319,7 @@ class UploadTweetWorker @AssistedInject constructor(
                     // Remove incomplete upload from tracking since it completed successfully
                     val workId = id.toString()
                     HproseInstance.removeIncompleteUpload(applicationContext, workId)
+                    showAppToast(applicationContext.getString(R.string.tweet_uploaded))
 
                     return Result.success()
                 }
@@ -353,6 +357,16 @@ class UploadTweetWorker @AssistedInject constructor(
             }
             // WorkManager will retry once more if runAttemptCount < 2
             return Result.failure()
+        }
+    }
+
+    private suspend fun showAppToast(message: String) {
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                applicationContext,
+                message,
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -402,14 +416,9 @@ class DeleteTweetWorker @AssistedInject constructor(
                 withContext(Dispatchers.IO) {
                     try {
                         val deletedTweetId = HproseInstance.deleteTweet(tweetId)
-                        if (deletedTweetId != null) {
-                            Timber.tag("DeleteTweetWorker").d("Tweet $deletedTweetId deleted.")
-                            val outputData = workDataOf("tweetId" to deletedTweetId)
-                            return@withContext Result.success(outputData)
-                        } else {
-                            Timber.tag("DeleteTweetWorker").w("Tweet deletion returned null")
-                            return@withContext Result.failure()
-                        }
+                        Timber.tag("DeleteTweetWorker").d("Tweet $deletedTweetId deleted.")
+                        val outputData = workDataOf("tweetId" to deletedTweetId)
+                        return@withContext Result.success(outputData)
                     } catch (e: Exception) {
                         Timber.tag("DeleteTweetWorker").e(e, "Error deleting tweet: ${e.message}")
                         return@withContext Result.failure()

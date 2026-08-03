@@ -390,10 +390,8 @@ fun FullScreenVideoPlayer(
                     windowInsetsController?.show(android.view.WindowInsets.Type.systemBars())
                 }
             }
-            // Stop playback when exiting fullscreen
-            Timber.d("FullScreenVideoPlayer (API 30+): Exiting fullscreen, stopping playback")
-            exoPlayer.pause()
-            exoPlayer.playWhenReady = false
+            Timber.d("FullScreenVideoPlayer (API 30+): Exiting fullscreen, trimming loaded media")
+            VideoManager.trimFullScreenPlayerMedia()
         }
     }
 

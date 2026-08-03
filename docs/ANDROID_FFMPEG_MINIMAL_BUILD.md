@@ -1,6 +1,6 @@
 # Minimal FFmpegKit Android Build Memo
 
-Last updated: June 2026
+Last updated: July 2026
 
 The Play flavor needs local FFmpeg for the same narrow video path as iOS:
 
@@ -15,12 +15,13 @@ The Play flavor needs local FFmpeg for the same narrow video path as iOS:
 The app now uses a smaller full/play AAR:
 
 - `app/libs/ffmpeg-kit-16kb-mediacodec-arm64.aar`
-- compressed size: about 6.8 MB
+- compressed size: about 7.0 MB
 - ABI: `arm64-v8a` only
-- source: FFmpegKit v6.0 Android main build with Android MediaCodec enabled
+- source: FFmpegKit v6.0 Android main build with Android MediaCodec and dav1d enabled
 - 16 KB ELF LOAD segment alignment: verified as `2**14`
 - configured without `--enable-gpl` or `--enable-libx264`
 - verified encoder strings include `h264_mediacodec`
+- verified decoder strings include `libdav1d decoder`
 
 ## Active Command Contract
 
@@ -29,11 +30,11 @@ The Android code currently requires the active FFmpegKit AAR to support:
 | Code path | Required FFmpeg pieces |
 | --- | --- |
 | `LocalHLSConverter` copy/remux path | `-c:v copy`, FFmpeg AAC encoder, file protocol, `h264_mp4toannexb` bitstream filter, HLS muxer, MPEG-TS segments |
-| `LocalHLSConverter` re-encode path | `h264_mediacodec`, FFmpeg AAC encoder, `scale` filter, `yuv420p`, `h264_mp4toannexb` bitstream filter, HLS muxer, MPEG-TS segments |
-| `VideoNormalizer` | `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
-| `LocalVideoProcessingService` legacy normalization | `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
+| `LocalHLSConverter` re-encode path | dav1d AV1 decode when needed, `h264_mediacodec`, FFmpeg AAC encoder, `scale` filter, `yuv420p`, `h264_mp4toannexb` bitstream filter, HLS muxer, MPEG-TS segments |
+| `VideoNormalizer` | dav1d AV1 decode when needed, `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
+| `LocalVideoProcessingService` legacy normalization | dav1d AV1 decode when needed, `h264_mediacodec`, FFmpeg AAC encoder, `scale`, MP4 muxer, `+faststart` |
 
-The checked-in full/play AAR meets this contract without GPL/x264 by using Android's platform H.264 encoder through `h264_mediacodec`. Revalidate on real devices because MediaCodec behavior depends on the device encoder.
+The checked-in full/play AAR meets this contract without GPL/x264 by using Android's platform H.264 encoder through `h264_mediacodec` and software AV1 decode through dav1d. Revalidate on real devices because MediaCodec behavior depends on the device encoder.
 
 ## Target Rebuild
 
@@ -45,13 +46,14 @@ cd ffmpeg-kit
 git checkout v6.0
 ```
 
-Build Android main release, arm64 only, no GPL, no `--full`, with Android platform codecs:
+Build Android main release, arm64 only, no GPL, no `--full`, with Android platform codecs and dav1d:
 
 ```bash
 export ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
-export ANDROID_NDK_ROOT="/path/to/android-ndk-r25b-or-compatible"
+export ANDROID_NDK_ROOT="/path/to/android-ndk-r25c-or-compatible"
 
 ./android.sh \
+  --enable-dav1d \
   --enable-android-media-codec \
   --disable-arm-v7a \
   --disable-arm-v7a-neon \
@@ -65,8 +67,17 @@ Do not pass:
 - `--enable-gpl`
 - `--enable-lib-x264`
 - `--enable-lib-x265`
+- `--enable-libaom`
 - `--enable-lib-vpx`
 - TLS/font/image/subtitle libraries unless a new app feature needs them
+
+Preserve 16 KB page alignment when rebuilding. FFmpegKit v6.0 does not expose this as a top-level Android build flag, so the Android linker flags must include:
+
+```text
+-Wl,-z,max-page-size=16384
+```
+
+Apply it to both FFmpeg shared-library links and the FFmpegKit JNI link before producing the replacement AAR.
 
 After the rebuild, replace:
 

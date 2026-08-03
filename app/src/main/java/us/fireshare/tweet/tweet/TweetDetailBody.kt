@@ -71,6 +71,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.SelectableText
@@ -95,7 +96,8 @@ fun TweetDetailBody(
     val authorStateFlow = remember(tweet.authorId) {
         TweetCacheManager.getUserStateFlow(tweet.authorId)
     }
-    val author by authorStateFlow.collectAsState()
+    val cachedAuthor by authorStateFlow.collectAsState()
+    val author = cachedAuthor ?: tweet.author
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -229,9 +231,13 @@ fun TweetDetailBody(
                                         isLoadingOriginal = false
                                     }
                                 }
-                                // Refresh from network in the background, update silently
+                                // Reload from the current provider in the background.
                                 val refreshed = withContext(Dispatchers.IO) {
-                                    HproseInstance.refreshTweet(originalTweetId, originalAuthorId)
+                                    HproseInstance.getTweet(
+                                        originalTweetId,
+                                        originalAuthorId,
+                                        bypassCache = true
+                                    )
                                 }
                                 if (refreshed != null) {
                                     originalTweet = refreshed
@@ -278,9 +284,24 @@ fun TweetDetailBody(
                                 )
                             }
                         } else {
-                            // Original tweet not available - this quoted tweet should be removed from the list
-                            // Return empty content to effectively hide this item
-                            Box(modifier = Modifier.size(0.dp))
+                            // Embedded tweet could not be found/loaded (deleted, network error, etc).
+                            // Render the quote tweet card anyway with a placeholder in place of the
+                            // missing embedded tweet, instead of hiding it entirely.
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 2.dp,
+                                modifier = Modifier.padding(start = 40.dp, top = 4.dp, end = 0.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.loading_quoted_tweet),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                                )
+                            }
                         }
                     }
 
@@ -294,7 +315,8 @@ fun TweetDetailBody(
                         RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        ShareButton(viewModel)
+                        // Detail-view share button uses the check_upgrade domain (DEEPLINKING.md)
+                        ShareButton(viewModel, linkStyle = ShareLinkStyle.WEB_DOMAIN)
                     }
                 }
             }

@@ -7,11 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -28,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +58,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.tweet.ScrollDirection
 import us.fireshare.tweet.tweet.ScrollState
+import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
@@ -94,7 +99,9 @@ fun ProfileScreen(
 
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
-    var didRequestResync by remember(userId) { mutableStateOf(false) }
+    var scrollToTopTrigger by remember(userId) { mutableIntStateOf(0) }
+    var scrollToTweetTrigger by remember(userId) { mutableIntStateOf(0) }
+    var scrollToTweetId by remember(userId) { mutableStateOf<MimeiId?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val profileCoordinator = remember(userId) { VideoPlaybackCoordinator() }
 
@@ -107,34 +114,16 @@ fun ProfileScreen(
 
 
 
-    val activity = context as? Activity
-    activity?.let { OrientationManager.lockToPortrait(it) }
+    val orientationActivity = context as? Activity
+    orientationActivity?.let { OrientationManager.lockToPortrait(it) }
 
-    // Load tweets when screen opens (on IO dispatcher to avoid blocking main thread
-    // with synchronous Hprose network calls, especially when user's IP has changed)
+    // Cached profile state is published by the ViewModel first. The single background
+    // load then health-checks/repairs the route before any profile server reads.
     LaunchedEffect(userId) {
         withContext(Dispatchers.IO) {
             viewModel.initLoad()
         }
     }
-
-    // Refresh user data when screen opens (in background, non-blocking)
-    LaunchedEffect(userId) {
-        Timber.tag("ProfileScreen").d("Refreshing user data from server for userId: $userId")
-        viewModel.refreshUserData()
-    }
-
-    // Resync user data after the profile route is available.
-    LaunchedEffect(userId, profileUser.mid, profileUser.baseUrl) {
-        if (didRequestResync || profileUser.mid != userId || profileUser.baseUrl.isNullOrBlank()) {
-            return@LaunchedEffect
-        }
-        didRequestResync = true
-        viewModel.resyncProfileUser()
-    }
-
-    // No need for LaunchedEffect(currentRoute) anymore - refreshUserData is called when profile opens
-    // and when exiting profile editor, appUserState is already updated by the save operation.
 
 
 
@@ -201,14 +190,18 @@ fun ProfileScreen(
                                     }
                                 }
                             },
-                        onScrolledToTop = {
-                            BottomBarState.opacity = 0.98f
-                            scrollState = ScrollState(false, ScrollDirection.NONE)
-                            scrollBehavior.state.heightOffset = 0f
-                        }
+                            onScrolledToTop = {
+                                BottomBarState.opacity = 0.98f
+                                scrollState = ScrollState(false, ScrollDirection.NONE)
+                                scrollBehavior.state.heightOffset = 0f
+                            },
+                            scrollToTopTrigger = scrollToTopTrigger,
+                            scrollToTweetId = scrollToTweetId,
+                            scrollToTweetTrigger = scrollToTweetTrigger
                         )
                     }
                 }
+
             }
         }
 
@@ -219,6 +212,29 @@ fun ProfileScreen(
                 .align(Alignment.BottomCenter),
             navController,
             0
+        )
+
+        val pendingNewTweets by viewModel.pendingNewTweets.collectAsState()
+        val showNewTweetsBanner by viewModel.showNewTweetsBanner.collectAsState()
+        val renderedTweets by viewModel.tweets.collectAsState()
+        val renderedPinnedTweets by viewModel.pinnedTweets.collectAsState()
+        val visiblePendingNewTweets = remember(pendingNewTweets, renderedTweets, renderedPinnedTweets) {
+            viewModel.visiblePendingNewTweetsSnapshot()
+        }
+        NewTweetsBanner(
+            pendingTweets = visiblePendingNewTweets,
+            visible = showNewTweetsBanner && visiblePendingNewTweets.isNotEmpty(),
+            onClick = {
+                scrollToTweetId = visiblePendingNewTweets.firstOrNull()?.mid
+                viewModel.applyPendingNewTweets()
+                scrollBehavior.state.heightOffset = 0f
+                scrollToTweetTrigger += 1
+            },
+            onAutoHide = {
+                viewModel.dismissNewTweetsBanner()
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
         )
     }
 }
@@ -239,6 +255,9 @@ private fun ProfileContentWithTweetListView(
     userId: MimeiId, // Add userId parameter
     onScrollStateChange: (ScrollState) -> Unit,
     onScrolledToTop: (() -> Unit)? = null,
+    scrollToTopTrigger: Int = 0,
+    scrollToTweetId: MimeiId? = null,
+    scrollToTweetTrigger: Int = 0,
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
@@ -275,13 +294,33 @@ private fun ProfileContentWithTweetListView(
                         )
                     }
 
-                    HorizontalDivider(
+                    Row(
                         modifier = Modifier
-                            .padding(bottom = 8.dp)
-                            .padding(horizontal = 0.dp),
-                        thickness = 2.dp,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    )
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                    }
                 }
             }
         }
@@ -309,6 +348,12 @@ private fun ProfileContentWithTweetListView(
         isInitialLoading = initState, // Pass the initialization state to delay videolist creation
         pinnedTweets = pinnedTweets, // Include pinned tweets in video navigation
         onScrolledToTop = onScrolledToTop,
+        scrollToTopTrigger = scrollToTopTrigger,
+        scrollToTweetId = scrollToTweetId,
+        scrollToTweetTrigger = scrollToTweetTrigger,
+        onHeaderVisibilityChange = { isVisible ->
+            viewModel.setProfileHeaderVisible(isVisible)
+        },
         onPullRefresh = {
             viewModel.resyncProfileUser(ignoreDebounce = true)
         }

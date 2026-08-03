@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -70,6 +69,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
+import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.Gadget.isElementVisible
 import us.fireshare.tweet.widget.MediaGrid
@@ -108,12 +108,27 @@ private fun rememberTweetRowViewModel(tweet: Tweet, key: String = tweet.mid): Tw
         }
     }
 
-    return hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
+    val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         viewModelStoreOwner = owner,
         key = key
     ) { factory ->
         factory.create(tweet)
     }
+
+    // The owner is intentionally stable for the row's lifetime, so Hilt will
+    // not call the factory again when the feed replaces this tweet after an
+    // update from detail view. Push the new list snapshot into the existing VM.
+    // Deep-copy attachments for the effect key because Tweet and attachment
+    // fields are mutable and can otherwise change without changing identity.
+    val tweetUpdateKey = tweet.copy(
+        favorites = tweet.favorites?.toMutableList(),
+        attachments = tweet.attachments?.map { it.copy() }
+    )
+    LaunchedEffect(tweetUpdateKey) {
+        viewModel.updateFromList(tweet)
+    }
+
+    return viewModel
 }
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -192,7 +207,7 @@ fun TweetItem(
     
     val isRetweetWithContent by remember(tweet.originalTweetId, tweet.content, tweet.attachments) {
         derivedStateOf { 
-            tweet.originalTweetId != null && 
+            (tweet.originalTweetId != null || tweet.savedParentTweet != null) &&
             (tweet.content?.isNotEmpty() == true || tweet.attachments?.isNotEmpty() == true)
         }
     }
@@ -615,8 +630,8 @@ private fun RetweetWithContent(
                 // Load and display original tweet
                 QuotedTweetContent(
                     tweet = tweet,
+                    embeddedTweet = tweet.savedParentTweet,
                     parentEntry = parentEntry,
-                    onTweetUnavailable = onTweetUnavailable,
                     context = context,
                     containerTopY = containerTopY
                 )
@@ -631,7 +646,8 @@ private fun RetweetWithContent(
                     RetweetButton(viewModel)
                     LikeButton(viewModel)
                     BookmarkButton(viewModel)
-                    ShareButton(viewModel)
+                    // Feed share uses the dtweet.com deep-link format (DEEPLINKING.md)
+                    ShareButton(viewModel, linkStyle = ShareLinkStyle.DEEPLINK)
                 }
             }
         }
@@ -642,15 +658,15 @@ private fun RetweetWithContent(
 @Composable
 private fun QuotedTweetContent(
     tweet: Tweet,
+    embeddedTweet: Tweet? = null,
     parentEntry: NavBackStackEntry,
-    onTweetUnavailable: ((MimeiId) -> Unit)?,
     context: String = "default",
     containerTopY: Float? = null
 ) {
     // Use remember with a stable key based on originalTweetId to maintain state across recompositions
-    val originalTweetId = tweet.originalTweetId
+    val originalTweetId = embeddedTweet?.mid ?: tweet.originalTweetId
     val cachedOriginalTweet = remember(originalTweetId) {
-        originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
+        embeddedTweet ?: originalTweetId?.let { TweetCacheManager.getCachedTweetMemoryOnly(it) }
     }
     var originalTweet by remember(originalTweetId) {
         mutableStateOf(cachedOriginalTweet)
@@ -660,18 +676,19 @@ private fun QuotedTweetContent(
     }
     val coordinator = us.fireshare.tweet.widget.LocalVideoCoordinator.current
 
-    LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
+    LaunchedEffect(originalTweetId, embeddedTweet?.authorId, tweet.originalAuthorId) {
         originalTweet?.let {
             coordinator.addEmbeddedTweetVideos(tweet.mid, it)
             isLoadingOriginal = false
             return@LaunchedEffect
         }
-        if (originalTweetId != null && tweet.originalAuthorId != null) {
+        val embeddedAuthorId = embeddedTweet?.authorId ?: tweet.originalAuthorId
+        if (originalTweetId != null && embeddedAuthorId != null) {
             try {
                 withContext(IO) {
                     originalTweet = HproseInstance.fetchTweet(
                         originalTweetId,
-                        tweet.originalAuthorId!!
+                        embeddedAuthorId
                     )
                 }
                 // Notify VideoPlaybackCoordinator about the loaded embedded tweet
@@ -739,11 +756,27 @@ private fun QuotedTweetContent(
             }
         }
         else -> {
-            // Original tweet not available - this quoted tweet should be removed from the list
-            LaunchedEffect(Unit) {
-                onTweetUnavailable?.invoke(tweet.mid)
+            // Embedded tweet could not be found/loaded (deleted, network error, etc).
+            // Render the quote tweet card anyway with a placeholder in place of the
+            // missing embedded tweet, instead of dropping the whole tweet from the list.
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier.padding(
+                    start = 4.dp,
+                    top = 8.dp,
+                    end = 8.dp
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.loading_quoted_tweet),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                )
             }
-            Box(modifier = Modifier.size(0.dp))
         }
     }
 }

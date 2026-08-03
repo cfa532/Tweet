@@ -19,6 +19,7 @@ data class Tweet(
 
     var originalTweetId: MimeiId? = null, // this is retweet id of the original tweet
     var originalAuthorId: MimeiId? = null,  // authorId of the forwarded tweet
+    var parentTweetId: MimeiId? = null, // immediate parent for comments and replies
 
     // the following five attributes are for display only. Not stored in database.
     var author: User? = null,
@@ -57,6 +58,7 @@ data class Tweet(
             title: String? = null,
             originalTweetId: String? = null,
             originalAuthorId: String? = null,
+            parentTweetId: String? = null,
             favorites: List<Boolean>? = listOf(false, false, false),
             favoriteCount: Int = 0,
             bookmarkCount: Int = 0,
@@ -72,6 +74,7 @@ data class Tweet(
                     // Update existing instance with new values
                     content?.let { existingInstance.content = it }
                     title?.let { existingInstance.title = it }
+                    parentTweetId?.let { existingInstance.parentTweetId = it }
                     favorites?.let { existingInstance.favorites = it.toMutableList() }
                     existingInstance.favoriteCount = favoriteCount
                     existingInstance.bookmarkCount = bookmarkCount
@@ -91,6 +94,7 @@ data class Tweet(
                     title = title,
                     originalTweetId = originalTweetId,
                     originalAuthorId = originalAuthorId,
+                    parentTweetId = parentTweetId,
                     favorites = favorites?.toMutableList(),
                     favoriteCount = favoriteCount,
                     bookmarkCount = bookmarkCount,
@@ -112,6 +116,20 @@ data class Tweet(
         fun clearAllInstances() {
             synchronized(instanceLock) {
                 instances.clear()
+            }
+        }
+
+        @Synchronized
+        fun findInstance(mid: MimeiId): Tweet? = synchronized(instanceLock) { instances[mid] }
+
+        /** Clear interaction state that belongs to the previously logged-in user. */
+        @Synchronized
+        fun clearInteractionOverrides() {
+            synchronized(instanceLock) {
+                instances.values.forEach { tweet ->
+                    tweet.favoriteOverride = null
+                    tweet.bookmarkOverride = null
+                }
             }
         }
 
@@ -188,6 +206,7 @@ data class Tweet(
                     title = tweet.title,
                     originalTweetId = tweet.originalTweetId,
                     originalAuthorId = tweet.originalAuthorId,
+                    parentTweetId = tweet.parentTweetId,
                     favorites = tweet.favorites,
                     favoriteCount = tweet.favoriteCount,
                     bookmarkCount = tweet.bookmarkCount,
@@ -227,6 +246,24 @@ data class Tweet(
     @kotlinx.serialization.Transient
     var rowTimestamp: Long? = null
 
+    /** Saved-list-only presentation context; never serialized as retweet state. */
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var savedParentTweet: Tweet? = null
+
+    /** Author whose root stores this comment; used for comment interactions. */
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var interactionHostAuthor: User? = null
+
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var favoriteOverride: Boolean? = null
+
+    @kotlin.jvm.Transient
+    @kotlinx.serialization.Transient
+    var bookmarkOverride: Boolean? = null
+
     /**
      * Updates the tweet instance with values from another tweet
      */
@@ -234,6 +271,7 @@ data class Tweet(
         // Update all properties except author and originalTweet
         from.content?.let { this.content = it }
         from.title?.let { this.title = it }
+        from.parentTweetId?.let { this.parentTweetId = it }
         from.favorites?.let { this.favorites = it.toMutableList() }
         this.favoriteCount = from.favoriteCount
         this.bookmarkCount = from.bookmarkCount
@@ -342,7 +380,7 @@ typealias MimeiId = String      // 27 or 64 character long string
 object TW_CONST {
     const val GUEST_ID = "000000000000000000000000000"      // 27
     const val CHUNK_SIZE = 1024 * 1024 * 1      // 1MB in bytes
-    const val MAX_FILE_SIZE = 512 * 1024 * 1024  // 512MB in bytes - max file size for attachments
+    const val MAX_FILE_SIZE = 512L * 1024L * 1024L  // 512MB in bytes - max file size for attachments
     const val PAGE_SIZE = 10
     const val USER_BATCH_SIZE = 20      // Batch size for user fetching
 }

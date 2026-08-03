@@ -55,6 +55,79 @@ import java.lang.Integer.max
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 
+// Fixed deep-link domain: iOS/Android open the app for these links; the
+// Cloudflare Worker sends browsers to the web app. See DEEPLINKING.md.
+private const val SHARE_DEEPLINK_DOMAIN = "http://dtweet.com"
+
+/**
+ * A base URL is safe to embed in a shared link only if its host is a domain
+ * name or a sound public IPv4. Private ranges, RFC 6598 / Tailscale
+ * (100.64.0.0/10), loopback, link-local, and IPv6 are rejected.
+ */
+private fun isShareSafePublicHost(url: String): Boolean {
+    val hostPort = url.substringAfter("://", url).substringBefore("/")
+    if (hostPort.startsWith("[")) return false                 // bracketed IPv6
+    if (hostPort.count { it == ':' } > 1) return false         // bare IPv6
+    val host = hostPort.substringBefore(":")
+    val match = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""").matchEntire(host)
+        ?: return true                                         // domain name — fine
+    val octets = match.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
+    if (octets.any { it > 255 }) return false
+    val a = octets[0]
+    val b = octets[1]
+    return !(a == 0 || a == 10 || a == 127 || a >= 224 ||
+            (a == 192 && b == 168) ||
+            (a == 172 && b in 16..31) ||
+            (a == 100 && b in 64..127) ||                      // RFC 6598 / Tailscale
+            (a == 169 && b == 254))
+}
+
+private val IPV4_HOST = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
+
+/** True when [url] points at a sound public IPv4 (not a domain name). */
+private fun isPublicIpv4BaseUrl(url: String?): Boolean {
+    if (url.isNullOrBlank()) return false
+    val hostPort = url.substringAfter("://", url).substringBefore("/")
+    if (hostPort.startsWith("[")) return false
+    if (hostPort.count { it == ':' } > 1) return false
+    val host = hostPort.substringBefore(":")
+    return IPV4_HOST.matches(host) && isShareSafePublicHost(url)
+}
+
+/**
+ * Resolve the author's provider-IP base URL for detail-view dropdown sharing.
+ * Domains are ignored — only a cached public IPv4 or a fresh getProviderIP result
+ * is used (mirrors iOS buildDetailShareItems / getIPv4PreferredBaseUrl).
+ */
+private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBaseUrl: String?): String {
+    if (isPublicIpv4BaseUrl(cachedBaseUrl)) return cachedBaseUrl!!
+    if (isPublicIpv4BaseUrl(appUser.baseUrl)) return appUser.baseUrl!!
+
+    try {
+        HproseInstance.getProviderIP(authorId)?.let { providerIP ->
+            return if (providerIP.startsWith("http://") || providerIP.startsWith("https://")) {
+                providerIP
+            } else {
+                "http://$providerIP"
+            }
+        }
+    } catch (e: Exception) {
+        Timber.tag("SHARE").w(e, "Failed to resolve provider IP for share: $authorId")
+    }
+
+    return appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+}
+
+/** Which URL a share action embeds — see DEEPLINKING.md for the policy. */
+enum class ShareLinkStyle {
+    /** `http://dtweet.com/tweet/{mid}/{authorId}` — feed share button */
+    DEEPLINK,
+    /** Domain delivered by the backend's `check_upgrade` — detail-view share button */
+    WEB_DOMAIN,
+    /** The tweet author's provider-IP entry URL — detail-view dropdown menu */
+    PROVIDER_IP
+}
+
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
@@ -75,13 +148,6 @@ class TweetViewModel @AssistedInject constructor(
     val comments: StateFlow<List<Tweet>> get() = _comments.asStateFlow()
     private var commentsCacheParentTweetId: MimeiId = tweet.mid
 
-    // Comment IDs whose payload failed to parse on the read node. Mirrors iOS
-    // `failedCommentIds` — populated by `loadComments` / `refreshCommentsPaginated`
-    // and drained by `syncMissingComments`. Only relevant when the author's
-    // hostIds[0] != hostIds[1]; otherwise sync would be a no-op.
-    private val _failedCommentIds = MutableStateFlow<Set<String>>(emptySet())
-    val failedCommentIds: StateFlow<Set<String>> get() = _failedCommentIds.asStateFlow()
-
     private val _mediaGridVideoIndex = MutableStateFlow(-1)
     val mediaGridVideoIndex: StateFlow<Int> get() = _mediaGridVideoIndex.asStateFlow()
 
@@ -95,6 +161,43 @@ class TweetViewModel @AssistedInject constructor(
 
     // remember current video playback position after configuration changes.
     private val playbackPositions = mutableMapOf<String, Long>()
+
+    private fun Tweet.hasDisplayPayload(): Boolean {
+        return !content.isNullOrBlank() ||
+            !title.isNullOrBlank() ||
+            !attachments.isNullOrEmpty() ||
+            originalTweetId != null
+    }
+
+    private fun applyFetchedTweet(fetched: Tweet) {
+        val currentTweet = _tweetState.value
+        val resolvedTweet = fetched.copy(
+            author = fetched.author ?: currentTweet.author,
+            favorites = fetched.favorites?.toMutableList(),
+            attachments = fetched.attachments?.map { it.copy() }
+        ).also { snapshot ->
+            // Keep presentation-only context while detaching mutable payload
+            // from the list-owned Tweet instance.
+            snapshot.rowTimestamp = fetched.rowTimestamp
+            snapshot.savedParentTweet = fetched.savedParentTweet
+            snapshot.interactionHostAuthor = fetched.interactionHostAuthor
+            snapshot.favoriteOverride = fetched.favoriteOverride
+            snapshot.bookmarkOverride = fetched.bookmarkOverride
+        }
+
+        resolvedTweet.author?.let { TweetCacheManager.saveUser(it) }
+        _tweetState.value = resolvedTweet
+        _attachments.value = resolvedTweet.attachments
+    }
+
+    /**
+     * Refresh an existing row ViewModel when its owning list receives a newer
+     * snapshot of the same tweet.
+     */
+    fun updateFromList(updatedTweet: Tweet) {
+        if (updatedTweet.mid != tweetState.value.mid) return
+        applyFetchedTweet(updatedTweet)
+    }
 
     fun getAudioPlayer(url: String, context: Context): ExoPlayer {
         // Extract media ID (CID) from URL to use as key
@@ -158,8 +261,7 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null && cachedTweet.author != null) {
-                        _tweetState.value = cachedTweet
-                        _attachments.value = cachedTweet.attachments
+                        applyFetchedTweet(cachedTweet)
                         return@launch
                     }
                 }
@@ -170,6 +272,7 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.authorId != null) {
                     cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
                     if (cachedUser != null) {
+                        TweetCacheManager.saveUser(cachedUser)
                         val tweetWithAuthor = tweet.copy(author = cachedUser)
                         _tweetState.value = tweetWithAuthor
                     }
@@ -183,6 +286,7 @@ class TweetViewModel @AssistedInject constructor(
                     try {
                         author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
                         if (author != null) {
+                            TweetCacheManager.saveUser(author)
                             val tweetWithAuthor = tweet.copy(author = author)
                             _tweetState.value = tweetWithAuthor
                         } else {
@@ -199,8 +303,7 @@ class TweetViewModel @AssistedInject constructor(
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
                     HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)?.let { fetched ->
-                        _tweetState.value = fetched
-                        _attachments.value = fetched.attachments
+                        applyFetchedTweet(fetched)
                     } ?: run {
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
@@ -246,23 +349,19 @@ class TweetViewModel @AssistedInject constructor(
     }
 
     /**
-     * Fetch one page of comments. Tracks failed parses in `_failedCommentIds`
-     * (drained later by `syncMissingComments`) and merges successful comments
-     * into `_comments`. Mirrors iOS `CommentListView` page-load semantics.
+     * Fetch one page of comments and merge successful ones into `_comments`.
+     * Mirrors iOS `CommentListView` page-load semantics.
      *
      * Returns the count of successfully parsed comments on this page.
      * The existing screen logic uses `== 0` as "no more comments", matching
      * the previous `getComments` return contract.
      */
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0, pageSize: Int = 20): Int {
-        val (fetched, failedIds) = HproseInstance.fetchComments(
+        val fetched = HproseInstance.fetchComments(
             tweet,
             pageNumber.toInt(),
             pageSize
         )
-        if (failedIds.isNotEmpty()) {
-            _failedCommentIds.update { it + failedIds }
-        }
         val newComments = fetched.filterNotNull()
 
         _comments.update { currentComments ->
@@ -272,7 +371,7 @@ class TweetViewModel @AssistedInject constructor(
             TweetCacheManager.saveCommentsByParent(commentsCacheParentTweetId, finalComments)
             if (newComments.isNotEmpty() || finalComments.size != currentComments.size) {
                 Timber.tag("TweetViewModel").d(
-                    "Merged to ${finalComments.size} total comments (${newComments.size} new, ${failedIds.size} failed)"
+                    "Merged to ${finalComments.size} total comments (${newComments.size} new)"
                 )
             }
             finalComments
@@ -286,14 +385,13 @@ class TweetViewModel @AssistedInject constructor(
      *
      * Uses `get_tweet` with `bypassCache=true` on the author's read node.
      * Never triggers cross-node `refresh_tweet`. Safe to call on screen-open
-     * and pull-to-refresh; pair with `doResyncTweet` only when
-     * `hostIds[0] != hostIds[1]`.
+     * and from the periodic detail-view reload.
      *
      * For a pure retweet (no content + no attachments) refreshes the original
      * tweet's cache so the embedded original sub-view picks it up. For a quoted
      * retweet refreshes both the wrapper and the original in parallel.
      */
-    suspend fun doReadTweet() {
+    suspend fun doReadTweet(allowRecoveryOnMissingPayload: Boolean = false) {
         val currentTweet = tweetState.value
         val originalId = currentTweet.originalTweetId
         val originalAuthor = currentTweet.originalAuthorId
@@ -318,16 +416,23 @@ class TweetViewModel @AssistedInject constructor(
                         val originalJob = async {
                             HproseInstance.getTweet(originalId, originalAuthor, bypassCache = true)
                         }
-                        wrapperJob.await()?.let { _tweetState.value = it }
+                        wrapperJob.await()?.let { applyFetchedTweet(it) }
                         originalJob.await()
                     }
                 }
             } else {
-                HproseInstance.getTweet(
+                val fetched = HproseInstance.getTweet(
                     currentTweet.mid,
                     currentTweet.authorId,
                     bypassCache = true
-                )?.let { _tweetState.value = it }
+                )
+                if (fetched != null) {
+                    applyFetchedTweet(fetched)
+                } else if (allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()) {
+                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
+                        applyFetchedTweet(refreshed)
+                    }
+                }
             }
         } catch (e: Exception) {
             Timber.tag("TweetViewModel").e(e, "doReadTweet failed for ${currentTweet.mid}")
@@ -339,8 +444,7 @@ class TweetViewModel @AssistedInject constructor(
      *
      * Calls `refresh_tweet` which the server uses to pull the latest version
      * across nodes via `node_update_mid_by_score`. Heavier than `doReadTweet`,
-     * so only call when the author's `hostIds[0] != hostIds[1]` (on screen
-     * appear and the 5-minute tick).
+     * so the detail screen calls it only from explicit pull-to-refresh.
      */
     suspend fun doResyncTweet() {
         val currentTweet = tweetState.value
@@ -364,7 +468,7 @@ class TweetViewModel @AssistedInject constructor(
                         }
                         wrapperJob.await()?.let { refreshed ->
                             if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
-                                _tweetState.value = refreshed
+                                applyFetchedTweet(refreshed)
                             }
                         }
                         originalJob.await()
@@ -373,7 +477,7 @@ class TweetViewModel @AssistedInject constructor(
             } else {
                 HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
                     if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
-                        _tweetState.value = refreshed
+                        applyFetchedTweet(refreshed)
                     }
                 }
             }
@@ -403,8 +507,7 @@ class TweetViewModel @AssistedInject constructor(
         var overlap = false
         try {
             while (!overlap) {
-                val (fetched, failedIds) = HproseInstance.fetchComments(parent, page, pageSize)
-                if (failedIds.isNotEmpty()) _failedCommentIds.update { it + failedIds }
+                val fetched = HproseInstance.fetchComments(parent, page, pageSize)
                 val valid = fetched.filterNotNull()
                 if (valid.isEmpty()) break
 
@@ -428,42 +531,6 @@ class TweetViewModel @AssistedInject constructor(
             Timber.tag("TweetViewModel").d("refreshCommentsPaginated skipped: ${e.message}")
         }
         return all.size
-    }
-
-    /**
-     * Drain `failedCommentIds` by syncing each via the author's home node
-     * (mirrors iOS `syncMissingComments`). Posts `TweetEvent.CommentSynced`
-     * for each recovered comment so observing views can append it.
-     *
-     * Skips entries already blacklisted (avoids hammering known-bad mids).
-     * Safe to call concurrently with other reads — `syncComment` is
-     * idempotent on the server side.
-     */
-    suspend fun syncMissingComments() {
-        val parent = tweetState.value
-        val pending = _failedCommentIds.value.toList()
-        if (pending.isEmpty()) return
-
-        for (commentId in pending) {
-            if (BlackList.isBlacklisted(commentId)) {
-                _failedCommentIds.update { it - commentId }
-                continue
-            }
-            val recovered = HproseInstance.syncComment(commentId, parent)
-            if (recovered != null) {
-                _failedCommentIds.update { it - commentId }
-                // Avoid posting if the comment already arrived via another path.
-                if (_comments.value.none { it.mid == recovered.mid }) {
-                    TweetNotificationCenter.post(
-                        TweetEvent.CommentSynced(recovered, parent.mid)
-                    )
-                }
-            } else {
-                // Avoid tight retry loops for unrecoverable IDs during this session.
-                // If the backend later returns a valid payload, fetchComments will re-add it.
-                _failedCommentIds.update { it - commentId }
-            }
-        }
     }
 
     suspend fun delComment(commentId: MimeiId) {
@@ -568,60 +635,48 @@ class TweetViewModel @AssistedInject constructor(
         context: Context,
         parentTweetId: String? = null,
         parentAuthorId: String? = null,
-        isInDetailView: Boolean = false
+        linkStyle: ShareLinkStyle = ShareLinkStyle.WEB_DOMAIN
     ) {
         _isSharing.value = true
         try {
             // Use current tweet state (which has loaded content) instead of constructor parameter
             val currentTweet = tweetState.value
-            
-            /**
-             * Call to checkUpgrade() also returns a map of environmental variables,
-             * which includes environment variables of the App.
-             * */
-            val map = HproseInstance.checkUpgrade()
-            if (map == null) {
-                return
-            }
-            
-            // Build the share link based on context (similar to iOS implementation)
-            val deepLink = if (isInDetailView) {
-                // In detail view: use author's baseUrl with entry format
-                val baseUrlString = currentTweet.author?.baseUrl ?: appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
-                if (parentTweetId != null && parentAuthorId != null) {
-                    // Comment in detail view: entry format with query parameters in hash
-                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
-                } else {
-                    // Regular tweet in detail view: entry format
-                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+
+            val commentParams = if (parentTweetId != null && parentAuthorId != null) {
+                "?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
+            } else ""
+
+            // Share-URL policy (see DEEPLINKING.md)
+            val deepLink = when (linkStyle) {
+                ShareLinkStyle.DEEPLINK -> {
+                    // Standard deep-link format: the OS opens the app when installed,
+                    // browsers land on the web app via the dtweet.com worker
+                    "$SHARE_DEEPLINK_DOMAIN/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
-            } else if (parentTweetId != null && parentAuthorId != null) {
-                // Comment in feed/list: traditional format with query parameters
-                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                    appUser.domainToShare!!
-                } else {
-                    map["domain"] ?: return
+                ShareLinkStyle.WEB_DOMAIN -> {
+                    /**
+                     * Domain delivered by the backend: checkUpgrade() returns a map of
+                     * environment variables of the App, including "domain".
+                     * */
+                    val map = HproseInstance.checkUpgrade() ?: return
+                    var domain = if (!appUser.domainToShare.isNullOrBlank()) {
+                        appUser.domainToShare!!
+                    } else {
+                        map["domain"] ?: return
+                    }
+                    // Ensure domain has http:// protocol prefix
+                    if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
+                        domain = "http://$domain"
+                    }
+                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
-                // Ensure domain has http:// protocol prefix
-                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
-                    domain = "http://$domain"
-                }
-                "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}?fromComment=true&parentTweetId=$parentTweetId&parentAuthorId=$parentAuthorId"
-            } else {
-                // In feed/grid: use traditional format
-                var domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                    appUser.domainToShare!!
-                } else {
-                    map["domain"] ?: return
-                }
-                // Ensure domain has http:// protocol prefix
-                if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
-                    domain = "http://$domain"
-                }
-                if (BuildConfig.IS_PLAY_VERSION) {
-                    "http://${BuildConfig.PLAY_SHARE_DOMAIN}/tweet/${currentTweet.mid}/${currentTweet.authorId}"
-                } else {
-                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}"
+                ShareLinkStyle.PROVIDER_IP -> {
+                    // Author's provider-IP entry URL (hash-router format).
+                    val baseUrlString = resolveProviderIpBaseUrlForShare(
+                        currentTweet.authorId,
+                        currentTweet.author?.baseUrl
+                    )
+                    "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
             }
 
@@ -1001,29 +1056,43 @@ class TweetViewModel @AssistedInject constructor(
      * Update favorite count and icon right away for better user experience.
      * */
     suspend fun toggleFavorite(
-        updateAppUser: (Tweet, Boolean) -> Unit     // callback to update current user's account.
+        updateAppUser: (Tweet, Boolean, SavedMutationUpdatePhase) -> Unit
     ) {
-        val isFavorite = tweetState.value.isFavorite
-        _tweetState.value.isFavorite = !isFavorite
-        _tweetState.value = tweetState.value.copy(
-            favoriteCount = if (isFavorite) max(0, tweetState.value.favoriteCount - 1)
-            else tweetState.value.favoriteCount + 1,
+        val originalTweet = tweetState.value.copy(
+            favorites = tweetState.value.favorites?.toMutableList()
+        )
+        val isFavorite = originalTweet.isFavorite
+        val desiredFavorite = !isFavorite
+        val optimisticTweet = originalTweet.copy(
+            favorites = originalTweet.favorites?.toMutableList(),
+            favoriteCount = if (isFavorite) max(0, originalTweet.favoriteCount - 1)
+            else originalTweet.favoriteCount + 1,
+        )
+        optimisticTweet.isFavorite = desiredFavorite
+        optimisticTweet.favoriteOverride = desiredFavorite
+        _tweetState.value = optimisticTweet
+        updateAppUser(
+            optimisticTweet,
+            desiredFavorite,
+            SavedMutationUpdatePhase.OPTIMISTIC
         )
 
-        /**
-         * Get the actual server response and update with real data.
-         * */
-        val updatedTweet = HproseInstance.toggleFavorite(tweetState.value)
-
-        // Check if the operation failed (if the tweet state didn't change)
-        if (updatedTweet.isFavorite == isFavorite) {
-            // Revert optimistic changes on failure
-            _tweetState.value.isFavorite = isFavorite
-            _tweetState.value = tweetState.value.copy(
-                favoriteCount = if (isFavorite) tweetState.value.favoriteCount + 1
-                else max(0, tweetState.value.favoriteCount - 1),
+        try {
+            val updatedTweet = HproseInstance.toggleFavorite(optimisticTweet, desiredFavorite)
+                ?: throw Exception("Favorite mutation failed")
+            _tweetState.value = updatedTweet
+            updateAppUser(
+                updatedTweet,
+                desiredFavorite,
+                SavedMutationUpdatePhase.CONFIRMED
             )
-            // Show error toast - check both WeakReference and Context are available
+        } catch (e: Exception) {
+            _tweetState.value = originalTweet
+            updateAppUser(
+                originalTweet,
+                isFavorite,
+                SavedMutationUpdatePhase.ROLLBACK
+            )
             val context = notificationContextRef?.get()
             if (context != null) {
                 Toast.makeText(
@@ -1032,39 +1101,51 @@ class TweetViewModel @AssistedInject constructor(
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        } else {
-            _tweetState.value = updatedTweet
-            // Update UserViewModel with the updated appUser data from server
-            updateAppUser(updatedTweet, updatedTweet.isFavorite)
+            Timber.tag("toggleFavorite").e(e, "Failed to update favorite ${originalTweet.mid}")
         }
     }
 
     /**
      * Update bookmark count and icon right away for better user experience.
      * */
-    suspend fun toggleBookmark(updateAppUser: (Tweet, Boolean) -> Unit) {
-        val hasBookmarked = tweetState.value.isBookmarked
-        _tweetState.value.isBookmarked = !hasBookmarked
-        _tweetState.value = tweetState.value.copy(
-            bookmarkCount = if (hasBookmarked) max(0, tweetState.value.bookmarkCount - 1)
-            else tweetState.value.bookmarkCount + 1,
+    suspend fun toggleBookmark(
+        updateAppUser: (Tweet, Boolean, SavedMutationUpdatePhase) -> Unit
+    ) {
+        val originalTweet = tweetState.value.copy(
+            favorites = tweetState.value.favorites?.toMutableList()
+        )
+        val hasBookmarked = originalTweet.isBookmarked
+        val desiredBookmark = !hasBookmarked
+        val optimisticTweet = originalTweet.copy(
+            favorites = originalTweet.favorites?.toMutableList(),
+            bookmarkCount = if (hasBookmarked) max(0, originalTweet.bookmarkCount - 1)
+            else originalTweet.bookmarkCount + 1,
+        )
+        optimisticTweet.isBookmarked = desiredBookmark
+        optimisticTweet.bookmarkOverride = desiredBookmark
+        _tweetState.value = optimisticTweet
+        updateAppUser(
+            optimisticTweet,
+            desiredBookmark,
+            SavedMutationUpdatePhase.OPTIMISTIC
         )
 
-        /**
-         * Get the actual server response and update with real data.
-         * If backend fails, the original value will be restored.
-         * */
-        val updatedTweet = HproseInstance.toggleBookmark(tweetState.value)
-
-        // Check if the operation failed (if the tweet state didn't change)
-        if (updatedTweet.isBookmarked == hasBookmarked) {
-            // Revert optimistic changes on failure
-            _tweetState.value.isBookmarked = hasBookmarked
-            _tweetState.value = tweetState.value.copy(
-                bookmarkCount = if (hasBookmarked) tweetState.value.bookmarkCount + 1
-                else max(0, tweetState.value.bookmarkCount - 1),
+        try {
+            val updatedTweet = HproseInstance.toggleBookmark(optimisticTweet, desiredBookmark)
+                ?: throw Exception("Bookmark mutation failed")
+            _tweetState.value = updatedTweet
+            updateAppUser(
+                updatedTweet,
+                desiredBookmark,
+                SavedMutationUpdatePhase.CONFIRMED
             )
-            // Show error toast - check both WeakReference and Context are available
+        } catch (e: Exception) {
+            _tweetState.value = originalTweet
+            updateAppUser(
+                originalTweet,
+                hasBookmarked,
+                SavedMutationUpdatePhase.ROLLBACK
+            )
             val context = notificationContextRef?.get()
             if (context != null) {
                 Toast.makeText(
@@ -1073,10 +1154,7 @@ class TweetViewModel @AssistedInject constructor(
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        } else {
-            _tweetState.value = updatedTweet
-            // Update UserViewModel with the updated appUser data from server
-            updateAppUser(updatedTweet, updatedTweet.isBookmarked)
+            Timber.tag("toggleBookmark").e(e, "Failed to update bookmark ${originalTweet.mid}")
         }
     }
 
@@ -1131,7 +1209,7 @@ class TweetViewModel @AssistedInject constructor(
                                     .d("CommentUploaded event received for tweet ${tweetState.value.mid}, comment ${event.comment.mid}, author ${event.comment.authorId}, current user ${appUser.mid}")
 
                                 // Update the tweet state with new comment count
-                                _tweetState.value = event.parentTweet
+                                applyFetchedTweet(event.parentTweet)
 
                                 // Add the new comment to the comments list
                                 _comments.update { currentComments ->
@@ -1185,7 +1263,7 @@ class TweetViewModel @AssistedInject constructor(
                         is TweetEvent.TweetUpdated -> {
                             // Update tweet if this is the same tweet
                             if (event.tweet.mid == tweetState.value.mid) {
-                                _tweetState.value = event.tweet
+                                applyFetchedTweet(event.tweet)
                             }
                         }
 
@@ -1207,7 +1285,7 @@ class TweetViewModel @AssistedInject constructor(
                                     .d("This tweet (${tweetState.value.mid}) was restored, clearing deleted flag")
                                 // Clear deleted flag and update tweet state
                                 _tweetDeleted.value = false
-                                _tweetState.value = event.tweet
+                                applyFetchedTweet(event.tweet)
                             }
                         }
 

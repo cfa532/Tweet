@@ -79,6 +79,10 @@
     <string name="comment_uploaded">Comment posted successfully</string>
     <string name="comment_delete_failed">Comment deletion failed. Please try again.</string>
     <string name="delete_failed">Tweet deletion failed. Please try again.</string>
+    <string name="delete_tweet_confirmation_title">Delete tweet?</string>
+    <string name="delete_tweet_confirmation_message">This tweet will be permanently deleted. This action cannot be undone.</string>
+    <string name="delete_comment_confirmation_title">Delete comment?</string>
+    <string name="delete_comment_confirmation_message">This comment will be permanently deleted. This action cannot be undone.</string>
     <string name="confirm_pwd">Please confirm password</string>
     <string name="use_current_pswd">Keep current password</string>
     <string name="user_bookmarks">Bookmarks</string>
@@ -374,6 +378,7 @@
     <string name="cannot_get_followed_user">Cannot get followed user</string>
     <string name="missing_host_for_followed_user">Missing host for followed user</string>
     <string name="tweet_not_found">Tweet not found</string>
+    <string name="loading_quoted_tweet">Loading quoted tweet...</string>
     <string name="only_author_can_update_privacy">Only the tweet author can update privacy settings</string>
     <string name="not_a_friend_of_the_host">Not a friend of the host</string>
     <string name="no_provider_ip_found">No provider IP found</string>

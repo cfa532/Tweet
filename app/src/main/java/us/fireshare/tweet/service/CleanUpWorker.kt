@@ -38,8 +38,9 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
                     preservedPrivateTweets++
                     Timber.tag("CleanUpWorker").d("Preserving appUser's private tweet: ${tweet.mid}")
                 } else {
-                    // Delete non-private tweets
-                    cachedTweetDao.deleteCachedTweet(cachedTweet.mid)
+                    // Delete only this expired list membership. The same tweet may be
+                    // preserved in another cache list such as bookmarks or favorites.
+                    cachedTweetDao.deleteCachedTweetFromCache(cachedTweet.mid, cachedTweet.uid)
                     deletedTweets++
                 }
             }

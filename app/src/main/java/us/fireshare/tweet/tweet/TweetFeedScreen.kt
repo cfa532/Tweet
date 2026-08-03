@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -33,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -83,7 +83,6 @@ fun TweetFeedScreen(
     
     // Collect retry message
     val retryMessage by viewModel.retryMessage.collectAsState()
-
     // State to track scroll state for bottom bar opacity
     var scrollState by remember { mutableStateOf(ScrollState(false, ScrollDirection.NONE)) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -174,7 +173,7 @@ fun TweetFeedScreen(
                                 onClick = { selectedTabIndex = index },
                                 text = {
                                     Text(
-                                        color = Color.Gray,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.Light,
                                         text = item.title
                                     )
@@ -221,6 +220,7 @@ fun TweetFeedScreen(
                                             viewModel,
                                             onScrollStateChange = { newScrollState ->
                                                 scrollState = newScrollState
+                                                viewModel.setMainFeedAtTop(newScrollState.isAtTop)
 
                                                 // Ignore NONE - when scroll stops, keep current opacity
                                                 if (newScrollState.direction == ScrollDirection.NONE) {

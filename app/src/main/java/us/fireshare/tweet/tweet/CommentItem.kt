@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,6 +60,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
+import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.profile.UserAvatar
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.MediaGrid
@@ -136,12 +139,12 @@ fun CommentItem(
                         Text(
                             text = " @${author?.username ?: "unknown"}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = " · ${localizedTimeDifference(comment.timestamp)}",
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     CommentDropdownMenu(comment, parentTweetViewModel)
@@ -214,12 +217,15 @@ fun CommentItem(
 fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
     // Use comment.mid as key to ensure state is reset when comment changes
     var expanded by remember(comment.mid) { mutableStateOf(false) }
+    var showDeleteConfirmation by remember(comment.mid) { mutableStateOf(false) }
     val parentTweet by parentTweetViewModel?.tweetState?.collectAsState()
         ?: remember { mutableStateOf(null) }
+    val navController = LocalNavController.current
     val context = LocalContext.current
     
     // Capture string resource at composable level to avoid context capture warnings
     val deleteFailedMessage = stringResource(R.string.comment_delete_failed)
+    val guestReminderText = stringResource(R.string.guest_reminder)
 
     // Dismiss popup menu when comment is deleted or becomes unavailable
     LaunchedEffect(comment.mid) {
@@ -253,28 +259,13 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                 DropdownMenuItem(
                     modifier = Modifier.alpha(0.9f),
                     onClick = {
-                        // Dismiss popup immediately for better UX
-                        expanded = false
-
-                        // Delete comment with optimistic updates
-                        parentTweetViewModel?.let { viewModel ->
-                            viewModel.viewModelScope.launch(Dispatchers.IO) {
-                                try {
-                                    viewModel.deleteComment(comment.mid, comment)
-                                } catch (e: Exception) {
-                                    Timber.tag("CommentDropdownMenu")
-                                        .e(e, "Error deleting comment: ${e.message}")
-                                    // Show toast message on main thread
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(
-                                            context,
-                                            deleteFailedMessage,
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                }
-                            }
+                        if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                            expanded = false
+                            return@DropdownMenuItem
                         }
+
+                        expanded = false
+                        showDeleteConfirmation = true
                     },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -293,5 +284,46 @@ fun CommentDropdownMenu(comment: Tweet, parentTweetViewModel: TweetViewModel?) {
                 )
             }
         }
+    }
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text(stringResource(R.string.delete_comment_confirmation_title)) },
+            text = { Text(stringResource(R.string.delete_comment_confirmation_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        parentTweetViewModel?.let { viewModel ->
+                            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    viewModel.deleteComment(comment.mid, comment)
+                                } catch (e: Exception) {
+                                    Timber.tag("CommentDropdownMenu")
+                                        .e(e, "Error deleting comment: ${e.message}")
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(
+                                            context,
+                                            deleteFailedMessage,
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }

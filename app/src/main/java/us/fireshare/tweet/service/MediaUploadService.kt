@@ -17,13 +17,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import us.fireshare.tweet.BuildConfig
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.video.LocalVideoProcessingService
 import us.fireshare.tweet.video.VideoNormalizer
 import us.fireshare.tweet.widget.VideoManager
@@ -46,14 +46,16 @@ class MediaUploadService(
 
     companion object {
         private const val TAG = "MediaUploadService"
-        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 32L * 1024L * 1024L
+        private const val PROGRESSIVE_VIDEO_THRESHOLD_BYTES = 50L * 1024L * 1024L
+        private const val UPLOAD_IPFS_TIMEOUT_MS = 120_000
     }
 
     private data class NormalizedVideo(
         val uri: Uri,
         val file: File,
         val sizeBytes: Long,
-        val resolutionValue: Int?
+        val resolutionValue: Int?,
+        val sourceBitrateK: Int?
     )
 
     private fun getFileTimestamp(uri: Uri): Long {
@@ -181,9 +183,8 @@ class MediaUploadService(
 
     /**
      * Route normal video uploads like iOS:
-     * - Mini uploads directly because it does not include FFmpeg.
      * - Full/play normalize to MP4 first.
-     * - Normalized videos up to 32MB upload as progressive MP4.
+     * - Normalized videos up to 50MB upload as progressive MP4.
      * - Larger videos use HLS when the cloud drive service is configured.
      */
     private suspend fun processVideoWithRouting(
@@ -193,13 +194,8 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            // Mini version: Skip FFmpeg processing, upload directly to IPFS
-            if (BuildConfig.IS_MINI_VERSION) {
-                Timber.tag(TAG).d("Mini version detected: Uploading video directly without local processing")
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
-            }
-
             val originalFileSize = getFileSize(uri) ?: 0L
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             val normalizedVideo = normalizeVideoToFile(uri)
                 ?: return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
 
@@ -207,7 +203,7 @@ class MediaUploadService(
                 Timber.tag(TAG).d("Normalized video size: ${normalizedVideo.sizeBytes / (1024 * 1024)}MB")
 
                 if (normalizedVideo.sizeBytes <= PROGRESSIVE_VIDEO_THRESHOLD_BYTES) {
-                    Timber.tag(TAG).d("Normalized video <=32MB, uploading as progressive MP4")
+                    Timber.tag(TAG).d("Normalized video <=50MB, uploading as progressive MP4")
                     return uploadToIPFSOriginal(
                         normalizedVideo.uri,
                         fileName,
@@ -240,7 +236,7 @@ class MediaUploadService(
                     )
                 }
 
-                Timber.tag(TAG).d("Normalized video >32MB, uploading through HLS path")
+                Timber.tag(TAG).d("Normalized video >50MB, uploading through HLS path")
                 val processingService = LocalVideoProcessingService(context, httpClient, appUser)
                 when (val result = processingService.processNormalizedVideo(
                     uri = normalizedVideo.uri,
@@ -249,7 +245,8 @@ class MediaUploadService(
                     referenceId = referenceId,
                     originalFileSize = originalFileSize,
                     normalizedSize = normalizedVideo.sizeBytes,
-                    normalizedResolution = normalizedVideo.resolutionValue
+                    normalizedResolution = normalizedVideo.resolutionValue,
+                    sourceBitrateK = normalizedVideo.sourceBitrateK ?: sourceBitrateK
                 )) {
                     is LocalVideoProcessingService.VideoProcessingResult.Success -> result.mimeiFile
                     is LocalVideoProcessingService.VideoProcessingResult.Error -> {
@@ -289,12 +286,6 @@ class MediaUploadService(
         referenceId: MimeiId?
     ): MimeiFileType? {
         return try {
-            // Safety check: Mini version should never call this method (no FFmpeg)
-            if (BuildConfig.IS_MINI_VERSION) {
-                Timber.tag(TAG).w("Mini version attempted to call normalizeAndUploadVideo - uploading directly")
-                return uploadToIPFSOriginal(uri, fileName, fileTimestamp, referenceId, MediaType.Video)
-            }
-
             val normalizedVideo = normalizeVideoToFile(uri)
             if (normalizedVideo == null) {
                 Timber.tag(TAG).d("Falling back to uploading original video as progressive video")
@@ -330,6 +321,7 @@ class MediaUploadService(
 
             val videoResolution = VideoManager.getVideoResolution(context, uri)
             val resolutionValue = VideoManager.getVideoResolutionValue(videoResolution)
+            val sourceBitrateK = VideoManager.getVideoBitrate(context, uri)?.let { it / 1000 }
             val needsResampling = (resolutionValue ?: 0) > 720
 
             if (needsResampling) {
@@ -351,7 +343,8 @@ class MediaUploadService(
                         uri = normalizedUri,
                         file = result.outputFile,
                         sizeBytes = result.outputFile.length(),
-                        resolutionValue = normalizedResolution
+                        resolutionValue = normalizedResolution,
+                        sourceBitrateK = sourceBitrateK
                     )
                 }
                 is VideoNormalizer.NormalizationResult.Error -> {
@@ -381,7 +374,7 @@ class MediaUploadService(
     private suspend fun isConversionServerAvailable(): Boolean {
         return try {
             Timber.tag(TAG).d(
-                "Checking HLS conversion server - cloudDrivePort: ${appUser.cloudDrivePort}, writableUrl: ${appUser.writableUrl}"
+                "Checking HLS conversion server - cloudDrivePort: ${appUser.cloudDrivePort}"
             )
 
             if (appUser.cloudDrivePort <= 0) {
@@ -389,12 +382,10 @@ class MediaUploadService(
                 return false
             }
 
-            if (appUser.writableUrl.isNullOrEmpty()) {
-                val resolvedUrl = appUser.resolveWritableUrl()
-                if (resolvedUrl.isNullOrEmpty()) {
-                    Timber.tag(TAG).w("Cannot resolve writableUrl for HLS conversion server")
-                    return false
-                }
+            val resolvedUrl = appUser.resolveWritableUrl()
+            if (resolvedUrl.isNullOrEmpty()) {
+                Timber.tag(TAG).w("Cannot resolve writableUrl for HLS conversion server")
+                return false
             }
 
             val tusServerUrl = appUser.tusServerUrl ?: run {
@@ -440,8 +431,6 @@ class MediaUploadService(
                 lastError = "Failed to resolve writableUrl (attempt $attempt/3)"
                 Timber.tag(TAG).w(lastError)
                 if (attempt < 3) {
-                    // Invalidate cache so next attempt re-resolves a fresh IP.
-                    appUser.writableUrlResolvedAt = null
                     delay((1000 * attempt).milliseconds)
                 }
             }
@@ -449,6 +438,13 @@ class MediaUploadService(
         
         if (resolvedUrl.isNullOrEmpty()) {
             Timber.tag(TAG).e("Failed to resolve writableUrl after 3 attempts")
+            return null
+        }
+        val writableClient = HproseClientPool.getWritableClient(
+            resolvedUrl,
+            UPLOAD_IPFS_TIMEOUT_MS
+        ) ?: run {
+            Timber.tag(TAG).e("Writable client not available after resolving writableUrl: $resolvedUrl")
             return null
         }
 
@@ -468,7 +464,7 @@ class MediaUploadService(
                     if (chunkCount % 10 == 0) {
                         Timber.tag(TAG).d("Upload progress: $chunkCount chunks, ${offset / 1024}KB uploaded")
                     }
-                    request["fsid"] = appUser.writableClient?.runMApp(
+                    request["fsid"] = writableClient.runMApp(
                         "upload_ipfs",
                         request.toMap(), listOf(buffer)
                     )
@@ -487,7 +483,7 @@ class MediaUploadService(
             referenceId?.let { request["referenceid"] = it }
 
             Timber.tag(TAG).d("Calling final upload_ipfs to complete upload...")
-            val cid = appUser.writableClient?.runMApp<String?>("upload_ipfs", request.toMap())
+            val cid = writableClient.runMApp<String?>("upload_ipfs", request.toMap())
             Timber.tag(TAG).d("Final upload_ipfs returned: ${cid ?: "null"}")
             if (cid == null) {
                 Timber.tag(TAG).e("Final upload_ipfs returned null")

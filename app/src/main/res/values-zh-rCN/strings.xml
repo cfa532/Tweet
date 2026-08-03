@@ -75,6 +75,10 @@
     <string name="comment_uploaded">评论发布成功</string>
     <string name="comment_delete_failed">评论删除失败，请重试。</string>
     <string name="delete_failed">推文删除失败，请重试。</string>
+    <string name="delete_tweet_confirmation_title">删除推文？</string>
+    <string name="delete_tweet_confirmation_message">此推文将被永久删除。此操作无法撤销。</string>
+    <string name="delete_comment_confirmation_title">删除评论？</string>
+    <string name="delete_comment_confirmation_message">此评论将被永久删除。此操作无法撤销。</string>
     <string name="confirm_pwd">请确认密码</string>
     <string name="domain_to_share">分享域名</string>
     <string name="use_current_pswd">保持现有密码</string>
@@ -297,6 +301,7 @@
     <string name="cannot_get_followed_user">无法获取被关注的用户</string>
     <string name="missing_host_for_followed_user">被关注用户缺少主机</string>
     <string name="tweet_not_found">找不到推文</string>
+    <string name="loading_quoted_tweet">正在加载引用的推文...</string>
     <string name="only_author_can_update_privacy">只有推文作者可以更新隐私设置</string>
     <string name="not_a_friend_of_the_host">不是主机的朋友</string>
     <string name="no_provider_ip_found">找不到提供者IP</string>

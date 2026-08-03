@@ -1,6 +1,7 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
@@ -81,6 +82,7 @@ import androidx.compose.ui.draw.alpha
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
+import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
@@ -140,6 +142,25 @@ fun TweetDetailScreen(
     
     // Prevent double-exit when back button is tapped multiple times
     var isNavigatingBack by remember { mutableStateOf(false) }
+
+    fun navigateBackWithHomeFallback() {
+        if (isNavigatingBack) return
+
+        isNavigatingBack = true
+        val didPop = navController.popBackStack()
+        if (!didPop) {
+            navController.navigate(NavTweet.TweetFeed) {
+                popUpTo(navController.graph.startDestinationId) {
+                    inclusive = true
+                }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    BackHandler {
+        navigateBackWithHomeFallback()
+    }
 
     // Remember scroll position across recompositions and configuration changes
     val savedScrollPosition = rememberSaveable { mutableStateOf(Pair(0, 0)) }
@@ -205,11 +226,7 @@ fun TweetDetailScreen(
         }
     }
 
-    // Pull-to-refresh: the spinner is bound to `doReadTweet()` only — that's
-    // the fast READ of the tweet body itself. The paginated comment refresh
-    // (and any follow-up `syncMissingComments`) runs in an independent
-    // coroutine that may keep working after the spinner is gone; new
-    // comments appear at the top via `_comments` updates.
+    // Pull-to-refresh syncs the latest tweet state, then reloads comments.
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
         onRefresh = {
@@ -217,25 +234,16 @@ fun TweetDetailScreen(
                 isRefreshingAtTop = true
                 val started = System.currentTimeMillis()
                 try {
-                    withContext(Dispatchers.IO) { viewModel.doReadTweet() }
+                    withContext(Dispatchers.IO) {
+                        viewModel.doResyncTweet()
+                        viewModel.refreshCommentsPaginated()
+                        lastLoadedPage = 0
+                        shouldStopPagination = false
+                    }
                     val elapsed = System.currentTimeMillis() - started
                     if (elapsed < 500) delay(500 - elapsed)
                 } finally {
                     isRefreshingAtTop = false
-                }
-            }
-            // Background comment refresh + optional sync — outlives the spinner.
-            coroutineScope.launch {
-                withContext(Dispatchers.IO) {
-                    viewModel.refreshCommentsPaginated()
-                    lastLoadedPage = 0
-                    shouldStopPagination = false
-                    val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
-                    if (hostIds.size >= 2 && hostIds[0] != hostIds[1] &&
-                        viewModel.failedCommentIds.value.isNotEmpty()
-                    ) {
-                        viewModel.syncMissingComments()
-                    }
                 }
             }
         }
@@ -404,32 +412,24 @@ fun TweetDetailScreen(
         }
     }
 
-    // On open: READ tweet (always). When the author's read node differs from
-    // their write node, also fire SYNC (refresh_tweet) and drain any failed
-    // comment ids. Repeat the SYNC step every 5 minutes (gated by the same
-    // hostIds check, matching iOS). Comments are loaded once by the
-    // LaunchedEffect(tweet.mid) block above — no duplicate page-0 fetch.
+    // On open and every five minutes, reload from the current provider without
+    // triggering a cross-node refresh_tweet sync.
+    // Comments are loaded once by the LaunchedEffect(tweet.mid) block above —
+    // no duplicate page-0 fetch. The server (`get_comments`) now handles
+    // cleaning up genuinely-stale comment IDs itself, so the client no longer
+    // needs to sync individual comments.
     LaunchedEffect(Unit) {
         try {
             withContext(Dispatchers.IO) {
-                viewModel.doReadTweet()
-                val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
-                if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
-                    launch { viewModel.doResyncTweet() }
-                    launch { viewModel.syncMissingComments() }
-                }
+                viewModel.doReadTweet(allowRecoveryOnMissingPayload = true)
                 Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
             }
             while (isActive) {
                 delay(5 * 60 * 1000)
                 if (!isActive) break
                 withContext(Dispatchers.IO) {
-                    val hostIds = viewModel.tweetState.value.author?.hostIds.orEmpty()
-                    if (hostIds.size >= 2 && hostIds[0] != hostIds[1]) {
-                        viewModel.doResyncTweet()
-                        viewModel.syncMissingComments()
-                        Timber.tag("TweetDetailScreen").d("Periodic SYNC completed")
-                    }
+                    viewModel.doReadTweet()
+                    Timber.tag("TweetDetailScreen").d("Periodic READ completed")
                 }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -488,10 +488,7 @@ fun TweetDetailScreen(
                 // Always-visible back button – independent of scroll-driven alpha
                 IconButton(
                     onClick = {
-                        if (!isNavigatingBack) {
-                            isNavigatingBack = true
-                            navController.popBackStack()
-                        }
+                        navigateBackWithHomeFallback()
                     },
                     enabled = !isNavigatingBack,
                     modifier = Modifier.align(Alignment.CenterStart)
