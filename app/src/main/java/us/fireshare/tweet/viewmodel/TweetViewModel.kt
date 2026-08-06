@@ -120,9 +120,9 @@ private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBas
 
 /** Which URL a share action embeds — see DEEPLINKING.md for the policy. */
 enum class ShareLinkStyle {
-    /** `http://dtweet.com/tweet/{mid}/{authorId}` — feed share button */
+    /** `http://dtweet.com/#tweet/{mid}/{authorId}` — feed share button */
     DEEPLINK,
-    /** Domain delivered by the backend's `check_upgrade` — detail-view share button */
+    /** Domain delivered by `check_upgrade` using TweetWeb's external fragment-form URL — detail-view share button */
     WEB_DOMAIN,
     /** The tweet author's provider-IP entry URL — detail-view dropdown menu */
     PROVIDER_IP
@@ -651,7 +651,7 @@ class TweetViewModel @AssistedInject constructor(
                 ShareLinkStyle.DEEPLINK -> {
                     // Standard deep-link format: the OS opens the app when installed,
                     // browsers land on the web app via the dtweet.com worker
-                    "$SHARE_DEEPLINK_DOMAIN/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
+                    "$SHARE_DEEPLINK_DOMAIN/#tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
                 ShareLinkStyle.WEB_DOMAIN -> {
                     /**
@@ -668,7 +668,7 @@ class TweetViewModel @AssistedInject constructor(
                     if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
                         domain = "http://$domain"
                     }
-                    "$domain/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
+                    "$domain/#tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
                 ShareLinkStyle.PROVIDER_IP -> {
                     // Author's provider-IP entry URL (hash-router format).

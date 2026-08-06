@@ -323,7 +323,7 @@ private fun NavHostController.openExternalDeepLink(destination: NavTweet.DeepLin
 
 /**
  * Parse deep link from intent
- * Expected URL format: http://dtweet.com/tweet/{tweetId}/{authorId}
+ * Expected URL format: http://dtweet.com/#tweet/{tweetId}/{authorId}
  */
 private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     if (intent?.action != Intent.ACTION_VIEW) {
@@ -336,21 +336,29 @@ private fun parseDeepLink(intent: Intent?): NavTweet.DeepLink? {
     }
     
     val pathSegments = appLinkData.pathSegments
-    
-    // Expected format: /tweet/{tweetId}/{authorId}
-    // pathSegments will be: ["tweet", "tweetId", "authorId"]
-    if (pathSegments.size < 3) {
-        Timber.tag("DeepLink").w("Invalid deep link format: expected at least 3 path segments, got ${pathSegments.size}")
+    val routeSegments = if (pathSegments.firstOrNull() == "tweet") {
+        pathSegments
+    } else {
+        appLinkData.fragment
+            ?.split("/")
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+    }
+
+    // Supports both the legacy /tweet/{tweetId}/{authorId} path and the
+    // fragment-form /#tweet/{tweetId}/{authorId} share URL.
+    if (routeSegments.size < 3) {
+        Timber.tag("DeepLink").w("Invalid deep link format: expected tweet route with at least 3 segments")
         return null
     }
     
-    if (pathSegments[0] != "tweet") {
-        Timber.tag("DeepLink").w("Invalid deep link format: first segment should be 'tweet', got '${pathSegments[0]}'")
+    if (routeSegments[0] != "tweet") {
+        Timber.tag("DeepLink").w("Invalid deep link format: first segment should be 'tweet', got '${routeSegments[0]}'")
         return null
     }
     
-    val tweetId = pathSegments[1]
-    val authorId = pathSegments[2]
+    val tweetId = routeSegments[1]
+    val authorId = routeSegments[2].substringBefore('?')
     
     if (tweetId.isBlank() || authorId.isBlank()) {
         Timber.tag("DeepLink").w("Invalid deep link: tweetId or authorId is blank")
