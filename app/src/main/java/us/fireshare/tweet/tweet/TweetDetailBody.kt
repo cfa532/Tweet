@@ -315,8 +315,8 @@ fun TweetDetailBody(
                         RetweetButton(viewModel)
                         LikeButton(viewModel)
                         BookmarkButton(viewModel)
-                        // Detail-view share button uses the check_upgrade domain (DEEPLINKING.md)
-                        ShareButton(viewModel, linkStyle = ShareLinkStyle.WEB_DOMAIN)
+                        // Every tweet action-bar share uses dtweet.com (DEEPLINKING.md)
+                        ShareButton(viewModel, linkStyle = ShareLinkStyle.DEEPLINK)
                     }
                 }
             }

@@ -563,7 +563,7 @@ private fun RetweetWithContent(
                     )
 
                     // Dropdown menu
-                    TweetDropdownMenu(tweet, parentEntry, null, context)
+                    TweetDropdownMenu(tweet, parentEntry, null, context, viewModel)
                 }
 
                 // Tweet content

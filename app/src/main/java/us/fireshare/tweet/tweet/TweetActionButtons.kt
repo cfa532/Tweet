@@ -283,7 +283,7 @@ fun ShareButton(
     color: Color? = null,
     parentTweetId: String? = null,
     parentAuthorId: String? = null,
-    linkStyle: ShareLinkStyle = ShareLinkStyle.WEB_DOMAIN
+    linkStyle: ShareLinkStyle = ShareLinkStyle.DEEPLINK
 ) {
     val navController = LocalNavController.current
     val context = LocalContext.current

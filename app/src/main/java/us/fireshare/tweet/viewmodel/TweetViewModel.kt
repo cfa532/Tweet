@@ -120,9 +120,9 @@ private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBas
 
 /** Which URL a share action embeds — see DEEPLINKING.md for the policy. */
 enum class ShareLinkStyle {
-    /** `http://dtweet.com/#tweet/{mid}/{authorId}` — feed share button */
+    /** `http://dtweet.com/#tweet/{mid}/{authorId}` — all tweet action-bar share buttons */
     DEEPLINK,
-    /** Domain delivered by `check_upgrade` using TweetWeb's external fragment-form URL — detail-view share button */
+    /** Domain delivered by `check_upgrade` using TweetWeb's external fragment-form URL — feed dropdown menu */
     WEB_DOMAIN,
     /** The tweet author's provider-IP entry URL — detail-view dropdown menu */
     PROVIDER_IP
@@ -635,7 +635,7 @@ class TweetViewModel @AssistedInject constructor(
         context: Context,
         parentTweetId: String? = null,
         parentAuthorId: String? = null,
-        linkStyle: ShareLinkStyle = ShareLinkStyle.WEB_DOMAIN
+        linkStyle: ShareLinkStyle = ShareLinkStyle.DEEPLINK
     ) {
         _isSharing.value = true
         try {
@@ -658,12 +658,10 @@ class TweetViewModel @AssistedInject constructor(
                      * Domain delivered by the backend: checkUpgrade() returns a map of
                      * environment variables of the App, including "domain".
                      * */
-                    val map = HproseInstance.checkUpgrade() ?: return
-                    var domain = if (!appUser.domainToShare.isNullOrBlank()) {
-                        appUser.domainToShare!!
-                    } else {
-                        map["domain"] ?: return
-                    }
+                    var domain = HproseInstance.checkUpgrade()
+                        ?.get("domain")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: SHARE_DEEPLINK_DOMAIN
                     // Ensure domain has http:// protocol prefix
                     if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
                         domain = "http://$domain"

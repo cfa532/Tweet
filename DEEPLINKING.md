@@ -28,10 +28,9 @@ https exists solely where Google/Apple require it (the well-known files).
 
 | Share action | URL format | Rationale |
 |---|---|---|
-| **Feed share button** (plain tweet rows only) | `http://dtweet.com/#tweet/{mid}/{authorId}` (fragment-form share URL) | Opens the app when installed; web fallback via Worker |
-| **Detail-view share button** | `http://{check_upgrade domain}/#tweet/{mid}/{authorId}` | Backend-controlled domain using TweetWeb's external share-link format, independent of dtweet.com |
+| **Tweet action-bar share buttons** | `http://dtweet.com/#tweet/{mid}/{authorId}` (fragment-form share URL) | Opens the app when installed; web fallback via Worker, in feed, detail, comment, media, and fullscreen contexts |
+| **Feed dropdown menu → share** | `http://{check_upgrade domain}/#tweet/{mid}/{authorId}` | Backend-controlled domain using TweetWeb's external share-link format, with `dtweet.com` as fallback |
 | **Detail-view dropdown menu → share** | `http://{author provider IP}/entry?aid={appIdHash}&ver=last#/tweet/{mid}/{authorId}` | Works with a bare node IP, no DNS/domain needed |
-| **Everything else** (comment rows, fullscreen player, media browser) | check_upgrade domain — same as the detail-view share button | Unchanged legacy behavior |
 
 The `#` in `domain/#tweet/...` is TweetWeb's external share-link delimiter; it
 does not mean TweetWeb uses Vue `createWebHashHistory()` for domain navigation.
@@ -52,11 +51,10 @@ Comment shares append `?fromComment=true&parentTweetId={mid}&parentAuthorId={mid
   patterns `/tweet/.*`, `/user/.*`, `/profile/.*`. Release resolves that host
   to `dtweet.com`; debug resolves it to `debug.dtweet.invalid`.
 - `app/src/main/java/us/fireshare/tweet/HproseInstance.kt` — `check_upgrade`
-  supplies the share domain for the detail-view share button.
+  supplies the share domain for the feed dropdown menu.
 - `viewmodel/TweetViewModel.kt` — `ShareLinkStyle` enum + `shareTweet`;
-  default is `WEB_DOMAIN`; feed rows (`TweetItem.kt`, `TweetItemBody.kt`)
-  pass `DEEPLINK`, the dropdown (`TweetDropdownMenuItems.kt`) passes
-  `PROVIDER_IP`.
+  the default and all action bars use `DEEPLINK`; feed dropdowns pass
+  `WEB_DOMAIN`, while the detail dropdown passes `PROVIDER_IP`.
 
 ## Verification identities (served by the Worker in `assetlinks.json`)
 

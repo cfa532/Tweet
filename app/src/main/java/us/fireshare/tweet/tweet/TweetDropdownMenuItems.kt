@@ -305,13 +305,18 @@ fun TweetDropdownMenuItems(
         } else {
             stringResource(R.string.share)
         }
+        val shareLinkStyle = if (isDetailViewDropdown) {
+            ShareLinkStyle.PROVIDER_IP
+        } else {
+            ShareLinkStyle.WEB_DOMAIN
+        }
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
                 onDismissRequest()
                 applicationScope.launch(IO) {
-                    // Dropdown share uses the author's provider-IP entry URL (DEEPLINKING.md)
-                    viewModel.shareTweet(shareContext, linkStyle = ShareLinkStyle.PROVIDER_IP)
+                    // Feed menus use check_upgrade; detail menus use provider IP.
+                    viewModel.shareTweet(shareContext, linkStyle = shareLinkStyle)
                 }
             },
             text = {

@@ -140,7 +140,7 @@ fun TweetItemBody(
                                 .weight(1f)
                                 .padding(start = 2.dp, top = 2.dp, end = 4.dp)
                         )
-                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
+                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context, viewModel)
                     }
                 }
 
@@ -273,7 +273,7 @@ fun TweetItemBody(
                                 .weight(1f)
                                 .padding(start = 2.dp, top = 2.dp, end = 4.dp)
                         )
-                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context)
+                        TweetDropdownMenu(tweet, parentEntry, parentTweet, context, viewModel)
                     }
 
                     // Text content of the tweet
