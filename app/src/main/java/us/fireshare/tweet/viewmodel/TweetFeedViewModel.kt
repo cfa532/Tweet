@@ -886,13 +886,18 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         // NOTE: No need to navigate here - TweetDetailScreen observes tweetDeleted state
         // and will navigate away automatically when TweetViewModel receives the notification
 
-        // STEP 3: Delete from local cache
-        try {
-            dao.deleteCachedTweet(tweetId)
-            Timber.tag("TweetFeedViewModel").d("Tweet $tweetId deleted from local cache")
+        // STEP 3: Establish a cache barrier before the backend call so in-flight
+        // reads and queued writes cannot restore the optimistically deleted tweet.
+        val evictedTweetIds = try {
+            // Keep wrapper rows during the optimistic phase so a failed backend
+            // delete can restore them simply by removing the deletion barrier.
+            TweetCacheManager.evictDeletedTweet(tweetId, includePureRetweets = false)
         } catch (e: Exception) {
-            Timber.tag("TweetFeedViewModel").w(e, "Failed to delete tweet from cache")
+            Timber.tag("TweetFeedViewModel").w(e, "Failed to evict tweet from cache")
+            setOf(tweetId)
         }
+
+        Timber.tag("TweetFeedViewModel").d("Tweet $tweetId deleted from local cache")
 
         // STEP 4: Delete from backend
         var deletionFailed = false
@@ -907,7 +912,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             Timber.tag("TweetFeedViewModel").e(e, "Backend deletion failed: ${e.message}")
         }
         
-        // STEP 5: If deletion failed, restore the tweet
+        // STEP 5: If deletion failed, remove the barrier before any restoration.
+        if (deletionFailed) {
+            TweetCacheManager.unmarkDeletedTweets(evictedTweetIds)
+        }
+
         if (deletionFailed && finalTweetToDelete != null) {
             Timber.tag("TweetFeedViewModel").w("Deletion failed, restoring tweet $tweetId")
             
@@ -921,6 +930,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             }
             
             val tweetToRestore = restoredTweet ?: finalTweetToDelete
+            TweetCacheManager.saveTweet(tweetToRestore, tweetToRestore.authorId)
             
             // Restore on Main thread to ensure immediate UI update
             withContext(Main) {
@@ -949,6 +959,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             Timber.tag("TweetFeedViewModel").d("Posting TweetRestored notification for $tweetId")
             TweetNotificationCenter.post(TweetEvent.TweetRestored(tweetToRestore))
             
+            throw Exception("Failed to delete tweet: $errorMessage")
+        }
+
+        if (deletionFailed) {
             throw Exception("Failed to delete tweet: $errorMessage")
         }
         

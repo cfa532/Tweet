@@ -122,6 +122,13 @@ data class Tweet(
         @Synchronized
         fun findInstance(mid: MimeiId): Tweet? = synchronized(instanceLock) { instances[mid] }
 
+        @Synchronized
+        fun clearInstance(mid: MimeiId) {
+            synchronized(instanceLock) {
+                instances.remove(mid)
+            }
+        }
+
         /** Clear interaction state that belongs to the previously logged-in user. */
         @Synchronized
         fun clearInteractionOverrides() {

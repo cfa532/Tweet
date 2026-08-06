@@ -2885,6 +2885,8 @@ object HproseInstance {
         tweetId: MimeiId,
         authorId: MimeiId
     ): Tweet? {
+        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+
         if (!isOnline.value) {
             Timber.tag("fetchTweet").d("Offline: skipping")
             return null
@@ -2929,6 +2931,8 @@ object HproseInstance {
             }
             val tweetData = unwrapV2Response<Map<String, Any>>(rawResponse)
             tweetData?.let {
+                if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+
                 // Record successful access
                 recordReliabilitySuccessTweet(tweetId)
 
@@ -3004,6 +3008,7 @@ object HproseInstance {
             return null
         }
         if (tweetId == null || authorId == null) return null
+        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
 
         if (isReliabilityBlacklistedTweet(tweetId)) {
             Timber.tag("getTweet").d("Tweet $tweetId blacklisted, returning cached")
@@ -3037,6 +3042,7 @@ object HproseInstance {
             val raw = authorService.runMApp<Any>("get_tweet", params)
             val data = unwrapV2Response<Map<String, Any>>(raw)
             if (data != null) {
+                if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                 recordReliabilitySuccessTweet(tweetId)
                 val tweet = Tweet.from(data)
                 tweet.author = author
@@ -3066,6 +3072,7 @@ object HproseInstance {
             Timber.tag("refreshTweet").w("Null parameters: tweetId=$tweetId, authorId=$authorId")
             return null
         }
+        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
 
         // Check if tweet is blacklisted
         if (isReliabilityBlacklistedTweet(tweetId)) {
@@ -3120,6 +3127,7 @@ object HproseInstance {
             }
             
             tweetData?.let {
+                if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                 // Record successful access
                 recordReliabilitySuccessTweet(tweetId)
 
@@ -3395,8 +3403,15 @@ object HproseInstance {
             "authorid" to originalTweet.authorId
         )
         return try {
+            val author = originalTweet.author ?: fetchUser(originalTweet.authorId)
+                ?: throw IllegalStateException("Original tweet author is not available")
+            val client = requireWritableClient(
+                author,
+                "updateRetweetCount",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
             val rawResponse = try {
-                originalTweet.author?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("updateRetweetCount").e(e, "Exception calling runMApp for updateRetweetCount, tweetId: ${originalTweet.mid}")
                 throw e
@@ -3505,8 +3520,15 @@ object HproseInstance {
             "hostid" to (parentTweet.author?.hostIds?.first() ?: "")
         )
         try {
+            val parentAuthor = parentTweet.author ?: fetchUser(parentTweet.authorId)
+                ?: throw IllegalStateException("Parent tweet author is not available")
+            val client = requireWritableClient(
+                parentAuthor,
+                "delComment",
+                TOGGLE_MUTATION_TIMEOUT_MS
+            )
             val rawResponse = try {
-                parentTweet.author?.hproseService?.runMApp<Any>(entry, params)
+                client.runMApp<Any>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("delComment").e(e, "Exception calling runMApp for delComment, tweetId: ${parentTweet.mid}, commentId: $commentId")
                 throw e
@@ -3548,15 +3570,21 @@ object HproseInstance {
             "followingid_hostid" to (cachedFollowing.hostIds?.firstOrNull() ?: "")
         )
         return try {
-            // Route the call directly to appUser's primary host (hostIds[0]) so
+            // Route the call directly to the acting user's primary host (hostIds[0]) so
             // toggle_following.js's `userHostId === nodeId` check fires and the
             // local handler runs. The cross-node delegation path
             // (lines 101-126) drops the response payload (cross-node bridge
             // returns a Java-Map-backed object that wrapResponse mishandles),
             // making a clearly successful operation look like failure on the
             // client. By calling the home node directly we never hit it.
-            val homeService = requireWritableClient(appUser, "toggleFollowing", TOGGLE_MUTATION_TIMEOUT_MS)
-            Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, baseUrl=${appUser.baseUrl}, homeHostId=${appUser.hostIds?.firstOrNull()}")
+            val actingUser = if (followingId == appUser.mid) {
+                appUser
+            } else {
+                fetchUser(followingId)
+                    ?: throw IllegalStateException("Acting user $followingId is not available")
+            }
+            val homeService = requireWritableClient(actingUser, "toggleFollowing", TOGGLE_MUTATION_TIMEOUT_MS)
+            Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, homeHostId=${actingUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
 
@@ -3683,33 +3711,9 @@ object HproseInstance {
         }
     }
 
-    private enum class SavedTweetList(
-        val fallbackEntry: String,
-        val stateParameter: String
-    ) {
-        FAVORITES("toggle_favorite_by_user", "isfavorite"),
-        BOOKMARKS("toggle_bookmark_by_user", "isbookmarked")
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun unwrapNestedV2Map(response: Any?): Map<String, Any>? {
-        var current = response
-        repeat(3) {
-            val map = current as? Map<String, Any> ?: return null
-            when (map["success"]) {
-                false -> return null
-                true -> {
-                    val data = map["data"]
-                    if (data is Map<*, *>) {
-                        current = data
-                    } else {
-                        return map
-                    }
-                }
-                else -> return map
-            }
-        }
-        return current as? Map<String, Any>
+    private enum class SavedTweetList {
+        FAVORITES,
+        BOOKMARKS
     }
 
     private fun savedTweetCacheKey(list: SavedTweetList): MimeiId = when (list) {
@@ -3717,32 +3721,19 @@ object HproseInstance {
         SavedTweetList.BOOKMARKS -> TweetCacheManager.getBookmarksCacheId(appUser.mid)
     }
 
-    private suspend fun removeSavedTweetFromAppUser(
-        tweetId: MimeiId,
-        list: SavedTweetList
-    ) {
-        val client = requireWritableClient(
-            appUser,
-            list.fallbackEntry,
-            TOGGLE_MUTATION_TIMEOUT_MS
-        )
-        val rawResponse = client.runMApp<Map<String, Any>>(
-            list.fallbackEntry,
-            mapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "userid" to appUser.mid,
-                "tweetid" to tweetId,
-                list.stateParameter to false,
-                "skipcontentsync" to true
-            )
-        )
-        val updatedUserData = unwrapNestedV2Map(rawResponse)
-            ?: throw IllegalStateException("${list.fallbackEntry} returned invalid user data")
-        appUser.from(updatedUserData)
-        TweetCacheManager.saveUser(appUser)
-        TweetCacheManager.removeTweetFromCache(tweetId, savedTweetCacheKey(list))
+    private suspend fun resolveSavedTweetStorageAuthor(tweet: Tweet): User {
+        tweet.interactionHostAuthor?.let { return it }
+
+        val parentTweetId = tweet.parentTweetId
+        if (parentTweetId != null) {
+            val parentTweet = TweetCacheManager.getCachedTweet(parentTweetId)
+                ?: throw IllegalStateException("Parent tweet $parentTweetId is not available")
+            return parentTweet.author ?: fetchUser(parentTweet.authorId)
+                ?: throw IllegalStateException("Parent tweet author ${parentTweet.authorId} is not available")
+        }
+
+        return tweet.author ?: fetchUser(tweet.authorId)
+            ?: throw IllegalStateException("Tweet author ${tweet.authorId} is not available")
     }
 
     private fun optimisticSavedTweetResult(
@@ -3764,123 +3755,99 @@ object HproseInstance {
     }
 
     /**
-     * Toggle favorite on the author's root. Removal falls back to the app
-     * user's root when the tweet author is missing or no longer writable.
+     * Toggle favorite on the exact storage owner's root.
      */
     suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? {
         if (!isOnline.value) throw Exception("No network connection")
 
-        try {
-            val author = tweet.interactionHostAuthor ?: tweet.author
-                ?: throw Exception("Author not available for toggleFavorite")
-            val authorClient = requireWritableClient(
-                author,
-                "toggleFavorite",
-                TOGGLE_MUTATION_TIMEOUT_MS
+        val author = resolveSavedTweetStorageAuthor(tweet)
+        val authorClient = requireWritableClient(
+            author,
+            "toggleFavorite",
+            TOGGLE_MUTATION_TIMEOUT_MS
+        )
+        val rawResponse = authorClient.runMApp<Map<String, Any>>(
+            "toggle_favorite",
+            mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "appuserid" to appUser.mid,
+                "tweetid" to tweet.mid,
+                "authorid" to author.mid,
+                "userhostid" to (appUser.hostIds?.first() ?: ""),
+                "isfavorite" to isFavorite
             )
-            val rawResponse = authorClient.runMApp<Map<String, Any>>(
-                "toggle_favorite",
-                mapOf(
-                    "aid" to appId,
-                    "ver" to "last",
-                    "version" to "v2",
-                    "appuserid" to appUser.mid,
-                    "tweetid" to tweet.mid,
-                    "authorid" to tweet.authorId,
-                    "userhostid" to (appUser.hostIds?.first() ?: ""),
-                    "isfavorite" to isFavorite
-                )
-            )
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-                ?: throw IllegalStateException("toggle_favorite returned invalid data")
-            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
-                appUser.from(updatedUserData)
-                TweetCacheManager.saveUser(appUser)
-            }
-            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
-                Tweet.from(updatedTweetData).also {
-                    it.favoriteOverride = it.isFavorite
-                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
-                }
-            }
-            if (!isFavorite) {
-                TweetCacheManager.removeTweetFromCache(
-                    tweet.mid,
-                    savedTweetCacheKey(SavedTweetList.FAVORITES)
-                )
-            }
-            return updatedTweet
-                ?: if (!isFavorite) optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
-                else throw IllegalStateException("toggle_favorite did not return a tweet")
-        } catch (primaryError: Exception) {
-            if (isFavorite) throw primaryError
-            Timber.tag("toggleFavorite").w(
-                primaryError,
-                "Author mutation failed; removing ${tweet.mid} from app user favorites"
-            )
-            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.FAVORITES)
-            return optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+        )
+        val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+            ?: throw IllegalStateException("toggle_favorite returned invalid data")
+        (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+            appUser.from(updatedUserData)
+            TweetCacheManager.saveUser(appUser)
         }
+        val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+            Tweet.from(updatedTweetData).also {
+                it.favoriteOverride = it.isFavorite
+                it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+            }
+        }
+        if (!isFavorite) {
+            TweetCacheManager.removeTweetFromCache(
+                tweet.mid,
+                savedTweetCacheKey(SavedTweetList.FAVORITES)
+            )
+        }
+        return updatedTweet
+            ?: if (!isFavorite) optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
+            else throw IllegalStateException("toggle_favorite did not return a tweet")
     }
 
     /**
-     * Toggle bookmark on the author's root. Removal falls back to the app
-     * user's root when the tweet author is missing or no longer writable.
+     * Toggle bookmark on the exact storage owner's root.
      */
     suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? {
         if (!isOnline.value) throw Exception("No network connection")
 
-        try {
-            val author = tweet.interactionHostAuthor ?: tweet.author
-                ?: throw Exception("Author not available for toggleBookmark")
-            val authorClient = requireWritableClient(
-                author,
-                "toggleBookmark",
-                TOGGLE_MUTATION_TIMEOUT_MS
+        val author = resolveSavedTweetStorageAuthor(tweet)
+        val authorClient = requireWritableClient(
+            author,
+            "toggleBookmark",
+            TOGGLE_MUTATION_TIMEOUT_MS
+        )
+        val rawResponse = authorClient.runMApp<Map<String, Any>>(
+            "toggle_bookmark",
+            mapOf(
+                "aid" to appId,
+                "ver" to "last",
+                "version" to "v2",
+                "userid" to appUser.mid,
+                "tweetid" to tweet.mid,
+                "authorid" to author.mid,
+                "userhostid" to (appUser.hostIds?.first() ?: ""),
+                "isbookmarked" to isBookmarked
             )
-            val rawResponse = authorClient.runMApp<Map<String, Any>>(
-                "toggle_bookmark",
-                mapOf(
-                    "aid" to appId,
-                    "ver" to "last",
-                    "version" to "v2",
-                    "userid" to appUser.mid,
-                    "tweetid" to tweet.mid,
-                    "authorid" to tweet.authorId,
-                    "userhostid" to (appUser.hostIds?.first() ?: ""),
-                    "isbookmarked" to isBookmarked
-                )
-            )
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-                ?: throw IllegalStateException("toggle_bookmark returned invalid data")
-            (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
-                appUser.from(updatedUserData)
-                TweetCacheManager.saveUser(appUser)
-            }
-            val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
-                Tweet.from(updatedTweetData).also {
-                    it.bookmarkOverride = it.isBookmarked
-                    it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
-                }
-            }
-            if (!isBookmarked) {
-                TweetCacheManager.removeTweetFromCache(
-                    tweet.mid,
-                    savedTweetCacheKey(SavedTweetList.BOOKMARKS)
-                )
-            }
-            return updatedTweet
-                ?: if (!isBookmarked) optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
-                else throw IllegalStateException("toggle_bookmark did not return a tweet")
-        } catch (primaryError: Exception) {
-            if (isBookmarked) throw primaryError
-            Timber.tag("toggleBookmark").w(
-                primaryError,
-                "Author mutation failed; removing ${tweet.mid} from app user bookmarks"
-            )
-            removeSavedTweetFromAppUser(tweet.mid, SavedTweetList.BOOKMARKS)
-            return optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
+        )
+        val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+            ?: throw IllegalStateException("toggle_bookmark returned invalid data")
+        (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+            appUser.from(updatedUserData)
+            TweetCacheManager.saveUser(appUser)
         }
+        val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
+            Tweet.from(updatedTweetData).also {
+                it.bookmarkOverride = it.isBookmarked
+                it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
+            }
+        }
+        if (!isBookmarked) {
+            TweetCacheManager.removeTweetFromCache(
+                tweet.mid,
+                savedTweetCacheKey(SavedTweetList.BOOKMARKS)
+            )
+        }
+        return updatedTweet
+            ?: if (!isBookmarked) optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
+            else throw IllegalStateException("toggle_bookmark did not return a tweet")
     }
 
     /**
@@ -4035,11 +4002,11 @@ object HproseInstance {
             Timber.tag("deleteTweet").d("Offline: skipping")
             throw Exception("No network connection")
         }
-        // Check if hproseService is available
-        if (appUser.hproseService == null) {
-            val errorMsg = "Cannot delete tweet: hproseService is null. User may not be properly initialized."
-            Timber.tag("deleteTweet").e(errorMsg)
-            throw Exception(errorMsg)
+        val requestUser = if (tweetAuthorId == appUser.mid) {
+            appUser
+        } else {
+            fetchUser(tweetAuthorId)
+                ?: throw IllegalStateException("Tweet author $tweetAuthorId is not available")
         }
 
         val entry = "delete_tweet"
@@ -4047,7 +4014,7 @@ object HproseInstance {
             "aid" to appId,
             "ver" to "last",
             "version" to "v3",
-            "userid" to appUser.mid,
+            "userid" to requestUser.mid,
             "authorid" to tweetAuthorId,
             "tweetid" to tweetId
         )
@@ -4069,14 +4036,15 @@ object HproseInstance {
         }
 
         return try {
-            // Mutation: route through appUser's writable host (hostIds[0]).
-            val client = requireWritableClient(appUser, "deleteTweet")
+            // Mutation: route through the tweet author's writable host (hostIds[0]).
+            val client = requireWritableClient(requestUser, "deleteTweet")
             val rawResponse = try {
                 client.runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 if (isTweetNotFoundDeleteFailure(error = e)) {
                     Timber.tag("deleteTweet")
                         .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    TweetCacheManager.evictDeletedTweet(tweetId)
                     refreshAppUserAfterDelete()
                     return tweetId
                 }
@@ -4089,6 +4057,7 @@ object HproseInstance {
                 if (isTweetNotFoundDeleteFailure(response = rawResponse)) {
                     Timber.tag("deleteTweet")
                         .d("Tweet $tweetId is already missing on server; treating delete as success")
+                    TweetCacheManager.evictDeletedTweet(tweetId)
                     refreshAppUserAfterDelete()
                     return tweetId
                 }
@@ -4105,6 +4074,8 @@ object HproseInstance {
                 throw Exception(errorMsg)
             }
 
+            TweetCacheManager.evictDeletedTweet(deletedTweetId)
+
             // Refresh appUser from server to get updated tweetCount and other properties
             refreshAppUserAfterDelete()
 
@@ -4113,6 +4084,7 @@ object HproseInstance {
             if (isTweetNotFoundDeleteFailure(error = e)) {
                 Timber.tag("deleteTweet")
                     .d("Tweet $tweetId is already missing on server; treating delete as success")
+                TweetCacheManager.evictDeletedTweet(tweetId)
                 refreshAppUserAfterDelete()
                 return tweetId
             }

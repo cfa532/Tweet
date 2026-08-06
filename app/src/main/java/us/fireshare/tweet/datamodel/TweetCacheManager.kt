@@ -59,6 +59,7 @@ object TweetCacheManager {
     // In-memory cache for frequently accessed tweets (LRU by access order)
     private val memoryCache = LinkedHashMap<String, CachedTweet>(32, 0.75f, true)
     private val cacheLock = Any()
+    private val deletedTweetIds = mutableSetOf<MimeiId>()
 
     // In-memory cache for users (LRU by access order)
     private val userMemoryCache = LinkedHashMap<String, User>(32, 0.75f, true)
@@ -91,6 +92,29 @@ object TweetCacheManager {
         return "$cacheKey|$tweetId"
     }
 
+    private fun Tweet.isPureRetweetOf(originalId: MimeiId): Boolean {
+        return originalTweetId == originalId &&
+            content.isNullOrBlank() &&
+            title.isNullOrBlank() &&
+            attachments.isNullOrEmpty()
+    }
+
+    private fun isBlockedByDeletionLocked(tweet: Tweet): Boolean {
+        if (tweet.mid in deletedTweetIds) return true
+        val originalId = tweet.originalTweetId ?: return false
+        return originalId in deletedTweetIds && tweet.isPureRetweetOf(originalId)
+    }
+
+    fun isTweetDeleted(tweetId: MimeiId): Boolean = synchronized(cacheLock) {
+        tweetId in deletedTweetIds
+    }
+
+    fun unmarkDeletedTweets(tweetIds: Collection<MimeiId>) {
+        synchronized(cacheLock) {
+            deletedTweetIds.removeAll(tweetIds.toSet())
+        }
+    }
+
     /**
      * Load cached comments keyed by parent tweet ID.
      * The parent tweet ID is used directly as the cache index bucket.
@@ -101,6 +125,7 @@ object TweetCacheManager {
                 HproseInstance.dao
                     .getCachedTweetsByUser(parentTweetId, 0, limit)
                     .map { it.originalTweet }
+                    .filterNot { tweet -> synchronized(cacheLock) { isBlockedByDeletionLocked(tweet) } }
                     .sortedByDescending { it.timestamp }
             }.getOrElse {
                 Timber.tag("TweetCacheManager")
@@ -128,9 +153,15 @@ object TweetCacheManager {
             Timber.w("Should not cache: $tweet")
             return
         }
+        if (synchronized(cacheLock) { isBlockedByDeletionLocked(tweet) }) {
+            return
+        }
 
         try {
             val cachedTweet = synchronized(cacheLock) {
+                if (isBlockedByDeletionLocked(tweet)) {
+                    return
+                }
                 val cached = CachedTweet(
                     mid = tweet.mid,
                     uid = userId,
@@ -160,6 +191,9 @@ object TweetCacheManager {
             // Always update database cache on IO thread
             CoroutineScope(Dispatchers.IO).launch {
                 try {
+                    if (synchronized(cacheLock) { isBlockedByDeletionLocked(tweet) }) {
+                        return@launch
+                    }
                     HproseInstance.dao.insertOrUpdateCachedTweet(cachedTweet)
                     HproseInstance.dao.updateCachedTweetPayload(
                         tweetId = tweet.mid,
@@ -195,6 +229,8 @@ object TweetCacheManager {
      * This expiration applies to all caches regardless of which uid they're stored under.
      */
     fun getCachedTweet(tweetId: MimeiId): Tweet? {
+        if (isTweetDeleted(tweetId)) return null
+
         return try {
             synchronized(cacheLock) {
                 // Check memory cache first (searches across all list memberships by mid)
@@ -202,12 +238,17 @@ object TweetCacheManager {
                     .filter { cachedTweet -> cachedTweet.mid == tweetId }
                     .maxByOrNull { cachedTweet -> cachedTweet.timestamp.time }
                     ?.let { cachedTweet ->
-                    return cachedTweet.originalTweet
+                    if (!isBlockedByDeletionLocked(cachedTweet.originalTweet)) {
+                        return cachedTweet.originalTweet
+                    }
                 }
 
                 // Check database cache (searches across all list memberships by mid, not filtered by uid)
                 val dbCachedTweet = HproseInstance.dao.getCachedTweet(tweetId)
                 dbCachedTweet?.let { cachedTweet ->
+                    if (isBlockedByDeletionLocked(cachedTweet.originalTweet)) {
+                        return null
+                    }
                     // Add to memory cache for faster access (LRU)
                     memoryCache[tweetMemoryKey(cachedTweet.mid, cachedTweet.uid)] = cachedTweet
                     evictTweetLruIfNeeded()
@@ -229,11 +270,71 @@ object TweetCacheManager {
      */
     fun getCachedTweetMemoryOnly(tweetId: MimeiId): Tweet? {
         return synchronized(cacheLock) {
+            if (tweetId in deletedTweetIds) return@synchronized null
             memoryCache.values
                 .filter { cachedTweet -> cachedTweet.mid == tweetId }
                 .maxByOrNull { cachedTweet -> cachedTweet.timestamp.time }
                 ?.originalTweet
+                ?.takeUnless { isBlockedByDeletionLocked(it) }
         }
+    }
+
+    /**
+     * Establish a deletion barrier, then remove the tweet from memory, Room, and
+     * the singleton store. Pure retweet wrappers are removed with it; quote
+     * tweets keep their own content and remain cached.
+     */
+    suspend fun evictDeletedTweet(
+        tweetId: MimeiId,
+        includePureRetweets: Boolean = true
+    ): Set<MimeiId> = withContext(Dispatchers.IO) {
+        val deletedIds = mutableSetOf(tweetId)
+        synchronized(cacheLock) {
+            deletedTweetIds.add(tweetId)
+            memoryCache.values.forEach { cached ->
+                if (cached.mid == tweetId ||
+                    (includePureRetweets && cached.originalTweet.isPureRetweetOf(tweetId))
+                ) {
+                    deletedIds.add(cached.mid)
+                }
+            }
+        }
+
+        val databaseCopies = runCatching {
+            HproseInstance.dao.getAllCachedTweets()
+        }.getOrElse { error ->
+            Timber.tag("TweetCacheManager")
+                .e(error, "Failed to scan pure retweets for deleted tweet $tweetId")
+            emptyList()
+        }
+        databaseCopies.forEach { cached ->
+            if (cached.mid == tweetId ||
+                (includePureRetweets && cached.originalTweet.isPureRetweetOf(tweetId))
+            ) {
+                deletedIds.add(cached.mid)
+            }
+        }
+
+        synchronized(cacheLock) {
+            deletedTweetIds.addAll(deletedIds)
+            val iterator = memoryCache.entries.iterator()
+            while (iterator.hasNext()) {
+                if (iterator.next().value.mid in deletedIds) {
+                    iterator.remove()
+                }
+            }
+        }
+
+        if (deletedIds.isNotEmpty()) {
+            runCatching {
+                HproseInstance.dao.deleteCachedTweets(deletedIds.toList())
+            }.onFailure { error ->
+                Timber.tag("TweetCacheManager")
+                    .e(error, "Failed to delete cached tweet IDs $deletedIds")
+            }
+            deletedIds.forEach(Tweet::clearInstance)
+        }
+        deletedIds
     }
 
     /**

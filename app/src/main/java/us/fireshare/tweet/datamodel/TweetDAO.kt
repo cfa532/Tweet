@@ -151,6 +151,9 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet ORDER BY tweetTimestamp DESC LIMIT :limit")
     fun getRecentCachedTweets(limit: Int): List<CachedTweet>
 
+    @Query("SELECT * FROM CachedTweet")
+    fun getAllCachedTweets(): List<CachedTweet>
+
     /**
      * Get cached tweets by user ID.
      * Bookmarks and favorites are written sequentially in server order, so their
@@ -195,6 +198,9 @@ interface CachedTweetDao {
 
     @Query("DELETE FROM CachedTweet WHERE mid = :tweetId")
     fun deleteCachedTweet(tweetId: MimeiId)
+
+    @Query("DELETE FROM CachedTweet WHERE mid IN (:tweetIds)")
+    fun deleteCachedTweets(tweetIds: List<MimeiId>)
 
     @Query("DELETE FROM CachedTweet WHERE mid = :tweetId AND uid = :cacheKey")
     fun deleteCachedTweetFromCache(tweetId: MimeiId, cacheKey: MimeiId)
