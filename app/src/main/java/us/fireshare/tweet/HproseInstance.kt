@@ -4875,7 +4875,7 @@ object HproseInstance {
     private val ipCacheMutex = Mutex()
     private const val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
 
-    private val providerIPRequests = mutableMapOf<MimeiId, Deferred<String?>>()
+    private val providerIPRequests = mutableMapOf<Pair<MimeiId, Boolean>, Deferred<String?>>()
     private val providerIPRequestsMutex = Mutex()
     private val hostIPRequests = mutableMapOf<String, Deferred<String?>>()
     private val hostIPRequestsMutex = Mutex()
@@ -5201,7 +5201,7 @@ object HproseInstance {
      * attempt. Always query it through the entry node so another user's stale or
      * healthy provider node is never used as a fallback route.
      */
-    suspend fun getProviderIP(mid: MimeiId): String? = coroutineScope {
+    suspend fun getProviderIP(mid: MimeiId, requireIPv4: Boolean = v4Only): String? = coroutineScope {
         if (!isOnline.value) {
             Timber.tag("getProviderIP").d("Offline: skipping")
             return@coroutineScope null
@@ -5212,21 +5212,22 @@ object HproseInstance {
             return@coroutineScope null
         }
 
+        val requestKey = mid to requireIPv4
         val request = providerIPRequestsMutex.withLock {
-            providerIPRequests[mid]?.takeIf { it.isActive } ?: run {
+            providerIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
                 val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
-                    resolveProviderIP(mid)
+                    resolveProviderIP(mid, requireIPv4)
                 }
                 newRequest.invokeOnCompletion {
                     TweetApplication.applicationScope.launch {
                         providerIPRequestsMutex.withLock {
-                            if (providerIPRequests[mid] === newRequest) {
-                                providerIPRequests -= mid
+                            if (providerIPRequests[requestKey] === newRequest) {
+                                providerIPRequests -= requestKey
                             }
                         }
                     }
                 }
-                providerIPRequests[mid] = newRequest
+                providerIPRequests[requestKey] = newRequest
                 newRequest
             }
         }
@@ -5234,30 +5235,34 @@ object HproseInstance {
         request.await()
     }
 
-    private suspend fun resolveProviderIP(mid: MimeiId): String? {
+    private suspend fun resolveProviderIP(mid: MimeiId, requireIPv4: Boolean): String? {
         // MATCH iOS: get_provider_ips is a discovery operation — always use the entry node,
         // not appUser.hproseService which may point to a stale provider IP.
         return try {
             val entryIP = findEntryIP()
             val baseUrl = "http://$entryIP"
             val entryClient = HproseClientPool.getRegularClient(baseUrl)
-            _getProviderIP(mid, entryClient)
+            _getProviderIP(mid, entryClient, requireIPv4)
         } catch (e: Exception) {
             Timber.tag("getProviderIP").w(e, "Network error in getProviderIP for $mid")
             throw e
         }
     }
 
-    private suspend fun _getProviderIP(mid: MimeiId, hproseService: HproseService?): String? {
+    private suspend fun _getProviderIP(
+        mid: MimeiId,
+        hproseService: HproseService?,
+        requireIPv4: Boolean
+    ): String? {
         val entry = "get_provider_ips"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "mid" to mid,
-            "v4only" to v4Only.toString()
+            "v4only" to requireIPv4.toString()
         )
-        Timber.tag("_getProviderIP").d("🔍 v4Only global = $v4Only, sending v4only = $v4Only")
+        Timber.tag("_getProviderIP").d("🔍 Sending v4only = $requireIPv4")
 
         // Let exceptions propagate - caller will decide whether to retry
         val rawResponse = hproseService?.runMApp<Any>(entry, params)

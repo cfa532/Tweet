@@ -59,63 +59,63 @@ import java.util.concurrent.TimeUnit
 // Cloudflare Worker sends browsers to the web app. See DEEPLINKING.md.
 private const val SHARE_DEEPLINK_DOMAIN = "http://dtweet.com"
 
-/**
- * A base URL is safe to embed in a shared link only if its host is a domain
- * name or a sound public IPv4. Private ranges, RFC 6598 / Tailscale
- * (100.64.0.0/10), loopback, link-local, and IPv6 are rejected.
- */
-private fun isShareSafePublicHost(url: String): Boolean {
-    val hostPort = url.substringAfter("://", url).substringBefore("/")
-    if (hostPort.startsWith("[")) return false                 // bracketed IPv6
-    if (hostPort.count { it == ':' } > 1) return false         // bare IPv6
-    val host = hostPort.substringBefore(":")
-    val match = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""").matchEntire(host)
-        ?: return true                                         // domain name — fine
-    val octets = match.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
-    if (octets.any { it > 255 }) return false
-    val a = octets[0]
-    val b = octets[1]
-    return !(a == 0 || a == 10 || a == 127 || a >= 224 ||
-            (a == 192 && b == 168) ||
-            (a == 172 && b in 16..31) ||
-            (a == 100 && b in 64..127) ||                      // RFC 6598 / Tailscale
-            (a == 169 && b == 254))
-}
-
 private val IPV4_HOST = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""")
 
-/** True when [url] points at a sound public IPv4 (not a domain name). */
-private fun isPublicIpv4BaseUrl(url: String?): Boolean {
-    if (url.isNullOrBlank()) return false
-    val hostPort = url.substringAfter("://", url).substringBefore("/")
-    if (hostPort.startsWith("[")) return false
-    if (hostPort.count { it == ':' } > 1) return false
-    val host = hostPort.substringBefore(":")
-    return IPV4_HOST.matches(host) && isShareSafePublicHost(url)
+private fun isStrictPublicIpv4(host: String): Boolean {
+    val match = IPV4_HOST.matchEntire(host) ?: return false
+    val octets = match.groupValues.drop(1).map { it.toIntOrNull() ?: return false }
+    if (octets.any { it !in 0..255 }) return false
+    val (a, b, c) = octets
+    return when {
+        a == 0 || a == 10 || a == 127 -> false
+        a == 100 && b in 64..127 -> false                    // RFC 6598 / Tailscale
+        a == 169 && b == 254 -> false
+        a == 172 && b in 16..31 -> false
+        a == 192 && b == 168 -> false
+        a == 192 && b == 0 && (c == 0 || c == 2) -> false     // special/test ranges
+        a == 192 && b == 88 && c == 99 -> false
+        a == 198 && b in 18..19 -> false
+        a == 198 && b == 51 && c == 100 -> false
+        a == 203 && b == 0 && c == 113 -> false
+        a >= 224 -> false                                    // multicast/reserved
+        else -> true
+    }
+}
+
+/** Normalize [value] only when it points at a strictly public IPv4 host. */
+private fun publicIpv4BaseUrl(value: String?): String? {
+    if (value.isNullOrBlank()) return null
+    val normalized = if (value.startsWith("http://") || value.startsWith("https://")) {
+        value
+    } else {
+        "http://$value"
+    }
+    val uri = Uri.parse(normalized)
+    val host = uri.host ?: return null
+    if (!isStrictPublicIpv4(host)) return null
+    val portSuffix = uri.port.takeIf { it >= 0 }?.let { ":$it" }.orEmpty()
+    return "${uri.scheme}://$host$portSuffix"
 }
 
 /**
  * Resolve the author's provider-IP base URL for detail-view dropdown sharing.
  * Domains are ignored — only a cached public IPv4 or a fresh getProviderIP result
- * is used (mirrors iOS buildDetailShareItems / getIPv4PreferredBaseUrl).
+ * is used (mirrors iOS buildDetailShareItems / getPublicIPv4BaseUrl).
  */
-private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBaseUrl: String?): String {
-    if (isPublicIpv4BaseUrl(cachedBaseUrl)) return cachedBaseUrl!!
-    if (isPublicIpv4BaseUrl(appUser.baseUrl)) return appUser.baseUrl!!
+private suspend fun resolveProviderIpBaseUrlForShare(authorId: String, cachedBaseUrl: String?): String? {
+    publicIpv4BaseUrl(cachedBaseUrl)?.let { return it }
 
     try {
-        HproseInstance.getProviderIP(authorId)?.let { providerIP ->
-            return if (providerIP.startsWith("http://") || providerIP.startsWith("https://")) {
-                providerIP
-            } else {
-                "http://$providerIP"
-            }
+        HproseInstance.getProviderIP(authorId, requireIPv4 = true)?.let { providerIP ->
+            publicIpv4BaseUrl(providerIP)?.let { return it }
+            Timber.tag("SHARE").w("Rejected non-public provider IP for share: $providerIP")
         }
     } catch (e: Exception) {
         Timber.tag("SHARE").w(e, "Failed to resolve provider IP for share: $authorId")
     }
 
-    return appUser.baseUrl ?: "http://${BuildConfig.BASE_URL}"
+    // Never fall back to appUser/base URLs: they may be Tailscale or private.
+    return null
 }
 
 /** Which URL a share action embeds — see DEEPLINKING.md for the policy. */
@@ -673,7 +673,12 @@ class TweetViewModel @AssistedInject constructor(
                     val baseUrlString = resolveProviderIpBaseUrlForShare(
                         currentTweet.authorId,
                         currentTweet.author?.baseUrl
-                    )
+                    ) ?: run {
+                        withContext(Main) {
+                            Toast.makeText(context, R.string.no_provider_ip_found, Toast.LENGTH_LONG).show()
+                        }
+                        return
+                    }
                     "$baseUrlString/entry?aid=${BuildConfig.APP_ID_HASH}&ver=last#/tweet/${currentTweet.mid}/${currentTweet.authorId}$commentParams"
                 }
             }

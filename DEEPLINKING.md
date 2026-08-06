@@ -30,7 +30,7 @@ https exists solely where Google/Apple require it (the well-known files).
 |---|---|---|
 | **Tweet action-bar share buttons** | `http://dtweet.com/#tweet/{mid}/{authorId}` (fragment-form share URL) | Opens the app when installed; web fallback via Worker, in feed, detail, comment, media, and fullscreen contexts |
 | **Feed dropdown menu → share** | `http://{check_upgrade domain}/#tweet/{mid}/{authorId}` | Backend-controlled domain using TweetWeb's external share-link format, with `dtweet.com` as fallback |
-| **Detail-view dropdown menu → share** | `http://{author provider IP}/entry?aid={appIdHash}&ver=last#/tweet/{mid}/{authorId}` | Works with a bare node IP, no DNS/domain needed |
+| **Detail-view dropdown menu → share** | `http://{author public IPv4}/entry?aid={appIdHash}&ver=last#/tweet/{mid}/{authorId}` | Uses only a validated public IPv4; private, Tailscale, IPv6, domain, and reserved addresses are rejected |
 
 The `#` in `domain/#tweet/...` is TweetWeb's external share-link delimiter; it
 does not mean TweetWeb uses Vue `createWebHashHistory()` for domain navigation.
