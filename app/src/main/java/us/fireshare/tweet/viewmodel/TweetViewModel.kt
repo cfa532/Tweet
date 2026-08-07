@@ -124,7 +124,24 @@ enum class ShareLinkStyle {
     DEEPLINK,
     /** Domain delivered by `check_upgrade` using TweetWeb's external fragment-form URL — feed dropdown menu */
     WEB_DOMAIN,
-    /** The tweet author's provider-IP entry URL — detail-view dropdown menu */
+    /**
+     * The tweet author's provider-IP entry URL. No share action selects this today
+     * (both dropdowns use WEB_DOMAIN); kept for a link that works without DNS.
+     *
+     * Composition:
+     * ```
+     * http://{public IPv4[:port]}/entry?aid={APP_ID_HASH}&ver=last#/tweet/{mid}/{authorId}
+     * ```
+     * - host — `resolveProviderIpBaseUrlForShare()`: the author's cached baseUrl when
+     *   it is already a public IPv4, otherwise `getProviderIP(authorId, requireIPv4 =
+     *   true)`. `publicIpv4BaseUrl()` rejects anything that is not a public IPv4 —
+     *   private ranges, Tailscale CGNAT, IPv6, domains, reserved addresses — so the
+     *   whole style is unavailable (toast `no_provider_ip_found`) when none is found.
+     * - `/entry` — Leither's SPA entry point; it needs `aid` + `ver` as *query* params
+     *   to load the app bundle, which is why they sit before the `#`.
+     * - the route lives in the hash so the node serves `/entry` and the SPA router
+     *   reads `#/tweet/...` client-side. Comment params append inside the hash.
+     */
     PROVIDER_IP
 }
 

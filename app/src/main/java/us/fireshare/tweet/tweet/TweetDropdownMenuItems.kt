@@ -301,17 +301,14 @@ fun TweetDropdownMenuItems(
         } else {
             stringResource(R.string.share)
         }
-        val shareLinkStyle = if (isDetailViewDropdown) {
-            ShareLinkStyle.PROVIDER_IP
-        } else {
-            ShareLinkStyle.WEB_DOMAIN
-        }
+        // Detail and feed dropdowns share the same link: the check_upgrade domain.
+        // PROVIDER_IP stays available for a DNS-free link — see ShareLinkStyle.
+        val shareLinkStyle = ShareLinkStyle.WEB_DOMAIN
         DropdownMenuItem(
             modifier = Modifier.alpha(1f),
             onClick = {
                 onDismissRequest()
                 applicationScope.launch(IO) {
-                    // Feed menus use check_upgrade; detail menus use provider IP.
                     viewModel.shareTweet(shareContext, linkStyle = shareLinkStyle)
                 }
             },
