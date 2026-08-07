@@ -169,14 +169,10 @@ fun TweetDropdownMenuItems(
                                 tweetFeedViewModel.delTweet(tweet.mid, appUserViewModel) {
                                     Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
 
-                                    if (originTweetViewModel != null) {
-                                        applicationScope.launch(IO) {
-                                            HproseInstance.updateRetweetCount(originTweetViewModel.tweetState.value, tweet.mid, -1)?.let { updatedOriginTweet ->
-                                                HproseInstance.updateCachedTweet(updatedOriginTweet, userId = updatedOriginTweet.authorId)
-                                                originTweetViewModel.updateRetweetCount(updatedOriginTweet)
-                                            }
-                                        }
-                                    }
+                                    // The original's retweetCount is decremented inside
+                                    // HproseInstance.deleteTweet, so every delete path gets it —
+                                    // this one only ran when originTweetViewModel was non-null,
+                                    // which left feed deletions uncounted.
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("TweetDropdownMenuItems")

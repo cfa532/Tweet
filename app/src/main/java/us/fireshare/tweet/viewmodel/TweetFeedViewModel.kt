@@ -904,7 +904,14 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         var errorMessage: String? = null
         try {
             Timber.tag("TweetFeedViewModel").d("Attempting backend deletion of tweet $tweetId")
-            val deletedTweetId = HproseInstance.deleteTweet(tweetId, authorId)
+            // Pass the retweet link explicitly: the tweet was evicted from cache above, so
+            // deleteTweet can no longer look up which original to decrement.
+            val deletedTweetId = HproseInstance.deleteTweet(
+                tweetId,
+                authorId,
+                originalTweetId = finalTweetToDelete?.originalTweetId,
+                originalAuthorId = finalTweetToDelete?.originalAuthorId
+            )
             Timber.tag("TweetFeedViewModel").d("Backend deletion successful for $deletedTweetId")
         } catch (e: Exception) {
             deletionFailed = true

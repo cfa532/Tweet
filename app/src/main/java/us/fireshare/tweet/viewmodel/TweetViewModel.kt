@@ -222,9 +222,15 @@ class TweetViewModel @AssistedInject constructor(
         return match?.value ?: url // Fallback to full URL if no CID found
     }
 
+    /**
+     * Adopt the server's authoritative retweet count for this tweet.
+     *
+     * The count is whatever the server reports — it must not be adjusted here. The caller has
+     * already applied the +1/-1 through retweet_added/retweet_removed, and the response is
+     * computed from the original's retweet list.
+     */
     fun updateRetweetCount(tweet: Tweet) {
-        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount + 1)
-        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount - 1)
+        _tweetState.value = tweetState.value.copy(retweetCount = tweet.retweetCount)
     }
 
     fun savePlaybackPosition(url: String, position: Long) {

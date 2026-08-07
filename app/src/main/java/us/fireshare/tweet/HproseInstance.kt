@@ -3417,8 +3417,18 @@ object HproseInstance {
                 throw e
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-            response?.let {
-                Tweet.from(it)
+            response?.let { Tweet.from(it) }?.also { updated ->
+                // The RPC response carries the server's authoritative counts but no author,
+                // so fill in presentation state before publishing it — TweetFeedViewModel
+                // swaps the list entry wholesale and would otherwise drop the avatar/name.
+                updated.author = updated.author ?: originalTweet.author ?: author
+                updated.content = updated.content ?: originalTweet.content
+                updated.attachments = updated.attachments ?: originalTweet.attachments
+
+                // Publish so every screen showing the original picks up the new count:
+                // feed, detail and profile all observe TweetUpdated.
+                updateCachedTweet(updated, userId = updated.authorId)
+                TweetNotificationCenter.post(TweetEvent.TweetUpdated(updated))
             }
         } catch (e: Exception) {
             Timber.tag("updateRetweetCount()").e(e)
@@ -3694,11 +3704,13 @@ object HproseInstance {
                     originalTweetId = tweet.mid,
                     originalAuthorId = tweet.authorId
                 )
-            ) ?: return
+            ) ?: throw IllegalStateException("Retweet upload failed")
 
-            updateRetweetCount(tweet, retweet.mid)?.let { updatedTweet ->
-                // Cache updated original tweet by authorId (matches iOS)
-                updateCachedTweet(updatedTweet, userId = updatedTweet.authorId)
+            // Counting is what makes the retweet visible on the original. updateRetweetCount
+            // caches the result and publishes TweetUpdated, so no extra caching is needed here.
+            if (updateRetweetCount(tweet, retweet.mid) == null) {
+                Timber.tag("retweet")
+                    .w("retweet_added failed for ${tweet.mid} — original's retweetCount not updated")
             }
 
             // Cache the retweet by its authorId
@@ -3707,7 +3719,10 @@ object HproseInstance {
             // Post notification for retweet
             TweetNotificationCenter.post(TweetEvent.TweetRetweeted(tweet, retweet))
         } catch (e: Exception) {
-            Timber.tag("toggleRetweet").e(e.toString())
+            // Rethrow: retweetTweet() reverts its optimistic +1 on failure, and swallowing the
+            // error left the UI showing a count the server never recorded.
+            Timber.tag("retweet").e(e.toString())
+            throw e
         }
     }
 
@@ -3997,7 +4012,17 @@ object HproseInstance {
      * The backend decides whether to permanently delete the tweet or remove it
      * from the current user's personal lists.
      */
-    suspend fun deleteTweet(tweetId: MimeiId, tweetAuthorId: MimeiId = appUser.mid): MimeiId {
+    /**
+     * @param originalTweetId/[originalAuthorId] the retweet link of the tweet being deleted,
+     *   for callers that evict it from cache before calling (TweetFeedViewModel.delTweet does).
+     *   Omit them and the link is read from cache instead.
+     */
+    suspend fun deleteTweet(
+        tweetId: MimeiId,
+        tweetAuthorId: MimeiId = appUser.mid,
+        originalTweetId: MimeiId? = null,
+        originalAuthorId: MimeiId? = null
+    ): MimeiId {
         if (!isOnline.value) {
             Timber.tag("deleteTweet").d("Offline: skipping")
             throw Exception("No network connection")
@@ -4018,6 +4043,30 @@ object HproseInstance {
             "authorid" to tweetAuthorId,
             "tweetid" to tweetId
         )
+
+        // Snapshot the retweet link BEFORE deleting: evictDeletedTweet() drops the cache row,
+        // so afterwards there is no way to find the original. The backend's delete_tweet never
+        // unlinks a deleted retweet from the original's tweet_retweet_list, so the client is
+        // what keeps the original's retweetCount honest.
+        val deletedTweet = TweetCacheManager.getCachedTweet(tweetId)
+        val linkedOriginalId = originalTweetId ?: deletedTweet?.originalTweetId
+        val linkedOriginalAuthorId = originalAuthorId ?: deletedTweet?.originalAuthorId
+
+        /**
+         * Unlink a deleted retweet/quote from its original and refresh the original's count.
+         * retweet_removed is an idempotent Hdel, so it is safe on the already-missing paths too.
+         */
+        suspend fun decrementOriginalRetweetCount() {
+            if (linkedOriginalId == null || linkedOriginalAuthorId == null) return
+            val original = TweetCacheManager.getCachedTweet(linkedOriginalId)
+                ?: getTweet(linkedOriginalId, linkedOriginalAuthorId)
+            if (original == null) {
+                Timber.tag("deleteTweet")
+                    .w("Original tweet $linkedOriginalId unavailable — retweetCount not decremented")
+                return
+            }
+            updateRetweetCount(original, tweetId, -1)
+        }
 
         suspend fun refreshAppUserAfterDelete() {
             try {
@@ -4045,6 +4094,7 @@ object HproseInstance {
                     Timber.tag("deleteTweet")
                         .d("Tweet $tweetId is already missing on server; treating delete as success")
                     TweetCacheManager.evictDeletedTweet(tweetId)
+                    decrementOriginalRetweetCount()
                     refreshAppUserAfterDelete()
                     return tweetId
                 }
@@ -4058,6 +4108,7 @@ object HproseInstance {
                     Timber.tag("deleteTweet")
                         .d("Tweet $tweetId is already missing on server; treating delete as success")
                     TweetCacheManager.evictDeletedTweet(tweetId)
+                    decrementOriginalRetweetCount()
                     refreshAppUserAfterDelete()
                     return tweetId
                 }
@@ -4076,6 +4127,10 @@ object HproseInstance {
 
             TweetCacheManager.evictDeletedTweet(deletedTweetId)
 
+            // Deleting a retweet/quote must unlink it from the original's retweet list,
+            // otherwise the original keeps counting a retweet that no longer exists.
+            decrementOriginalRetweetCount()
+
             // Refresh appUser from server to get updated tweetCount and other properties
             refreshAppUserAfterDelete()
 
@@ -4085,6 +4140,7 @@ object HproseInstance {
                 Timber.tag("deleteTweet")
                     .d("Tweet $tweetId is already missing on server; treating delete as success")
                 TweetCacheManager.evictDeletedTweet(tweetId)
+                decrementOriginalRetweetCount()
                 refreshAppUserAfterDelete()
                 return tweetId
             }

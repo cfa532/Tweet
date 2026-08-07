@@ -143,19 +143,37 @@ class UploadCommentWorker @AssistedInject constructor(
                 timestamp = System.currentTimeMillis()
             )
 
+            // Build the quote payload from the comment's own data rather than mutating the
+            // comment. The two are separate objects server-side — add_comment.js strips
+            // originalTweetId before storing the comment — and a comment must never influence
+            // the original's retweetCount.
+            val quotePayload = if (isChecked) {
+                Tweet(
+                    mid = TW_CONST.GUEST_ID,  // placeholder, replaced by the backend
+                    authorId = appUser.mid,
+                    parentTweetId = parentTweet.mid,
+                    originalTweetId = parentTweet.mid,
+                    originalAuthorId = parentTweet.authorId,
+                    content = commentContent,
+                    attachments = attachments,
+                    timestamp = System.currentTimeMillis()
+                )
+            } else {
+                null
+            }
+
             val updatedTweet = HproseInstance.uploadComment(parentTweet, comment)
             if (updatedTweet != null) {
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
-                // retweet is a new tweet with the comment as its content.
-                if (isChecked) {
-                    comment.originalTweetId = parentTweet.mid
-                    comment.originalAuthorId = parentTweet.authorId
-                    HproseInstance.uploadTweet(comment)?.let { retweet ->
-                        updateRetweetCount(parentTweet, retweet.mid)?.let {
+                if (quotePayload != null) {
+                    // Creating the quote increments the original's retweetCount here; deleting
+                    // it decrements via HproseInstance.deleteTweet, keyed by the same mid.
+                    HproseInstance.uploadTweet(quotePayload)?.let { quoteTweet ->
+                        updateRetweetCount(parentTweet, quoteTweet.mid)?.let {
                             updatedTweet.retweetCount = it.retweetCount
                         }
-                    }
+                    } ?: Timber.tag("UploadCommentWorker").e("Quote tweet upload failed")
                 }
                 cleanupPermissions()
                 return Result.success()
