@@ -184,6 +184,10 @@ data class User(
     /**
      * Resolve writable URL from hostIds and reset writableClient if needed.
      * Writable routes can change, so this intentionally never returns a cached URL.
+     *
+     * NodePool caches read-access nodes (hostIds[1]) only, so the lookup below runs
+     * with usePool = false: no pooled entry is reused and none is recorded. Writes are
+     * rare next to reads, so resolving hostIds[0] fresh each time costs nothing.
      */
     suspend fun resolveWritableUrl(): String? {
         clearWritableClient()
@@ -200,7 +204,7 @@ data class User(
                 return null
             }
 
-            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true")
+            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true", usePool = false)
             if (hostIP != null) {
                 
                 // Extract clean IP and port

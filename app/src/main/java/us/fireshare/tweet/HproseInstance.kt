@@ -1546,12 +1546,18 @@ object HproseInstance {
      * 2. Try lookup using appUser's client
      * 3. If no healthy IPs found AND appUser unhealthy -> try via entry IP
      * 4. Update NodePool with successful result
+     *
+     * @param usePool whether NodePool may serve and record this resolution. The pool
+     * caches read-access nodes only, so write-route resolution passes false: steps 1
+     * and 4 are skipped entirely, no pooled entry is reused and none is written back.
+     * Mutations are rare next to reads, so resolving hostIds[0] fresh costs nothing.
      * */
     suspend fun getHostIP(
         nodeId: MimeiId,
         v4Only: String = HproseInstance.v4Only.toString(),
         forceHealthCheck: Boolean = false,
-        excludedIP: String? = null
+        excludedIP: String? = null,
+        usePool: Boolean = true
     ): String? {
         if (!isOnline.value) {
             Timber.tag("getHostIP").d("Offline: skipping")
@@ -1559,7 +1565,7 @@ object HproseInstance {
         }
 
         // Step 1: Check NodePool for known IPs and verify health
-        val poolIP = NodePool.getIPFromNodeId(nodeId)
+        val poolIP = if (usePool) NodePool.getIPFromNodeId(nodeId) else null
         val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
         if (poolIP != null && normalizeIPHealthCacheKey(poolIP) != excludedKey) {
             // Verify the cached IP is still healthy before returning
@@ -1581,11 +1587,13 @@ object HproseInstance {
             )
         }
 
-        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|${excludedKey.orEmpty()}"
+        // usePool is part of the key so a write-route lookup never joins (or is joined
+        // by) a read-route lookup that would record the result in NodePool.
+        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|${excludedKey.orEmpty()}|$usePool"
         val request = hostIPRequestsMutex.withLock {
             hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
                 val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
-                    resolveHostIPAfterPoolMiss(nodeId, v4Only, excludedIP)
+                    resolveHostIPAfterPoolMiss(nodeId, v4Only, excludedIP, usePool)
                 }
                 newRequest.invokeOnCompletion {
                     TweetApplication.applicationScope.launch {
@@ -1607,15 +1615,20 @@ object HproseInstance {
     private suspend fun resolveHostIPAfterPoolMiss(
         nodeId: MimeiId,
         v4Only: String,
-        excludedIP: String?
+        excludedIP: String?,
+        usePool: Boolean = true
     ): String? {
         // Step 2: Try lookup using appUser's client
         try {
             val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService, excludedIP)
             if (hostIP != null) {
                 // Successfully resolved healthy IP
-                NodePool.updateNodeIP(nodeId, hostIP)
-                Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via appUser: $hostIP, updated NodePool")
+                if (usePool) {
+                    NodePool.updateNodeIP(nodeId, hostIP)
+                    Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via appUser: $hostIP, updated NodePool")
+                } else {
+                    Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via appUser: $hostIP (write route, NodePool untouched)")
+                }
                 return hostIP
             }
             // null means: server responded but no healthy IPs found
@@ -1644,8 +1657,12 @@ object HproseInstance {
                 
                 val hostIP = _getHostIP(nodeId, v4Only, entryClient, excludedIP)
                 if (hostIP != null) {
-                    NodePool.updateNodeIP(nodeId, hostIP)
-                    Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP, updated NodePool")
+                    if (usePool) {
+                        NodePool.updateNodeIP(nodeId, hostIP)
+                        Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP, updated NodePool")
+                    } else {
+                        Timber.tag("getHostIP").d("✓ Resolved IP for node $nodeId via entry IP: $hostIP (write route, NodePool untouched)")
+                    }
                     hostIP
                 } else {
                     Timber.tag("getHostIP").w("No IPs found for node $nodeId even via entry IP")
