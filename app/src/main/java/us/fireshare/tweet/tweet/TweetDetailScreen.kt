@@ -261,7 +261,12 @@ fun TweetDetailScreen(
     // PERFORMANCE FIX: Consolidated initialization effects
     // Set context for notifications and start listening - run once when screen opens
     LaunchedEffect(Unit) {
-        viewModel.setCommentsCacheParentTweetId(parentTweetId ?: tweetId)
+        // The comment list below belongs to THIS screen's tweet, so its cache bucket is
+        // always tweetId — including when the tweet is itself a comment. `parentTweetId` is
+        // the nav arg naming the tweet this comment hangs off; using it as the bucket made a
+        // comment's detail view hydrate with (and write its own replies back into) the parent
+        // tweet's comment list.
+        viewModel.setCommentsCacheParentTweetId(tweetId)
         withContext(Dispatchers.IO) {
             viewModel.loadCachedCommentsForDetailOpen()
         }

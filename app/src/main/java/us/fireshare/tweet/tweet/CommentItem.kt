@@ -89,7 +89,12 @@ fun CommentItem(
     val authorStateFlow = remember(comment.authorId) {
         TweetCacheManager.getUserStateFlow(comment.authorId)
     }
-    val author by authorStateFlow.collectAsState(initial = User(mid = TW_CONST.GUEST_ID, baseUrl = appUser.baseUrl))
+    // The StateFlow only carries users that are in the in-memory cache; comments hydrated
+    // from Room can name an author nobody has called saveUser() for yet, and the flow then
+    // emits null. Fall back to the author the comment itself carries (same as TweetDetailBody)
+    // instead of rendering "No One / @unknown".
+    val cachedAuthor by authorStateFlow.collectAsState()
+    val author = cachedAuthor ?: comment.author
 
     Column(
         modifier = Modifier
