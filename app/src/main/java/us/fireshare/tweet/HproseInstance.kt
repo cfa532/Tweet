@@ -245,6 +245,17 @@ object HproseInstance {
      * v2 responses are wrapped as: {success: true, data: result} or {success: false, message: "..."}
      * @return The unwrapped data if success is true, null otherwise
      */
+    /**
+     * Render a boolean for an RPC parameter.
+     *
+     * The Leither transport carries strings only, so a boolean sent from a client
+     * reaches the backend already stringified — which is why handlers compare against
+     * "true", and why get_tweet's `fromdetailview` accepts nothing else. Send the
+     * string the backend actually receives rather than leaning on that coercion, so
+     * the wire format is visible at the call site. Matches TweetWeb's `rpcBool`.
+     */
+    private fun rpcBool(value: Boolean): String = if (value) "true" else "false"
+
     @Suppress("UNCHECKED_CAST")
     private fun <T> unwrapV2Response(response: Any?, logErrors: Boolean = true): T? {
         if (response == null) return null
@@ -2706,7 +2717,7 @@ object HproseInstance {
 
             val accessResponse = accessService.runMApp<Map<String, Any>>(
                 "update_following_tweets",
-                params + ("homeupdated" to true)
+                params + ("homeupdated" to rpcBool(true))
             )
             val success = accessResponse?.get("success") as? Boolean
             if (success != true) {
@@ -3049,13 +3060,24 @@ object HproseInstance {
                 return null
             }
 
-            val params = mapOf(
+            val params = mutableMapOf<String, Any>(
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
                 "tweetid" to tweetId,
                 "appuserid" to appUser.mid
             )
+            // Opening a detail view is the trigger that brings an access node's copy
+            // of the tweet up to date with the root node: get_tweet syncs and starts
+            // providing the tweet when this node is not already a provider. User
+            // objects propagate on their own; tweet objects still need this manual
+            // nudge on access. bypassCache is only ever set by the detail-view paths.
+            // authorhostid saves the node a get_user_core_data lookup, which assumes
+            // the author's core data is already synced there. Mirrors iOS.
+            if (bypassCache) {
+                params["fromdetailview"] = rpcBool(true)
+                author.hostIds?.firstOrNull()?.let { params["authorhostid"] = it }
+            }
             val raw = authorService.runMApp<Any>("get_tweet", params)
             val data = unwrapV2Response<Map<String, Any>>(raw)
             if (data != null) {
@@ -3808,7 +3830,7 @@ object HproseInstance {
                 "tweetid" to tweet.mid,
                 "authorid" to author.mid,
                 "userhostid" to (appUser.hostIds?.first() ?: ""),
-                "isfavorite" to isFavorite
+                "isfavorite" to rpcBool(isFavorite)
             )
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
@@ -3856,7 +3878,7 @@ object HproseInstance {
                 "tweetid" to tweet.mid,
                 "authorid" to author.mid,
                 "userhostid" to (appUser.hostIds?.first() ?: ""),
-                "isbookmarked" to isBookmarked
+                "isbookmarked" to rpcBool(isBookmarked)
             )
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
