@@ -67,7 +67,7 @@ import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
-import us.fireshare.tweet.widget.Gadget.filterIpAddresses
+import us.fireshare.tweet.widget.Gadget.entryIpCandidates
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -719,15 +719,25 @@ object HproseInstance {
                          * Each pair is an ArrayList of two elements. The first is the IP address,
                          * and the second is the time spent to get response from the IP.
                          *
-                         * bestIp is the IP with the smallest response time from valid public IPs.
+                         * entryIpCandidates keeps that per-node grouping and hands back every
+                         * usable address, ordered so the next one after a failure belongs to a
+                         * different node. Committing to the single fastest address without ever
+                         * contacting it — what this did — meant a node that had gone down took
+                         * the deep link down with it, since nothing here could try anywhere else.
                          * */
                         Timber.tag("findEntryIP").d("Successfully parsed paramMap: $paramMap")
-                        val entryIP = filterIpAddresses(paramMap["addrs"] as List<*>)
-                        if (entryIP != null) {
-                            return entryIP
-                        } else {
-                            Timber.tag("findEntryIP").w("filterIpAddresses returned null for URL: $url")
-                            // Continue to next URL
+                        val candidates = entryIpCandidates(paramMap["addrs"] as List<*>)
+                        if (candidates.isEmpty()) {
+                            Timber.tag("findEntryIP").w("No usable entry address for URL: $url")
+                        }
+                        for (candidate in candidates) {
+                            // Fresh verdict per resolution: a cached one is what
+                            // sent us to this node in the first place.
+                            if (isServerHealthy("http://$candidate", useCache = false)) {
+                                Timber.tag("findEntryIP").d("Entry IP answered: $candidate")
+                                return candidate
+                            }
+                            Timber.tag("findEntryIP").w("Entry IP failed health check: $candidate")
                         }
                     }
                 } else {

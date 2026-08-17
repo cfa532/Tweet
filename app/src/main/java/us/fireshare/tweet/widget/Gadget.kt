@@ -152,52 +152,67 @@ object Gadget {
     }
 
     /**
-     * Return the IP address with the smallest response time from the available nodes.
-     * Only considers public IPs (any port).
-     * Treats IPv4 and IPv6 equally.
-     * */
-    fun filterIpAddresses(nodeList: List<*>): String? {
-        var bestIp: String? = null
-        var bestResponseTime = Double.MAX_VALUE
-
-        for (i in 0 until nodeList.size) {
-            val nodeIps = nodeList[i] as? ArrayList<*> ?: continue
-
-            for (ipData in nodeIps) {
-                val pair = ipData as? ArrayList<*> ?: continue
-                if (pair.size < 2) continue
-
-                val ip = pair[0].toString()
-                val responseTimeStr = pair[1].toString()
-
-                // Parse response time (scientific format)
-                val responseTime = try {
-                    responseTimeStr.toDouble()
-                } catch (e: NumberFormatException) {
-                    continue // Skip invalid response time
-                }
-
-                ip.getIP() ?: continue
-                if (ip.substringAfterLast(":", "8080").toIntOrNull() == null) continue
-
-                // Check if it's a public IP
-                if (!isValidPublicIpAddress(ip)) continue
-
-                // Determine if this IP is better than the current best
-                val isBetter = when {
-                    bestIp == null -> true // First valid IP
-                    responseTime < bestResponseTime -> true // Faster response time
-                    else -> false
-                }
-
-                if (isBetter) {
-                    bestIp = ip
-                    bestResponseTime = responseTime
-                }
-            }
+     * Entry candidates ordered so that consecutive ones belong to different nodes.
+     *
+     * `nodeList` groups its addresses BY NODE — one node appears several times
+     * in its own group because it is reachable on several interfaces — and
+     * ranks each node's addresses by how fast that interface answers for it.
+     * Keeping only the single fastest address across the whole list, as this
+     * did, left the caller nothing to fall back to: when that one node was
+     * down, opening a deep link failed outright.
+     *
+     * Take one address per node per round instead — every node's fastest, then
+     * every node's second fastest. Rank decides who is in a round, which keeps
+     * consecutive candidates on different machines, and the published response
+     * time orders the round so the quickest still leads.
+     *
+     * Only public IPs are considered, on any port, and IPv4 and IPv6 are
+     * treated equally — unchanged from the previous behaviour.
+     *
+     * Tweet-iOS applies the same ordering in `HproseInstance.entryIPCandidates`,
+     * and TweetWeb in `src/utils/entryRoutes.ts`.
+     */
+    fun entryIpCandidates(nodeList: List<*>): List<String> {
+        val nodes = nodeList.mapNotNull { node ->
+            (node as? List<*>)
+                ?.mapNotNull { rankedAddress(it) }
+                ?.sortedBy { it.responseTime }
+                ?.takeIf { it.isNotEmpty() }
         }
 
-        return bestIp
+        val ordered = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        val deepest = nodes.maxOfOrNull { it.size } ?: 0
+
+        for (rank in 0 until deepest) {
+            nodes.mapNotNull { it.getOrNull(rank) }
+                .sortedBy { it.responseTime }
+                .forEach { candidate ->
+                    // One address can be published by two nodes behind a single
+                    // NAT. It is one way in either way, and belongs at its first
+                    // position.
+                    if (seen.add(candidate.ip)) ordered.add(candidate.ip)
+                }
+        }
+        return ordered
+    }
+
+    private data class RankedAddress(val ip: String, val responseTime: Double)
+
+    /** One published address/response-time pair, or null when it is unusable. */
+    private fun rankedAddress(ipData: Any?): RankedAddress? {
+        val pair = ipData as? List<*> ?: return null
+        if (pair.size < 2) return null
+
+        val ip = pair[0].toString()
+        // Response time arrives in scientific format for the slower interfaces.
+        val responseTime = pair[1].toString().toDoubleOrNull() ?: return null
+
+        ip.getIP() ?: return null
+        if (ip.substringAfterLast(":", "8080").toIntOrNull() == null) return null
+        if (!isValidPublicIpAddress(ip)) return null
+
+        return RankedAddress(ip, responseTime)
     }
 
     fun isValidPublicIpAddress(fullIp: String): Boolean {
