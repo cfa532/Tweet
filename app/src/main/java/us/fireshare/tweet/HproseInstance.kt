@@ -67,6 +67,7 @@ import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
+import us.fireshare.tweet.widget.Gadget
 import us.fireshare.tweet.widget.Gadget.entryIpCandidates
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
@@ -145,10 +146,24 @@ object NodePool {
     }
     
     /**
+     * Rejects routes that can never work off the advertising machine's own network:
+     * Tailscale CGNAT (100.64.0.0/10), RFC 1918 LANs, loopback, link-local. A private
+     * address that health-checks fine on the developer's tailnet would be cached here and
+     * then fail for every other user. Hostnames pass through — baseUrl is a domain in
+     * normal operation, and only IP literals can be judged private.
+     */
+    private fun isUnroutable(ip: String, nodeMid: MimeiId): Boolean {
+        if (!Gadget.isPrivateHostAddress(ip)) return false
+        Timber.tag("NodePool").d("🚫 Rejecting private address $ip for node $nodeMid")
+        return true
+    }
+
+    /**
      * Update node's IP list (replaces existing IPs)
      * Called after re-resolution when fetch fails
      */
     suspend fun updateNodeIP(nodeMid: MimeiId, newIP: String) = nodeMutex.withLock {
+        if (isUnroutable(newIP, nodeMid)) return@withLock
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
             if (nodeInfo.ips.size == 1 && nodeInfo.hasIP(newIP)) {
@@ -183,6 +198,7 @@ object NodePool {
      * Called when discovering new IPs for a node
      */
     suspend fun addIPToNode(nodeMid: MimeiId, ip: String) = nodeMutex.withLock {
+        if (isUnroutable(ip, nodeMid)) return@withLock
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
             // Add IP if not already present
@@ -5035,7 +5051,20 @@ object HproseInstance {
      * @param logPrefix Prefix for logging messages
      * @return Fastest healthy IP address, or null if none found
      */
-    private suspend fun tryIpAddresses(ipAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
+    private suspend fun tryIpAddresses(rawAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
+        // Nodes advertise every address they are bound to, including Tailscale CGNAT
+        // (100.64.0.0/10), LAN and link-local addresses that are unreachable — or, worse,
+        // reachable but wrong — from another network. Such an address health-checks green
+        // on the advertising machine's own network and then fails for everyone else, so it
+        // is never a route candidate. This is the single choke point for both
+        // server-advertised lists (_getHostIP and _getProviderIP).
+        val ipAddresses = rawAddresses.filter { Gadget.isValidPublicIpAddress(it) }
+        if (ipAddresses.size != rawAddresses.size) {
+            Timber.tag("getProviderIP").d(
+                "$logPrefix - Dropped ${rawAddresses.size - ipAddresses.size} non-public address(es)"
+            )
+        }
+
         if (ipAddresses.isEmpty()) {
             return@coroutineScope null
         }
