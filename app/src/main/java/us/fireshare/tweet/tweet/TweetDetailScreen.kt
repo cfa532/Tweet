@@ -75,6 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
@@ -88,6 +89,16 @@ import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import kotlin.math.abs
+
+/**
+ * Hard cap on how long either comment spinner — the pull-to-refresh indicator or
+ * the initial page-0 load — blocks the detail view. Both wait on blocking socket
+ * calls with a 30s client timeout each: `refreshCommentsPaginated` issues one per
+ * comment page plus one per uncached comment author, and `fetchComments` resolves
+ * the tweet author first (up to three `fetchUser` attempts) before `get_comments`.
+ * Without this cap a slow node keeps a spinner up for minutes.
+ */
+private const val MAX_SPINNER_MS = 6_000L
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -135,7 +146,8 @@ fun TweetDetailScreen(
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var isInitialLoading by remember { mutableStateOf(true) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
-    // Track if we've loaded page 0 to prevent infinite reloads
+    // Set once page 0 has been kicked off. Gates the load-more pagination below so it
+    // cannot run before the first page exists.
     var hasLoadedPage0 by remember { mutableStateOf(false) }
     // Track if we should stop pagination (when empty page is returned)
     var shouldStopPagination by remember { mutableStateOf(false) }
@@ -234,12 +246,19 @@ fun TweetDetailScreen(
                 isRefreshingAtTop = true
                 val started = System.currentTimeMillis()
                 try {
-                    withContext(Dispatchers.IO) {
+                    // The fetch runs as its own job rather than inline: the Hprose
+                    // calls underneath are blocking socket reads, so cancelling the
+                    // coroutine cannot cut them short and a plain withTimeout would
+                    // still sit here until they returned. Stop *waiting* at the cap
+                    // instead — the job finishes in the background and its comments
+                    // still land in the list when they arrive.
+                    val refreshJob = coroutineScope.launch(Dispatchers.IO) {
                         viewModel.doResyncTweet()
                         viewModel.refreshCommentsPaginated()
                         lastLoadedPage = 0
                         shouldStopPagination = false
                     }
+                    withTimeoutOrNull(MAX_SPINNER_MS) { refreshJob.join() }
                     val elapsed = System.currentTimeMillis() - started
                     if (elapsed < 500) delay(500 - elapsed)
                 } finally {
@@ -258,8 +277,11 @@ fun TweetDetailScreen(
         }
     }
 
-    // PERFORMANCE FIX: Consolidated initialization effects
-    // Set context for notifications and start listening - run once when screen opens
+    // Screen-open sequence. These steps are ordered, not independent, which is why they
+    // share one effect: loadCachedCommentsForDetailOpen replaces the comment list
+    // wholesale, so it has to finish before anything that merges into that list — both
+    // the notification listener and the page-0 load do. Split across two effects they
+    // raced, and a slow disk read landing last would drop freshly merged comments.
     LaunchedEffect(Unit) {
         // The comment list below belongs to THIS screen's tweet, so its cache bucket is
         // always tweetId — including when the tweet is itself a comment. `parentTweetId` is
@@ -272,6 +294,27 @@ fun TweetDetailScreen(
         }
         viewModel.setNotificationContext(context)
         viewModel.startListeningToNotifications()
+
+        hasLoadedPage0 = true
+        try {
+            // Same shape as pull-to-refresh: the fetch gets its own job so the spinner
+            // can be dropped at the cap without waiting on a blocking socket read. The
+            // flag must be cleared from a finally — this effect runs once, so a throw or
+            // a cancellation in between would otherwise leave the spinner up with
+            // nothing left to take it down.
+            val load = coroutineScope.launch(Dispatchers.IO) {
+                val newCommentsCount = viewModel.loadComments(tweet, 0)
+                lastLoadedPage = 0
+                // If page 0 returned no comments, stop pagination immediately
+                if (newCommentsCount == 0) {
+                    shouldStopPagination = true
+                    Timber.tag("TweetDetailScreen").d("Page 0 returned no comments for tweet ${tweet.mid}, stopping pagination")
+                }
+            }
+            withTimeoutOrNull(MAX_SPINNER_MS) { load.join() }
+        } finally {
+            isInitialLoading = false
+        }
     }
 
     // Track scroll position changes and save them
@@ -285,24 +328,6 @@ fun TweetDetailScreen(
             .collect { position ->
                 savedScrollPosition.value = position
             }
-    }
-
-    // Initial comment load when tweet is available - only load once per tweet
-    LaunchedEffect(tweet.mid) {
-        if (!hasLoadedPage0) {
-            hasLoadedPage0 = true
-            isInitialLoading = true
-            withContext(Dispatchers.IO) {
-                val newCommentsCount = viewModel.loadComments(tweet, 0)
-                lastLoadedPage = 0
-                // If page 0 returned no comments, stop pagination immediately
-                if (newCommentsCount == 0) {
-                    shouldStopPagination = true
-                    Timber.tag("TweetDetailScreen").d("Page 0 returned no comments for tweet ${tweet.mid}, stopping pagination")
-                }
-            }
-            isInitialLoading = false
-        }
     }
 
     // Track last pagination attempt to prevent rapid repeated calls
@@ -371,7 +396,8 @@ fun TweetDetailScreen(
         }
 
         val now = System.currentTimeMillis()
-        if (isAtBottom && hasUserScrolledForPagination && paginationScrollArmed && !isRefreshingAtBottom && !isInitialLoading &&
+        if (isAtBottom && hasUserScrolledForPagination && paginationScrollArmed && !isRefreshingAtBottom &&
+            !isRefreshingAtTop && !isInitialLoading &&
             hasLoadedPage0 && !shouldStopPagination && comments.isNotEmpty() &&
             (now - lastPaginationAttempt) > 1000L) {
 
@@ -585,48 +611,13 @@ fun TweetDetailScreen(
                     )
                 }
 
-                // Show initial loading spinner for comments
-                // Use fixed-height container to prevent layout shifts
-                if (isInitialLoading) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
-                        }
-                    }
-                } else {
-                    // Show comments when loading is complete
-                    if (comments.isEmpty()) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ChatBubbleOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                                )
-                                Text(
-                                    text = stringResource(R.string.no_comments_yet),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                        }
-                    } else {
+                // Comment area, in priority order:
+                //   comments in hand  -> show them (cache first, then the merged page 0)
+                //   commentCount == 0 -> nothing to fetch, so the label shows at once
+                //   load in flight    -> spinner, capped at MAX_SPINNER_MS
+                //   otherwise         -> label
+                // Use fixed-height containers to prevent layout shifts.
+                if (comments.isNotEmpty()) {
                     itemsIndexed(
                         items = comments,
                         key = { _, comment -> comment.mid },
@@ -650,61 +641,79 @@ fun TweetDetailScreen(
                             )
                         }
                     }
-                    }
-
-                    // Show top refresh spinner
-                    // Use fixed-height container to prevent layout shifts
-                    if (isRefreshingAtTop) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 60.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(48.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 4.dp
-                                )
-                            }
+                } else if (isInitialLoading && tweet.commentCount > 0) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
                         }
                     }
-
-                    // Show bottom pagination spinner.
-                    if (isRefreshingAtBottom) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 2.5.dp
-                                )
-                            }
+                } else {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChatBubbleOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                            )
+                            Text(
+                                text = stringResource(R.string.no_comments_yet),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                         }
                     }
+                }
 
-                    // "No more comments" flash — shown briefly when at the bottom with
-                    // nothing more to load (mirrors iOS CommentListView.showNoMoreComments).
-                    if (showNoMoreComments && !isRefreshingAtBottom) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.no_more_comments),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                // Show bottom pagination spinner. Suppressed while pull-to-refresh
+                // is running so its indicator is the only spinner on screen.
+                if (isRefreshingAtBottom && !isRefreshingAtTop) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.5.dp
+                            )
+                        }
+                    }
+                }
+
+                // "No more comments" flash — shown briefly when at the bottom with
+                // nothing more to load (mirrors iOS CommentListView.showNoMoreComments).
+                if (showNoMoreComments && !isRefreshingAtBottom) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.no_more_comments),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

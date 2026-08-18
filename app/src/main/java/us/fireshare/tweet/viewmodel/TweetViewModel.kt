@@ -550,6 +550,10 @@ class TweetViewModel @AssistedInject constructor(
                     merged
                 }
             }
+        } catch (e: CancellationException) {
+            // Must outrun the general catch: on the JVM cancellation is an Exception,
+            // and swallowing it here would let a torn-down screen keep paging.
+            throw e
         } catch (e: Exception) {
             Timber.tag("TweetViewModel").d("refreshCommentsPaginated skipped: ${e.message}")
         }

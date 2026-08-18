@@ -4297,6 +4297,10 @@ object HproseInstance {
                     val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
                     comment.author = cachedAuthor ?: fetchUser(comment.authorId)
                     comments.add(comment)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // fetchUser suspends inside this block; cancellation is not a parse
+                    // failure and must reach the caller instead of becoming a null row.
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag("fetchComments").w(
                         "Failed to parse comment in tweet ${tweet.mid}: mid=$commentId, error=${e.message}"
@@ -4305,6 +4309,10 @@ object HproseInstance {
                 }
             }
             comments
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // CancellationException is an Exception on the JVM, so the general catch
+            // below would swallow it and report a cancelled screen as "no comments".
+            throw e
         } catch (e: Exception) {
             Timber.tag("fetchComments").e(e, "Error fetching comments for tweet ${tweet.mid}")
             emptyList()
