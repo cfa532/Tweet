@@ -2,6 +2,7 @@ package us.fireshare.tweet.tweet
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,8 +30,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import us.fireshare.tweet.ui.theme.mediaGridBorderColor
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
@@ -200,7 +203,8 @@ fun TweetItemBody(
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 tonalElevation = 4.dp,
-                                shape = RoundedCornerShape(size = 8.dp)
+                                shape = RoundedCornerShape(size = 8.dp),
+                                border = BorderStroke(Dp.Hairline, mediaGridBorderColor)
                             ) {
                                 MediaGrid(
                                     mediaAttachments,
@@ -323,7 +327,8 @@ fun TweetItemBody(
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     tonalElevation = 4.dp,
-                                    shape = RoundedCornerShape(size = 8.dp)
+                                    shape = RoundedCornerShape(size = 8.dp),
+                                    border = BorderStroke(Dp.Hairline, mediaGridBorderColor)
                                 ) {
                                     MediaGrid(
                                         mediaAttachments,

@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import us.fireshare.tweet.ui.theme.mediaGridBorderColor
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
@@ -613,7 +615,8 @@ private fun RetweetWithContent(
                                     .fillMaxWidth()
                                     .padding(top = 4.dp),
                                 tonalElevation = 4.dp,
-                                shape = RoundedCornerShape(size = 8.dp)
+                                shape = RoundedCornerShape(size = 8.dp),
+                                border = BorderStroke(Dp.Hairline, mediaGridBorderColor)
                             ) {
                                 MediaGrid(
                                     tweet.attachments!!,

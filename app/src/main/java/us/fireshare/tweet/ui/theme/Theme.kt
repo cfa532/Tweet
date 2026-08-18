@@ -15,6 +15,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -92,7 +93,28 @@ object ThemeManager {
     fun updateThemeMode(mode: String) {
         currentThemeMode = mode
     }
+
+    /**
+     * The light/dark decision the app is actually rendering with: the in-app override when
+     * one is set, otherwise the system setting. [TweetTheme] picks its color scheme from
+     * this, so anything reading a theme-dependent color outside the scheme must use it too
+     * — `isSystemInDarkTheme()` alone would ignore a forced light/dark mode.
+     */
+    val isDarkTheme: Boolean
+        @Composable get() = when (currentThemeMode) {
+            "light" -> false
+            "dark" -> true
+            else -> isSystemInDarkTheme()
+        }
 }
+
+/**
+ * Thin outline around a feed tweet's media grid, drawn on the `Surface` that already
+ * rounds the grid's corners. Not `colorScheme.outline`: the grid border is deliberately
+ * a step stronger so the media reads as its own card against the tweet body.
+ */
+val mediaGridBorderColor: Color
+    @Composable get() = if (ThemeManager.isDarkTheme) XDarkMediaGridBorder else XLightMediaGridBorder
 
 @Composable
 fun TweetTheme(
@@ -104,11 +126,7 @@ fun TweetTheme(
     // Update the theme manager with the current mode
     ThemeManager.updateThemeMode(themeMode)
     
-    val darkTheme = when (ThemeManager.currentThemeMode) {
-        "light" -> false
-        "dark" -> true
-        else -> isSystemInDarkTheme() // "system" or default
-    }
+    val darkTheme = ThemeManager.isDarkTheme
     
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
