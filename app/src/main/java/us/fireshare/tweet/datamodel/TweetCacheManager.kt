@@ -41,9 +41,11 @@ import java.util.Locale
  */
 object TweetCacheManager {
 
-    // Cache expiration time (30 days in milliseconds)
+    // Cache expiration time (30 days in milliseconds). Enforced by CleanUpWorker,
+    // which runs daily; internal so the worker reads this value instead of keeping
+    // its own cutoff.
     // Note: Does not apply to bookmarks, favorites, or appUser's private tweets
-    private const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
+    internal const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
 
     // User cache expiration time (30 minutes in milliseconds)
     internal const val USER_CACHE_EXPIRATION_TIME = 30 * 60 * 1000L

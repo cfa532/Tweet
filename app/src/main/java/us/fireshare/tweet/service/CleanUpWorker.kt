@@ -8,21 +8,23 @@ import androidx.work.WorkerParameters
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
-import java.util.Calendar
+import us.fireshare.tweet.datamodel.TweetCacheManager
+import java.util.Date
 
 class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {
     @OptIn(UnstableApi::class)
     override fun doWork(): Result {
         try {
-            val oneMonthAgo = Calendar.getInstance().apply {
-                add(Calendar.MONTH, -1)
-            }.time
+            // Single source of truth for the retention window; the cutoff used to be
+            // computed here as a calendar month, which drifted from the documented
+            // constant by a day or three depending on the month.
+            val cutoff = Date(System.currentTimeMillis() - TweetCacheManager.CACHE_EXPIRATION_TIME)
             
             val database = TweetCacheDatabase.getInstance(applicationContext)
             val cachedTweetDao = database.tweetDao()
             
             // Get old cached tweets that would be deleted (excludes bookmarks and favorites)
-            val oldTweets = cachedTweetDao.getOldCachedTweets(oneMonthAgo)
+            val oldTweets = cachedTweetDao.getOldCachedTweets(cutoff)
             
             // Count tweets before cleanup
             val totalOldTweets = oldTweets.size
