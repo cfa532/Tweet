@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -128,30 +127,18 @@ fun CommentItem(
                     modifier = Modifier.fillMaxWidth()
                         .padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(
-                        modifier = Modifier.padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = author?.name ?: "No One",
-                            modifier = Modifier.padding(horizontal = 0.dp),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = " @${author?.username ?: "unknown"}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = " · ${localizedTimeDifference(comment.timestamp)}",
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    // Single wrapping line for name/@username/time, like TweetDetailBody's
+                    // header, so a long name no longer runs under the dropdown menu.
+                    TweetHeaderText(
+                        authorName = author?.name,
+                        username = author?.username,
+                        timestamp = comment.timestamp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(top = 2.dp, end = 4.dp)
+                    )
                     CommentDropdownMenu(comment, parentTweetViewModel)
                 }
 
