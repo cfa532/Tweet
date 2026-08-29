@@ -10,12 +10,61 @@ import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.network.HproseClientPool
 
+/**
+ * Where each user's requests currently go.
+ *
+ * A route is not a property of a user. It is where the app can reach that user's data
+ * right now, and it changes with node health, discovery and writes. A User here is a
+ * value — copied, parcelled between screens, read back from the cache as a fresh object —
+ * so live routing cannot live on it: a copy taken before a write would keep sending reads
+ * to the node that has not caught up yet.
+ *
+ * `baseUrl` stays on the user as the access-node route, because that is the value worth
+ * persisting and copying. This table owns what must not be copied:
+ * - `writable` — the resolved root host, refreshed before every mutation. Used to build
+ *   write clients; on its own it changes nothing about reads.
+ * - `readsFromWriteHost` — set when a write succeeds. While it holds, reads go to the
+ *   root host whichever copy of the user they are made through, because the access node
+ *   has not copied that write yet. Any route failure drops it.
+ */
+object UserRoutes {
+    private data class Route(var writable: String? = null, var readsFromWriteHost: Boolean = false)
+
+    private val routes = mutableMapOf<MimeiId, Route>()
+    private val lock = Any()
+
+    /** The route reads should use, or null to fall back to the user's access route. */
+    fun readRoute(mid: MimeiId): String? = synchronized(lock) {
+        routes[mid]?.let { if (it.readsFromWriteHost) it.writable else null }
+    }
+
+    /** The resolved root host, for building write clients. */
+    fun writableRoute(mid: MimeiId): String? = synchronized(lock) { routes[mid]?.writable }
+
+    fun setWritableRoute(mid: MimeiId, url: String?) = synchronized(lock) {
+        val route = routes.getOrPut(mid) { Route() }
+        route.writable = url
+        if (url == null) route.readsFromWriteHost = false
+    }
+
+    /** Read from the node that just took a write, until that route stops answering. */
+    fun readFromWriteHost(mid: MimeiId): Boolean = synchronized(lock) {
+        val route = routes.getOrPut(mid) { Route() }
+        if (route.writable == null || route.readsFromWriteHost) return@synchronized false
+        route.readsFromWriteHost = true
+        true
+    }
+
+    /** Called when the current route fails, so recovery starts from the access node. */
+    fun stopReadingFromWriteHost(mid: MimeiId) = synchronized(lock) {
+        routes[mid]?.readsFromWriteHost = false
+    }
+}
+
 @Parcelize
 @Serializable
 data class User(
     @Expose var baseUrl: String? = null,
-    @Transient
-    var writableUrl: String? = null,
     @Expose val mid: MimeiId,
     @Expose var name: String? = null,
     @Expose var username: String? = null,
@@ -57,9 +106,6 @@ data class User(
         fun getInstance(mid: String): User {
             return userInstances.getOrPut(mid) { User(mid = mid) }
         }
-
-        /** The live instance for this id, or null. Never creates one. */
-        fun peekInstance(mid: String): User? = userInstances[mid]
 
         /**
          * Update user instance with new data
@@ -118,9 +164,16 @@ data class User(
     @IgnoredOnParcel
     private var _lastBaseUrl: String? = null
     
+    /** The resolved root host for this user. Lives in UserRoutes, not on the copy. */
+    var writableUrl: String?
+        get() = UserRoutes.writableRoute(mid)
+        set(value) = UserRoutes.setWritableRoute(mid, value)
+
     val hproseService: HproseService?
         get() {
-            val baseUrl = baseUrl ?: return null
+            // UserRoutes wins while a write is being read out of the root host; otherwise
+            // this copy's access route is the route.
+            val baseUrl = UserRoutes.readRoute(mid) ?: baseUrl ?: return null
             
             // Use HproseClientPool for shared client management across users on same node
             // This significantly reduces memory footprint and improves connection reuse

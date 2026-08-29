@@ -502,23 +502,6 @@ object TweetCacheManager {
      * Optimization: If memory copy is expired, database copy must also be expired
      * since they share the same timestamp, so we clear both immediately.
      */
-    /**
-     * A user read from cache is a different object from the live instance the app writes
-     * through, and it carries the route stored before that user's last write. Reads go
-     * through these copies, so a route that is the live instance's own write host has to
-     * come along; otherwise every cached read undoes the post-write route switch.
-     */
-    private fun withLiveWriteRoute(user: User): User {
-        val live = User.peekInstance(user.mid) ?: return user
-        val liveWritableUrl = live.writableUrl ?: return user
-        if (live.baseUrl == liveWritableUrl && user.baseUrl != liveWritableUrl) {
-            user.baseUrl = liveWritableUrl
-            user.writableUrl = liveWritableUrl
-            user.clearHproseService()
-        }
-        return user
-    }
-
     suspend fun getCachedUser(userId: MimeiId): User? {
         return try {
             // Check memory cache first
@@ -528,12 +511,12 @@ object TweetCacheManager {
 
             memoryUser?.let { user ->
                 if (!isUserExpired(user)) {
-                    return withLiveWriteRoute(user)
+                    return user
                 } else {
                     // User is expired but still return it (stale data is better than no data)
                     // The caller (fetchUser) will handle background refresh
                     Timber.tag("TweetCacheManager").d("⏰ MEMORY CACHE EXPIRED (but returning): userId: $userId, username: ${user.username}")
-                    return withLiveWriteRoute(user)
+                    return user
                 }
             }
 
@@ -554,7 +537,7 @@ object TweetCacheManager {
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
                         evictUserLruIfNeeded()
                     }
-                    return withLiveWriteRoute(user)
+                    return user
                 } else {
                     // Cache is expired but still return it (stale data is better than no data)
                     // Add back to memory cache so hasExpired check works correctly
@@ -564,7 +547,7 @@ object TweetCacheManager {
                         userCacheTimestamps[userId] = cachedUser.timestamp.time
                         evictUserLruIfNeeded()
                     }
-                    return withLiveWriteRoute(user)
+                    return user
                 }
             }
 

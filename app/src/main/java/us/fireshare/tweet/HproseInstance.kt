@@ -61,6 +61,7 @@ import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.UserRoutes
 import us.fireshare.tweet.datamodel.User.Companion.getInstance
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.network.HproseClientPool
@@ -2066,18 +2067,11 @@ object HproseInstance {
             .substringBefore("/")
         NodePool.updateNodeIP(writeHostId, poolIP)
 
-        if (user.baseUrl != writableUrl) {
-            setUserBaseUrlForRequest(user, writableUrl)
+        // Recorded against the user id, so it holds for every copy of this user — the
+        // one the write ran through, the ones the cache hands out, and the ones already
+        // attached to cached tweets.
+        if (UserRoutes.readFromWriteHost(user.mid)) {
             Timber.tag("writeRoute").d("Reading ${user.mid} from write host after $reason: $writableUrl")
-        }
-
-        // Writes run against whichever User object the caller had — a cached copy as
-        // often as the live instance. Put the route on the live instance too, so the
-        // copies handed out by the cache can be reconciled against it.
-        val instance = User.getInstance(user.mid)
-        if (instance !== user && instance.baseUrl != writableUrl) {
-            instance.writableUrl = writableUrl
-            setUserBaseUrlForRequest(instance, writableUrl)
         }
     }
 
@@ -2138,6 +2132,7 @@ object HproseInstance {
         val currentKey = currentPoolIP?.let { normalizeIPHealthCacheKey(it) }
         if (currentKey == attemptedKey) {
             Timber.tag(tag).d("Removing unhealthy node $accessNodeMid from pool after failed health check for $attemptedBaseUrl")
+            UserRoutes.stopReadingFromWriteHost(user.mid)
             NodePool.removeNode(accessNodeMid)
             HproseClientPool.clearClient(attemptedBaseUrl)
         } else {
@@ -2172,6 +2167,8 @@ object HproseInstance {
             }
 
             Timber.tag("ProfileRoute").w("Current route is unhealthy for ${user.mid}: $currentBaseUrl")
+            // Reads go back to the access node; the root host stopped answering.
+            UserRoutes.stopReadingFromWriteHost(user.mid)
             invalidateIPCache(currentBaseUrl)
             if (accessNodeMid != null) {
                 val pooledIP = NodePool.getIPFromNodeId(accessNodeMid)
