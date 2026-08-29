@@ -2066,9 +2066,19 @@ object HproseInstance {
             .substringBefore("/")
         NodePool.updateNodeIP(writeHostId, poolIP)
 
-        if (user.baseUrl == writableUrl) return
-        setUserBaseUrlForRequest(user, writableUrl)
-        Timber.tag("writeRoute").d("Reading ${user.mid} from write host after $reason: $writableUrl")
+        if (user.baseUrl != writableUrl) {
+            setUserBaseUrlForRequest(user, writableUrl)
+            Timber.tag("writeRoute").d("Reading ${user.mid} from write host after $reason: $writableUrl")
+        }
+
+        // Writes run against whichever User object the caller had — a cached copy as
+        // often as the live instance. Put the route on the live instance too, so the
+        // copies handed out by the cache can be reconciled against it.
+        val instance = User.getInstance(user.mid)
+        if (instance !== user && instance.baseUrl != writableUrl) {
+            instance.writableUrl = writableUrl
+            setUserBaseUrlForRequest(instance, writableUrl)
+        }
     }
 
     private suspend fun refreshRelationshipListBaseUrl(

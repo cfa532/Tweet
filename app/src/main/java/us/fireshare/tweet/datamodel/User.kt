@@ -58,6 +58,9 @@ data class User(
             return userInstances.getOrPut(mid) { User(mid = mid) }
         }
 
+        /** The live instance for this id, or null. Never creates one. */
+        fun peekInstance(mid: String): User? = userInstances[mid]
+
         /**
          * Update user instance with new data
          */
