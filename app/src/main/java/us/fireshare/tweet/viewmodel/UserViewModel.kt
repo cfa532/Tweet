@@ -1869,10 +1869,16 @@ class UserViewModel @AssistedInject constructor(
         hostIdError.value = ""
         cloudDrivePortError.value = ""
 
-        if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-            /**
-             * Register a new user. Check username and password first.
-             * */
+        /**
+         * Register a new user. Check username and password first.
+         *
+         * These two checks used to sit inside the host-id branch below, which only runs when
+         * a Host ID was typed. Host ID is optional, so the ordinary path skipped them: an
+         * empty username reached registerUser() as `username.value!!` on a guest, whose
+         * username is null, and threw. Registering is what makes them required, not the
+         * Host ID, so they are guarded by that instead.
+         * */
+        if (appUser.isGuest()) {
             if (username.value.isNullOrEmpty()) {
                 usernameError.value = context.getString(R.string.username_required)
                 isLoading.value = false
@@ -1883,6 +1889,9 @@ class UserViewModel @AssistedInject constructor(
                 isLoading.value = false
                 return
             }
+        }
+
+        if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
             // Find IP of the desired node. User can change its value to appoint to
             // a different host node later.
             HproseInstance.getHostIP(hostId.value)?.let { ip ->
@@ -1921,8 +1930,17 @@ class UserViewModel @AssistedInject constructor(
 
         if (success) {
             if (appUser.isGuest()) {
-                // new user registered, wait for its login
-                popBack()
+                // New user registered; wait for its login. Say so before leaving: the account
+                // takes a few minutes to become reachable, and until now this path returned
+                // silently, so a user who registered and logged straight back in just failed.
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.registration_ok),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    popBack()
+                }
             } else {
                 // Update existing user profile - the updateUserCore function handles all UI updates internally
                 withContext(Dispatchers.Main) {
