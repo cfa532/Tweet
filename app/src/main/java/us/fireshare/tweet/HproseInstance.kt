@@ -224,6 +224,9 @@ object NodePool {
     suspend fun updateFromUser(user: User) {
         val accessNodeMid = user.hostIds?.getOrNull(1) ?: return
         val userIP = user.baseUrl ?: return
+        // A post-write route is hostIds[0]'s address; recording it here would describe
+        // the access node with the root host's address for every user sharing it.
+        if (userIP == user.writableUrl) return
         
         // Extract just the IP:port from baseUrl
         // Normalize IP but keep brackets for IPv6 addresses with ports
@@ -1981,6 +1984,7 @@ object HproseInstance {
                 TweetCacheManager.saveUser(appUser)
                 Timber.tag("updateUserCore").d("Saved updated user to cache: ${appUser.mid}")
 
+                adoptWriteRouteForReads(appUser, entry)
                 return Pair(true, null)
             } else {
                 val errorMessage = response["message"] as? String
@@ -2009,6 +2013,7 @@ object HproseInstance {
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
             val response = requireWritableClient(appUser, "setUserAvatar").runMApp<MimeiId>(entry, request)
+            adoptWriteRouteForReads(appUser, entry)
             response
         } catch (e: Exception) {
             Timber.tag("setUserAvatar").e(e)
@@ -2032,6 +2037,38 @@ object HproseInstance {
         }
         return client
             ?: throw IllegalStateException("$operation failed: writable client not available for $writableUrl")
+    }
+
+    /**
+     * Point a user's reads at the node that just took a write for them.
+     *
+     * Writes land on hostIds[0] (the root host) while reads are served by the access
+     * node hostIds[1], which copies from the root host on its own schedule. A read in
+     * that window returns the pre-write state, and the user cannot tell whether their
+     * like, comment or tweet went through. Writes are rare, so moving the read route
+     * costs little. This is a route hint and nothing more: any later resolution
+     * (NodePool, health repair, an access-node change) may replace it right away.
+     *
+     * Mirrors iOS HproseInstance.adoptWriteRouteForReads.
+     */
+    private suspend fun adoptWriteRouteForReads(user: User, reason: String) {
+        val writeHostId = user.hostIds?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return
+        // Mutations resolve this immediately before sending, so it is normally set here.
+        val writableUrl = user.writableUrl?.takeIf { it.isNotBlank() }
+            ?: user.resolveWritableUrl()?.takeIf { it.isNotBlank() }
+            ?: return
+
+        // Filed under the write host's own MID — never under the access node, whose
+        // pool entry other users share.
+        val poolIP = writableUrl.trim()
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .substringBefore("/")
+        NodePool.updateNodeIP(writeHostId, poolIP)
+
+        if (user.baseUrl == writableUrl) return
+        setUserBaseUrlForRequest(user, writableUrl)
+        Timber.tag("writeRoute").d("Reading ${user.mid} from write host after $reason: $writableUrl")
     }
 
     private suspend fun refreshRelationshipListBaseUrl(
@@ -3482,6 +3519,7 @@ object HproseInstance {
                 throw e
             }
             val response = unwrapV2Response<Map<String, Any>>(rawResponse)
+            adoptWriteRouteForReads(author, entry)
             response?.let { Tweet.from(it) }?.also { updated ->
                 // The RPC response carries the server's authoritative counts but no author,
                 // so fill in presentation state before publishing it — TweetFeedViewModel
@@ -3529,6 +3567,10 @@ object HproseInstance {
             if (response != null) {
                 val newTweetId = response["mid"] as? String
                 if (newTweetId != null) {
+                    // The tweet is stored on hostIds[0]; read it back from there rather
+                    // than from an access node that has not copied it yet.
+                    adoptWriteRouteForReads(appUser, entry)
+
                     // Create a new tweet with the updated mid
                     val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
 
@@ -3611,6 +3653,7 @@ object HproseInstance {
             val response = unwrapV2Response<Boolean>(rawResponse)
 
             if (response == true) {
+                adoptWriteRouteForReads(parentAuthor, entry)
                 // Post notification for successful comment deletion
                 TweetNotificationCenter.post(TweetEvent.CommentDeleted(commentId, parentTweet.mid))
                 callback(commentId)
@@ -3675,6 +3718,7 @@ object HproseInstance {
             
             val duration = System.currentTimeMillis() - startTime
             Timber.tag("toggleFollowing").d("toggle_following completed in ${duration}ms, rawResponse: $rawResponse (type: ${rawResponse?.javaClass?.simpleName})")
+            adoptWriteRouteForReads(actingUser, entry)
             
             when (rawResponse) {
                 is Boolean -> {
@@ -3861,6 +3905,10 @@ object HproseInstance {
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             ?: throw IllegalStateException("toggle_favorite returned invalid data")
+        // The tweet's counters live on the author's host; the app user's favorites list
+        // lives on its own (userhostid). Both sides were written.
+        adoptWriteRouteForReads(author, "toggle_favorite")
+        adoptWriteRouteForReads(appUser, "toggle_favorite")
         (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
             appUser.from(updatedUserData)
             TweetCacheManager.saveUser(appUser)
@@ -3909,6 +3957,10 @@ object HproseInstance {
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             ?: throw IllegalStateException("toggle_bookmark returned invalid data")
+        // Same split as toggle_favorite: author's host for the tweet, app user's host
+        // for the bookmark list.
+        adoptWriteRouteForReads(author, "toggle_bookmark")
+        adoptWriteRouteForReads(appUser, "toggle_bookmark")
         (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
             appUser.from(updatedUserData)
             TweetCacheManager.saveUser(appUser)
@@ -4190,6 +4242,8 @@ object HproseInstance {
                 throw Exception(errorMsg)
             }
 
+            adoptWriteRouteForReads(requestUser, entry)
+
             TweetCacheManager.evictDeletedTweet(deletedTweetId)
 
             // Deleting a retweet/quote must unlink it from the original's retweet list,
@@ -4361,8 +4415,10 @@ object HproseInstance {
                     "tweetauthorid" to parentAuthor.mid,
                     "hostid" to parentHostId
                 )
-                requireWritableClient(parentAuthor, "uploadComment")
+                val added = requireWritableClient(parentAuthor, "uploadComment")
                     .runMApp<Map<String, Any>>(entry, params)
+                adoptWriteRouteForReads(parentAuthor, entry)
+                added
             } catch (e: Exception) {
                 Timber.tag("uploadComment").e(e, "Exception calling runMApp for uploadComment, tweetId: ${tweet.mid}")
                 throw e
@@ -4750,6 +4806,17 @@ object HproseInstance {
         hasExpired: Boolean,
         originalBaseUrl: String?
     ) {
+        // A read route that is already this user's own write host was put there by a
+        // successful write (adoptWriteRouteForReads). The pool only ever knows the
+        // access node — the copy that has not caught up yet — so applying it here would
+        // undo the write route before the very next read uses it. Route repair still
+        // moves the user off the write host the moment it stops answering.
+        val writableUrl = user.writableUrl
+        if (attempt == 1 && !forceFreshIP && writableUrl != null && user.baseUrl == writableUrl) {
+            Timber.tag("updateUserFromServer").d("📡 Keeping post-write route $writableUrl for userId: ${user.mid}")
+            return
+        }
+
         if (attempt == 1) {
             val accessNodeMid = user.hostIds?.getOrNull(1)
             val poolIP = accessNodeMid?.let { NodePool.getIPFromNodeId(it) }
@@ -4820,9 +4887,12 @@ object HproseInstance {
                 
                 setUserBaseUrlForRequest(user, newBaseUrl)
                 
-                // Update NodePool with newly resolved IP (replaces old IPs for this node)
+                // Update NodePool with newly resolved IP (replaces old IPs for this node).
+                // Provider discovery can land on the user's own root host; filing that
+                // address here would describe the access node with the root host's
+                // address for every user reading through it.
                 val accessNodeMid = user.hostIds?.getOrNull(1)
-                if (accessNodeMid != null) {
+                if (accessNodeMid != null && newBaseUrl != user.writableUrl) {
                     // Extract IP:port from baseUrl for pool
                     val ipWithPort = newBaseUrl.removePrefix("http://").removePrefix("https://")
                     NodePool.updateNodeIP(accessNodeMid, ipWithPort)
@@ -4921,7 +4991,10 @@ object HproseInstance {
                         ?.removePrefix("http://")
                         ?.removePrefix("https://")
                         ?.substringBefore("/")
-                    if (accessNodeMid != null && !workingIP.isNullOrBlank()) {
+                    // Filing a write-host address under the access node would hand the
+                    // root host's address to every other user reading through that node.
+                    val servedByWriteHost = user.baseUrl != null && user.baseUrl == user.writableUrl
+                    if (accessNodeMid != null && !workingIP.isNullOrBlank() && !servedByWriteHost) {
                         NodePool.updateNodeIP(accessNodeMid, workingIP)
                     }
                 }
@@ -5472,7 +5545,9 @@ object HproseInstance {
             val pinClient = requireWritableClient(appUser, "togglePinnedTweet")
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            when (val rawResponse = pinClient.runMApp<Any>(entry, params)) {
+            val rawResponse = pinClient.runMApp<Any>(entry, params)
+            adoptWriteRouteForReads(appUser, entry)
+            when (rawResponse) {
                 is Boolean -> {
                     // Legacy format: direct boolean response
                     rawResponse
