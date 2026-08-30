@@ -56,6 +56,16 @@ object TweetCacheManager {
 
     // LRU limits for in-memory caches (evict least recently used when over capacity)
     private const val MAX_MEMORY_TWEETS = 500
+
+    /**
+     * Ceiling on cached tweet rows in the database, enforced by CleanUpWorker.
+     *
+     * The cache was expiry-only before this: nothing bounded it between the 30-day
+     * sweeps. Background read-ahead (BackgroundTweetPrefetcher) writes pages nobody
+     * asked for, so a ceiling is what keeps that from growing unattended. Matches the
+     * iOS cap of the same name.
+     */
+    const val MAX_CACHED_TWEETS = 5000
     private const val MAX_MEMORY_USERS = 200
 
     // In-memory cache for frequently accessed tweets (LRU by access order)

@@ -56,6 +56,32 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
                 - Favorites preserved: ∞ (never expire)
             """.trimIndent())
 
+            // Enforce the row ceiling. Expiry alone left the cache unbounded between
+            // 30-day sweeps, which matters now that read-ahead writes pages nobody
+            // asked for. Rows only, no media: a row is one (tweet, cache key) pair and
+            // a tweet usually has several, so a trimmed row is no evidence its media is
+            // unused.
+            val total = cachedTweetDao.countCachedTweets()
+            if (total > TweetCacheManager.MAX_CACHED_TWEETS) {
+                val excess = total - TweetCacheManager.MAX_CACHED_TWEETS
+                var trimmed = 0
+                var preservedPrivateOverCap = 0
+                cachedTweetDao.getOldestTrimmableCachedTweets(excess).forEach { cachedTweet ->
+                    val tweet = cachedTweet.originalTweet
+                    // Same permanence rule as expiry above.
+                    if (tweet.authorId == appUser.mid && tweet.isPrivate) {
+                        preservedPrivateOverCap++
+                    } else {
+                        cachedTweetDao.deleteCachedTweetFromCache(cachedTweet.mid, cachedTweet.uid)
+                        trimmed++
+                    }
+                }
+                Timber.tag("CleanUpWorker").d(
+                    "Trimmed $trimmed row(s) over the ${TweetCacheManager.MAX_CACHED_TWEETS} cap " +
+                        "($total before, $preservedPrivateOverCap private preserved)"
+                )
+            }
+
             // Note: VideoManager doesn't have clearOldCachedVideos method
             // The memory management is handled automatically by VideoManager
             Timber.d("CleanUpWorker - Video cache cleanup handled by VideoManager")

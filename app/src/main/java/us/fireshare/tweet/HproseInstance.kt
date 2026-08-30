@@ -2435,6 +2435,77 @@ object HproseInstance {
             ?: row
     }
 
+    /**
+     * Fetch one page of the app user's feed straight into the cache.
+     *
+     * Deliberately narrower than [getTweetFeed]. It decodes with [Tweet.decode] and
+     * writes the cache without going through [Tweet.from], so no entry is added to the
+     * shared instance registry: nothing is published into the visible feed and nothing
+     * survives in memory once the page is written. It also skips that function's
+     * per-tweet [fetchUser] call - a read-ahead must not fan out into a network request
+     * per author.
+     *
+     * No retry or route switching either. Nobody is waiting on this page, so a failure
+     * is simply reported and BackgroundTweetPrefetcher backs off.
+     *
+     * @return the number of rows the server returned, nulls included. A page shorter
+     *   than [pageSize] means the backend has no more entries.
+     */
+    suspend fun cacheMainFeedPage(pageNumber: Int, pageSize: Int): Int {
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "pn" to pageNumber,
+            "ps" to pageSize,
+            "userid" to appUser.mid,
+            "appuserid" to appUser.mid,
+            "v4only" to v4Only.toString()
+        )
+
+        val service = getTweetFeedService("get_tweet_feed")
+            ?: throw IllegalStateException("No feed service for ${appUser.mid}")
+        val response = service.runMApp<Map<String, Any>>("get_tweet_feed", params)
+        if (response?.get("success") as? Boolean != true) {
+            val message = response?.get("message") as? String
+            throw Exception("Server returned failure: ${message ?: "Unknown error"}")
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val tweetsData = response["tweets"] as? List<Map<String, Any>?>
+        @Suppress("UNCHECKED_CAST")
+        val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
+
+        // Originals are filed under their own author, as getTweetFeed files them, so a
+        // retweet read from cache can find the tweet it embeds.
+        originalTweetsData?.forEach { json ->
+            if (json == null) return@forEach
+            try {
+                val original = Tweet.decode(json)
+                TweetCacheManager.saveTweet(original, original.authorId)
+            } catch (e: Exception) {
+                Timber.tag("cacheMainFeedPage").w("Skipping undecodable original tweet: $e")
+            }
+        }
+
+        val feedCacheId = TweetCacheManager.getMainFeedCacheId(appUser.mid)
+        tweetsData?.forEach { row ->
+            if (row == null) return@forEach
+            try {
+                val tweet = Tweet.decode(tweetPayload(row))
+                tweet.rowTimestamp = tweetRowTimestamp(row)
+                // getTweetFeed's rule: the feed never carries private tweets.
+                if (!tweet.isPrivate) {
+                    TweetCacheManager.saveTweet(tweet, feedCacheId)
+                }
+            } catch (e: Exception) {
+                Timber.tag("cacheMainFeedPage").w("Skipping undecodable tweet: $e")
+            }
+        }
+
+        return tweetsData?.size ?: 0
+    }
+
     suspend fun getTweetFeed(
         pageNumber: Int = 0,
         pageSize: Int = 5,

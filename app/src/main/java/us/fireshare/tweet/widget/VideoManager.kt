@@ -1218,6 +1218,27 @@ object VideoManager {
         return hiddenWarmPreloadCount() < MAX_WARM_PRELOADED_PLAYERS
     }
 
+    /**
+     * True when video has bandwidth to spare for work nobody is waiting on.
+     *
+     * False while an on-screen player is still filling its buffer, or while a preload
+     * is running - the two cases where video is actively spending bandwidth.
+     * Deliberately NOT "is a player present": a comfortably buffered player is playing
+     * out of its buffer and downloading nothing, so presence would gate background work
+     * off forever on a feed with autoplay.
+     *
+     * Reads ExoPlayer state, so call it on the main thread.
+     */
+    fun hasSpareBandwidth(): Boolean {
+        if (preloadJobs.isNotEmpty() || preloadingVideos.isNotEmpty()) return false
+        return videoPlayers.none { (videoMid, player) ->
+            (hasActiveAppearanceForMedia(videoMid) ||
+                hasVisibleAppearanceForMedia(videoMid) ||
+                isCoordinatorRetainedVideo(videoMid)) &&
+                player.playbackState == Player.STATE_BUFFERING
+        }
+    }
+
     private fun hasForegroundPlaybackDemand(): Boolean {
         return videoPlayers.any { (videoMid, player) ->
             (hasActiveAppearanceForMedia(videoMid) ||

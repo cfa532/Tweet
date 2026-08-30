@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.service.BackgroundTweetPrefetcher
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.HproseInstance.dao
 import us.fireshare.tweet.HproseInstance.fetchUser
@@ -321,6 +322,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      */
     fun reset() {
         isInitialized = false
+
+        // The read-ahead cursor and the pages behind it belong to the session that just
+        // ended; the next account must not inherit them.
+        BackgroundTweetPrefetcher.reset()
         
         // Don't clear cached tweets - cache persists per user and is cleared periodically or manually
         // This matches iOS behavior where cache is not cleared on logout

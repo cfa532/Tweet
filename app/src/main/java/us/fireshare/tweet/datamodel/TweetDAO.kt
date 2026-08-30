@@ -193,6 +193,19 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet WHERE timestamp < :oneMonthAgo AND uid NOT LIKE 'bookmark_list_%' AND uid NOT LIKE 'favorite_list_%'")
     fun getOldCachedTweets(oneMonthAgo: Date): List<CachedTweet>
 
+    @Query("SELECT COUNT(*) FROM CachedTweet")
+    fun countCachedTweets(): Int
+
+    /**
+     * The least recently cached rows that the size trim is allowed to drop, oldest
+     * first. Bookmarks and favorites are excluded here for the same reason they are
+     * excluded from expiry: they never expire. AppUser's private tweets cannot be
+     * filtered in SQL (isPrivate lives inside the serialized payload) and are skipped
+     * by the caller, exactly as CleanUpWorker already does for expiry.
+     */
+    @Query("SELECT * FROM CachedTweet WHERE uid NOT LIKE 'bookmark_list_%' AND uid NOT LIKE 'favorite_list_%' ORDER BY timestamp ASC LIMIT :limit")
+    fun getOldestTrimmableCachedTweets(limit: Int): List<CachedTweet>
+
     @Query("DELETE FROM CachedTweet")
     fun clearAllCachedTweets()
 

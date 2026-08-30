@@ -144,6 +144,37 @@ data class Tweet(
          * Creates a Tweet from a dictionary returned by the network call
          */
         fun from(dict: Map<String, Any>): Tweet {
+            val tweet = decode(dict)
+            return getInstance(
+                    mid = tweet.mid,
+                    authorId = tweet.authorId,
+                    content = tweet.content,
+                    timestamp = tweet.timestamp,
+                    title = tweet.title,
+                    originalTweetId = tweet.originalTweetId,
+                    originalAuthorId = tweet.originalAuthorId,
+                    parentTweetId = tweet.parentTweetId,
+                    favorites = tweet.favorites,
+                    favoriteCount = tweet.favoriteCount,
+                    bookmarkCount = tweet.bookmarkCount,
+                    retweetCount = tweet.retweetCount,
+                    commentCount = tweet.commentCount,
+                    attachments = tweet.attachments,
+                    isPrivate = tweet.isPrivate,
+                    downloadable = tweet.downloadable
+            )
+        }
+
+        /**
+         * Decode a network dictionary into a standalone Tweet WITHOUT registering it in
+         * [instances].
+         *
+         * [from] is the normal path and returns the shared instance so the UI observes
+         * one object per tweet. Callers that only want to write to the cache use this
+         * instead: a read-ahead that goes through [from] would pin every tweet it
+         * touched in the registry for the life of the process.
+         */
+        fun decode(dict: Map<String, Any>): Tweet {
             try {
                 val gson = GsonBuilder()
                     .registerTypeAdapter(MediaType::class.java, MediaTypeDeserializer())
@@ -203,26 +234,7 @@ data class Tweet(
                 }
                 
                 val jsonString = gson.toJson(processedDict)
-                val tweet = gson.fromJson(jsonString, Tweet::class.java)
-
-                return getInstance(
-                    mid = tweet.mid,
-                    authorId = tweet.authorId,
-                    content = tweet.content,
-                    timestamp = tweet.timestamp,
-                    title = tweet.title,
-                    originalTweetId = tweet.originalTweetId,
-                    originalAuthorId = tweet.originalAuthorId,
-                    parentTweetId = tweet.parentTweetId,
-                    favorites = tweet.favorites,
-                    favoriteCount = tweet.favoriteCount,
-                    bookmarkCount = tweet.bookmarkCount,
-                    retweetCount = tweet.retweetCount,
-                    commentCount = tweet.commentCount,
-                    attachments = tweet.attachments,
-                    isPrivate = tweet.isPrivate,
-                    downloadable = tweet.downloadable
-                )
+                return gson.fromJson(jsonString, Tweet::class.java)
             } catch (e: Exception) {
                 Timber.e("Error converting dictionary to Tweet: $e")
                 throw RuntimeException("Cannot convert dictionary to Tweet", e)

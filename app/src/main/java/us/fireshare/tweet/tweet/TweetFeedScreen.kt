@@ -44,6 +44,7 @@ import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.service.BackgroundTweetPrefetcher
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import androidx.compose.ui.res.stringResource
 
@@ -76,6 +77,9 @@ fun TweetFeedScreen(
     // This ensures HproseInstance is ready before tweet loading begins
     LaunchedEffect(Unit) {
         viewModel.initialize()
+        // Read ahead of the visible list while the network is idle, so paging down the
+        // feed serves from cache instead of waiting on a page fetch.
+        BackgroundTweetPrefetcher.prefetchMainFeed()
     }
 
     // Collect initialization state to show loading indicator
