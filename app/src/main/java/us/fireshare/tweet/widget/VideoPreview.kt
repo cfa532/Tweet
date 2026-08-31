@@ -525,7 +525,17 @@ fun VideoPreview(
                 val playerView = findViewById<PlayerView>(R.id.player_view)
                 playerView.player = exoPlayer
                 findViewById<ImageButton>(R.id.retry_button).setOnClickListener {
-                    state.manualRetry(ctx, url, videoType, retryScope, playerKey)
+                    // This listener is installed once, so it has to read the address that is
+                    // current when it is tapped. Capturing `url` here retried whatever the
+                    // author route was when the view was first built — which, for the error
+                    // this button exists to clear, is exactly the address that failed.
+                    currentState.manualRetry(
+                        ctx,
+                        currentUrl,
+                        currentVideoType,
+                        retryScope,
+                        currentPlayerKey
+                    )
                 }
                 if (enableTapToShowControls) {
                     playerView.useController = true

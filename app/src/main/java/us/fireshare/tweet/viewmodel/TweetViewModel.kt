@@ -284,6 +284,13 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null && cachedTweet.author != null) {
+                        // The cached author carries the node address this screen builds every
+                        // media URL from, and a link is routinely opened long after that
+                        // address stopped serving. This branch never reads the tweet from the
+                        // server, so nothing else here would ever notice. Check it first —
+                        // the repair rewrites the author's address, and applying afterwards
+                        // is what puts the repaired one into the first render.
+                        cachedTweet.author?.let { HproseInstance.validateAndRepairProfileRoute(it) }
                         applyFetchedTweet(cachedTweet)
                         return@launch
                     }

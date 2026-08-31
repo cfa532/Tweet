@@ -91,10 +91,16 @@ fun MediaItemView(
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
-    val attachments = mediaItems.map {
-        val inferredType = inferMediaTypeFromAttachment(it)
-        val mediaUrl = getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString()
-        MediaItem(it.mid, mediaUrl, inferredType)
+    // An author with no route yet has no address to fetch from — `orEmpty()` turned that
+    // into a schemeless URL, which the player accepted as a real one: it failed, was cached
+    // under the media id, and the failure was recorded against a video that had never
+    // actually been tried. Blank instead, so the media below can decline to load until the
+    // route arrives.
+    val authorBaseUrl = tweet.author?.baseUrl?.takeIf { it.isNotBlank() }
+    val attachments = mediaItems.map { item ->
+        val inferredType = inferMediaTypeFromAttachment(item)
+        val mediaUrl = authorBaseUrl?.let { base -> getMediaUrl(item.mid, base) }.orEmpty()
+        MediaItem(item.mid, mediaUrl, inferredType)
     }
     val attachment = attachments[index]
     val navController = LocalNavController.current
@@ -240,7 +246,7 @@ fun MediaItemView(
             MediaType.Video, MediaType.HLS_VIDEO -> {
                 // Use a completely stable approach with key
                 val videoMid = mediaItems[index].mid
-                val videoUrl = attachment.url
+                val videoUrl = attachment.url.takeIf { it.isNotBlank() }
                 val playbackVideoId = videoPlaybackIdentifier(
                     videoMid = videoMid,
                     parentTweetId = playbackTweetId?.takeIf { it.isNotEmpty() }
