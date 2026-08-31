@@ -1052,9 +1052,10 @@ object HproseInstance {
                 "hostid" to (appUser.hostIds?.first() ?: "")
             )
             
-            if (appUser.hproseService == null) {
+            val senderClient = messagingClient(appUser, forceResolve = forceRefresh && !lastFailureWasTimeout)
+            if (senderClient == null) {
                 val errorMsg = "Failed to create client for sender node"
-                Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${appUser.baseUrl}")
+                Timber.tag("sendMessage").e("❌ $errorMsg - writableUrl: ${appUser.writableUrl}")
                 if (attempt < maxRetries) {
                     delay(((attempt + 1) * 1000L).milliseconds)
                     continue
@@ -1062,10 +1063,10 @@ object HproseInstance {
                 return Pair(false, errorMsg)
             }
             
-            Timber.tag("sendMessage").d("📤 Sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}) - baseUrl: ${appUser.baseUrl}")
+            Timber.tag("sendMessage").d("📤 Sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}) - writableUrl: ${appUser.writableUrl}")
             
             try {
-                val response = appUser.hproseService?.runMApp<Any>(entry, params)
+                val response = senderClient.runMApp<Any>(entry, params)
                 
                 // Handle different response types
                 val isSuccess = when (response) {
@@ -1153,9 +1154,10 @@ object HproseInstance {
                 "msg" to Json.encodeToString(msg)
             )
             
-            if (receiptUser.hproseService == null) {
+            val recipientClient = messagingClient(receiptUser, forceResolve = forceRefresh && !lastFailureWasTimeout)
+            if (recipientClient == null) {
                 val errorMsg = "Failed to create client for recipient node"
-                Timber.tag("sendMessage").e("❌ $errorMsg - baseUrl: ${receiptUser.baseUrl}")
+                Timber.tag("sendMessage").e("❌ $errorMsg - writableUrl: ${receiptUser.writableUrl}")
                 if (attempt < maxRetries) {
                     delay(((attempt + 1) * 1000L).milliseconds)
                     continue
@@ -1163,10 +1165,10 @@ object HproseInstance {
                 return Pair(false, errorMsg)
             }
             
-            Timber.tag("sendMessage").d("📤 Sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}) - baseUrl: ${receiptUser.baseUrl}")
+            Timber.tag("sendMessage").d("📤 Sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}) - writableUrl: ${receiptUser.writableUrl}")
             
             try {
-                val receiptResponse = receiptUser.hproseService?.runMApp<Any>(receiptEntry, receiptParams)
+                val receiptResponse = recipientClient.runMApp<Any>(receiptEntry, receiptParams)
                 
                 // Handle different response types
                 val success = when (receiptResponse) {
@@ -1233,7 +1235,9 @@ object HproseInstance {
 
         return try {
             // Get raw response and unwrap v2 format (matching iOS implementation)
-            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+            // message_fetch marks the conversation read, so it writes and belongs on
+            // the root node that holds the message store.
+            val rawResponse = messagingClient(appUser, forceResolve = false)?.runMApp<Any>(entry, params)
             Timber.tag("fetchMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
 
             // Handle v2 response format: {success: true, data: [...]} or {success: false, error: ...} or direct array
@@ -1324,7 +1328,10 @@ object HproseInstance {
         )
         return try {
             // Get raw response and unwrap v2 format (matching iOS implementation)
-            val rawResponse = appUser.hproseService?.runMApp<Any>(entry, params)
+            // Reads the store message_fetch writes on the root node. Checking through
+            // the read route would count unread messages on a replica that never
+            // receives them.
+            val rawResponse = messagingClient(appUser, forceResolve = false)?.runMApp<Any>(entry, params)
             Timber.tag("checkNewMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
 
             // Handle v2 response format: {success: true, data: [...]} or direct array
@@ -2020,6 +2027,26 @@ object HproseInstance {
             Timber.tag("setUserAvatar").e(e)
             null
         }
+    }
+
+    /**
+     * Writable client for the messaging entries.
+     *
+     * The message store lives on the account's root node, so these calls take the
+     * writable route rather than the read route. A chat is a stream of writes, and
+     * [User.resolveWritableUrl] re-resolves the host every time it is called, so
+     * this reuses the route already resolved and only resolves when there is none
+     * or a retry asks for a fresh one. Returns null instead of throwing, because
+     * the callers retry on a missing client rather than failing outright.
+     */
+    private suspend fun messagingClient(user: User, forceResolve: Boolean): HproseService? {
+        if (!forceResolve) {
+            user.writableClient?.let { return it }
+        }
+        if (user.resolveWritableUrl().isNullOrBlank()) {
+            return null
+        }
+        return user.writableClient
     }
 
     private suspend fun requireWritableClient(
