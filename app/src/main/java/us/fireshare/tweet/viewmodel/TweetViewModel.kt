@@ -284,14 +284,20 @@ class TweetViewModel @AssistedInject constructor(
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null && cachedTweet.author != null) {
-                        // The cached author carries the node address this screen builds every
-                        // media URL from, and a link is routinely opened long after that
-                        // address stopped serving. This branch never reads the tweet from the
-                        // server, so nothing else here would ever notice. Check it first —
-                        // the repair rewrites the author's address, and applying afterwards
-                        // is what puts the repaired one into the first render.
-                        cachedTweet.author?.let { HproseInstance.validateAndRepairProfileRoute(it) }
                         applyFetchedTweet(cachedTweet)
+                        // Then check the address the cached author carries. This branch never
+                        // reads the tweet from the server, so nothing else here would notice a
+                        // node that stopped serving, and the comment load that follows goes
+                        // through it.
+                        //
+                        // After the apply, never before it. Every detail screen starts from a
+                        // stub — it does not share this ViewModel with the feed row it was
+                        // opened from — so holding the apply behind a probe left the screen
+                        // showing nothing but the header and avatar, which the body resolves
+                        // from the user cache, for as long as the probe took. The tweet is
+                        // already on disk; the media it names is content-addressed and served
+                        // by any reachable node, so there is nothing to wait for.
+                        cachedTweet.author?.let { HproseInstance.validateAndRepairProfileRoute(it) }
                         return@launch
                     }
                 }

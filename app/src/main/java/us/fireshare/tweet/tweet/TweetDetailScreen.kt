@@ -110,7 +110,10 @@ fun TweetDetailScreen(
     parentTweetId: String? = null,
     parentAuthorId: String? = null
 ) {
-    // Use activity scope to ensure same ViewModel instance is shared with TweetItem
+    // Activity-scoped and keyed by tweet id, so re-opening the same tweet reuses this
+    // instance. It is NOT shared with the feed row that led here: TweetItem gives each row
+    // its own ViewModelStore. Every first open therefore starts from the stub built below
+    // and depends on TweetViewModel.init to fill it in.
     val activity = LocalActivity.current as ComponentActivity
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         viewModelStoreOwner = activity, key = tweetId
