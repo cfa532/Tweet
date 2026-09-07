@@ -5222,12 +5222,13 @@ object HproseInstance {
     }
 
     /**
-     * Try each IP address and return the healthy IP whose probe completes first.
+     * Race IP addresses in pairs and return the first healthy IP in the current pair.
+     * Move to the next pair only when neither IP is healthy.
      * Cached unhealthy IPs are skipped briefly, but cached healthy IPs are probed
      * again so an old cache hit cannot keep selecting a slow route.
-     * @param ipAddresses List of IP addresses to test
+     * @param rawAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
-     * @return Fastest healthy IP address, or null if none found
+     * @return First healthy IP address in a pair, or null if none found
      */
     private suspend fun tryIpAddresses(rawAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
         // Nodes advertise every address they are bound to, including Tailscale CGNAT
@@ -5248,48 +5249,51 @@ object HproseInstance {
         }
 
         if (logPrefix.isNotEmpty()) {
-            Timber.tag("getProviderIP").d("$logPrefix - Racing ${ipAddresses.size} IP health checks")
+            Timber.tag("getProviderIP").d("$logPrefix - Racing ${ipAddresses.size} IP health checks in pairs")
         }
 
-        val activeJobs = ipAddresses.mapIndexed { globalIndex, ipAddress ->
-            async(Dispatchers.IO) {
-                try {
-                    if (getCachedHealth(ipAddress) == false) {
-                        return@async null
-                    }
-
-                    val testURL = normalizeHealthCheckUrl(ipAddress)
-                    val isHealthy = isServerHealthy(testURL, useCache = false)
-                    cacheIPHealth(ipAddress, isHealthy)
-
-                    if (isHealthy) {
-                        if (logPrefix.isNotEmpty()) {
-                            Timber.tag("getProviderIP").d("$logPrefix - IP ${globalIndex + 1}/${ipAddresses.size} ($ipAddress) is healthy")
+        // Limit concurrent probes to two; exhaust each pair before starting the next.
+        for (pair in ipAddresses.withIndex().chunked(2)) {
+            val activeJobs = pair.map { (globalIndex, ipAddress) ->
+                async(Dispatchers.IO) {
+                    try {
+                        if (getCachedHealth(ipAddress) == false) {
+                            return@async null
                         }
-                        ipAddress
-                    } else {
+
+                        val testURL = normalizeHealthCheckUrl(ipAddress)
+                        val isHealthy = isServerHealthy(testURL, useCache = false)
+                        cacheIPHealth(ipAddress, isHealthy)
+
+                        if (isHealthy) {
+                            if (logPrefix.isNotEmpty()) {
+                                Timber.tag("getProviderIP").d("$logPrefix - IP ${globalIndex + 1}/${ipAddresses.size} ($ipAddress) is healthy")
+                            }
+                            ipAddress
+                        } else {
+                            null
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        cacheIPHealth(ipAddress, false)
                         null
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    cacheIPHealth(ipAddress, false)
-                    null
                 }
-            }
-        }.toMutableList()
+            }.toMutableList()
 
-        while (activeJobs.isNotEmpty()) {
-            val (completedJob, result) = select<Pair<Deferred<String?>, String?>> {
-                activeJobs.forEach { job ->
-                    job.onAwait { job to it }
+            while (activeJobs.isNotEmpty()) {
+                val (completedJob, result) = select<Pair<Deferred<String?>, String?>> {
+                    activeJobs.forEach { job ->
+                        job.onAwait { job to it }
+                    }
                 }
-            }
 
-            activeJobs.remove(completedJob)
-            if (result != null) {
-                activeJobs.forEach { it.cancel() }
-                return@coroutineScope result
+                activeJobs.remove(completedJob)
+                if (result != null) {
+                    activeJobs.forEach { it.cancel() }
+                    return@coroutineScope result
+                }
             }
         }
 
