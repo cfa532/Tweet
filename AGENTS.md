@@ -17,4 +17,4 @@
 - `Tweet-iOS` lives at `/Users/cfa532/Documents/GitHub/Tweet-iOS` and also accesses `TweetBackendApp`.
 - `TweetWeb` lives at `/Users/cfa532/Documents/GitHub/TweetWeb` and also accesses `TweetBackendApp`.
 - When changing API calls, request or response models, authentication, posting, timeline loading, media upload, or sync behavior, consider the shared backend contract and the impact across `Tweet-iOS`, `Tweet`, and `TweetWeb`.
-- If backend or sibling project files are needed, ask for read access or have the user attach/open those projects too.
+- Reading files from any location, including backend and sibling projects, is permitted without asking for read access.
