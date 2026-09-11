@@ -767,10 +767,10 @@ class UserViewModel @AssistedInject constructor(
                                 if (serverIsFollowing) (listOf(subjectUserId) + list).toSet().toList()
                                 else list.filterNot { it == subjectUserId }
                             }
-                            val reconciledCount =
-                                if (serverIsFollowing) previousCount + 1 else previousCount - 1
-                            _followingsCount.value = reconciledCount
-                            setUserState(user.value.copy(followingCount = reconciledCount))
+                            // A result opposite to the attempted toggle leaves the
+                            // relationship in its original state, so restore its counts.
+                            _followingsCount.value = previousCount
+                            setUserState(user.value.copy(followingCount = previousCount))
 
                             if (userId == appUser.mid) {
                                 // Apply the server-truth diff against the snapshot,
@@ -780,21 +780,30 @@ class UserViewModel @AssistedInject constructor(
                                 } else {
                                     previousAppUserFollowingList?.filterNot { it == subjectUserId }
                                 }
-                                appUser.followingCount = maxOf(0, reconciledCount)
+                                appUser.followingCount = previousAppUserFollowingCount
                                 targetUser.fansList = if (serverIsFollowing) {
                                     ((previousTargetFansList ?: emptyList()) + appUser.mid).distinct()
                                 } else {
                                     previousTargetFansList?.filterNot { it == appUser.mid }
                                 }
-                                targetUser.followersCount = maxOf(
-                                    0,
-                                    previousTargetFollowersCount + if (serverIsFollowing) 1 else -1
-                                )
+                                targetUser.followersCount = previousTargetFollowersCount
                             }
 
                             viewModelScope.launch(IO) { updateTweetFeed(serverIsFollowing) }
                         } else {
                             Timber.tag("UserViewModel").d("Follow operation succeeded for: $subjectUserId")
+                        }
+                        if (userId == appUser.mid) {
+                            // Publish the confirmed local counts to open profiles. A read
+                            // from the target's access node can still precede replication.
+                            val confirmedAppUser = appUser.copy()
+                            val confirmedTargetUser = targetUser.copy()
+                            TweetCacheManager.saveUser(confirmedAppUser)
+                            TweetCacheManager.saveUser(confirmedTargetUser)
+                            viewModelScope.launch {
+                                TweetNotificationCenter.post(TweetEvent.UserDataUpdated(confirmedAppUser))
+                                TweetNotificationCenter.post(TweetEvent.UserDataUpdated(confirmedTargetUser))
+                            }
                         }
                         cleanupObserver(followRequest.id)
                     }

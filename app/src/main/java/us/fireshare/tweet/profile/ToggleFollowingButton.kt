@@ -22,12 +22,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
-import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.ui.theme.DebouncedButton
@@ -89,19 +86,6 @@ fun ToggleFollowingButton(
                             userId,
                             isFollowingResult
                         )
-                        
-                        // Refresh user data for the followed/unfollowed user
-                        try {
-                            // Get fresh user data from server and cache it
-                            fetchUser(userId, forceRefresh = true)?.let { refreshedUser ->
-                                TweetCacheManager.saveUser(refreshedUser)
-                                // Refresh the current viewmodel's user data
-                                viewModel.refreshUserData()
-                                Timber.tag("ToggleFollowingButton").d("Refreshed user data for: $userId")
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("ToggleFollowingButton").e("Failed to refresh user data for $userId: $e")
-                        }
                     }
                 },
                 rollbackTweetFeed = { attemptedIsFollowing ->

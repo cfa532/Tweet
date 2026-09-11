@@ -24,11 +24,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUserState
-import us.fireshare.tweet.HproseInstance.fetchUser
 import us.fireshare.tweet.R
-import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.ProfileEditor
 import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -111,19 +108,6 @@ fun ProfileTopBarButton(
                         updateTweetFeed = { isFollowingResult ->
                             viewModel.viewModelScope.launch(Dispatchers.IO) {
                                 tweetFeedViewModel.updateFollowingsTweets(user.mid, isFollowingResult)
-
-                                // Refresh user data for the followed/unfollowed user
-                                try {
-                                    // Get fresh user data from server and cache it
-                                    fetchUser(user.mid, forceRefresh = true)?.let { refreshedUser ->
-                                        TweetCacheManager.saveUser(refreshedUser)
-                                        // Refresh the current viewmodel's user data
-                                        viewModel.refreshUserData()
-                                        Timber.tag("ProfileTopBarButtons").d("Refreshed user data for: ${user.mid}")
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.tag("ProfileTopBarButtons").e("Failed to refresh user data for ${user.mid}: $e")
-                                }
                             }
                         },
                         rollbackTweetFeed = { attemptedIsFollowing ->
