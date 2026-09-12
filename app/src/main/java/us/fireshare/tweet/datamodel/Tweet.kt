@@ -40,6 +40,7 @@ data class Tweet(
     var attachments: List<MimeiFileType>? = null,
     var isPrivate: Boolean = false,     // Viewable by the author only, if true.
     var downloadable: Boolean = false,  // only used in web version.
+    var storageFormat: String? = null,
 ) {
     companion object {
         // Singleton dictionary to store tweet instances
@@ -66,7 +67,8 @@ data class Tweet(
             commentCount: Int = 0,
             attachments: List<MimeiFileType>? = null,
             isPrivate: Boolean = false,
-            downloadable: Boolean = false
+            downloadable: Boolean = false,
+            storageFormat: String? = null
         ): Tweet {
             synchronized(instanceLock) {
                 val existingInstance = instances[mid]
@@ -83,6 +85,7 @@ data class Tweet(
                     attachments?.let { existingInstance.attachments = it }
                     existingInstance.isPrivate = isPrivate
                     existingInstance.downloadable = downloadable
+                    existingInstance.storageFormat = storageFormat ?: existingInstance.storageFormat
                     return existingInstance
                 }
 
@@ -102,7 +105,8 @@ data class Tweet(
                     commentCount = commentCount,
                     attachments = attachments,
                     isPrivate = isPrivate,
-                    downloadable = downloadable
+                    downloadable = downloadable,
+                    storageFormat = storageFormat
                 )
                 instances[mid] = newInstance
                 return newInstance
@@ -161,7 +165,8 @@ data class Tweet(
                     commentCount = tweet.commentCount,
                     attachments = tweet.attachments,
                     isPrivate = tweet.isPrivate,
-                    downloadable = tweet.downloadable
+                    downloadable = tweet.downloadable,
+                    storageFormat = tweet.storageFormat
             )
         }
 

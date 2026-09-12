@@ -249,6 +249,10 @@ object HproseInstance {
     private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
     private const val GET_TWEET_FEED_TIMEOUT_MS = 15_000
     private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
+    private const val STORAGE_CAPABILITY_TTL_MS = 60_000L
+    private const val STORAGE_CAPABILITY_TIMEOUT_MS = 5_000
+    private const val DATABASE_STORAGE_FORMAT = "database"
+    private const val FILE_STORAGE_FORMAT = "tweet-file-v1"
     const val HEAVY_CALL_INTERVAL_MS = 5 * 60 * 1000L
     private var _appId: MimeiId = BuildConfig.APP_ID
     val appId: MimeiId get() = _appId
@@ -302,6 +306,156 @@ object HproseInstance {
                 response as? T
             }
         }
+    }
+
+    private data class BackendStorageCapabilities(
+        val formats: Set<String>,
+        val checkedAt: Long
+    )
+
+    private val storageCapabilitiesCache = mutableMapOf<String, BackendStorageCapabilities>()
+    private val storageCapabilitiesLock = Any()
+
+    private fun normalizedServerBaseUrl(baseUrl: String): String = baseUrl
+        .trim()
+        .trimEnd('/')
+        .removeSuffix("/webapi")
+
+    /**
+     * Query application health, which reports storage support independently of
+     * the node's HTTP reachability. A successful legacy health response has no
+     * storageFormats field and therefore supports Database objects only.
+     */
+    private suspend fun storageCapabilities(
+        baseUrl: String,
+        params: Map<*, *>
+    ): BackendStorageCapabilities {
+        val normalizedUrl = normalizedServerBaseUrl(baseUrl)
+        val aid = params["aid"]?.toString() ?: appId
+        val version = params["ver"]?.toString() ?: "last"
+        val key = "$normalizedUrl|$aid|$version"
+        val now = System.currentTimeMillis()
+        synchronized(storageCapabilitiesLock) {
+            storageCapabilitiesCache[key]?.takeIf {
+                now - it.checkedAt < STORAGE_CAPABILITY_TTL_MS
+            }?.let { return it }
+        }
+
+        val probe = HproseClientPool.getRegularClient(normalizedUrl, STORAGE_CAPABILITY_TIMEOUT_MS)
+            ?: throw IllegalStateException("Unable to create a client for storage capability check")
+        val raw = withContext(Dispatchers.IO) {
+            probe.runMApp<Any>(
+                "health",
+                mapOf("aid" to aid, "ver" to version)
+            )
+        }
+        val reply = raw as? Map<*, *>
+            ?: throw IllegalStateException("Unable to check this server's storage support")
+        val succeeded = when (val value = reply["success"]) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            else -> false
+        }
+        if (!succeeded) {
+            throw IllegalStateException("Unable to check this server's storage support")
+        }
+
+        val formats = if (reply.containsKey("storageFormats")) {
+            val advertised = (reply["storageFormats"] as? List<*>)
+                ?.mapNotNull { it as? String }
+                ?.toSet()
+                ?: throw IllegalStateException("Invalid server storage capabilities")
+            if (advertised.isEmpty()) {
+                throw IllegalStateException("Invalid server storage capabilities")
+            }
+            advertised
+        } else {
+            setOf(DATABASE_STORAGE_FORMAT)
+        }
+        val result = BackendStorageCapabilities(formats, now)
+        synchronized(storageCapabilitiesLock) {
+            storageCapabilitiesCache[key] = result
+        }
+        return result
+    }
+
+    /**
+     * Select a read client that can decode the requested object graph. Even a
+     * Database user may own new File tweets, so a dual-format server is preferred
+     * whenever one is available. Reads may fall back to the owner's root; writes
+     * and explicit synchronization calls continue to use their existing routes.
+     */
+    private suspend fun storageCompatibleReadService(
+        owner: User,
+        params: Map<*, *>,
+        requiredFormat: String? = null,
+        timeoutMillis: Int = 30_000
+    ): HproseService {
+        val candidateUrl = UserRoutes.readRoute(owner.mid) ?: owner.baseUrl
+            ?: throw IllegalStateException("No read route for ${owner.mid}")
+        val candidate = HproseClientPool.getRegularClient(candidateUrl, timeoutMillis)
+            ?: throw IllegalStateException("No read client for ${owner.mid}")
+        val required = requiredFormat ?: owner.storageFormat ?: DATABASE_STORAGE_FORMAT
+        val candidateCapabilities = storageCapabilities(candidateUrl, params)
+        if (candidateCapabilities.formats.contains(FILE_STORAGE_FORMAT)
+            && candidateCapabilities.formats.contains(required)
+        ) {
+            return candidate
+        }
+
+        val rootHostId = owner.hostIds?.firstOrNull()
+        if (!rootHostId.isNullOrBlank()) {
+            val rootAddress = getHostIP(rootHostId, v4Only = "false", usePool = false)
+            if (!rootAddress.isNullOrBlank()) {
+                val rootUrl = normalizedServerBaseUrl(
+                    if (rootAddress.startsWith("http://") || rootAddress.startsWith("https://")) {
+                        rootAddress
+                    } else {
+                        "http://$rootAddress"
+                    }
+                )
+                if (rootUrl != normalizedServerBaseUrl(candidateUrl)) {
+                    val rootCapabilities = storageCapabilities(rootUrl, params)
+                    if (rootCapabilities.formats.contains(FILE_STORAGE_FORMAT)
+                        && rootCapabilities.formats.contains(required)
+                    ) {
+                        return HproseClientPool.getRegularClient(rootUrl, timeoutMillis)
+                            ?: throw IllegalStateException("No root read client for ${owner.mid}")
+                    }
+                }
+            }
+        }
+
+        if (!candidateCapabilities.formats.contains(required)) {
+            throw IllegalStateException("This server needs an update to access this account or tweet")
+        }
+        return candidate
+    }
+
+    private suspend fun <T> runStorageRead(
+        owner: User,
+        entry: String,
+        params: Map<*, *>,
+        requiredFormat: String? = null,
+        timeoutMillis: Int = 30_000
+    ): T? = storageCompatibleReadService(owner, params, requiredFormat, timeoutMillis)
+        .runMApp(entry, params)
+
+    /** Validate a fixed mutation/recovery route without changing its destination. */
+    private suspend fun storageCompatibleRequestedService(
+        baseUrl: String,
+        owner: User,
+        params: Map<*, *>,
+        requiredFormat: String? = null,
+        timeoutMillis: Int = 30_000
+    ): HproseService {
+        val required = requiredFormat ?: owner.storageFormat ?: DATABASE_STORAGE_FORMAT
+        val capabilities = storageCapabilities(baseUrl, params)
+        if (!capabilities.formats.contains(required)) {
+            throw IllegalStateException("This server needs an update to access this account or tweet")
+        }
+        return HproseClientPool.getRegularClient(baseUrl, timeoutMillis)
+            ?: throw IllegalStateException("No client for requested server")
     }
 
     /** Relationship timestamps may be decoded as any Number subtype or a numeric String. */
@@ -1513,8 +1667,7 @@ object HproseInstance {
                     "username" to username,
                     "password" to password
                 )
-                val rawResponse =
-                    user.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                val rawResponse = runStorageRead<Map<String, Any>>(user, entry, params)
                 val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
                 // Handle v2 response format: {success: true, data: {user: ..., status: "success"}} or {success: false, message: "..."}
@@ -1768,6 +1921,59 @@ object HproseInstance {
         return null
     }
 
+    /** Follow the configured defaults from the root returned by register itself. */
+    private suspend fun autoFollowDefaultUsersAfterRegistration(
+        registeredUserId: MimeiId,
+        registeredUserHostId: MimeiId
+    ) {
+        val rootAddress = getHostIP(registeredUserHostId, v4Only = "false", usePool = false)
+        if (rootAddress.isNullOrBlank()) {
+            Timber.tag("registerUser").w("Could not resolve registered user's root host: $registeredUserHostId")
+            return
+        }
+        val rootUrl = if (rootAddress.startsWith("http://") || rootAddress.startsWith("https://")) {
+            rootAddress
+        } else {
+            "http://$rootAddress"
+        }
+        val client = HproseClientPool.getWritableClient(rootUrl, TOGGLE_MUTATION_TIMEOUT_MS)
+        if (client == null) {
+            Timber.tag("registerUser").w("Could not create registered user's root client")
+            return
+        }
+
+        for (alphaId in getAlphaIds()) {
+            try {
+                val target = fetchUser(alphaId)
+                val targetHostId = target?.hostIds?.firstOrNull()
+                if (targetHostId.isNullOrBlank()) {
+                    Timber.tag("registerUser").w("Default user $alphaId has no root host; skipping")
+                    continue
+                }
+                val raw = client.runMApp<Any>(
+                    "toggle_following",
+                    mapOf(
+                        "aid" to appId,
+                        "ver" to "last",
+                        "version" to "v2",
+                        "followingid" to alphaId,
+                        "followingid_hostid" to targetHostId,
+                        "userid" to registeredUserId,
+                        "userid_hostid" to registeredUserHostId
+                    )
+                )
+                val result = unwrapV2Response<Map<String, Any>>(raw)
+                val isFollowing = result?.get("isFollowing") as? Boolean
+                    ?: (unwrapV2Response<Boolean>(raw, logErrors = false))
+                if (isFollowing != true) {
+                    Timber.tag("registerUser").w("Unexpected default-follow response for $alphaId: $raw")
+                }
+            } catch (e: Exception) {
+                Timber.tag("registerUser").e(e, "Failed to follow default user $alphaId")
+            }
+        }
+    }
+
     /**
      * Register a new user account.
      * @param username Username for the new account
@@ -1839,34 +2045,20 @@ object HproseInstance {
             if (success == true) {
                 Timber.tag("registerUser").d("Registration successful")
 
-                // Extract the newly created user's ID from the response
                 val userDict = response["user"] as? Map<String, Any>
                 val registeredUserId = userDict?.get("mid") as? String
+                val registeredUserHostId = (userDict?.get("hostIds") as? List<*>)
+                    ?.firstOrNull() as? String
 
-                if (registeredUserId != null) {
-                    // Launch toggleFollowing operations in a separate coroutine to avoid blocking
-                    // This allows the user to receive the success response immediately
+                if (registeredUserId != null && !registeredUserHostId.isNullOrBlank()) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            Timber.tag("registerUser").d("Starting async follow operations for new user $registeredUserId")
-                            // Make the newly registered user follow each user in getAlphaIds()
-                            val alphaIds = getAlphaIds()
-                            for (alphaId in alphaIds) {
-                                try {
-                                    val followResult = toggleFollowing(alphaId, registeredUserId)
-                                    Timber.tag("registerUser").d("New user $registeredUserId followed alpha user $alphaId, result: $followResult")
-                                } catch (e: Exception) {
-                                    Timber.tag("registerUser").e(e, "Failed to follow alphaId $alphaId for new user $registeredUserId")
-                                    // Continue with other users even if one fails
-                                }
-                            }
-                            Timber.tag("registerUser").d("Completed async follow operations for new user $registeredUserId")
-                        } catch (e: Exception) {
-                            Timber.tag("registerUser").e(e, "Error in async follow operations")
-                        }
+                        autoFollowDefaultUsersAfterRegistration(
+                            registeredUserId,
+                            registeredUserHostId
+                        )
                     }
                 } else {
-                    Timber.tag("registerUser").w("Warning: User object not found in registration response")
+                    Timber.tag("registerUser").w("Registration response has no user.mid or user.hostIds[0]; skipping default follow")
                 }
 
                 // Return success immediately without waiting for follow operations
@@ -2303,7 +2495,7 @@ object HproseInstance {
                     }
                 }
                 
-                val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+                val rawResponse = runStorageRead<Any>(user, entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
                 val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String } ?: getAlphaIds()
@@ -2383,7 +2575,7 @@ object HproseInstance {
                     }
                 }
                 
-                val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+                val rawResponse = runStorageRead<Any>(user, entry, params)
                 val response = unwrapV2Response<List<Map<String, Any>>>(rawResponse)
                 val result = response?.sortedByDescending { relationshipTimestamp(it["value"]) }
                     ?.mapNotNull { it["field"] as? String }
@@ -2490,9 +2682,14 @@ object HproseInstance {
             "v4only" to v4Only.toString()
         )
 
-        val service = getTweetFeedService("get_tweet_feed")
+        getTweetFeedService("get_tweet_feed")
             ?: throw IllegalStateException("No feed service for ${appUser.mid}")
-        val response = service.runMApp<Map<String, Any>>("get_tweet_feed", params)
+        val response = runStorageRead<Map<String, Any>>(
+            appUser,
+            "get_tweet_feed",
+            params,
+            timeoutMillis = GET_TWEET_FEED_TIMEOUT_MS
+        )
         if (response?.get("success") as? Boolean != true) {
             val message = response?.get("message") as? String
             throw Exception("Server returned failure: ${message ?: "Unknown error"}")
@@ -2628,7 +2825,16 @@ object HproseInstance {
                     }
                 }
                 val response = try {
-                    feedService?.runMApp<Map<String, Any>>(entry, params)
+                    if (entry == "get_tweet_feed") {
+                        runStorageRead<Map<String, Any>>(
+                            appUser,
+                            entry,
+                            params,
+                            timeoutMillis = GET_TWEET_FEED_TIMEOUT_MS
+                        )
+                    } else {
+                        feedService?.runMApp<Map<String, Any>>(entry, params)
+                    }
                 } catch (e: Exception) {
                     Timber.tag("getTweetFeed").e(e, "Exception calling runMApp for getTweetFeed, entry: $entry, appUser: ${appUser.mid} (attempt ${attempt + 1}/${effectiveMaxRetries + 1})")
                     throw e
@@ -2874,7 +3080,15 @@ object HproseInstance {
 
         try {
             val accessIp = getHostIP(accessHostId)
-            val accessService = accessIp?.let { HproseClientPool.getRegularClient("http://$it") }
+            val accessBaseUrl = accessIp?.let { "http://$it" }
+            val accessService = accessBaseUrl?.let {
+                storageCompatibleRequestedService(
+                    it,
+                    appUser,
+                    params,
+                    timeoutMillis = UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS
+                )
+            }
 
             if (accessService == null) {
                 Timber.tag("getTweetFeed").w(
@@ -2943,7 +3157,7 @@ object HproseInstance {
             }
             
             val response = try {
-                activeUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                runStorageRead<Map<String, Any>>(activeUser, entry, params)
             } catch (e: Exception) {
                 Timber.tag("getTweetsByUser").e(e, "❌ Exception calling runMApp for getTweetsByUser, userId: ${activeUser.mid}")
                 throw e
@@ -3120,7 +3334,15 @@ object HproseInstance {
             val authorForApi = fetchUser(authorId) ?: cachedAuthor
 
             val rawResponse = try {
-                authorForApi?.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                authorForApi?.let { owner ->
+                    runStorageRead<Map<String, Any>>(
+                        owner,
+                        entry,
+                        params,
+                        Tweet.findInstance(tweetId)?.storageFormat
+                            ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
+                    )
+                }
             } catch (e: Exception) {
                 Timber.tag("fetchTweet").e(e, "Exception calling runMApp for fetchTweet, tweetId: $tweetId, authorId: $authorId")
                 throw e
@@ -3222,8 +3444,7 @@ object HproseInstance {
 
         return try {
             val author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
-            val authorService = author?.hproseService
-            if (authorService == null) {
+            if (author?.hproseService == null) {
                 Timber.tag("getTweet").w("No author service for tweetId=$tweetId, authorId=$authorId")
                 return null
             }
@@ -3246,7 +3467,13 @@ object HproseInstance {
                 params["fromdetailview"] = rpcBool(true)
                 author.hostIds?.firstOrNull()?.let { params["authorhostid"] = it }
             }
-            val raw = authorService.runMApp<Any>("get_tweet", params)
+            val raw = runStorageRead<Any>(
+                author,
+                "get_tweet",
+                params,
+                Tweet.findInstance(tweetId)?.storageFormat
+                    ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
+            )
             val data = unwrapV2Response<Map<String, Any>>(raw)
             if (data != null) {
                 if (TweetCacheManager.isTweetDeleted(tweetId)) return null
@@ -3311,7 +3538,15 @@ object HproseInstance {
                 "hostid" to (authorForApi.hostIds?.first() ?: "")
             )
             val rawResponse = try {
-                authorForApi.hproseService?.runMApp<Map<String, Any>>(entry, params)
+                val baseUrl = UserRoutes.readRoute(authorForApi.mid) ?: authorForApi.baseUrl
+                    ?: throw IllegalStateException("No refresh route for $authorId")
+                storageCompatibleRequestedService(
+                    baseUrl,
+                    authorForApi,
+                    params,
+                    Tweet.findInstance(tweetId)?.storageFormat
+                        ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
+                ).runMApp<Map<String, Any>>(entry, params)
             } catch (e: Exception) {
                 Timber.tag("refreshTweet").e(e, "Exception calling runMApp for refresh_tweet, tweetId: $tweetId, authorId: $authorId")
                 throw e
@@ -4116,7 +4351,7 @@ object HproseInstance {
         )
         return try {
             val rawResponse = try {
-                user.hproseService?.runMApp<Any>(entry, params)
+                runStorageRead<Any>(user, entry, params)
             } catch (e: Exception) {
                 Timber.tag("getUserTweetsByType").e(e, "Exception calling runMApp for getUserTweetsByType, userId: ${user.mid}, type: $type")
                 throw e
@@ -4170,7 +4405,8 @@ object HproseInstance {
                             && tweet.parentTweetId != null
                         ) {
                             try {
-                                val parentRaw = user.hproseService?.runMApp<Any>(
+                                val parentRaw = runStorageRead<Any>(
+                                    user,
                                     "get_tweet",
                                     mapOf(
                                         "aid" to appId,
@@ -4178,7 +4414,8 @@ object HproseInstance {
                                         "version" to "v2",
                                         "tweetid" to tweet.parentTweetId!!,
                                         "appuserid" to appUser.mid
-                                    )
+                                    ),
+                                    tweet.storageFormat
                                 )
                                 val parentData = unwrapV2Response<Map<String, Any>>(parentRaw)
                                 if (parentData != null) {
@@ -4428,8 +4665,7 @@ object HproseInstance {
                 }
                 tweet.author = fetched
             }
-            val authorService = tweet.author?.hproseService
-                ?: return emptyList()
+            if (tweet.author?.hproseService == null) return emptyList()
 
             val params = mapOf(
                 "aid" to appId,
@@ -4440,7 +4676,12 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize
             )
-            val raw = authorService.runMApp<Any>("get_comments", params)
+            val raw = runStorageRead<Any>(
+                tweet.author!!,
+                "get_comments",
+                params,
+                tweet.storageFormat
+            )
             val response = unwrapV2Response<List<Map<String, Any>?>>(raw) ?: emptyList()
 
             val comments = mutableListOf<Tweet?>()
@@ -5065,7 +5306,7 @@ object HproseInstance {
                 
                 // Make server call
                 val rawResponse = try {
-                    user.hproseService?.runMApp<Any>(entry, params)
+                    runStorageRead<Any>(user, entry, params)
                 } catch (e: Exception) {
                     Timber.tag("updateUserFromServer").e(e, "Exception calling runMApp for get_user, userId: ${user.mid}")
                     throw e
@@ -5388,10 +5629,12 @@ object HproseInstance {
             
             // Make the API call
             val rawResponse = withContext(Dispatchers.IO) {
-                val client = HproseClient.create("$baseUrl/webapi/")
-                client.timeout = RESYNC_USER_TIMEOUT_MS
-                val service = client.useService(HproseService::class.java)
-                service.runMApp<Any>(entry, params)
+                storageCompatibleRequestedService(
+                    baseUrl,
+                    user,
+                    params,
+                    timeoutMillis = RESYNC_USER_TIMEOUT_MS
+                ).runMApp<Any>(entry, params)
             }
             
             Timber.tag("resyncUser").d("Got response for user $userId: ${rawResponse?.javaClass?.simpleName}")
@@ -5719,7 +5962,7 @@ object HproseInstance {
             "appuserid" to appUser.mid
         )
         return try {
-            val rawResponse = user.hproseService?.runMApp<Any>(entry, params)
+            val rawResponse = runStorageRead<Any>(user, entry, params)
             unwrapV2Response<List<Map<String, Any>>>(rawResponse)
         } catch (e: Exception) {
             Timber.tag("getPinnedList").e("Error getting pinned tweets for user: ${user.mid}")

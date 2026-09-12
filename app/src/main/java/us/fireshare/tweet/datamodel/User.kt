@@ -86,6 +86,7 @@ data class User(
 
     @Expose var hostIds: List<MimeiId>? = null,
     @Expose var publicKey: String? = null,
+    @Expose var storageFormat: String? = null,
 
     @Expose var fansList: List<MimeiId>? = null,
     @Expose var followingList: List<MimeiId>? = null,
@@ -129,6 +130,7 @@ data class User(
                 user.lastLogin?.let { lastLogin = it }
                 cloudDrivePort = user.cloudDrivePort
                 user.hostIds?.let { hostIds = it }
+                user.storageFormat?.let { storageFormat = it }
 
                 // CRITICAL: Never overwrite baseUrl from user parameter unless it has a value.
                 if (shouldUpdateBaseUrl && user.baseUrl != null) {
@@ -382,6 +384,7 @@ data class User(
             commentsCount = (processedData["commentsCount"] as? Number)?.toInt() ?: commentsCount
             
             hostIds = (processedData["hostIds"] as? List<*>)?.mapNotNull { id -> id as? String } ?: hostIds
+            storageFormat = processedData["storageFormat"] as? String ?: storageFormat
             
             // Clear cached services if URLs changed
             if (oldBaseUrl != baseUrl) {
@@ -438,6 +441,7 @@ data class User(
         favoritesCount = userData.favoritesCount
         commentsCount = userData.commentsCount
         userData.hostIds?.let { hostIds = it }
+        userData.storageFormat?.let { storageFormat = it }
 
         // Sync appUser StateFlows if this instance is appUser
         if (isAppUser) {
