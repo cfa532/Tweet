@@ -10,6 +10,8 @@
 
 # Related Projects
 
+- **Backend implementation:** Only inspect and modify `TweetBackendApp/go` for backend work. Its JavaScript backend is deprecated; do not use it as a reference or update it unless the user explicitly requests JavaScript work.
+
 - **Canonical sync contract:** Before changing object creation, references, node routing, synchronization, profiles, tweets, comments, replies, or related APIs, read `/Users/cfa532/Documents/GitHub/TweetBackendApp/docs/LEITHER_DATA_AND_SYNC_CONTRACT.md` and preserve its cross-client invariants.
 
 - `TweetAppBackend` is the shared backend companion project for this app and its sibling clients.

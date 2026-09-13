@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -16,9 +17,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,24 +83,11 @@ import us.fireshare.tweet.tweet.MediaItemView
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
 /**
- * MediaGrid displays a grid of media items with intelligent layout based on aspect ratios.
- * 
- * Layout Strategy (matching iOS implementation):
- * - Uses PROPORTIONAL SIZING based on individual media aspect ratios
- * - Ensures maximum content visibility without excessive cropping
- * - Hero images in 3-item grids use golden ratio (61.8%) for aesthetic balance
- * - Clamps grid aspect ratios between 0.8 (portrait) and 1.618 (landscape/golden ratio)
- * 
- * 1 Item: Uses individual aspect ratio (min 0.8)
- * 2 Items: 
- *   - Both portrait: Horizontal layout with proportional widths
- *   - Both landscape: Vertical layout with proportional heights
- *   - Mixed: Horizontal layout with dynamic proportional widths
- * 3 Items:
- *   - All portrait: Hero left (61.8%), two stacked right with proportional heights
- *   - All landscape: Hero top (61.8%), two side-by-side bottom with proportional widths
- *   - Mixed: Hero (61.8% minimum) adapts based on first item orientation with proportional sizing
- * 4+ Items: 2x2 grid with aspect ratio based on all items' orientation
+ * Media preview layout matching iOS MediaGridUIView and MediaGridViewModel.
+ * Single items use aspect ratios from 0.9 to 1.618. Pairs have equal-sized cells,
+ * stacked for two landscapes and side by side otherwise. Three items use a
+ * golden-ratio hero with proportional secondary cells in a square grid.
+ * Four or more items show an equal 2x2 grid, sized by the first four orientations.
  */
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
@@ -237,16 +225,10 @@ fun MediaGrid(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 400.dp)
         ) {
             when (limitedMediaList.size) {
             1 -> {
-                // Use cached aspect ratio for better performance
-                val aspectRatio = if (cachedAspectRatios[0] > 0.8f) {
-                    cachedAspectRatios[0]
-                } else {
-                    0.8f
-                }
+                val aspectRatio = cachedAspectRatios[0].coerceIn(0.9f, 1.618f)
                 MediaItemView(
                     limitedMediaList,
                     modifier = Modifier
@@ -299,18 +281,9 @@ fun MediaGrid(
                 val isPortrait1 = ar1 < 1f
                 val isLandscape0 = ar0 > 1f
                 val isLandscape1 = ar1 > 1f
-                val safeAr0 = ar0.coerceAtLeast(0.01f)
-                val safeAr1 = ar1.coerceAtLeast(0.01f)
 
                 if (isLandscape0 && isLandscape1) {
-                    // iOS parity: both landscape -> vertical split, grid AR 0.8,
-                    // heights proportional to ideal heights (inverse aspect ratio).
-                    val weight0 = 1f / safeAr0
-                    val weight1 = 1f / safeAr1
-                    val totalWeight = weight0 + weight1
-                    val normalizedWeight0 = weight0 / totalWeight
-                    val normalizedWeight1 = weight1 / totalWeight
-
+                    // iOS stacks two landscapes with equal heights.
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -320,7 +293,7 @@ fun MediaGrid(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(normalizedWeight0)
+                                .weight(1f)
                                 .clipToBounds()
                         ) {
                             MediaItemView(
@@ -340,61 +313,7 @@ fun MediaGrid(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(normalizedWeight1)
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                index = 1,
-                                autoPlay = isAutoPlayForGridIndex(1),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                                allMediaItems = visualMediaList
-                            )
-                        }
-                    }
-                } else if (isPortrait0 && isPortrait1) {
-                    // iOS parity: both portrait -> horizontal split, grid AR 1.0,
-                    // widths proportional to ideal widths (aspect ratios).
-                    val totalIdealWidth = safeAr0 + safeAr1
-                    val weight0 = safeAr0 / totalIdealWidth
-                    val weight1 = safeAr1 / totalIdealWidth
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        horizontalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(weight0)
-                                .fillMaxHeight()
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                index = 0,
-                                autoPlay = isAutoPlayForGridIndex(0),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                                allMediaItems = visualMediaList
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(weight1)
-                                .fillMaxHeight()
+                                .weight(1f)
                                 .clipToBounds()
                         ) {
                             MediaItemView(
@@ -413,13 +332,13 @@ fun MediaGrid(
                         }
                     }
                 } else {
-                    // iOS parity: mixed -> horizontal split, grid AR clamped(ar0 + ar1, 0.8...1.618),
-                    // widths proportional to ideal widths.
-                    val totalIdealWidth = safeAr0 + safeAr1
-                    val gridAspectRatio = totalIdealWidth.coerceIn(0.8f, 1.618f)
-                    val weight0 = safeAr0 / totalIdealWidth
-                    val weight1 = safeAr1 / totalIdealWidth
+                    val gridAspectRatio = if (isPortrait0 && isPortrait1) {
+                        1f
+                    } else {
+                        (ar0 + ar1).coerceIn(0.8f, 1.618f)
+                    }
 
+                    // Portrait and mixed pairs have equal widths, as in iOS.
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -428,7 +347,7 @@ fun MediaGrid(
                     ) {
                         Box(
                             modifier = Modifier
-                                .weight(weight0)
+                                .weight(1f)
                                 .fillMaxHeight()
                                 .clipToBounds()
                         ) {
@@ -448,7 +367,7 @@ fun MediaGrid(
                         }
                         Box(
                             modifier = Modifier
-                                .weight(weight1)
+                                .weight(1f)
                                 .fillMaxHeight()
                                 .clipToBounds()
                         ) {
@@ -470,147 +389,35 @@ fun MediaGrid(
                 }
             }
             3 -> {
-                // Use cached aspect ratios for better performance
                 val ar0 = cachedAspectRatios[0]
                 val ar1 = cachedAspectRatios[1]
                 val ar2 = cachedAspectRatios[2]
-                val allPortrait = ar0 < 1f && ar1 < 1f && ar2 < 1f
-                val allLandscape = ar0 > 1f && ar1 > 1f && ar2 > 1f
-                val isPortrait0 = ar0 < 1f
-                val minHeroWeight = 0.618f // Golden ratio floor (matches iOS mixed-layout logic)
-                val safeAr0 = ar0.coerceAtLeast(0.01f)
-                val safeAr1 = ar1.coerceAtLeast(0.01f)
-                val safeAr2 = ar2.coerceAtLeast(0.01f)
 
-                if (allPortrait) {
-                    // iOS: hero fixed to golden ratio on the left; right stack split by ideal heights.
-                    val weight1 = 1f / safeAr1
-                    val weight2 = 1f / safeAr2
-                    val totalWeight = weight1 + weight2
-                    val normalizedWeight1 = weight1 / totalWeight
-                    val normalizedWeight2 = weight2 / totalWeight
-                    val heroWeight = minHeroWeight
-                    val sideWeight = 1f - heroWeight
-                    
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        horizontalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        // First image: left 61.8% (golden ratio)
-                        Box(
-                            modifier = Modifier
-                                .weight(heroWeight)
-                                .fillMaxHeight()
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
-                                index = 0,
-                                autoPlay = isAutoPlayForGridIndex(0),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                            )
-                        }
-                        // Second and third: right side (38.2%), stacked with proportional heights
-                        Column(
-                            modifier = Modifier.weight(sideWeight),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(normalizedWeight1)
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(normalizedWeight2)
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 2,
-                                    autoPlay = isAutoPlayForGridIndex(2),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
-                            }
-                        }
-                    }
-                } else if (allLandscape) {
-                    // iOS: hero fixed to golden ratio on top; bottom row split by ideal widths.
-                    val totalIdealWidth = safeAr1 + safeAr2
-                    val weight1 = ar1 / totalIdealWidth
-                    val weight2 = ar2 / totalIdealWidth
-                    val heroWeight = minHeroWeight
-                    val bottomWeight = 1f - heroWeight
-                    
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        // First image: top 61.8% (golden ratio)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(heroWeight)
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
-                                index = 0,
-                                autoPlay = isAutoPlayForGridIndex(0),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                            )
-                        }
-                        // Second and third: bottom (38.2%), side by side with proportional widths
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                ) {
+                    // iOS takes the gap out of the hero, not out of the grid before
+                    // applying 61.8%. In mixed layouts its proportional candidate is
+                    // at most half the available span, so the golden-ratio floor wins.
+                    val heroSize = maxWidth * 0.618f - 1.dp
+                    if (ar0 < 1f) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(bottomWeight),
+                                .fillMaxSize(),
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
+                            // First image: left 61.8% (golden ratio)
                             Box(
                                 modifier = Modifier
-                                    .weight(weight1)
+                                    .width(heroSize)
                                     .fillMaxHeight()
                                     .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    index = 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     parentTweetId = parentTweetId,
@@ -618,81 +425,67 @@ fun MediaGrid(
                                     containerTopY = containerTopY,
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .weight(weight2)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
+                            // Second and third: right side (38.2%), stacked with proportional heights
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 2,
-                                    autoPlay = isAutoPlayForGridIndex(2),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f / ar1)
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = 1,
+                                        autoPlay = isAutoPlayForGridIndex(1),
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        parentTweetId = parentTweetId,
+                                        enableCoordinator = enableCoordinator,
+                                        containerTopY = containerTopY,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f / ar2)
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = 2,
+                                        autoPlay = isAutoPlayForGridIndex(2),
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        parentTweetId = parentTweetId,
+                                        enableCoordinator = enableCoordinator,
+                                        containerTopY = containerTopY,
+                                    )
+                                }
                             }
                         }
-                    }
-                } else if (isPortrait0) {
-                    // iOS mixed portrait case:
-                    // left hero = max(proportional split, golden-ratio floor), right side stacked proportionally.
-                    val rightIdealWidth = maxOf(safeAr1, safeAr2)
-                    val proportionalHeroWeight = safeAr0 / (safeAr0 + rightIdealWidth)
-                    val heroWeight = proportionalHeroWeight.coerceAtLeast(minHeroWeight).coerceAtMost(0.9f)
-                    val sideWeight = 1f - heroWeight
-
-                    val weight1 = 1f / safeAr1
-                    val weight2 = 1f / safeAr2
-                    val totalWeight = weight1 + weight2
-                    val normalizedWeight1 = weight1 / totalWeight
-                    val normalizedWeight2 = weight2 / totalWeight
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        horizontalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        // First image: left 61.8% (golden ratio)
-                        Box(
-                            modifier = Modifier
-                                .weight(heroWeight)
-                                .fillMaxHeight()
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
-                                index = 0,
-                                autoPlay = isAutoPlayForGridIndex(0),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                            )
-                        }
-                        // Second and third: right side (38.2%), stacked with proportional heights
+                    } else {
                         Column(
-                            modifier = Modifier.weight(sideWeight),
+                            modifier = Modifier
+                                .fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
+                            // First image: top 61.8% (golden ratio)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(normalizedWeight1)
+                                    .height(heroSize)
                                     .clipToBounds()
                             ) {
                                 MediaItemView(
                                     limitedMediaList,
                                     modifier = Modifier.fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
+                                    index = 0,
+                                    autoPlay = isAutoPlayForGridIndex(0),
                                     inPreviewGrid = true,
                                     viewModel = viewModel,
                                     parentTweetId = parentTweetId,
@@ -700,105 +493,49 @@ fun MediaGrid(
                                     containerTopY = containerTopY,
                                 )
                             }
-                            Box(
+                            // Second and third: bottom (38.2%), side by side with proportional widths
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(normalizedWeight2)
-                                    .clipToBounds()
+                                    .weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 2,
-                                    autoPlay = isAutoPlayForGridIndex(2),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    // iOS mixed landscape case:
-                    // top hero = max(proportional split, golden-ratio floor), bottom split proportionally.
-                    val bottomIdealHeight = maxOf(1f / safeAr1, 1f / safeAr2)
-                    val proportionalHeroWeight = (1f / safeAr0) / ((1f / safeAr0) + bottomIdealHeight)
-                    val heroWeight = proportionalHeroWeight.coerceAtLeast(minHeroWeight).coerceAtMost(0.9f)
-                    val bottomWeight = 1f - heroWeight
-
-                    val totalIdealWidth = safeAr1 + safeAr2
-                    val weight1 = safeAr1 / totalIdealWidth
-                    val weight2 = safeAr2 / totalIdealWidth
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        // First image: top 61.8% (golden ratio)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(heroWeight)
-                                .clipToBounds()
-                        ) {
-                            MediaItemView(
-                                limitedMediaList,
-                                modifier = Modifier.fillMaxSize(),
-                                index = 0,
-                                autoPlay = isAutoPlayForGridIndex(0),
-                                inPreviewGrid = true,
-                                viewModel = viewModel,
-                                parentTweetId = parentTweetId,
-                                enableCoordinator = enableCoordinator,
-                                containerTopY = containerTopY,
-                            )
-                        }
-                        // Second and third: bottom (38.2%), side by side with proportional widths
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(bottomWeight),
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(weight1)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 1,
-                                    autoPlay = isAutoPlayForGridIndex(1),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(weight2)
-                                    .fillMaxHeight()
-                                    .clipToBounds()
-                            ) {
-                                MediaItemView(
-                                    limitedMediaList,
-                                    modifier = Modifier.fillMaxSize(),
-                                    index = 2,
-                                    autoPlay = isAutoPlayForGridIndex(2),
-                                    inPreviewGrid = true,
-                                    viewModel = viewModel,
-                                    parentTweetId = parentTweetId,
-                                    enableCoordinator = enableCoordinator,
-                                    containerTopY = containerTopY,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(ar1)
+                                        .fillMaxHeight()
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = 1,
+                                        autoPlay = isAutoPlayForGridIndex(1),
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        parentTweetId = parentTweetId,
+                                        enableCoordinator = enableCoordinator,
+                                        containerTopY = containerTopY,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(ar2)
+                                        .fillMaxHeight()
+                                        .clipToBounds()
+                                ) {
+                                    MediaItemView(
+                                        limitedMediaList,
+                                        modifier = Modifier.fillMaxSize(),
+                                        index = 2,
+                                        autoPlay = isAutoPlayForGridIndex(2),
+                                        inPreviewGrid = true,
+                                        viewModel = viewModel,
+                                        parentTweetId = parentTweetId,
+                                        enableCoordinator = enableCoordinator,
+                                        containerTopY = containerTopY,
+                                    )
+                                }
                             }
                         }
                     }
@@ -862,8 +599,8 @@ fun MediaGrid(
             }
             }
 
-            // Mute button anchored to the MediaCell's bottom-end (the heightIn-capped outer
-            // Box), not to the video frame. Shown whenever any video item is in the cell.
+            // Mute button anchored to the media grid's bottom-end, rather than the video frame.
+            // Shown whenever any video item is in the cell.
             // Mute is a global preference, so a single overlay covers multi-video grids too.
             val hasVideo = limitedMediaList.any {
                 it.type == MediaType.Video || it.type == MediaType.HLS_VIDEO
