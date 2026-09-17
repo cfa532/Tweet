@@ -690,7 +690,7 @@ object HproseInstance {
         val videoConversionUri: String? = null  // Original video URI for aspect ratio calculation
     )
 
-    suspend fun init(context: Context, onInitialized: (suspend () -> Unit)? = null) {
+    suspend fun init(context: Context, onLocalStateReady: (suspend () -> Unit)? = null) {
         // Store Application context to avoid memory leaks
         this.applicationContext = context.applicationContext as Application
         HproseClassManager.register(Tweet::class.java, "Tweet")
@@ -743,18 +743,18 @@ object HproseInstance {
             Timber.tag("HproseInstance").d("Guest user initialized")
         }
         
-        // STEP 2: Try to update appUser with fresh data from server during init
+        // Navigation only needs local identity and caches. A deep-link target resolves
+        // its own route; do not hold it behind the app user's network bootstrap.
+        onLocalStateReady?.invoke()
+
+        // Network readiness remains separate for feed and account operations.
         try {
-            // CRITICAL: initAppEntry() now calls onInitialized as soon as baseUrl is set
-            // User data fetch continues in the background and updates appUser
-            initAppEntry(onInitialized)
+            initAppEntry()
         } catch (e: Exception) {
             Timber.tag("HproseInstance").e(e, "Error during network initialization, continuing with cached data")
             // Already have cached data loaded in STEP 1, just continue
             // Don't re-throw - allow app to continue in offline mode
             Timber.tag("HproseInstance").w("App initialized in offline mode with cached data")
-            // Call callback even in offline mode so UI can be shown
-            onInitialized?.invoke()
         }
     }
 
@@ -933,11 +933,10 @@ object HproseInstance {
         throw IllegalStateException(errorMsg)
     }
 
-    private suspend fun initAppEntry(onBaseUrlReady: (suspend () -> Unit)? = null) {
+    private suspend fun initAppEntry() {
         if (!isOnline.value) {
             Timber.tag("initAppEntry").d("Offline: skipping network bootstrap, marking app as initialized with cached data")
             _isAppUserInitialized.value = true
-            onBaseUrlReady?.invoke()
             return
         }
         val userId = preferenceHelper.getUserId()
@@ -959,10 +958,8 @@ object HproseInstance {
             val hasCachedBaseUrl = !appUser.baseUrl.isNullOrBlank()
 
             if (hasCachedBaseUrl) {
-                // Health-check cached baseUrl before showing UI.
-                // If stale (e.g. dynamic IP changed), resolve fresh IP first to prevent
-                // all subsequent operations (getFans, getTweetFeed, images) from
-                // hammering a dead IP for 30+ seconds.
+                // Validate the account route before marking network initialization ready.
+                // Navigation can already load an independent deep-link target.
                 Timber.tag("initAppEntry").d("Health-checking cached baseUrl: ${appUser.baseUrl}")
                 val cachedHealthy = withContext(Dispatchers.IO) {
                     isServerHealthy(appUser.baseUrl!!)
@@ -996,11 +993,10 @@ object HproseInstance {
                 User.updateUserInstance(appUser, true)
             }
 
-            // Show UI now that we have a verified baseUrl
+            // Account-dependent requests can proceed once its route is verified.
             if (hasCachedData) {
                 _isAppUserInitialized.value = true
-                Timber.tag("initAppEntry").d("🚀 BaseUrl ready with cached data, showing UI now (initialized: true)")
-                onBaseUrlReady?.invoke()
+                Timber.tag("initAppEntry").d("BaseUrl ready with cached account data")
             }
 
             // Fetch fresh user data from network
@@ -1053,11 +1049,6 @@ object HproseInstance {
                             .d("✅ User fetch successful - baseUrl: ${appUser.baseUrl}, avatar: ${appUser.avatar}, initialized: true")
                     }
                     
-                    // Show UI with fresh data
-                    if (!hasCachedData) {
-                        Timber.tag("initAppEntry").d("🚀 Fresh user data loaded, showing UI now")
-                        onBaseUrlReady?.invoke()
-                    }
                 } else {
                     // All retry attempts failed - ensure we have a usable baseUrl
                     if (appUser.baseUrl.isNullOrBlank()) {
@@ -1070,11 +1061,6 @@ object HproseInstance {
                             .w("All user fetch attempts failed, continuing with existing baseUrl: ${appUser.baseUrl}")
                     }
 
-                    // Show UI in degraded mode (using resolved IP)
-                    if (!hasCachedData) {
-                        Timber.tag("initAppEntry").w("⚠️ User fetch failed after all retries, showing UI with resolved IP")
-                        onBaseUrlReady?.invoke()
-                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("initAppEntry").e(e, "Error during user fetch retry loop: ${e.message}")
@@ -1083,11 +1069,6 @@ object HproseInstance {
                     val entryIP = findEntryIP()
                     appUser.baseUrl = "http://$entryIP"
                     Timber.tag("initAppEntry").w("Exception recovery: resolved new IP ${appUser.baseUrl}")
-                }
-                // Still show UI even if fetch failed
-                if (!hasCachedData) {
-                    Timber.tag("initAppEntry").e("❌ Critical error fetching user, showing UI with entry IP only")
-                    onBaseUrlReady?.invoke()
                 }
             }
             
@@ -1117,8 +1098,6 @@ object HproseInstance {
             Timber.tag("initAppEntry").d("🔍 Guest user baseUrl: ${guestUser.baseUrl}")
             Timber.tag("initAppEntry").d("🔍 Guest user mid: ${guestUser.mid}")
             _isAppUserInitialized.value = true
-            // For guest users, also call the callback to show UI
-            onBaseUrlReady?.invoke()
         }
         // once a workable URL is found, return successfully
         Timber.tag("initAppEntry").d("✅ Successfully initialized app entry (UI ready)")

@@ -21,6 +21,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.async
@@ -272,13 +273,17 @@ class TweetViewModel @AssistedInject constructor(
         exoPlayers[mediaId]?.playWhenReady = false  // have to set it here, otherwise won't work.
     }
 
+    // Share the first server read with the detail screen. Other consumers (media
+    // browser and embedded rows) still need this initialization without a detail screen.
+    private var initialTweetLoad: Deferred<Boolean>?
+
     init {
         /**
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
-        if (tweetState.value.author == null) {
-            viewModelScope.launch(Dispatchers.IO) {
+        initialTweetLoad = if (tweetState.value.author == null) {
+            viewModelScope.async(Dispatchers.IO) {
                 // Step 1: Check if there's a cached tweet with author already populated
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null) {
@@ -298,7 +303,7 @@ class TweetViewModel @AssistedInject constructor(
                         // already on disk; the media it names is content-addressed and served
                         // by any reachable node, so there is nothing to wait for.
                         cachedTweet.author?.let { HproseInstance.validateAndRepairProfileRoute(it) }
-                        return@launch
+                        return@async false
                     }
                 }
                 
@@ -338,22 +343,25 @@ class TweetViewModel @AssistedInject constructor(
                 // is enough; cross-node sync is handled by the detail screen on appear.
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null && tweet.authorId != null) {
-                    HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)?.let { fetched ->
+                    val fetched = HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)
+                    if (fetched != null) {
                         applyFetchedTweet(fetched)
-                    } ?: run {
+                    } else {
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
                             _tweetState.value = tweet.copy(author = currentAuthor)
                         }
                     }
+                    fetched != null
                 } else {
                     val currentAuthor = author ?: cachedUser
                     if (currentAuthor != null && tweetState.value.author == null) {
                         _tweetState.value = tweet.copy(author = currentAuthor)
                     }
+                    false
                 }
             }
-        }
+        } else null
     }
 
     /**
@@ -428,6 +436,13 @@ class TweetViewModel @AssistedInject constructor(
      * retweet refreshes both the wrapper and the original in parallel.
      */
     suspend fun doReadTweet(allowRecoveryOnMissingPayload: Boolean = false) {
+        // The first detail read joins initialization instead of sending a second RPC.
+        // Snapshot afterwards so a newly loaded retweet also resolves its original.
+        val alreadyRead = if (allowRecoveryOnMissingPayload) {
+            val fetched = initialTweetLoad?.await() == true
+            initialTweetLoad = null // Later screen openings perform their own fresh read.
+            fetched
+        } else false
         val currentTweet = tweetState.value
         val originalId = currentTweet.originalTweetId
         val originalAuthor = currentTweet.originalAuthorId
@@ -443,7 +458,7 @@ class TweetViewModel @AssistedInject constructor(
                 } else {
                     coroutineScope {
                         val wrapperJob = async {
-                            HproseInstance.getTweet(
+                            if (alreadyRead) null else HproseInstance.getTweet(
                                 currentTweet.mid,
                                 currentTweet.authorId,
                                 bypassCache = true
@@ -457,6 +472,7 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             } else {
+                if (alreadyRead) return
                 val fetched = HproseInstance.getTweet(
                     currentTweet.mid,
                     currentTweet.authorId,
