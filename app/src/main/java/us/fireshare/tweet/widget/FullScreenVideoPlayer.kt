@@ -5,8 +5,6 @@ import android.os.Build
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -30,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -242,31 +239,11 @@ fun FullScreenVideoPlayer(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { 
-                        dragOffset = 0f
-                    },
-                    onDragEnd = {
-                        // Check if it's a downward swipe (positive Y value means downward)
-                        if (dragOffset > 220f) { // Allow more dragging distance before exit
-                            onClose()
-                        }
-                        dragOffset = 0f
-                    },
-                    onDrag = { _, dragAmount ->
-                        // Only allow downward dragging (positive Y values)
-                        if (dragAmount.y > 0) {
-                            dragOffset += dragAmount.y
-                        }
-                    }
-                )
-            }
     ) {
-        // Video player view with native controls - NO interference
+        // Native controls stay fixed while the video surface zooms.
         AndroidView(
             factory = {
-                PlayerView(context).apply {
+                ZoomableVideoPlayerView(context).apply {
                     player = existingPlayer
                     useController = true
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -278,6 +255,16 @@ fun FullScreenVideoPlayer(
                     hideController()
                 }
             },
+            update = { view ->
+                view.player = existingPlayer
+                view.onNavigationDrag = { dx, dy -> dragOffset = if (abs(dy) > abs(dx)) dy.coerceAtLeast(0f) else 0f }
+                view.onNavigationEnd = { dx, dy ->
+                    if (dy > 220f && abs(dy) > abs(dx)) onClose()
+                    dragOffset = 0f
+                }
+                view.onNavigationCancel = { dragOffset = 0f }
+            },
+            onRelease = { it.player = null },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -434,35 +421,11 @@ fun FullScreenVideoPlayer(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        // Horizontal swipe
-                        if (abs(dragOffset) > 100f) {
-                            onHorizontalSwipe?.invoke(if (dragOffset > 0) 1 else -1)
-                        }
-                        // Vertical drag-to-exit
-                        if (verticalDragOffset > 220f) {
-                            onClose()
-                        }
-                        dragOffset = 0f
-                        verticalDragOffset = 0f
-                    },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        // Track both directions
-                        dragOffset += dragAmount.x
-                        if (dragAmount.y > 0) {
-                            verticalDragOffset += dragAmount.y
-                        }
-                    }
-                )
-            }
     ) {
         // Video player view
         AndroidView(
             factory = {
-                PlayerView(context).apply {
+                ZoomableVideoPlayerView(context).apply {
                     player = exoPlayer
                     useController = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -471,6 +434,28 @@ fun FullScreenVideoPlayer(
                     setKeepContentOnPlayerReset(true)
                 }
             },
+            update = { view ->
+                view.player = exoPlayer
+                view.onSurfaceTap = {
+                    showControls = !showControls
+                    showCloseButton = !showCloseButton
+                }
+                view.onNavigationDrag = { dx, dy ->
+                    dragOffset = dx
+                    verticalDragOffset = if (abs(dy) > abs(dx)) dy.coerceAtLeast(0f) else 0f
+                }
+                view.onNavigationEnd = { dx, dy ->
+                    if (abs(dx) > 100f && abs(dx) > abs(dy)) {
+                        onHorizontalSwipe?.invoke(if (dx > 0) 1 else -1)
+                    } else if (dy > 220f && abs(dy) > abs(dx)) {
+                        onClose()
+                    }
+                    dragOffset = 0f
+                    verticalDragOffset = 0f
+                }
+                view.onNavigationCancel = { dragOffset = 0f; verticalDragOffset = 0f }
+            },
+            onRelease = { it.player = null },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -481,15 +466,7 @@ fun FullScreenVideoPlayer(
                     scaleY = (1f - (verticalDragOffset / 800f)).coerceAtLeast(0.8f)
                     alpha = 1f - (verticalDragOffset / 500f).coerceAtMost(0.3f)
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {
-                            Timber.d("FullScreenVideoPlayer (API 30+): AndroidView tapped, toggling controls")
-                            showControls = !showControls
-                            showCloseButton = !showCloseButton
-                        }
-                    )
-                } // Toggle controls and close button on tap
+
         )
 
         // Custom controls overlay
@@ -497,15 +474,7 @@ fun FullScreenVideoPlayer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = {
-                                Timber.d("FullScreenVideoPlayer (API 30+): Controls overlay tapped, toggling controls")
-                                showControls = !showControls
-                                showCloseButton = !showCloseButton
-                            }
-                        )
-                    }
+
             ) {
                 // Close button
                 if (showCloseButton) {

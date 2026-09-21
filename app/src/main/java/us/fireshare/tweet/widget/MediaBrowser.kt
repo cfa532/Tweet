@@ -288,10 +288,11 @@ fun MediaBrowser(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
+    val currentPageIsVideo = mediaItems[pagerState.currentPage].type.let {
+        it == MediaType.Video || it == MediaType.HLS_VIDEO
+    }
+    // Video gestures belong to its native player; retain the image gesture path.
+    val imageGestures = if (currentPageIsVideo) Modifier else Modifier
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
@@ -314,9 +315,12 @@ fun MediaBrowser(
                     offsetY += pan.y
                 }
             }
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black).then(imageGestures)
     ) {
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = !currentPageIsVideo,
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val mediaItem = mediaItems[page]
@@ -340,6 +344,12 @@ fun MediaBrowser(
                         onClose = {
                             Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
                             navController.popBackStack()
+                        },
+                        onHorizontalSwipe = { direction ->
+                            val destination = pagerState.currentPage + direction
+                            if (destination in mediaItems.indices) {
+                                animationScope.launch { pagerState.animateScrollToPage(destination) }
+                            }
                         }
                     )
                 }

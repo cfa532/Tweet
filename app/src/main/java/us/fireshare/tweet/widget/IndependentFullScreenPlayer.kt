@@ -9,13 +9,18 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,8 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -47,6 +52,7 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import timber.log.Timber
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
@@ -77,7 +83,8 @@ fun IndependentFullScreenPlayer(
     fallbackMediaItems: List<MediaItem> = emptyList(),
     tappedTweet: Tweet? = null, // The tweet that was actually tapped
     parentEntry: NavBackStackEntry,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onHorizontalSwipe: ((Int) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -123,9 +130,12 @@ fun IndependentFullScreenPlayer(
     var shouldResumeAfterLifecyclePause by remember { mutableStateOf(false) }
     var initializedKey by remember { mutableStateOf<String?>(null) }
 
-    // Show controls (and thus action buttons) briefly when entering fullscreen
-    LaunchedEffect(Unit) {
-        showControls = true
+    // All exit gestures share one latch until the destination is disposed.
+    val closePlayer: () -> Unit = {
+        if (!isClosing) {
+            isClosing = true
+            onClose()
+        }
     }
     
     // Initialize the singleton player
@@ -236,61 +246,6 @@ fun IndependentFullScreenPlayer(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        // Check for vertical drag gestures
-                        if (abs(verticalDragOffset) > 150f && !isClosing) {
-                            if (verticalDragOffset > 300f) {
-                                // Large drag down - exit player
-                                Timber.d("IndependentFullScreenPlayer - Large drag down detected, closing player")
-                                isClosing = true
-                                onClose()
-                            } else if (totalVideos == 1) {
-                                // Only one video - any gesture should exit
-                                Timber.d("IndependentFullScreenPlayer - Single video detected, exiting player")
-                                isClosing = true
-                                onClose()
-                            } else if (verticalDragOffset < 0) {
-                                // Swipe up - next video in list (older video)
-                                Timber.d("IndependentFullScreenPlayer - Swipe up detected, playing next video")
-                                FullScreenPlayerManager.playNextVideo()
-                            } else {
-                                // Small drag down - not enough to exit, snap back
-                                Timber.d("IndependentFullScreenPlayer - Small drag down detected, not exiting")
-                            }
-                        } else {
-                            // No significant gesture detected
-                            Timber.d("IndependentFullScreenPlayer - No significant gesture detected")
-                        }
-                        // Reset all gesture states
-                        verticalDragOffset = 0f
-                        videoScale = 1f
-                        videoOffset = 0f
-                        // Reset isClosing flag for next gesture
-                        isClosing = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        // Consume to ensure smooth, dedicated drag handling
-                        change.consume()
-                        // Track vertical drag for navigation and exit
-                        verticalDragOffset += dragAmount.y
-                        
-                        // Implement video shrinking gesture with better UX
-                        if (verticalDragOffset < 0) {
-                            // Dragging up - shrink video slightly for visual feedback
-                            videoScale = (1f - abs(verticalDragOffset) / 1000f).coerceAtLeast(0.8f)
-                            // Move at 0.5x for smoother feel and less jitter
-                            videoOffset = verticalDragOffset / 2f
-                        } else if (verticalDragOffset > 0) {
-                            // Dragging down - moderate shrinking for exit feedback
-                            videoScale = (1f - verticalDragOffset / 800f).coerceAtLeast(0.8f)
-                            // Move at 0.5x for smoother feel and less jitter
-                            videoOffset = verticalDragOffset / 2f
-                        }
-                    }
-                )
-            }
     ) {
         // Video player view with gesture-based scaling
         AndroidView(
@@ -302,7 +257,7 @@ fun IndependentFullScreenPlayer(
                     translationY = videoOffset
                 ),
             factory = {
-                PlayerView(context).apply {
+                ZoomableVideoPlayerView(context).apply {
                     useController = true
                     controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -325,8 +280,33 @@ fun IndependentFullScreenPlayer(
                 playerView.setShutterBackgroundColor(android.graphics.Color.BLACK)
                 // Update the player when exoPlayer changes
                 playerView.player = exoPlayer
-                Timber.d("IndependentFullScreenPlayer - Updated PlayerView with player: $exoPlayer")
-            }
+                playerView.onNavigationCancel = {
+                    verticalDragOffset = 0f
+                    videoScale = 1f
+                    videoOffset = 0f
+                }
+                playerView.onNavigationDrag = { dx, dy ->
+                    verticalDragOffset = if (abs(dy) > abs(dx)) dy else 0f
+                    val shrinkDistance = if (verticalDragOffset < 0) 1000f else 800f
+                    videoScale = (1f - abs(verticalDragOffset) / shrinkDistance).coerceAtLeast(0.8f)
+                    videoOffset = verticalDragOffset / 2f
+                }
+                playerView.onNavigationEnd = { dx, dy ->
+                    if (!isClosing) {
+                        if (abs(dx) > abs(dy) && abs(dx) > 100f) {
+                            onHorizontalSwipe?.invoke(if (dx > 0) -1 else 1)
+                        } else if (abs(dy) > abs(dx) && abs(dy) > 150f) {
+                            if (dy > 300f || totalVideos == 1) {
+                                closePlayer()
+                            } else if (dy < 0) {
+                                FullScreenPlayerManager.playNextVideo()
+                            }
+                        }
+                    }
+                    playerView.onNavigationCancel()
+                }
+            },
+            onRelease = { it.player = null }
         )
         
         // Video information overlay
@@ -341,12 +321,31 @@ fun IndependentFullScreenPlayer(
                 tweet = currentTweet!!,
                 currentIndex = currentIndex,
                 totalVideos = totalVideos,
-                onClose = onClose,
+                onClose = closePlayer,
                 onNext = { FullScreenPlayerManager.playNextVideo() },
                 onPrevious = { FullScreenPlayerManager.playPreviousVideo() },
                 parentEntry = parentEntry,
                 modifier = Modifier.alpha(controlsAlpha)
             )
+        }
+        // Native controller visibility is the only clock for this button, so it
+        // stays available while the user interacts with playback controls.
+        if (showControls) {
+            IconButton(
+                onClick = closePlayer,
+                enabled = !isClosing,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White
+                )
+            }
         }
     }
     
@@ -366,14 +365,6 @@ fun IndependentFullScreenPlayer(
                     player.playWhenReady = true
                 }
             }
-        }
-    }
-    
-    // Auto-hide controls (and action buttons) after 3 seconds whenever they are shown
-    LaunchedEffect(showControls) {
-        if (showControls) {
-            kotlinx.coroutines.delay(3000)
-            showControls = false
         }
     }
     
