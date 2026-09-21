@@ -94,11 +94,12 @@ import kotlin.math.abs
  * Hard cap on how long either comment spinner — the pull-to-refresh indicator or
  * the initial page-0 load — blocks the detail view. Both wait on blocking socket
  * calls with a 30s client timeout each: `refreshCommentsPaginated` issues one per
- * comment page plus one per uncached comment author, and `fetchComments` resolves
+ * comment page, and `fetchComments` resolves
  * the tweet author first (up to three `fetchUser` attempts) before `get_comments`.
  * Without this cap a slow node keeps a spinner up for minutes.
  */
 private const val MAX_SPINNER_MS = 6_000L
+private const val COMMENT_PAGE_SIZE = 20
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -152,7 +153,7 @@ fun TweetDetailScreen(
     // Set once page 0 has been kicked off. Gates the load-more pagination below so it
     // cannot run before the first page exists.
     var hasLoadedPage0 by remember { mutableStateOf(false) }
-    // Track if we should stop pagination (when empty page is returned)
+    // Only a short raw server page proves exhaustion.
     var shouldStopPagination by remember { mutableStateOf(false) }
     
     // Prevent double-exit when back button is tapped multiple times
@@ -280,6 +281,16 @@ fun TweetDetailScreen(
         }
     }
 
+    suspend fun reloadFirstCommentPages() {
+        var page = 0
+        do {
+            val count = viewModel.loadComments(viewModel.tweetState.value, page, COMMENT_PAGE_SIZE)
+            lastLoadedPage = page
+            shouldStopPagination = count < COMMENT_PAGE_SIZE
+            page++
+        } while (!shouldStopPagination && viewModel.comments.value.isEmpty())
+    }
+
     // Screen-open sequence. These steps are ordered, not independent, which is why they
     // share one effect: loadCachedCommentsForDetailOpen replaces the comment list
     // wholesale, so it has to finish before anything that merges into that list — both
@@ -306,12 +317,25 @@ fun TweetDetailScreen(
             // a cancellation in between would otherwise leave the spinner up with
             // nothing left to take it down.
             val load = coroutineScope.launch(Dispatchers.IO) {
-                val newCommentsCount = viewModel.loadComments(tweet, 0)
-                lastLoadedPage = 0
-                // If page 0 returned no comments, stop pagination immediately
-                if (newCommentsCount == 0) {
-                    shouldStopPagination = true
-                    Timber.tag("TweetDetailScreen").d("Page 0 returned no comments for tweet ${tweet.mid}, stopping pagination")
+                try {
+                    reloadFirstCommentPages()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("TweetDetailScreen").w(e, "Initial comments read failed")
+                }
+            }
+            coroutineScope.launch(Dispatchers.IO) {
+                load.join()
+                // One ordinary reread after the initial attempt; the screen scope cancels
+                // this delay when the detail view is disposed. Do not force a tweet sync.
+                delay(15_000)
+                try {
+                    reloadFirstCommentPages()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("TweetDetailScreen").w(e, "Delayed comments read failed")
                 }
             }
             withTimeoutOrNull(MAX_SPINNER_MS) { load.join() }
@@ -394,14 +418,14 @@ fun TweetDetailScreen(
     // exhaust pagination before the user ever interacts, leaving subsequent
     // real scrolls with no spinner / no "no more" feedback.
     LaunchedEffect(isAtBottom, shouldStopPagination, comments.isEmpty(), hasUserScrolledForPagination) {
-        if (shouldStopPagination || (comments.isEmpty() && hasLoadedPage0)) {
+        if (shouldStopPagination) {
             return@LaunchedEffect
         }
 
         val now = System.currentTimeMillis()
         if (isAtBottom && hasUserScrolledForPagination && paginationScrollArmed && !isRefreshingAtBottom &&
             !isRefreshingAtTop && !isInitialLoading &&
-            hasLoadedPage0 && !shouldStopPagination && comments.isNotEmpty() &&
+            hasLoadedPage0 && !shouldStopPagination &&
             (now - lastPaginationAttempt) > 1000L) {
 
             lastPaginationAttempt = now
@@ -418,16 +442,21 @@ fun TweetDetailScreen(
                     runCatching { listState.animateScrollToItem(targetIndex) }
 
                     withContext(Dispatchers.IO) {
-                        val nextPage = lastLoadedPage + 1
-                        val count = viewModel.loadComments(tweet, nextPage)
-                        if (count > 0) {
+                        var count: Int
+                        do {
+                            val nextPage = lastLoadedPage + 1
+                            val previousIds = viewModel.comments.value.map { it.mid }.toSet()
+                            count = viewModel.loadComments(tweet, nextPage, COMMENT_PAGE_SIZE)
                             lastLoadedPage = nextPage
-                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned $count comments, continuing pagination")
-                        } else {
-                            Timber.tag("TweetDetailScreen").d("Page $nextPage returned no comments, stopping pagination")
-                        }
+                            val addedVisibleRows = viewModel.comments.value.any { it.mid !in previousIds }
+                        } while (count >= COMMENT_PAGE_SIZE && !addedVisibleRows)
                         count
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("TweetDetailScreen").w(e, "Comments page read failed")
+                    return@launch
                 } finally {
                     // Keep the spinner on screen for at least 500ms so a fast
                     // network doesn't render it as a one-frame flash. Then drop
@@ -436,7 +465,7 @@ fun TweetDetailScreen(
                     if (elapsed < 500) delay(500 - elapsed)
                     isRefreshingAtBottom = false
                 }
-                if (newCommentsCount == 0) {
+                if (newCommentsCount < COMMENT_PAGE_SIZE) {
                     shouldStopPagination = true
                     if (hasUserScrolledForPagination) {
                         showNoMoreComments = true
@@ -448,8 +477,7 @@ fun TweetDetailScreen(
 
     // On open and every five minutes, reload from the current provider without
     // triggering a cross-node refresh_tweet sync.
-    // Comments are loaded once by the LaunchedEffect(tweet.mid) block above —
-    // no duplicate page-0 fetch. The server (`get_comments`) now handles
+    // Comments load independently above, with one delayed reread. The server (`get_comments`) now handles
     // cleaning up genuinely-stale comment IDs itself, so the client no longer
     // needs to sync individual comments.
     LaunchedEffect(Unit) {

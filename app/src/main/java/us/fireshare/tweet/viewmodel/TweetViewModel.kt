@@ -396,9 +396,8 @@ class TweetViewModel @AssistedInject constructor(
      * Fetch one page of comments and merge successful ones into `_comments`.
      * Mirrors iOS `CommentListView` page-load semantics.
      *
-     * Returns the count of successfully parsed comments on this page.
-     * The existing screen logic uses `== 0` as "no more comments", matching
-     * the previous `getComments` return contract.
+     * Return the raw page size, including unresolved rows, for pagination.
+     * Failed requests throw so callers retain their current page.
      */
     suspend fun loadComments(tweet: Tweet, pageNumber: Number = 0, pageSize: Int = 20): Int {
         val fetched = HproseInstance.fetchComments(
@@ -421,7 +420,7 @@ class TweetViewModel @AssistedInject constructor(
             finalComments
         }
 
-        return newComments.size
+        return fetched.size
     }
 
     /**
@@ -543,50 +542,25 @@ class TweetViewModel @AssistedInject constructor(
     /**
      * Pull-to-refresh comment read (mirrors iOS `refreshComments`).
      *
-     * Loops page-by-page on the read node until a page contains a comment we
-     * already have, or until the page is short/empty. New comments are inserted
-     * at the top. This catches the case where more than one page of new
-     * comments accrued since the last load — the previous Android
-     * implementation only re-fetched page 0 and would silently drop the
-     * remainder.
-     *
+     * Walk every raw page until a short page, including pages of unresolved or
+     * already-visible comments. Publish each page so a later failure cannot hide it.
      * Returns the number of new comments inserted.
      */
     suspend fun refreshCommentsPaginated(pageSize: Int = 20): Int {
         val parent = tweetState.value
-        val all = mutableListOf<Tweet>()
         var page = 0
-        var overlap = false
+        val initialIds = _comments.value.map { it.mid }.toSet()
         try {
-            while (!overlap) {
-                val fetched = HproseInstance.fetchComments(parent, page, pageSize)
-                val valid = fetched.filterNotNull()
-                if (valid.isEmpty()) break
-
-                val existingIds = _comments.value.map { it.mid }.toSet()
-                val newHere = valid.filter { it.mid !in existingIds }
-                if (newHere.size < valid.size) overlap = true
-                all += newHere
-                if (fetched.size < pageSize) break
+            do {
+                val count = loadComments(parent, page, pageSize)
                 page++
-            }
-            if (all.isNotEmpty()) {
-                _comments.update { current ->
-                    val newIds = all.map { it.mid }.toSet()
-                    val merged = (all + current.filterNot { it.mid in newIds })
-                        .sortedByDescending { it.timestamp }
-                    TweetCacheManager.saveCommentsByParent(commentsCacheParentTweetId, merged)
-                    merged
-                }
-            }
+            } while (count >= pageSize)
         } catch (e: CancellationException) {
-            // Must outrun the general catch: on the JVM cancellation is an Exception,
-            // and swallowing it here would let a torn-down screen keep paging.
             throw e
         } catch (e: Exception) {
-            Timber.tag("TweetViewModel").d("refreshCommentsPaginated skipped: ${e.message}")
+            Timber.tag("TweetViewModel").d("refreshCommentsPaginated failed: ${e.message}")
         }
-        return all.size
+        return _comments.value.count { it.mid !in initialIds }
     }
 
     suspend fun delComment(commentId: MimeiId) {

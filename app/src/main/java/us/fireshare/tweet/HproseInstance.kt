@@ -4624,8 +4624,7 @@ object HproseInstance {
         pageSize: Int = 20
     ): List<Tweet?> {
         if (!isOnline.value) {
-            Timber.tag("fetchComments").d("Offline: skipping")
-            return emptyList()
+            throw IllegalStateException("Cannot load comments while offline")
         }
         return try {
             if (tweet.author == null) {
@@ -4640,11 +4639,11 @@ object HproseInstance {
                 val fetched = fetchUser(tweet.authorId)
                 if (fetched == null || fetched.baseUrl.isNullOrEmpty()) {
                     Timber.tag("fetchComments").e("Cannot resolve author for tweet ${tweet.mid}")
-                    return emptyList()
+                    throw IllegalStateException("Cannot resolve comment parent author ${tweet.authorId}")
                 }
                 tweet.author = fetched
             }
-            if (tweet.author?.hproseService == null) return emptyList()
+            checkNotNull(tweet.author?.hproseService) { "No comment read service" }
 
             val params = mapOf(
                 "aid" to appId,
@@ -4661,7 +4660,9 @@ object HproseInstance {
                 params,
                 tweet.storageFormat
             )
-            val response = unwrapV2Response<List<Map<String, Any>?>>(raw) ?: emptyList()
+            val response = checkNotNull(unwrapV2Response<List<Map<String, Any>?>>(raw)) {
+                "Invalid comments response"
+            }
 
             val comments = mutableListOf<Tweet?>()
             for (entry in response) {
@@ -4689,18 +4690,30 @@ object HproseInstance {
                     comment.favoriteOverride = favoriteOverride
                     comment.bookmarkOverride = bookmarkOverride
                     comment.interactionHostAuthor = tweet.author
-                    val cachedAuthor = TweetCacheManager.getCachedUser(comment.authorId)
-                    comment.author = cachedAuthor ?: fetchUser(comment.authorId)
+                    comment.author = TweetCacheManager.getUserStateFlow(comment.authorId).value
                     comments.add(comment)
                 } catch (e: kotlinx.coroutines.CancellationException) {
-                    // fetchUser suspends inside this block; cancellation is not a parse
-                    // failure and must reach the caller instead of becoming a null row.
+                    // Cancellation must not become an unresolved comment row.
                     throw e
                 } catch (e: Exception) {
                     Timber.tag("fetchComments").w(
                         "Failed to parse comment in tweet ${tweet.mid}: mid=$commentId, error=${e.message}"
                     )
                     comments.add(null)
+                }
+            }
+            // Return bodies immediately. CommentItem observes the user cache's StateFlow,
+            // which fetchUser updates when these independent author lookups finish.
+            comments.filterNotNull().groupBy { it.authorId }.forEach { (authorId, rows) ->
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val author = fetchUser(authorId)
+                        rows.forEach { it.author = author }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("fetchComments").w(e, "Comment author lookup failed: $authorId")
+                    }
                 }
             }
             comments
@@ -4710,7 +4723,7 @@ object HproseInstance {
             throw e
         } catch (e: Exception) {
             Timber.tag("fetchComments").e(e, "Error fetching comments for tweet ${tweet.mid}")
-            emptyList()
+            throw e
         }
     }
 
