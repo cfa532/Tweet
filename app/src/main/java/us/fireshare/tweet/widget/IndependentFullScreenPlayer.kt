@@ -84,7 +84,8 @@ fun IndependentFullScreenPlayer(
     tappedTweet: Tweet? = null, // The tweet that was actually tapped
     parentEntry: NavBackStackEntry,
     onClose: () -> Unit,
-    onHorizontalSwipe: ((Int) -> Unit)? = null
+    onHorizontalSwipe: ((Int) -> Unit)? = null,
+    onDismissDrag: (Float) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -245,7 +246,6 @@ fun IndependentFullScreenPlayer(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
     ) {
         // Video player view with gesture-based scaling
         AndroidView(
@@ -261,8 +261,8 @@ fun IndependentFullScreenPlayer(
                     useController = true
                     controllerAutoShow = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    setBackgroundColor(android.graphics.Color.BLACK)
-                    setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                     setKeepContentOnPlayerReset(true)
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     setControllerVisibilityListener(
@@ -276,17 +276,19 @@ fun IndependentFullScreenPlayer(
                 }
             },
             update = { playerView ->
-                // Ensure shutter background is black when updating player (in case view hierarchy changed)
-                playerView.setShutterBackgroundColor(android.graphics.Color.BLACK)
+                // Keep letterboxing transparent; the browser owns the stationary dim layer.
+                playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                 // Update the player when exoPlayer changes
                 playerView.player = exoPlayer
                 playerView.onNavigationCancel = {
                     verticalDragOffset = 0f
+                    onDismissDrag(0f)
                     videoScale = 1f
                     videoOffset = 0f
                 }
                 playerView.onNavigationDrag = { dx, dy ->
                     verticalDragOffset = if (abs(dy) > abs(dx)) dy else 0f
+                    onDismissDrag(verticalDragOffset.coerceAtLeast(0f))
                     val shrinkDistance = if (verticalDragOffset < 0) 1000f else 800f
                     videoScale = (1f - abs(verticalDragOffset) / shrinkDistance).coerceAtLeast(0.8f)
                     videoOffset = verticalDragOffset / 2f

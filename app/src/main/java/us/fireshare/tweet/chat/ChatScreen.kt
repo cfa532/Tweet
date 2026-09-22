@@ -526,7 +526,6 @@ fun ChatScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black)
                     ) {
                         us.fireshare.tweet.widget.AdvancedImageViewer(
                             imageUrl = mediaUrl,

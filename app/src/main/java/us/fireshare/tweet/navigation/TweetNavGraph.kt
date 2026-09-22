@@ -28,6 +28,8 @@ import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.compose.ui.window.DialogProperties
+import androidx.navigation.compose.dialog
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -222,7 +224,9 @@ fun TweetNavGraph(
                 )
                 ChatListScreen(viewModel)
             }
-            composable<NavTweet.MediaViewer>(
+            // A floating destination retains the originating feed under the dim backdrop.
+            dialog<NavTweet.MediaViewer>(
+                dialogProperties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
                 typeMap = mapOf(typeOf<MediaViewerParams>() to TweetNavType.MediaViewerType)
             ) { navBackStackEntry ->
                 val parentEntry = remember(navBackStackEntry) {

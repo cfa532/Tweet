@@ -94,6 +94,7 @@ fun MediaBrowser(
     navController: NavController,
     params: MediaViewerParams
 ) {
+    val mediaWindow = FullscreenMediaWindow()
     val startIndex = params.index
     val tweetId = params.tweetId
     val authorId = params.authorId
@@ -202,6 +203,8 @@ fun MediaBrowser(
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var mediaDismissOffset by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(pagerState.currentPage) { mediaDismissOffset = 0f }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
     var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
@@ -234,7 +237,7 @@ fun MediaBrowser(
      * Stop playing when screen locked. Also hide system bars.
      * */
     DisposableEffect(Unit) {
-        activity?.window?.let { window ->
+        mediaWindow.let { window ->
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) // keep screen ON
 
             // Use WindowInsetsController directly for API level 30 and above
@@ -270,10 +273,10 @@ fun MediaBrowser(
         lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            mediaWindow.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
             // Show system bars when exiting full screen
-            activity?.window?.let { window ->
+            mediaWindow.let { window ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     window.insetsController?.show(WindowInsets.Type.systemBars())
                 } else {
@@ -316,7 +319,9 @@ fun MediaBrowser(
                 }
             }
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black).then(imageGestures)
+        modifier = Modifier.fillMaxSize().fullscreenDismissBackdrop {
+            if (currentPageIsVideo) mediaDismissOffset else maxOf(mediaDismissOffset, animatedOffsetY)
+        }.then(imageGestures)
     ) {
         HorizontalPager(
             state = pagerState,
@@ -345,6 +350,7 @@ fun MediaBrowser(
                             Timber.d("MediaBrowser - IndependentFullScreenPlayer onClose called")
                             navController.popBackStack()
                         },
+                        onDismissDrag = { mediaDismissOffset = it },
                         onHorizontalSwipe = { direction ->
                             val destination = pagerState.currentPage + direction
                             if (destination in mediaItems.indices) {
@@ -421,6 +427,8 @@ fun MediaBrowser(
                     AdvancedImageViewer(
                         imageUrl = mediaItem.url,
                         imageMid = mediaItem.mid,
+                        drawBackdrop = false,
+                        onDismissDrag = { mediaDismissOffset = it },
                         onClose = { navController.popBackStack() },
                         modifier = Modifier
                             .offset { IntOffset(offsetX.roundToInt(), 0) }

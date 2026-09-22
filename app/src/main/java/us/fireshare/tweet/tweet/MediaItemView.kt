@@ -371,7 +371,6 @@ fun MediaItemView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black)
             ) {
                 // Use key to force recomposition when image changes - this ensures smooth animation
                 key(imageMid) {

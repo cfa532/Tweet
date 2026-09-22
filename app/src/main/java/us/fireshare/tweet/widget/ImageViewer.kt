@@ -120,8 +120,11 @@ fun AdvancedImageViewer(
     imageUrls: List<String>? = null, // List of all image URLs for navigation
     // Current image index in the list
     onNextImage: (() -> Unit)? = null, // Callback to load next image
-    onPreviousImage: (() -> Unit)? = null // Callback to load previous image
+    onPreviousImage: (() -> Unit)? = null, // Callback to load previous image
+    drawBackdrop: Boolean = true,
+    onDismissDrag: (Float) -> Unit = {}
 ) {
+    if (drawBackdrop) FullscreenMediaWindow()
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val mid = imageMid
@@ -491,7 +494,7 @@ fun AdvancedImageViewer(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .then(if (drawBackdrop) Modifier.fullscreenDismissBackdrop { verticalDragOffset } else Modifier)
             .onGloballyPositioned { 
                 isVisible = true 
             }
@@ -508,6 +511,13 @@ fun AdvancedImageViewer(
                         dragOffset = 0f
                         horizontalDragOffset = 0f
                         verticalDragOffset = 0f
+                        onDismissDrag(0f)
+                    },
+                    onDragCancel = {
+                        dragOffset = 0f
+                        horizontalDragOffset = 0f
+                        verticalDragOffset = 0f
+                        onDismissDrag(0f)
                     },
                     onDragEnd = { 
                         // Check for horizontal drag gestures (left/right swipe)
@@ -534,6 +544,7 @@ fun AdvancedImageViewer(
                         dragOffset = 0f
                         horizontalDragOffset = 0f
                         verticalDragOffset = 0f
+                        onDismissDrag(0f)
                     },
                     onDrag = { change, dragAmount ->
                         // Check if this is primarily a horizontal or vertical drag
@@ -552,6 +563,7 @@ fun AdvancedImageViewer(
                         } else if (isVerticalDrag && dragAmount.y > 0) {
                             // Track vertical drag down for exit
                             verticalDragOffset += dragAmount.y
+                            onDismissDrag(verticalDragOffset)
                             
                             // Update dragOffset for visual feedback (vertical down)
                             dragOffset += dragAmount.y
