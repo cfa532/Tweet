@@ -169,4 +169,9 @@
     <string name="logout_confirmation">ログアウトしてもよろしいですか？この操作は元に戻せません。</string>
     <string name="delete_account_confirmation">アカウントを削除してもよろしいですか？すべてのデータが完全に削除されます。この操作は元に戻せません。</string>
     <string name="deleting_account">アカウントを削除中…</string>
+    <string name="search_placeholder">@ユーザー名または投稿内容で検索…</string>
+    <string name="search_hint">@ユーザー名または投稿内容で検索</string>
+    <string name="search_no_results">結果が見つかりません</string>
+    <string name="search_load_more">さらに読み込む</string>
+    <string name="search_countdown">%1$d秒</string>
 </resources>

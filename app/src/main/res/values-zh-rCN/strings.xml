@@ -192,7 +192,7 @@
     <string name="show">显示</string>
     <string name="cleared">已清除！</string>
     <string name="clear">清除</string>
-    <string name="search_placeholder">搜索 @用户名 或 #话题</string>
+    <string name="search_placeholder">按 @用户名或推文内容搜索…</string>
     <string name="search_generic_error">搜索时出现问题，请重试。</string>
     <string name="search_section_users">账号</string>
     <string name="search_section_tweets">推文</string>
@@ -324,4 +324,8 @@
     <string name="logout_confirmation">确定要退出登录吗？此操作无法撤销。</string>
     <string name="delete_account_confirmation">确定要注销账号吗？所有数据将被永久删除，此操作无法撤销。</string>
     <string name="deleting_account">正在注销账号…</string>
+    <string name="search_hint">按 @用户名或推文内容搜索</string>
+    <string name="search_no_results">未找到结果</string>
+    <string name="search_load_more">加载更多</string>
+    <string name="search_countdown">%1$d秒</string>
 </resources>

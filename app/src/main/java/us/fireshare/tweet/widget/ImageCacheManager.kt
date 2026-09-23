@@ -16,6 +16,7 @@ import io.ktor.client.request.headers
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +100,8 @@ object ImageCacheManager {
             config {
                 connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 readTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 20s for IPFS
+                // Include the response body in the deadline, even if data keeps arriving.
+                callTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 writeTimeout(READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
                 followRedirects(followRedirects = true)
@@ -112,6 +115,7 @@ object ImageCacheManager {
             config {
                 connectTimeout(CONNECTION_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 readTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)  // 15s for avatars
+                callTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 writeTimeout(AVATAR_READ_TIMEOUT.toLong(), TimeUnit.MILLISECONDS)
                 protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
                 followRedirects(followRedirects = true)
@@ -531,7 +535,7 @@ object ImageCacheManager {
             }
             
             val isStillDownloading = synchronized(downloadQueueMutex) {
-                ongoingDownloads.contains(mid)
+                ongoingDownloads.containsKey(mid)
             }
             
             if (!isStillDownloading) {
@@ -596,45 +600,35 @@ object ImageCacheManager {
         isAvatar: Boolean = false
     ): Bitmap? =
         withContext(Dispatchers.IO) {
+            getCachedImage(context, mid)?.let { return@withContext it }
+
+            if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
+                Timber.tag("ImageCacheManager").d("Skip blacklisted media image: $mid")
+                return@withContext null
+            }
+
+            waitForFullScreenImageTurn(mid)
+
+            val shouldProceed = synchronized(downloadQueueMutex) {
+                if (ongoingDownloads.containsKey(mid)) {
+                    false
+                } else {
+                    ongoingDownloads[mid] = System.currentTimeMillis()
+                    downloadPriorityQueue[mid] = isVisible
+                    true
+                }
+            }
+
+            // Waiters do not own the download's bookkeeping. Cancelling one must
+            // leave the owner registered until its own attempt finishes.
+            if (!shouldProceed) {
+                if (isVisible) promoteDownloadToVisible(mid)
+                return@withContext waitForConcurrentDownload(context, mid)
+            }
+
             var permit: DownloadPermit? = null
             try {
-                // Check if already cached first
-                getCachedImage(context, mid)?.let { return@withContext it }
-
-                if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
-                    Timber.tag("ImageCacheManager").d("Skip blacklisted media image: $mid")
-                    return@withContext null
-                }
-
-                waitForFullScreenImageTurn(mid)
-
-                // Deduplication: Check if already downloading this image
-                val shouldProceed = synchronized(downloadQueueMutex) {
-                    if (ongoingDownloads.contains(mid)) {
-                        false // Another thread is downloading
-                    } else {
-                        ongoingDownloads[mid] = System.currentTimeMillis()
-                        downloadPriorityQueue[mid] = isVisible
-                        true // This thread will download
-                    }
-                }
-
-                if (!shouldProceed) {
-                    if (isVisible) {
-                        promoteDownloadToVisible(mid)
-                    }
-                    // Wait for the concurrent download to complete
-                    return@withContext waitForConcurrentDownload(context, mid)
-                }
-
-                // Check memory availability before starting download (similar to iOS)
-                if (!waitForMemoryWindow(mid, "[thumbnail]")) {
-                    synchronized(downloadQueueMutex) {
-                        ongoingDownloads.remove(mid)
-                        downloadPriorityQueue.remove(mid)
-                    }
-                    return@withContext null
-                }
+                if (!waitForMemoryWindow(mid, "[thumbnail]")) return@withContext null
 
                 permit = acquireDownloadPermit(mid, imageUrl, isVisible, isAvatar)
                 downloadQueue[mid] = true
@@ -644,89 +638,44 @@ object ImageCacheManager {
                     activeVisibleDownloads++
                 }
 
-                try {
-                    var bitmap: Bitmap? = null
-                    var attempt = 0
-
-                    while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
-                        attempt++
-                        try {
-                            bitmap = performDownload(imageUrl, mid, context, isAvatar)
-                            if (bitmap != null && !bitmap.isRecycled) {
-                                // Cache the downloaded image
-                                cacheImage(context, mid, bitmap)
-                                us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
-                                return@withContext bitmap
-                            }
-                        } catch (e: Exception) {
-                            if (attempt < MAX_RETRY_ATTEMPTS) {
-                                delay(1000L * attempt) // Exponential backoff
-                            }
+                var attempt = 0
+                while (attempt < MAX_RETRY_ATTEMPTS) {
+                    attempt++
+                    try {
+                        val bitmap = performDownload(imageUrl, mid, context, isAvatar)
+                        if (bitmap != null && !bitmap.isRecycled) {
+                            cacheImage(context, mid, bitmap)
+                            us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
+                            return@withContext bitmap
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        if (attempt < MAX_RETRY_ATTEMPTS) delay(1000L * attempt)
                     }
+                }
 
-                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
-                    return@withContext null
-
-                } finally {
+                us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
+                null
+            } finally {
+                synchronized(downloadQueueMutex) {
                     downloadQueue.remove(mid)
-                    // Remove from ongoing downloads to signal completion
-                    synchronized(downloadQueueMutex) {
-                        downloadPriorityQueue.remove(mid)
-                        ongoingDownloads.remove(mid)
-                    }
-                    if (permit.priority == ImageDownloadPriority.BACKGROUND) {
+                    downloadPriorityQueue.remove(mid)
+                    ongoingDownloads.remove(mid)
+                }
+                permit?.let {
+                    if (it.priority == ImageDownloadPriority.BACKGROUND) {
                         activeInvisibleDownloads--
                     } else {
                         activeVisibleDownloads--
                     }
-                    releaseDownloadPermit(permit)
-                    permit = null
+                    releaseDownloadPermit(it)
                 }
-            } catch (e: Exception) {
-                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Clean up download queue and release resources atomically
-                    synchronized(downloadQueueMutex) {
-                        val wasInQueue = downloadQueue.containsKey(mid)
-                        
-                        // Recycle any cached result for this download
-                        downloadResults[mid]?.let { bitmap ->
-                            if (!bitmap.isRecycled) {
-                                try {
-                                    bitmap.recycle()
-                                } catch (ex: Exception) {
-                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
-                                }
-                            }
-                        }
-                        
-                        downloadQueue.remove(mid)
-                        downloadResults.remove(mid)
-                        downloadPriorityQueue.remove(mid)
-                        resultTimestamps.remove(mid)
-                        ongoingDownloads.remove(mid)
-                        
-                        // Update counter ONLY if we were in the queue
-                        if (wasInQueue) {
-                            if (permit?.priority == ImageDownloadPriority.BACKGROUND) {
-                                activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
-                            } else {
-                                activeVisibleDownloads = maxOf(0, activeVisibleDownloads - 1)
-                            }
-                        }
-                    }
-                    
-                    releaseDownloadPermit(permit)
-                    permit = null
-                } else {
-                    synchronized(downloadQueueMutex) {
-                        downloadPriorityQueue.remove(mid)
-                        ongoingDownloads.remove(mid)
-                    }
-                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
-                }
-                null
             }
         }
 
@@ -1296,7 +1245,7 @@ object ImageCacheManager {
     }
     
     /**
-     * Start an on-demand background task to resume paused downloads and clean up stuck downloads.
+     * Start an on-demand background task to resume paused downloads.
      * Runs only while there are paused downloads, then stops automatically.
      */
     private fun ensureResumerRunning() {
@@ -1317,8 +1266,6 @@ object ImageCacheManager {
                         }
                     }
                 }
-
-                cleanupStuckDownloads()
 
                 // Stop the resumer when there's nothing left to manage
                 val hasPaused = synchronized(pausedDownloadMutex) { pausedDownloads.isNotEmpty() }
@@ -1647,38 +1594,6 @@ object ImageCacheManager {
                 }
                 downloadResults.remove(entry.key)
                 iterator.remove()
-            }
-        }
-    }
-
-    /**
-     * Clean up stuck downloads that have been in the queue too long
-     */
-    private fun cleanupStuckDownloads() {
-        val currentTime = System.currentTimeMillis()
-        val thirtySecondsAgo = currentTime - 30000L // 30 seconds timeout
-        
-        synchronized(downloadQueueMutex) {
-            val stuckDownloads = downloadQueue.keys.filter { mid ->
-                // Check when download started (ongoingDownloads) not when it completed (resultTimestamps)
-                val startTimestamp = ongoingDownloads[mid]
-                if (startTimestamp != null) {
-                    // Download is actively running - check if it's been too long
-                    startTimestamp < thirtySecondsAgo
-                } else {
-                    // No start timestamp - something is wrong, consider it stuck
-                    true
-                }
-            }
-            
-            if (stuckDownloads.isNotEmpty()) {
-                stuckDownloads.forEach { mid ->
-                    downloadQueue.remove(mid)
-                    downloadResults.remove(mid)
-                    downloadPriorityQueue.remove(mid)
-                    resultTimestamps.remove(mid)
-                    ongoingDownloads.remove(mid)
-                }
             }
         }
     }

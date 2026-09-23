@@ -277,10 +277,9 @@ fun TweetNavGraph(
                 FollowerScreen(user.userId, parentEntry, sharedViewModel.appUserViewModel)
             }
             composable<NavTweet.Search> {
-                val parentEntry = remember(it) {
-                    it
-                }
-                val viewModel: SearchViewModel = hiltViewModel(parentEntry)
+                // Preserve the query/results across navigation, with a scope that stays
+                // active until the activity is cleared rather than a Search entry is popped.
+                val viewModel: SearchViewModel = hiltViewModel(viewModelStoreOwner = activity)
                 SearchScreen(viewModel)
             }
             /**

@@ -196,7 +196,7 @@
     <string name="show">Show</string>
     <string name="cleared">Cleared!</string>
     <string name="clear">Clear</string>
-    <string name="search_placeholder">Search @username or #hashtag</string>
+    <string name="search_placeholder">Search by @username or tweet content…</string>
     <string name="search_generic_error">Something went wrong while searching. Please try again.</string>
     <string name="search_section_users">Accounts</string>
     <string name="search_section_tweets">Tweets</string>
@@ -398,4 +398,8 @@
     <string name="logout_confirmation">Are you sure you want to logout? This action cannot be undone.</string>
     <string name="delete_account_confirmation">Are you sure you want to delete your account? All your data will be permanently deleted. This action cannot be undone.</string>
     <string name="deleting_account">Deleting account…</string>
+    <string name="search_hint">Search by @username or tweet content</string>
+    <string name="search_no_results">No results found</string>
+    <string name="search_load_more">Load more</string>
+    <string name="search_countdown">%1$ds</string>
 </resources>

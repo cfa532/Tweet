@@ -155,6 +155,16 @@ object BlackList {
         }
     }
     
+    /** Allow an explicit user retry of one resource without clearing other failures. */
+    suspend fun resetForRetry(resourceId: String) {
+        mutex.withLock {
+            blacklistDao?.delete(resourceId)
+            sessionFailureCounts.remove(resourceId)
+            sessionBlockedResources.remove(resourceId)
+            lastFailureRecordedAt.remove(resourceId)
+        }
+    }
+
     /**
      * Clear all data (for testing or reset purposes)
      */

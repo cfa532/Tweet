@@ -284,26 +284,18 @@ class TweetViewModel @AssistedInject constructor(
          * */
         initialTweetLoad = if (tweetState.value.author == null) {
             viewModelScope.async(Dispatchers.IO) {
-                // Step 1: Check if there's a cached tweet with author already populated
+                // Render cached content before resolving the author or probing its node.
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.mid != null) {
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
-                    if (cachedTweet != null && cachedTweet.author != null) {
+                    if (cachedTweet != null) {
                         applyFetchedTweet(cachedTweet)
-                        // Then check the address the cached author carries. This branch never
-                        // reads the tweet from the server, so nothing else here would notice a
-                        // node that stopped serving, and the comment load that follows goes
-                        // through it.
-                        //
-                        // After the apply, never before it. Every detail screen starts from a
-                        // stub — it does not share this ViewModel with the feed row it was
-                        // opened from — so holding the apply behind a probe left the screen
-                        // showing nothing but the header and avatar, which the body resolves
-                        // from the user cache, for as long as the probe took. The tweet is
-                        // already on disk; the media it names is content-addressed and served
-                        // by any reachable node, so there is nothing to wait for.
-                        cachedTweet.author?.let { HproseInstance.validateAndRepairProfileRoute(it) }
-                        return@async false
+                        cachedTweet.author?.let { cachedAuthor ->
+                            // A populated author still needs its route checked, but that
+                            // network work must not delay rendering the cached payload.
+                            HproseInstance.validateAndRepairProfileRoute(cachedAuthor)
+                            return@async false
+                        }
                     }
                 }
                 
@@ -314,8 +306,8 @@ class TweetViewModel @AssistedInject constructor(
                     cachedUser = TweetCacheManager.getCachedUser(tweet.authorId)
                     if (cachedUser != null) {
                         TweetCacheManager.saveUser(cachedUser)
-                        val tweetWithAuthor = tweet.copy(author = cachedUser)
-                        _tweetState.value = tweetWithAuthor
+                        // Enrich the loaded payload, not the constructor's ID-only stub.
+                        _tweetState.update { it.copy(author = cachedUser) }
                     }
                 }
                 
@@ -328,8 +320,7 @@ class TweetViewModel @AssistedInject constructor(
                         author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
                         if (author != null) {
                             TweetCacheManager.saveUser(author)
-                            val tweetWithAuthor = tweet.copy(author = author)
-                            _tweetState.value = tweetWithAuthor
+                            _tweetState.update { it.copy(author = author) }
                         } else {
                             Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId}")
                         }
@@ -349,14 +340,14 @@ class TweetViewModel @AssistedInject constructor(
                     } else {
                         val currentAuthor = author ?: cachedUser
                         if (currentAuthor != null && tweetState.value.author == null) {
-                            _tweetState.value = tweet.copy(author = currentAuthor)
+                            _tweetState.update { it.copy(author = currentAuthor) }
                         }
                     }
                     fetched != null
                 } else {
                     val currentAuthor = author ?: cachedUser
                     if (currentAuthor != null && tweetState.value.author == null) {
-                        _tweetState.value = tweet.copy(author = currentAuthor)
+                        _tweetState.update { it.copy(author = currentAuthor) }
                     }
                     false
                 }

@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.BlackList
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.min
@@ -864,6 +866,7 @@ fun ImageViewer(
     onBitmapLoaded: ((Bitmap?) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val retryScope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     val mid = imageMid
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
@@ -1394,6 +1397,35 @@ fun ImageViewer(
                     text = stringResource(R.string.loading),
                     color = if (isFullScreen) Color.Gray else Color.Gray
                 )
+            }
+        } else if (loadState.hasError) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.failed_to_load_image),
+                    color = Color.Gray
+                )
+                TextButton(
+                    enabled = mid != null && !imageUrl.isNullOrBlank(),
+                    onClick = {
+                        val retryMid = mid ?: return@TextButton
+                        loadState = loadState.copy(isLoading = true, hasError = false)
+                        retryScope.launch {
+                            try {
+                                BlackList.resetForRetry(retryMid)
+                                // Changing the effect key also retries after the automatic budget
+                                // is exhausted, without granting another automatic retry loop.
+                                retryCount++
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                loadState = loadState.copy(isLoading = false, hasError = true)
+                                Timber.tag("ImageViewer").e(e, "Could not retry image: $retryMid")
+                            }
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.retry))
+                }
             }
         }
 
