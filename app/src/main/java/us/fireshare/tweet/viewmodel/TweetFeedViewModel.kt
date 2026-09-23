@@ -239,6 +239,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * This should be called from the UI layer after app initialization completes.
      */
     fun initialize() {
+        // Feed resets re-enter here without recreating the screen. Start read-ahead
+        // here too so login and route initialization cannot leave it cancelled.
+        BackgroundTweetPrefetcher.prefetchMainFeed()
         if (isInitialized) {
             return
         }

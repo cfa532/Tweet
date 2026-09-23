@@ -203,10 +203,10 @@ fun SearchScreen(
                 )
                 uiState.userResults.isEmpty() && uiState.tweetResults.isEmpty() -> SearchEmptyState(
                     title = stringResource(
-                        if (uiState.query.isEmpty()) R.string.search else R.string.search_no_results
+                        if (uiState.submittedQuery == uiState.query.trim()) R.string.search_no_results else R.string.search
                     ),
                     subtitle = stringResource(
-                        if (uiState.query.isEmpty()) R.string.search_hint else R.string.try_different_search
+                        if (uiState.submittedQuery == uiState.query.trim()) R.string.try_different_search else R.string.search_hint
                     ),
                     onTap = { focusManager.clearFocus() }
                 )
@@ -363,6 +363,8 @@ private fun SearchSectionHeader(text: String) {
 
 data class SearchUiState(
     val query: String = "",
+    // Empty results only describe the submitted query, not text still being edited.
+    val submittedQuery: String? = null,
     val userResults: List<User> = emptyList(),
     val tweetResults: List<Tweet> = emptyList(),
     val isLoading: Boolean = false,
@@ -401,6 +403,7 @@ class SearchViewModel @Inject constructor() : ViewModel() {
 
         if (sanitizedQuery.isEmpty()) {
             _uiState.value = _uiState.value.copy(
+                submittedQuery = null,
                 userResults = emptyList(),
                 tweetResults = emptyList(),
                 isLoading = false,
@@ -412,6 +415,7 @@ class SearchViewModel @Inject constructor() : ViewModel() {
         // Serialize state updates with text edits and other submissions on main.
         searchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
+                submittedQuery = sanitizedQuery,
                 isLoading = true,
                 hasError = false,
                 userResults = emptyList(),

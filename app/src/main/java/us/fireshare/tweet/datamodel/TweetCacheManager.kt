@@ -771,7 +771,7 @@ object TweetCacheManager {
 
     /**
      * Perform a partial search across locally cached tweets (memory + database).
-     * Matches tweet content, title, and author metadata case-insensitively.
+     * Matches tweet content and title case-insensitively.
      */
     suspend fun searchTweets(query: String, limit: Int = 40): List<Tweet> = withContext(Dispatchers.IO) {
         if (query.isBlank() || limit <= 0) return@withContext emptyList()
@@ -794,15 +794,14 @@ object TweetCacheManager {
             }
         }
 
-        if (results.size < limit) {
-            try {
-                HproseInstance.dao.getRecentCachedTweets(400).forEach { cachedTweet ->
-                    consider(cachedTweet.originalTweet)
-                    if (results.size >= limit) return@forEach
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "searchTweets: Unable to read cached tweets from database")
+        // The result limit applies after matching and ranking the entire cache.
+        // Read-ahead can evict an opened tweet from memory while it remains on disk.
+        try {
+            HproseInstance.dao.getAllCachedTweets().forEach { cachedTweet ->
+                consider(cachedTweet.originalTweet)
             }
+        } catch (e: Exception) {
+            Timber.e(e, "searchTweets: Unable to read cached tweets from database")
         }
 
         val sortedTweets = results.values
@@ -813,12 +812,9 @@ object TweetCacheManager {
 
         for (tweet in sortedTweets) {
             if (tweet.author == null) {
-                try {
-                    // Check cache first before fetching from server
-                    tweet.author = getCachedUser(tweet.authorId) ?: HproseInstance.fetchUser(tweet.authorId)
-                } catch (e: Exception) {
-                    Timber.tag("TweetCacheManager").v(e, "searchTweets: Failed to fetch author ${tweet.authorId}")
-                }
+                // Like iOS, use local author data so profile RPCs cannot hold back
+                // matches until the search deadline cancels the request.
+                tweet.author = getCachedUser(tweet.authorId)
             }
         }
 

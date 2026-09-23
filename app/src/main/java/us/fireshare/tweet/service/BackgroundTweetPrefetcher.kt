@@ -29,13 +29,14 @@ import us.fireshare.tweet.widget.VideoManager
  * anything in Tweet's shared instance registry, so a read-ahead page leaves nothing
  * pinned in memory and publishes nothing into the visible feed.
  *
- * Read-ahead runs until the backend returns a short page. Cache size is bounded by the
- * cache's own 30-day expiry, not by anything here.
+ * Read-ahead covers up to 5,000 feed entries, stopping earlier on a short page.
+ * Older pages remain available through normal scroll pagination.
  */
 object BackgroundTweetPrefetcher {
 
     private const val TAG = "TweetPrefetch"
     private const val PAGE_SIZE = 20
+    private const val MAX_PREFETCH_TWEETS = 5_000
     /** How often to re-check the network while something else is downloading. */
     private const val BUSY_POLL_INTERVAL_MS = 3_000L
     /**
@@ -63,12 +64,12 @@ object BackgroundTweetPrefetcher {
     private var job: Job? = null
 
     /**
-     * Warm the app user's following feed. Called when the main feed is shown.
+     * Warm the app user's following feed on screen entry and after a feed reset.
      *
-     * The app user is deliberately NOT inspected here. This runs from the screen's
-     * LaunchedEffect, right after TweetFeedViewModel.initialize(), which is not a
-     * suspend function - it only launches the work that resolves the app user. Reading
-     * appUser at this point usually sees the guest placeholder, and bailing on that
+     * The app user is deliberately NOT inspected here. TweetFeedViewModel.initialize()
+     * starts this on screen entry and after a feed reset, before its asynchronous
+     * initialization work finishes. Reading appUser at this point can still see the
+     * guest placeholder, and bailing on that
      * would kill the read-ahead for the whole session with nothing to re-arm it.
      * Readiness is a gate condition instead, re-checked on every poll.
      */
@@ -107,7 +108,8 @@ object BackgroundTweetPrefetcher {
 
     /**
      * Claim the next page to fetch, binding the cursor to whoever the app user is now.
-     * Returns null once the backend has run out. Synchronized with [reset] so a run
+     * Returns null once the backend has run out or the read-ahead limit is reached.
+     * Synchronized with [reset] so a run
      * that outlives its session cannot resurrect a stale cursor.
      */
     @Synchronized
@@ -118,7 +120,7 @@ object BackgroundTweetPrefetcher {
             nextPage = 0
             isExhausted = false
         }
-        if (isExhausted) return null
+        if (isExhausted || nextPage * PAGE_SIZE >= MAX_PREFETCH_TWEETS) return null
         return mid to nextPage
     }
 
