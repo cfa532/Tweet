@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,7 +20,8 @@ import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -32,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,7 +57,6 @@ import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,121 +77,146 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
     var lastClickTime by remember { mutableLongStateOf(0L) }
     val debounceTime = 500L
 
-    LargeTopAppBar(
-        title = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = 0.dp,
-                        end = 8.dp
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                // LargeTopAppBar also measures this title between the toolbar icons, even
-                // while that copy is hidden. Reserve the button's width before the identity
-                // so its label cannot wrap and inflate the invisible toolbar row.
-                Row(
-                    modifier = Modifier.weight(1f).padding(end = 8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    if (showDialog) {
-                        ImageModalDialog(user,
-                            onDismiss = { showDialog = false })
-                    }
-                    UserAvatar(
-                        user = user,
-                        size = (80 - (scrollFraction * 20)).toInt(),
-                        onClick = { showDialog = true }
-                    )
-                    Column(
-                        modifier = Modifier.padding(start = 8.dp, top = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        Text(
-                            text = user.name ?: "No one",
-                            fontSize = 18.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "@" + (user.username ?: "NoOne"),
-                            fontSize = 14.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(start = 0.dp)
-                        )
-                        // Show registration date
-                        val date = Date(user.timestamp)
-                        val dateFormat = SimpleDateFormat("MMM yyyy", LocalLocale.current.platformLocale)
-                        Text(
-                            text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 0.dp)
-                        )
-                    }
-                }
-                Box(modifier = Modifier.align(Alignment.CenterVertically)) {
-                    ProfileTopBarButton(viewModel, navController, scrollBehavior)
-                }
-            }
-        },
-        navigationIcon = {
-            IconButton(onClick = {
-                val currentTime = SystemClock.elapsedRealtime()
-                if (currentTime - lastClickTime > debounceTime) {
-                    // Navigate back to tweet feed to prevent navigation issues
-                    try {
-                        // First try to pop back stack
-                        if (!navController.popBackStack()) {
-                            // If popBackStack returns false, navigate to tweet feed
+    if (showDialog) {
+        ImageModalDialog(user, onDismiss = { showDialog = false })
+    }
+
+    // Keep the compact toolbar separate: LargeTopAppBar measures the full profile
+    // in both rows, so its hidden avatar also increases the navigation row's height.
+    Column {
+        TopAppBar(
+            title = {
+                Text(
+                    text = user.name ?: "No one",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .graphicsLayer { alpha = scrollFraction }
+                        .then(if (scrollFraction < 0.5f) Modifier.clearAndSetSemantics {} else Modifier)
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = {
+                    val currentTime = SystemClock.elapsedRealtime()
+                    if (currentTime - lastClickTime > debounceTime) {
+                        // Navigate back to tweet feed to prevent navigation issues
+                        try {
+                            // First try to pop back stack
+                            if (!navController.popBackStack()) {
+                                // If popBackStack returns false, navigate to tweet feed
+                                navController.navigate(NavTweet.TweetFeed) {
+                                    // Clear the back stack to prevent multiple back navigation
+                                    popUpTo(NavTweet.TweetFeed) { inclusive = true }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // Fallback: navigate to tweet feed
                             navController.navigate(NavTweet.TweetFeed) {
-                                // Clear the back stack to prevent multiple back navigation
                                 popUpTo(NavTweet.TweetFeed) { inclusive = true }
                             }
                         }
-                    } catch (_: Exception) {
-                        // Fallback: navigate to tweet feed
-                        navController.navigate(NavTweet.TweetFeed) {
-                            popUpTo(NavTweet.TweetFeed) { inclusive = true }
-                        }
                     }
-                }
-            }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                )
-            }
-        },
-        actions = {
-            if (appUser.mid != user.mid) {
-                IconButton(onClick = {
-                    if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
-                        return@IconButton
-                    }
-                    navController.navigate(NavTweet.ChatBox(user.mid))
                 }) {
                     Icon(
-                        imageVector = Icons.Default.MailOutline,
-                        contentDescription = stringResource(R.string.message)
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
                     )
                 }
+            },
+            actions = {
+                if (appUser.mid != user.mid) {
+                    IconButton(onClick = {
+                        if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+                            return@IconButton
+                        }
+                        navController.navigate(NavTweet.ChatBox(user.mid))
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.MailOutline,
+                            contentDescription = stringResource(R.string.message)
+                        )
+                    }
+                }
             }
-        },
-        scrollBehavior = scrollBehavior
-    )
+        )
+        // Only this row owns the scroll offset. Material's app bar handles its
+        // measured collapse range, clipping, dragging and fling/snap behavior.
+        TopAppBar(
+            expandedHeight = 80.dp,
+            windowInsets = TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Horizontal),
+            colors = TopAppBarDefaults.topAppBarColors(
+                scrolledContainerColor = MaterialTheme.colorScheme.surface
+            ),
+            scrollBehavior = scrollBehavior,
+            title = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = 1f - scrollFraction }
+                        .then(if (scrollFraction >= 0.5f) Modifier.clearAndSetSemantics {} else Modifier)
+                        .padding(
+                            start = 0.dp,
+                            end = 8.dp
+                        ),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    // Reserve button space before measuring the identity on narrow screens.
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        UserAvatar(
+                            user = user,
+                            size = 80,
+                            onClick = { showDialog = true }
+                        )
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, top = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                text = user.name ?: "No one",
+                                fontSize = 18.sp,
+                                lineHeight = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "@" + (user.username ?: "NoOne"),
+                                fontSize = 14.sp,
+                                lineHeight = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(start = 0.dp)
+                            )
+                            // Show registration date
+                            val date = Date(user.timestamp)
+                            val dateFormat = SimpleDateFormat("MMM yyyy", LocalLocale.current.platformLocale)
+                            Text(
+                                text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 0.dp)
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.align(Alignment.CenterVertically)) {
+                        ProfileTopBarButton(viewModel, navController, scrollBehavior)
+                    }
+                }
+            }
+        )
+    }
 }
 
 /**
