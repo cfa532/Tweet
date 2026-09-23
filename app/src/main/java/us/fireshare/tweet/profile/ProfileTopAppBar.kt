@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -84,7 +85,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                Row(verticalAlignment = Alignment.Top) {
+                // LargeTopAppBar also measures this title between the toolbar icons, even
+                // while that copy is hidden. Reserve the button's width before the identity
+                // so its label cannot wrap and inflate the invisible toolbar row.
+                Row(
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
                     if (showDialog) {
                         ImageModalDialog(user,
                             onDismiss = { showDialog = false })
@@ -103,6 +110,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             fontSize = 18.sp,
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -110,6 +119,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             fontSize = 14.sp,
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(start = 0.dp)
                         )
@@ -120,6 +131,8 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
                             fontSize = 12.sp,
                             lineHeight = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 0.dp)
                         )
