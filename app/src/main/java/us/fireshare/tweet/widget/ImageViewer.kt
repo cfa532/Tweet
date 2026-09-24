@@ -863,7 +863,8 @@ fun ImageViewer(
     loadOriginalImage: Boolean = false, // force load original high-res image instead of compressed
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null,
-    onBitmapLoaded: ((Bitmap?) -> Unit)? = null
+    onBitmapLoaded: ((Bitmap?) -> Unit)? = null,
+    resolveImageUrlForRetry: (() -> String?)? = null
 ) {
     val context = LocalContext.current
     val retryScope = rememberCoroutineScope()
@@ -900,6 +901,14 @@ fun ImageViewer(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var retryCount by remember { mutableIntStateOf(0) }
     var lastRetryTime by remember { mutableLongStateOf(0L) }
+    var retryImageUrl by remember(mid) { mutableStateOf<String?>(null) }
+    val effectiveImageUrl = retryImageUrl ?: imageUrl
+
+    LaunchedEffect(imageUrl) {
+        // A normal parent recomposition supplied a newer route, so it supersedes
+        // any URL selected by an earlier manual retry.
+        retryImageUrl = null
+    }
 
     suspend fun applyCachedBitmapIfAvailable(reason: String): Boolean {
         val currentMid = mid ?: return false
@@ -1013,9 +1022,9 @@ fun ImageViewer(
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, imageUrl, retryCount) {
-        // Early return if imageUrl or mid is null
-        if (imageUrl == null || mid == null) {
+    LaunchedEffect(mid, effectiveImageUrl, retryCount) {
+        // Early return if the current URL or mid is null
+        if (effectiveImageUrl == null || mid == null) {
             return@LaunchedEffect
         }
 
@@ -1076,7 +1085,7 @@ fun ImageViewer(
                 if (loadOriginalImage) {
                     // Load original high-res image from server (deferred so cancellation can be debounced)
                     val originalMid = "${mid}_original"
-                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible) { preview ->
+                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, effectiveImageUrl, mid, isVisible) { preview ->
                         // Show partial (low-res) image while full image loads so user sees progress
                         if (loadState.isLoading && !preview.isRecycled) {
                             loadState = loadState.copy(bitmap = preview)
@@ -1136,7 +1145,7 @@ fun ImageViewer(
                     // Load compressed image from server (downloads and compresses automatically)
                     val downloadedBitmap = ImageCacheManager.downloadAndCacheImage(
                         context,
-                        imageUrl,
+                        effectiveImageUrl,
                         mid,
                         isVisible = isVisible
                     )
@@ -1405,13 +1414,21 @@ fun ImageViewer(
                     color = Color.Gray
                 )
                 TextButton(
-                    enabled = mid != null && !imageUrl.isNullOrBlank(),
+                    enabled = mid != null && (resolveImageUrlForRetry != null || !imageUrl.isNullOrBlank()),
                     onClick = {
                         val retryMid = mid ?: return@TextButton
+                        val refreshedUrl = resolveImageUrlForRetry?.invoke()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: imageUrl?.takeIf { it.isNotBlank() }
+                            ?: return@TextButton
                         loadState = loadState.copy(isLoading = true, hasError = false)
                         retryScope.launch {
                             try {
                                 BlackList.resetForRetry(retryMid)
+                                // Rebuild the URL from the owning tweet's current author
+                                // route. The route is mutable and may have been repaired
+                                // without changing this composable's original parameter.
+                                retryImageUrl = refreshedUrl
                                 // Changing the effect key also retries after the automatic budget
                                 // is exhausted, without granting another automatic retry loop.
                                 retryCount++

@@ -240,6 +240,11 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
+                        resolveImageUrlForRetry = {
+                            viewModel.tweetState.value.author?.baseUrl
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { baseUrl -> getMediaUrl(mediaItems[index].mid, baseUrl) }
+                        },
                     )
                 }
             }
