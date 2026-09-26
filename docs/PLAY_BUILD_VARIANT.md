@@ -21,11 +21,16 @@ The former `mini` flavor has been removed, so this project now builds `full` and
 create("play") {
     dimension = "version"
     versionNameSuffix = "-play"
-    versionCode = 138
+    versionCode = 160
     buildConfigField("Boolean", "IS_PLAY_VERSION", "true")
     buildConfigField("String", "PLAY_SHARE_DOMAIN", "\"gplay.fireshare.us\"")
 }
 ```
+
+The numeric value above reflects release 77. For later releases, keep it
+monotonically increasing and aligned with the direct build unless Google Play
+requires a higher code. Update comparisons use `versionCode`, not
+`versionName`.
 
 ## Source Sets
 

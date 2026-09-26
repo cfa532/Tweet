@@ -15,6 +15,7 @@ Full app start
   -> persist the release metadata and DownloadManager id
   -> verify size, SHA-256, package name and versionCode
   -> open Android's package installer
+  -> installed versionCode now equals the advertisement, so later checks stop
 ```
 
 ## Variant Responsibilities
@@ -31,6 +32,27 @@ Full app start
 The download is stored in the app's external-files directory rather than the
 shared Downloads directory. Android still enforces that an update is signed by
 the same signing identity as the installed app.
+
+`versionCode` alone decides whether a release is newer. `versionName` remains a
+required display/compatibility field in the current protocol, but it must never
+be used for semantic ordering. Removing it requires a coordinated future client
+and server protocol change.
+
+## Recovery Behavior
+
+- The DownloadManager id and complete release metadata are persisted together.
+- Activity recreation observes the existing download instead of starting a
+  second one.
+- A completed download is revalidated before every installer launch.
+- A failed, missing, cancelled, or metadata-mismatched download is cleared so a
+  later check can start cleanly.
+- The install mutex prevents lifecycle callbacks from opening duplicate Android
+  installer screens.
+- Provider discovery health-checks routes before constructing `/mm/<packageId>`.
+  Unreachable provider advertisements are not download candidates.
+
+Publication and operational verification are documented in
+`SERVER_UPGRADE_SYSTEM.md`.
 
 ## Build Commands
 
