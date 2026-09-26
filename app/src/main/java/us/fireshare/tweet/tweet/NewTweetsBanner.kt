@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -67,7 +68,8 @@ fun NewTweetsBanner(
         // this inset the pill lands in the status-bar gesture region and misses taps.
         modifier = modifier
             .statusBarsPadding()
-            .padding(top = 8.dp)
+            .padding(top = 12.dp)
+            .wrapContentWidth()
     ) {
         Surface(
             shape = CircleShape,
@@ -80,7 +82,7 @@ fun NewTweetsBanner(
         ) {
             Row(
                 modifier = Modifier
-                    .padding(start = 12.dp, top = 2.dp, end = 14.dp, bottom = 2.dp),
+                    .padding(start = 12.dp, top = 4.dp, end = 14.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
