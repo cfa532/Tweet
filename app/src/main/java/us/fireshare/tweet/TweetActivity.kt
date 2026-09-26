@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Button
@@ -26,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat.getString
-import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
@@ -37,12 +35,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -53,7 +52,6 @@ import us.fireshare.tweet.service.NotificationPermissionManager
 import us.fireshare.tweet.service.OrientationManager
 import us.fireshare.tweet.ui.theme.ThemeManager
 import us.fireshare.tweet.ui.theme.TweetTheme
-import java.io.File
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -160,7 +158,9 @@ class TweetActivity : ComponentActivity() {
         // Handle initial intent
         handleIntent(intent)
 
-        UpgradeDownloadState.installCompletedUpgrade(this, fromForeground = true)
+        if (!BuildConfig.IS_PLAY_VERSION) lifecycleScope.launch {
+            UpgradeDownloadState.installCompletedUpgrade(this@TweetActivity, fromForeground = true)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -196,7 +196,9 @@ class TweetActivity : ComponentActivity() {
             }
         }
 
-        UpgradeDownloadState.installCompletedUpgrade(this, fromForeground = true)
+        if (!BuildConfig.IS_PLAY_VERSION) lifecycleScope.launch {
+            UpgradeDownloadState.installCompletedUpgrade(this@TweetActivity, fromForeground = true)
+        }
     }
 
     override fun onDestroy() {
@@ -299,7 +301,8 @@ class TweetActivity : ComponentActivity() {
 @HiltViewModel
 class ActivityViewModel  @Inject constructor(): ViewModel() {
     val isAppReady = mutableStateOf(false)
-    private val _isDownloading = MutableStateFlow(false)
+    private var isDownloading = false
+    private var upgradeDownloadJob: Job? = null
     val systemDomainToShare = mutableStateOf<String?>(null)
     val currentIntent = mutableStateOf<Intent?>(null)
     val currentIntentSequence = mutableStateOf(0L)
@@ -353,28 +356,22 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
 
-    // Check for upgrade using versionName comparison (for all versions except play)
+    // Direct builds trust only complete, explicitly enabled release metadata.
     fun checkForUpgrade(context: Context) {
-        // Play version doesn't support upgrades
         if (BuildConfig.IS_PLAY_VERSION) {
             Timber.tag("checkForUpgrade").d("Play version detected, skipping upgrade check")
             return
         }
         viewModelScope.launch(IO) {
             try {
-                delay(3000)    // delay 3s before checking for upgrade.
-                
-                // Get current version
-                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                val currentVersionName = packageInfo.versionName
-                val currentVersionString = currentVersionName
-                if (currentVersionString == null) {
-                    Timber.tag("checkForUpgrade").e("Failed to get current versionName")
+                UpgradeDownloadState.clearIfAppWasUpgraded(context)
+                val trackedDownload = UpgradeDownloadState.trackedDownloadId(context)
+                if (trackedDownload != -1L) {
+                    isDownloading = true
+                    observeUpgradeDownload(context, trackedDownload)
                     return@launch
                 }
-                Timber.tag("checkForUpgrade").d("Current versionName: $currentVersionName (comparing as: $currentVersionString)")
-                
-                // Query server for upgrade info
+
                 val versionInfo = HproseInstance.checkUpgrade()
                 if (versionInfo == null) {
                     Timber.tag("checkForUpgrade").e("Server returned null version info")
@@ -387,62 +384,60 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     systemDomainToShare.value = domain
                     Timber.tag("checkForUpgrade").d("Retrieved system domainToShare: $domain")
                 }
-                
-                // Get server version
-                val serverVersionString = versionInfo["version"]
-                if (serverVersionString == null) {
-                    Timber.tag("checkForUpgrade").e("Server versionInfo missing 'version' key")
-                    return@launch
-                }
-                
-                // Parse and compare versions
-                val currentVersion = try {
-                    currentVersionString.toInt()
-                } catch (e: NumberFormatException) {
-                    Timber.tag("checkForUpgrade").e(e, "Failed to parse current version as Int: $currentVersionString")
-                    return@launch
-                }
-                
-                val serverVersion = try {
-                    serverVersionString.toInt()
-                } catch (e: NumberFormatException) {
-                    Timber.tag("checkForUpgrade").e(e, "Failed to parse server version as Int: $serverVersionString")
-                    return@launch
-                }
-                
-                Timber.tag("checkForUpgrade").d("Version comparison: current=$currentVersion, server=$serverVersion")
-                
-                if (currentVersion < serverVersion) {
-                    Timber.tag("checkForUpgrade").d("✅ Upgrade available! current=$currentVersion < server=$serverVersion")
-                    
-                    val packageId = versionInfo["packageId"]
-                    if (packageId == null) {
-                        Timber.tag("checkForUpgrade").e("Cannot show upgrade dialog: packageId is null")
-                        return@launch
-                    }
 
-                    val providerIp = HproseInstance.getProviderIP(packageId)
-                    if (providerIp == null) {
-                        Timber.tag("checkForUpgrade").e("Cannot show upgrade dialog: provider IP is null for packageId=$packageId")
-                        return@launch
-                    }
-
-                    val downloadUrl = "http://$providerIp/mm/$packageId"
-                    Timber.tag("checkForUpgrade").d("Showing upgrade dialog with URL: $downloadUrl")
-                    showUpdateDialog(context, downloadUrl)
-                } else {
-                    Timber.tag("checkForUpgrade").d("No upgrade needed (current=$currentVersion >= server=$serverVersion)")
+                if (versionInfo["enabled"] != "true") {
+                    Timber.tag("checkForUpgrade").d("Direct update advertisement is disabled")
+                    return@launch
                 }
+                val release = parseUpgradeRelease(versionInfo)
+                if (release.versionCode <= BuildConfig.VERSION_CODE) {
+                    Timber.tag("checkForUpgrade").d(
+                        "No upgrade needed (current=${BuildConfig.VERSION_CODE}, server=${release.versionCode})",
+                    )
+                    return@launch
+                }
+                val provider = HproseInstance.getProviderIP(release.packageId)
+                    ?: error("No healthy provider for update package ${release.packageId}")
+                val downloadUrl = packageDownloadUrl(provider, release.packageId)
+                showUpdateDialog(context, release.copy(downloadUrl = downloadUrl))
             } catch (e: Exception) {
                 Timber.tag("checkForUpgrade").e(e, "Error during upgrade check: ${e.message}")
             }
         }
     }
+
+    private fun parseUpgradeRelease(values: Map<String, String>): UpgradeRelease {
+        val versionCode = values["versionCode"]?.toLongOrNull()
+            ?: error("Upgrade metadata has no version code")
+        val versionName = values["versionName"].orEmpty()
+        val packageId = values["packageId"].orEmpty()
+        val size = values["size"]?.toLongOrNull() ?: error("Upgrade metadata has no package size")
+        val sha256 = values["sha256"].orEmpty().lowercase()
+        val mission = values["mission"].orEmpty()
+        check(versionCode in 1..Int.MAX_VALUE.toLong()) { "Invalid upgrade version code" }
+        check(versionName.isNotEmpty() && versionName.length <= 64 && versionName.trim() == versionName &&
+            versionName.all { it.code in 0x20..0x7e }) { "Invalid upgrade version name" }
+        check(packageId.matches(Regex("[A-Za-z0-9_-]{27}"))) { "Invalid upgrade package id" }
+        check(size in 1..MAX_UPGRADE_BYTES) { "Invalid upgrade package size" }
+        check(sha256.matches(Regex("[a-f0-9]{64}"))) { "Invalid upgrade checksum" }
+        check(mission in listOf("minor", "major", "critical")) { "Invalid upgrade mission" }
+        return UpgradeRelease(versionCode, versionName, packageId, size, sha256, mission)
+    }
+
+    private fun packageDownloadUrl(provider: String, packageId: String): String {
+        val base = if (provider.startsWith("http://") || provider.startsWith("https://")) provider else "http://$provider"
+        val uri = base.toUri()
+        check(uri.scheme in listOf("http", "https") && uri.host != null && uri.userInfo == null &&
+            uri.query == null && uri.fragment == null && uri.path.orEmpty() in listOf("", "/")) {
+            "Invalid update provider address"
+        }
+        return base.trimEnd('/') + "/mm/$packageId"
+    }
     
     /**
      * Show update dialog for full version users
      */
-    private fun showUpdateDialog(context: Context, downloadUrl: String) {
+    private fun showUpdateDialog(context: Context, release: UpgradeRelease) {
         (context as Activity).runOnUiThread {
             val dialog = AlertDialog.Builder(context)
                 .setTitle(getString(context, R.string.update_available))
@@ -475,7 +470,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     updateButton.text = "Starting..."
                     cancelButton.text = ""
                     updateButton.animate().alpha(1f).setDuration(80L).start()
-                    downloadAndInstall(context, downloadUrl)
+                    downloadAndInstall(context, release)
                     updateButton.postDelayed({
                         if (dialog.isShowing) {
                             dialog.dismiss()
@@ -533,107 +528,57 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
 
-    /**
-     * Download and install APK using DownloadManager (simple approach from MiniVersion branch)
-     */
-    private fun downloadAndInstall(context: Context, downloadUrl: String) {
-        Timber.tag("downloadAndInstall").d("Function called with URL: $downloadUrl")
-        
-        // Check if download is already in progress
-        if (_isDownloading.value) {
+    private fun downloadAndInstall(context: Context, release: UpgradeRelease) {
+        if (isDownloading) {
             Timber.tag("downloadAndInstall").d("Download already in progress, showing toast")
             android.widget.Toast.makeText(context,
                 context.getString(R.string.download_in_progress),
                 android.widget.Toast.LENGTH_LONG).show()
             return
         }
-        
-        // Set download state to true
-        _isDownloading.value = true
-        
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val request = DownloadManager.Request(downloadUrl.toUri())
-            .setMimeType("application/vnd.android.package-archive")
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "fireshare.apk")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setTitle("Downloading Update")
+        try {
+            val downloadId = UpgradeDownloadState.enqueue(context, release)
+            isDownloading = true
+            Timber.tag("downloadAndInstall").d("Verified update download started with id=$downloadId")
+            observeUpgradeDownload(context, downloadId)
+        } catch (error: Exception) {
+            Timber.tag("downloadAndInstall").e(error, "Could not start update download")
+            isDownloading = false
+        }
+    }
 
-        val downloadId = downloadManager.enqueue(request)
-        UpgradeDownloadState.rememberDownload(context, downloadId)
-        Timber.tag("downloadAndInstall").d("Download started with ID: $downloadId")
-
-        viewModelScope.launch(IO) {
-            var finishDownload = false
-            while (!finishDownload) {
-                val cursor =
-                    downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
-                if (cursor.moveToFirst()) {
-                    val columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                    val status = cursor.getInt(columnIndex)
-                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        finishDownload = true
-                        _isDownloading.value = false
-                        Timber.tag("downloadAndInstall").d("Download completed successfully")
-                        UpgradeDownloadState.markCompleted(context, downloadId)
-                        UpgradeDownloadState.installCompletedUpgrade(context, fromForeground = true)
-
-                    } else if (status == DownloadManager.STATUS_FAILED) {
-                        finishDownload = true
-                        _isDownloading.value = false
-                        Timber.tag("downloadAndInstall").e("Download failed")
-                        // Handle download failure
+    private fun observeUpgradeDownload(context: Context, downloadId: Long) {
+        if (upgradeDownloadJob?.isActive == true) return
+        upgradeDownloadJob = viewModelScope.launch(IO) {
+            try {
+                while (true) {
+                    when (UpgradeDownloadState.status(context, downloadId)) {
+                        DownloadManager.STATUS_SUCCESSFUL -> {
+                            UpgradeDownloadState.markCompleted(context, downloadId)
+                            isDownloading = false
+                            UpgradeDownloadState.installCompletedUpgrade(context, fromForeground = true)
+                            return@launch
+                        }
+                        DownloadManager.STATUS_FAILED, UpgradeDownloadState.MISSING -> {
+                            UpgradeDownloadState.discard(context)
+                            isDownloading = false
+                            Timber.tag("downloadAndInstall").e("Update download failed or disappeared")
+                            return@launch
+                        }
                     }
+                    delay(1_000)
                 }
-                cursor.close()
-                delay(1000)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                isDownloading = false
+                Timber.tag("downloadAndInstall").e(error, "Could not observe update download")
             }
         }
     }
-    
-    /**
-     * Install APK from file using FileProvider
-     */
-    private suspend fun installApkFromFile(context: Context, apkFile: File) {
-        try {
-            Timber.tag("installApkFromFile").d("Installing APK from: ${apkFile.absolutePath}")
-            Timber.tag("installApkFromFile").d("APK file size: ${apkFile.length()} bytes")
-            Timber.tag("installApkFromFile").d("APK file exists: ${apkFile.exists()}")
-            
-            // Verify APK is valid before trying to install
-            val packageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-            if (packageInfo == null) {
-                Timber.tag("installApkFromFile").e("APK file is corrupted or invalid")
-                withContext(Main) {
-                    android.widget.Toast.makeText(context,
-                        "Downloaded APK is corrupted. Please try again.",
-                        android.widget.Toast.LENGTH_LONG).show()
-                }
-                return
-            }
-            
-            val apkUri =
-                FileProvider.getUriForFile(context, "${context.packageName}.provider", apkFile)
 
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            }
-            
-            Timber.tag("installApkFromFile").d("Starting installation with URI: $apkUri")
-            withContext(Main) {
-                android.widget.Toast.makeText(context,
-                    "Starting installation...",
-                    android.widget.Toast.LENGTH_SHORT).show()
-            }
-            context.startActivity(installIntent)
-        } catch (e: Exception) {
-            Timber.tag("installApkFromFile").e(e, "Failed to install APK: ${e.message}")
-            withContext(Main) {
-                android.widget.Toast.makeText(context,
-                    "Installation failed: ${e.message}",
-                    android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
+    companion object {
+        private const val MAX_UPGRADE_BYTES = 512L * 1024L * 1024L
     }
 
 }

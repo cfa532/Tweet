@@ -3543,11 +3543,11 @@ object HproseInstance {
                 "tweetid" to tweetId,
                 "appuserid" to appUser.mid
             )
-            // Opening a detail view is the trigger that brings an access node's copy
-            // of the tweet up to date with the root node: get_tweet syncs and starts
-            // providing the tweet when this node is not already a provider. User
-            // objects propagate on their own; tweet objects still need this manual
-            // nudge on access. bypassCache is only ever set by the detail-view paths.
+            // Opening a detail view lets the access node become a provider when it
+            // is neither the author's root host nor already serving the tweet.
+            // MiMeiProvide performs Leither's synchronization internally; get_tweet
+            // does not explicitly invoke MiMeiSync. bypassCache is only ever set by
+            // the detail-view paths.
             // authorhostid saves the node a get_user_core_data lookup, which assumes
             // the author's core data is already synced there. Mirrors iOS.
             if (bypassCache) {

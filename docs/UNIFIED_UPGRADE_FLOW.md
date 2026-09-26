@@ -8,9 +8,13 @@ The mini variant has been removed, so upgrade behavior is no longer shared acros
 Full app start
   -> checkForUpgrade()
   -> backend checkUpgrade()
-  -> compare installed versionName with backend version
+  -> require an enabled, complete release advertisement
+  -> compare Android versionCode with backend versionCode
+  -> resolve a healthy provider for the immutable package MiMei
   -> show update dialog when backend version is newer
-  -> download and install the full APK
+  -> persist the release metadata and DownloadManager id
+  -> verify size, SHA-256, package name and versionCode
+  -> open Android's package installer
 ```
 
 ## Variant Responsibilities
@@ -20,9 +24,13 @@ Full app start
 
 ## Code Paths
 
-- `ActivityViewModel.checkForUpgrade()` handles backend version comparison.
+- `ActivityViewModel.checkForUpgrade()` validates the advertisement and compares version codes.
 - `ActivityViewModel.showUpdateDialog()` presents the upgrade prompt.
-- `ActivityViewModel.downloadAndInstall()` downloads and installs the APK.
+- `UpgradeDownloadState` owns persistent downloading, recovery and APK verification.
+
+The download is stored in the app's external-files directory rather than the
+shared Downloads directory. Android still enforces that an update is signed by
+the same signing identity as the installed app.
 
 ## Build Commands
 

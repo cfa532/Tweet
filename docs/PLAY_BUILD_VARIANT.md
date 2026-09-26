@@ -39,7 +39,8 @@ app/src/
 
 ## Manifest Differences
 
-`app/src/play/AndroidManifest.xml` removes permissions that are not allowed for Play Store distribution, such as `REQUEST_INSTALL_PACKAGES`.
+`REQUEST_INSTALL_PACKAGES` and the update-download receiver are declared only
+by `app/src/full/AndroidManifest.xml`; they never enter the Play manifest.
 
 ## Build Commands
 
