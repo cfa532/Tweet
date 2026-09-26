@@ -28,7 +28,14 @@ import us.fireshare.tweet.network.HproseClientPool
  *   has not copied that write yet. Any route failure drops it.
  */
 object UserRoutes {
-    private data class Route(var writable: String? = null, var readsFromWriteHost: Boolean = false)
+    private const val CONFIRMATION_LIFETIME_MS = 60_000L
+
+    private data class Route(
+        var writable: String? = null,
+        var readsFromWriteHost: Boolean = false,
+        var confirmedReadRoute: String? = null,
+        var lastRouteConfirmedAt: Long? = null
+    )
 
     private val routes = mutableMapOf<MimeiId, Route>()
     private val lock = Any()
@@ -41,23 +48,85 @@ object UserRoutes {
     /** The resolved root host, for building write clients. */
     fun writableRoute(mid: MimeiId): String? = synchronized(lock) { routes[mid]?.writable }
 
+    private fun normalize(url: String?): String? = url?.trim()?.removeSuffix("/")
+
+    private fun effectiveReadRoute(route: Route, accessRoute: String?): String? {
+        return normalize(if (route.readsFromWriteHost) route.writable else accessRoute)
+    }
+
+    private fun invalidateConfirmationIfRouteChanged(
+        route: Route,
+        previousReadRoute: String?,
+        accessRoute: String? = null
+    ) {
+        if (normalize(previousReadRoute) == effectiveReadRoute(route, accessRoute)) return
+        route.confirmedReadRoute = null
+        route.lastRouteConfirmedAt = null
+    }
+
     fun setWritableRoute(mid: MimeiId, url: String?) = synchronized(lock) {
         val route = routes.getOrPut(mid) { Route() }
-        route.writable = url
+        val previousReadRoute = effectiveReadRoute(route, accessRoute = null)
+        route.writable = normalize(url)
         if (url == null) route.readsFromWriteHost = false
+        invalidateConfirmationIfRouteChanged(route, previousReadRoute)
     }
 
     /** Read from the node that just took a write, until that route stops answering. */
     fun readFromWriteHost(mid: MimeiId): Boolean = synchronized(lock) {
         val route = routes.getOrPut(mid) { Route() }
         if (route.writable == null || route.readsFromWriteHost) return@synchronized false
+        val previousReadRoute = effectiveReadRoute(route, accessRoute = null)
         route.readsFromWriteHost = true
+        invalidateConfirmationIfRouteChanged(route, previousReadRoute)
         true
     }
 
     /** Called when the current route fails, so recovery starts from the access node. */
     fun stopReadingFromWriteHost(mid: MimeiId) = synchronized(lock) {
-        routes[mid]?.readsFromWriteHost = false
+        val route = routes[mid] ?: return@synchronized
+        val previousReadRoute = effectiveReadRoute(route, accessRoute = null)
+        route.readsFromWriteHost = false
+        invalidateConfirmationIfRouteChanged(route, previousReadRoute)
+    }
+
+    /**
+     * Record a route confirmation only while [confirmedRoute] is still the effective
+     * read route. Passing the user's current access route prevents a late response from
+     * blessing an address that another request has already replaced.
+     */
+    fun confirmReadRoute(
+        mid: MimeiId,
+        confirmedRoute: String?,
+        accessRoute: String?,
+        confirmedAt: Long = System.currentTimeMillis()
+    ): Boolean = synchronized(lock) {
+        val normalizedConfirmedRoute = normalize(confirmedRoute) ?: return@synchronized false
+        val route = routes.getOrPut(mid) { Route() }
+        if (effectiveReadRoute(route, accessRoute) != normalizedConfirmedRoute) {
+            return@synchronized false
+        }
+        route.confirmedReadRoute = normalizedConfirmedRoute
+        route.lastRouteConfirmedAt = confirmedAt
+        true
+    }
+
+    fun lastRouteConfirmedAt(mid: MimeiId, accessRoute: String?): Long? = synchronized(lock) {
+        val route = routes[mid] ?: return@synchronized null
+        if (route.confirmedReadRoute != effectiveReadRoute(route, accessRoute)) {
+            return@synchronized null
+        }
+        route.lastRouteConfirmedAt
+    }
+
+    fun hasRecentRouteConfirmation(
+        mid: MimeiId,
+        accessRoute: String?,
+        now: Long = System.currentTimeMillis()
+    ): Boolean {
+        val confirmedAt = lastRouteConfirmedAt(mid, accessRoute) ?: return false
+        val age = now - confirmedAt
+        return age in 0 until CONFIRMATION_LIFETIME_MS
     }
 }
 

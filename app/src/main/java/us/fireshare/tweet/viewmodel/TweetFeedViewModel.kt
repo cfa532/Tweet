@@ -239,9 +239,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
      * This should be called from the UI layer after app initialization completes.
      */
     fun initialize() {
-        // Feed resets re-enter here without recreating the screen. Start read-ahead
-        // here too so login and route initialization cannot leave it cancelled.
-        BackgroundTweetPrefetcher.prefetchMainFeed()
         if (isInitialized) {
             return
         }
@@ -292,6 +289,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 // Always clear init spinner after initialization attempt.
                 // Empty state should be rendered instead of indefinite loading.
                 initState.value = false
+                // Match iOS's initialization gate: read-ahead starts only after the
+                // user's interactive startup load has had the network to itself.
+                BackgroundTweetPrefetcher.prefetchMainFeed()
                 Timber.tag("TweetFeedViewModel").d("Initialization flow finished, initState=false, tweetCount=${_tweets.value.size}")
             }
         }

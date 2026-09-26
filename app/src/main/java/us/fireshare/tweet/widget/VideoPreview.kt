@@ -70,6 +70,7 @@ fun VideoPreview(
 
     // --- State holder (all mutable state lives here) ---
     val state = rememberVideoPreviewState(videoMid, useIndependentMuteState)
+    var previousUrl by remember(videoMid) { mutableStateOf(url) }
 
     // --- Coordinator ---
     val coordinator = LocalVideoCoordinator.current
@@ -94,6 +95,27 @@ fun VideoPreview(
     val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val preloadGeneration = VideoManager.preloadGenerations[playerKey] ?: 0
     val hasWarmPlayer = playerKey?.let { VideoManager.hasWarmVideoPlayer(it) } == true
+
+    LaunchedEffect(url) {
+        val oldUrl = previousUrl
+        val newUrl = url
+        if (!oldUrl.isNullOrBlank() && !newUrl.isNullOrBlank() && oldUrl != newUrl) {
+            state.retryCount = 0
+            state.blockAutoPrepareAfterError = false
+            state.isNetworkRecoveryInProgress = false
+            state.hasError = false
+            state.isLoading = true
+
+            val retryKey = playerKey ?: videoMid
+            val recovered = retryKey?.let {
+                VideoManager.attemptVideoRecovery(context, it, newUrl, videoType)
+            } == true
+            if (!recovered && retryKey != null) {
+                VideoManager.forceRecreatePlayer(context, retryKey, newUrl, videoType)
+            }
+        }
+        previousUrl = newUrl
+    }
     var resolvedHlsUrl by remember(url, videoType) {
         mutableStateOf(
             if (videoType == MediaType.HLS_VIDEO && url != null) {

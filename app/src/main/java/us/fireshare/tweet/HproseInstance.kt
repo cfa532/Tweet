@@ -314,6 +314,8 @@ object HproseInstance {
     )
 
     private val storageCapabilitiesCache = mutableMapOf<String, BackendStorageCapabilities>()
+    private val storageCapabilitiesInFlight =
+        mutableMapOf<String, CompletableDeferred<BackendStorageCapabilities>>()
     private val storageCapabilitiesLock = Any()
 
     private fun normalizedServerBaseUrl(baseUrl: String): String = baseUrl
@@ -335,48 +337,74 @@ object HproseInstance {
         val version = params["ver"]?.toString() ?: "last"
         val key = "$normalizedUrl|$aid|$version"
         val now = System.currentTimeMillis()
-        synchronized(storageCapabilitiesLock) {
+        val (request, ownsRequest) = synchronized(storageCapabilitiesLock) {
             storageCapabilitiesCache[key]?.takeIf {
                 now - it.checkedAt < STORAGE_CAPABILITY_TTL_MS
             }?.let { return it }
+
+            storageCapabilitiesInFlight[key]?.let { it to false }
+                ?: CompletableDeferred<BackendStorageCapabilities>().let { newRequest ->
+                    storageCapabilitiesInFlight[key] = newRequest
+                    newRequest to true
+                }
         }
 
-        val probe = HproseClientPool.getRegularClient(normalizedUrl, STORAGE_CAPABILITY_TIMEOUT_MS)
-            ?: throw IllegalStateException("Unable to create a client for storage capability check")
-        val raw = withContext(Dispatchers.IO) {
-            probe.runMApp<Any>(
-                "health",
-                mapOf("aid" to aid, "ver" to version)
+        if (!ownsRequest) {
+            return request.await()
+        }
+
+        try {
+            val probe = HproseClientPool.getRegularClient(
+                normalizedUrl,
+                STORAGE_CAPABILITY_TIMEOUT_MS
+            ) ?: throw IllegalStateException(
+                "Unable to create a client for storage capability check"
             )
-        }
-        val reply = raw as? Map<*, *>
-            ?: throw IllegalStateException("Unable to check this server's storage support")
-        val succeeded = when (val value = reply["success"]) {
-            is Boolean -> value
-            is Number -> value.toInt() != 0
-            else -> false
-        }
-        if (!succeeded) {
-            throw IllegalStateException("Unable to check this server's storage support")
-        }
-
-        val formats = if (reply.containsKey("storageFormats")) {
-            val advertised = (reply["storageFormats"] as? List<*>)
-                ?.mapNotNull { it as? String }
-                ?.toSet()
-                ?: throw IllegalStateException("Invalid server storage capabilities")
-            if (advertised.isEmpty()) {
-                throw IllegalStateException("Invalid server storage capabilities")
+            val raw = withContext(Dispatchers.IO) {
+                probe.runMApp<Any>(
+                    "health",
+                    mapOf("aid" to aid, "ver" to version)
+                )
             }
-            advertised
-        } else {
-            setOf(DATABASE_STORAGE_FORMAT)
+            val reply = raw as? Map<*, *>
+                ?: throw IllegalStateException("Unable to check this server's storage support")
+            val succeeded = when (val value = reply["success"]) {
+                is Boolean -> value
+                is Number -> value.toInt() != 0
+                else -> false
+            }
+            if (!succeeded) {
+                throw IllegalStateException("Unable to check this server's storage support")
+            }
+
+            val formats = if (reply.containsKey("storageFormats")) {
+                val advertised = (reply["storageFormats"] as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    ?.toSet()
+                    ?: throw IllegalStateException("Invalid server storage capabilities")
+                if (advertised.isEmpty()) {
+                    throw IllegalStateException("Invalid server storage capabilities")
+                }
+                advertised
+            } else {
+                setOf(DATABASE_STORAGE_FORMAT)
+            }
+            val result = BackendStorageCapabilities(formats, System.currentTimeMillis())
+            synchronized(storageCapabilitiesLock) {
+                storageCapabilitiesCache[key] = result
+            }
+            request.complete(result)
+            return result
+        } catch (error: Throwable) {
+            request.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(storageCapabilitiesLock) {
+                if (storageCapabilitiesInFlight[key] === request) {
+                    storageCapabilitiesInFlight.remove(key)
+                }
+            }
         }
-        val result = BackendStorageCapabilities(formats, now)
-        synchronized(storageCapabilitiesLock) {
-            storageCapabilitiesCache[key] = result
-        }
-        return result
     }
 
     /**
@@ -1731,11 +1759,15 @@ object HproseInstance {
      * caches read-access nodes only, so write-route resolution passes false: steps 1
      * and 4 are skipped entirely, no pooled entry is reused and none is written back.
      * Mutations are rare next to reads, so resolving hostIds[0] fresh costs nothing.
+     * @param forceDiscovery bypass NodePool and consult current node discovery. A forced
+     * user refresh uses this because reachability does not prove an address is still the
+     * node's currently advertised route.
      * */
     suspend fun getHostIP(
         nodeId: MimeiId,
         v4Only: String = HproseInstance.v4Only.toString(),
         forceHealthCheck: Boolean = false,
+        forceDiscovery: Boolean = false,
         excludedIP: String? = null,
         usePool: Boolean = true
     ): String? {
@@ -1745,7 +1777,7 @@ object HproseInstance {
         }
 
         // Step 1: Check NodePool for known IPs and verify health
-        val poolIP = if (usePool) NodePool.getIPFromNodeId(nodeId) else null
+        val poolIP = if (usePool && !forceDiscovery) NodePool.getIPFromNodeId(nodeId) else null
         val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
         if (poolIP != null && normalizeIPHealthCacheKey(poolIP) != excludedKey) {
             // Verify the cached IP is still healthy before returning
@@ -1769,7 +1801,7 @@ object HproseInstance {
 
         // usePool is part of the key so a write-route lookup never joins (or is joined
         // by) a read-route lookup that would record the result in NodePool.
-        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|${excludedKey.orEmpty()}|$usePool"
+        val requestKey = "$nodeId|$v4Only|$forceHealthCheck|$forceDiscovery|${excludedKey.orEmpty()}|$usePool"
         val request = hostIPRequestsMutex.withLock {
             hostIPRequests[requestKey]?.takeIf { it.isActive } ?: run {
                 val newRequest = TweetApplication.applicationScope.async(Dispatchers.IO) {
@@ -2268,7 +2300,9 @@ object HproseInstance {
         // Recorded against the user id, so it holds for every copy of this user — the
         // one the write ran through, the ones the cache hands out, and the ones already
         // attached to cached tweets.
-        if (UserRoutes.readFromWriteHost(user.mid)) {
+        val routeChanged = UserRoutes.readFromWriteHost(user.mid)
+        UserRoutes.confirmReadRoute(user.mid, writableUrl, user.baseUrl)
+        if (routeChanged) {
             Timber.tag("writeRoute").d("Reading ${user.mid} from write host after $reason: $writableUrl")
         }
     }
@@ -2354,7 +2388,9 @@ object HproseInstance {
             return false
         }
 
-        val currentBaseUrl = user.baseUrl?.trim()?.removeSuffix("/")
+        val currentBaseUrl = (UserRoutes.readRoute(user.mid) ?: user.baseUrl)
+            ?.trim()
+            ?.removeSuffix("/")
         val accessNodeMid = user.hostIds?.getOrNull(1)
 
         if (!currentBaseUrl.isNullOrBlank()) {
@@ -2421,6 +2457,7 @@ object HproseInstance {
         if (accessNodeMid != null) {
             NodePool.updateNodeIP(accessNodeMid, resolvedIP)
         }
+        UserRoutes.confirmReadRoute(user.mid, replacementBaseUrl, user.baseUrl)
 
         Timber.tag("ProfileRoute").d("Route ready for ${user.mid}: $replacementBaseUrl")
         return true
@@ -2837,6 +2874,7 @@ object HproseInstance {
                 // Extract tweets and originalTweets from the new response format
                 val tweetsData = orderedTweetRows(response["tweets"] as? List<Map<String, Any>?>)
                 val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
+                val authorIdsToRefresh = mutableSetOf<MimeiId>()
 
                 // Cache original tweets by authorId
                 originalTweetsData?.forEach { originalTweetJson ->
@@ -2846,14 +2884,9 @@ object HproseInstance {
                             
                             // IMPORTANT: Set cached author FIRST (immediate, fast)
                             originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
+                            authorIdsToRefresh.add(originalTweet.authorId)
                             
-                            // Then fetch fresh author from server (slow network call)
-                            val fetchedAuthor = fetchUser(originalTweet.authorId)
-                            if (fetchedAuthor != null) {
-                                originalTweet.author = fetchedAuthor
-                            }
-                            
-                            // Log warning if author is still null
+                            // The background refresh will publish a reactive author update.
                             if (originalTweet.author == null) {
                                 Timber.tag("getTweetFeed").w("⚠️ Failed to get author for original tweet ${originalTweet.mid}, authorId: ${originalTweet.authorId}")
                             }
@@ -2884,15 +2917,9 @@ object HproseInstance {
                             } else {
                                 tweet.author = TweetCacheManager.getCachedUser(tweet.authorId)
                             }
-
-                            // Then fetch fresh author from server (slow network call)
-                            // Update author if fetch succeeds
-                            val fetchedAuthor = fetchUser(tweet.authorId)
-                            if (fetchedAuthor != null) {
-                                tweet.author = fetchedAuthor
-                            }
+                            authorIdsToRefresh.add(tweet.authorId)
                             
-                            // Log warning if author is still null after both cache and fetch attempts
+                            // The background refresh will publish a reactive author update.
                             if (tweet.author == null) {
                                 Timber.tag("getTweetFeed").w("⚠️ Failed to get author for tweet ${tweet.mid}, authorId: ${tweet.authorId}")
                             }
@@ -2910,6 +2937,8 @@ object HproseInstance {
                         }
                     }
                 } ?: emptyList()
+
+                refreshTweetAuthorsInBackground(authorIdsToRefresh, reason = "tweet feed")
                 
                 // Success! Return the result
                 if (attempt > 0) {
@@ -3035,6 +3064,53 @@ object HproseInstance {
     }
 
     /**
+     * A route can answer the lightweight health probe and still be unable to serve a
+     * profile read. After the real RPC times out twice, move to another advertised
+     * address of the same access node, matching the iOS profile-read recovery path.
+     */
+    private suspend fun switchUserReadRouteAfterTimeout(
+        user: User,
+        attemptedBaseUrl: String?
+    ): Boolean {
+        if (attemptedBaseUrl.isNullOrBlank()) return false
+        val accessNodeMid = user.hostIds?.getOrNull(1) ?: return false
+        UserRoutes.stopReadingFromWriteHost(user.mid)
+
+        val alternateIP = try {
+            getHostIP(
+                accessNodeMid,
+                forceHealthCheck = true,
+                excludedIP = attemptedBaseUrl
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("getTweetsByUser").w(e, "Alternate profile-route lookup failed")
+            null
+        } ?: return false
+        val alternateBaseUrl = normalizeHealthCheckUrl(alternateIP).removeSuffix("/")
+        if (normalizeIPHealthCacheKey(alternateBaseUrl) ==
+            normalizeIPHealthCacheKey(attemptedBaseUrl)
+        ) {
+            return false
+        }
+
+        val oldBaseUrl = user.baseUrl
+        user.baseUrl = alternateBaseUrl
+        if (user.mid == appUser.mid) {
+            notifyAppUserChanged(oldBaseUrl, user.avatar)
+        }
+        UserRoutes.confirmReadRoute(user.mid, alternateBaseUrl, user.baseUrl)
+        NodePool.updateNodeIP(accessNodeMid, alternateIP)
+        TweetCacheManager.saveUser(user)
+        Timber.tag("getTweetsByUser").w(
+            "Switched route for ${user.mid} after operation timeouts: " +
+                "$attemptedBaseUrl -> $alternateBaseUrl"
+        )
+        return true
+    }
+
+    /**
      * First call updates appUser.hostIds[0]. If that home update found new
      * tweets, call update_following_tweets again on hostIds[1] so the current
      * host pulls the updated appUser state. The second response is not used; it
@@ -3117,6 +3193,8 @@ object HproseInstance {
         var activeUser = user
         var refreshedRoute = false
         var retriedSameRouteAfterTimeout = false
+        var usedAlternateAfterTimeout = false
+        val initiallyAttemptedBaseUrl = UserRoutes.readRoute(user.mid) ?: user.baseUrl
 
         while (true) {
             try {
@@ -3157,6 +3235,7 @@ object HproseInstance {
             // Extract tweets and originalTweets from the new response format
             val tweetsData = orderedTweetRows(response["tweets"] as? List<Map<String, Any>?>)
             val originalTweetsData = response["originalTweets"] as? List<Map<String, Any>?>
+            val authorIdsToRefresh = mutableSetOf<MimeiId>()
 
             // Cache original tweets by authorId
             originalTweetsData?.forEach { originalTweetJson ->
@@ -3171,19 +3250,18 @@ object HproseInstance {
                         } else {
                             originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
                         }
-
-                        // Then fetch fresh author from server (slow network call)
-                        val fetchedAuthor = fetchUser(originalTweet.authorId)
-                        if (fetchedAuthor != null) {
-                            originalTweet.author = fetchedAuthor
-                        }
+                        authorIdsToRefresh.add(originalTweet.authorId)
                         
                         // Log warning if author is still null
                         if (originalTweet.author == null) {
                             Timber.tag("getTweetsByUser").w("⚠️ Failed to get author for original tweet ${originalTweet.mid}, authorId: ${originalTweet.authorId}")
                         }
                         
-                        TweetCacheManager.saveTweet(originalTweet, originalTweet.authorId)
+                        TweetCacheManager.saveTweet(
+                            originalTweet,
+                            originalTweet.authorId,
+                            saveAuthor = false
+                        )
                         Timber.tag("getTweetsByUser")
                             .d("Cached original tweet: ${originalTweet.mid}")
                     } catch (e: Exception) {
@@ -3205,7 +3283,11 @@ object HproseInstance {
                         tweet.author = activeUser
                         // Note: originalTweet is no longer loaded here, it will be loaded on-demand in the UI
                         // Cache all tweets by their authorId
-                        updateCachedTweet(tweet, userId = tweet.authorId)
+                        updateCachedTweet(
+                            tweet,
+                            userId = tweet.authorId,
+                            saveAuthor = false
+                        )
                         tweet
                     } catch (e: Exception) {
                         Timber.tag("getTweetsByUser").e(e, "Error decoding tweet")
@@ -3217,21 +3299,34 @@ object HproseInstance {
             Timber.tag("getTweetsByUser")
                 .d("Received ${tweetsData?.size ?: 0} tweets (${result.filterNotNull().size} valid) and ${originalTweetsData?.size ?: 0} original tweets for user: ${activeUser.mid}")
 
+            refreshTweetAuthorsInBackground(authorIdsToRefresh, reason = "profile tweet list")
             NodePool.updateFromUser(activeUser)
             return result
         } catch (e: Exception) {
+            // The iOS path gives a freshly resolved or alternate route one attempt.
+            // Do not restart the original recovery ladder from that new destination.
+            if (refreshedRoute || usedAlternateAfterTimeout) {
+                Timber.tag("getTweetsByUser").e(
+                    "Error fetching tweets for user after route refresh: ${activeUser.mid}: ${e.message}"
+                )
+                throw e
+            }
+
             if (e.hasTimeoutCause()) {
                 if (!retriedSameRouteAfterTimeout) {
                     Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out for ${activeUser.mid}; retrying same route once")
                     retriedSameRouteAfterTimeout = true
                     continue
                 }
-                Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out again for ${activeUser.mid}; not refreshing route for operation timeout")
-                throw e
-            }
-
-            if (refreshedRoute) {
-                Timber.tag("getTweetsByUser").e("Error fetching tweets for user after route refresh: ${activeUser.mid}: ${e.message}")
+                if (!usedAlternateAfterTimeout && switchUserReadRouteAfterTimeout(
+                        activeUser,
+                        initiallyAttemptedBaseUrl
+                    )
+                ) {
+                    usedAlternateAfterTimeout = true
+                    continue
+                }
+                Timber.tag("getTweetsByUser").w(e, "Tweet fetch timed out again for ${activeUser.mid}; no alternate route is available")
                 throw e
             }
 
@@ -3295,6 +3390,11 @@ object HproseInstance {
                 if (cachedTweet.author == null) {
                     cachedTweet.author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
                 }
+
+                refreshTweetAuthorsInBackground(
+                    setOf(authorId),
+                    reason = "cached tweet detail"
+                )
 
                 return cachedTweet
             }
@@ -3360,9 +3460,13 @@ object HproseInstance {
      * Update cached but keep its timestamp when it was cached.
      * @param userId The user ID to cache under. Defaults to tweet.authorId
      * */
-    fun updateCachedTweet(tweet: Tweet, userId: MimeiId? = null) {
+    fun updateCachedTweet(
+        tweet: Tweet,
+        userId: MimeiId? = null,
+        saveAuthor: Boolean = true
+    ) {
         val cacheUserId = userId ?: tweet.authorId
-        TweetCacheManager.updateCachedTweet(tweet, cacheUserId)
+        TweetCacheManager.updateCachedTweet(tweet, cacheUserId, saveAuthor)
     }
 
     /**
@@ -3417,6 +3521,10 @@ object HproseInstance {
                 if (cached.author == null) {
                     cached.author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
                 }
+                refreshTweetAuthorsInBackground(
+                    setOf(authorId),
+                    reason = "cached tweet detail"
+                )
                 return cached
             }
         }
@@ -3623,7 +3731,7 @@ object HproseInstance {
                 primaryRows
             }
 
-            cachedRows.mapNotNull { cachedTweet ->
+            val tweets = cachedRows.mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 
                 // Skip tweets with null authorId (should never happen, but safety check)
@@ -3652,6 +3760,11 @@ object HproseInstance {
                 
                 tweet
             }
+            refreshTweetAuthorsInBackground(
+                tweets.map { it.authorId }.toSet(),
+                reason = "cached tweet page"
+            )
+            tweets
         } catch (e: Exception) {
             Timber.tag("loadCachedTweets").e("❌ Error loading cached tweets: $e")
             emptyList()
@@ -3670,7 +3783,7 @@ object HproseInstance {
         count: Int,
     ): List<Tweet> = withContext(Dispatchers.IO) {
         return@withContext try {
-            dao.getCachedTweetsByUser(authorId, startRank, count).mapNotNull { cachedTweet ->
+            val tweets = dao.getCachedTweetsByUser(authorId, startRank, count).mapNotNull { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 if (tweet.authorId.isEmpty() || tweet.authorId != authorId) {
                     return@mapNotNull null
@@ -3702,6 +3815,11 @@ object HproseInstance {
 
                 tweet
             }
+            refreshTweetAuthorsInBackground(
+                tweets.map { it.authorId }.toSet(),
+                reason = "cached profile tweet page"
+            )
+            tweets
         } catch (e: Exception) {
             Timber.tag("loadCachedTweetsByAuthor").e("Error loading cached tweets by author: $e")
             emptyList()
@@ -4926,21 +5044,56 @@ object HproseInstance {
     }
 
     /**
+     * Tweet rows render immediately with cached authors, then use an ordinary get_user
+     * read to refresh author data and routing in the background. The centralized route
+     * confirmation lease keeps repeated rows from probing the same author continuously.
+     */
+    fun refreshTweetAuthorsInBackground(userIds: Set<MimeiId>, reason: String) {
+        userIds.asSequence()
+            .filter { it.isNotBlank() && it != TW_CONST.GUEST_ID }
+            .distinct()
+            .forEach { userId ->
+                TweetApplication.applicationScope.launch(Dispatchers.IO) {
+                    try {
+                        val cachedUser = TweetCacheManager.getCachedUser(userId)
+                        val accessRoute = cachedUser?.baseUrl ?: getUserInstance(userId).baseUrl
+                        if (UserRoutes.hasRecentRouteConfirmation(userId, accessRoute)) {
+                            return@launch
+                        }
+
+                        fetchUser(
+                            userId,
+                            baseUrl = "",
+                            maxRetries = 2,
+                            forceRefresh = true
+                        )
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("tweetAuthorRefresh")
+                            .w(e, "Background author refresh failed for $userId ($reason)")
+                    }
+                }
+            }
+    }
+
+    /**
      * Waits for concurrent update to complete with timeout
-     * @return Cached user if allowed, retries fetchUser after the competing update finishes,
-     * or null for timed-out forceRefresh calls so callers do not reuse stale routing.
+     * @return The result cached by the owner of the in-flight refresh. Forced callers
+     * only accept it when that refresh confirmed the effective route.
      */
     private suspend fun waitForConcurrentUpdate(userId: MimeiId, baseUrl: String?, maxRetries: Int, forceRefresh: Boolean): User? {
-        val maxWaitTime = 10000L // 10 seconds
+        val requiresConfirmedRoute = forceRefresh || baseUrl.isNullOrBlank()
+        val maxWaitTime = if (requiresConfirmedRoute) 15_000L else 6_000L
         val startTime = System.currentTimeMillis()
         
         while (true) {
-            delay(50.milliseconds)
+            delay(200.milliseconds)
             
             if (System.currentTimeMillis() - startTime > maxWaitTime) {
                 Timber.tag("getUser").w("Timeout waiting for concurrent update to complete for userId: $userId")
-                if (forceRefresh) {
-                    Timber.tag("getUser").w("forceRefresh=true; returning null instead of stale cached user for userId: $userId")
+                if (requiresConfirmedRoute) {
+                    Timber.tag("getUser").w("Route confirmation required; returning null instead of stale cached user for userId: $userId")
                     return null
                 }
                 return TweetCacheManager.getCachedUser(userId)
@@ -4952,12 +5105,15 @@ object HproseInstance {
             }
             
             if (!isStillUpdating) {
-                if (forceRefresh) {
-                    return fetchUser(userId, baseUrl, maxRetries, forceRefresh)
+                val refreshedUser = TweetCacheManager.getCachedUser(userId)
+                    ?.takeIf { it.username != null }
+                    ?: getUserInstance(userId).takeIf { it.username != null }
+                if (requiresConfirmedRoute) {
+                    return refreshedUser?.takeIf {
+                        UserRoutes.hasRecentRouteConfirmation(userId, it.baseUrl)
+                    }
                 }
-                return TweetCacheManager.getCachedUser(userId)
-                    ?.takeIf { it.username != null } ?:
-                    fetchUser(userId, baseUrl, maxRetries, forceRefresh)
+                return refreshedUser ?: fetchUser(userId, baseUrl, maxRetries, forceRefresh)
             }
         }
     }
@@ -4983,7 +5139,7 @@ object HproseInstance {
             return null
         }
 
-        if (!skipRetryAndBlacklist && isReliabilityBlacklistedUser(userId)) {
+        if (!skipRetryAndBlacklist && !forceRefresh && isReliabilityBlacklistedUser(userId)) {
             val cachedUser = TweetCacheManager.getCachedUser(userId)
                 ?.takeIf { it.username != null }
             Timber.tag("getUser").d("User $userId is blacklisted, returning cached=${cachedUser != null}")
@@ -5155,7 +5311,7 @@ object HproseInstance {
             return
         }
 
-        if (attempt == 1) {
+        if (attempt == 1 && !forceFreshIP) {
             val accessNodeMid = user.hostIds?.getOrNull(1)
             val poolIP = accessNodeMid?.let { NodePool.getIPFromNodeId(it) }
             if (poolIP != null) {
@@ -5198,7 +5354,11 @@ object HproseInstance {
         val accessNodeMid = user.hostIds?.getOrNull(1)
         if (accessNodeMid != null) {
             Timber.tag("updateUserFromServer").d("📡 ATTEMPT $attempt/$maxRetries - Resolving read node $accessNodeMid for userId: ${user.mid}, reason: $reason")
-            val accessIP = getHostIP(accessNodeMid)
+            val accessIP = getHostIP(
+                accessNodeMid,
+                forceHealthCheck = forceFreshIP,
+                forceDiscovery = forceFreshIP
+            )
             if (!accessIP.isNullOrBlank()) {
                 val newBaseUrl = if (accessIP.startsWith("http://") || accessIP.startsWith("https://")) {
                     accessIP
@@ -5295,6 +5455,8 @@ object HproseInstance {
                     Timber.tag("updateUserFromServer").e("Cannot call get_user: hproseService is null for userId: ${user.mid}, baseUrl: ${user.baseUrl}")
                     throw Exception("hproseService is null - cannot fetch user data")
                 }
+
+                val attemptedReadRoute = UserRoutes.readRoute(user.mid) ?: user.baseUrl
                 
                 // Make server call
                 val rawResponse = try {
@@ -5323,6 +5485,7 @@ object HproseInstance {
                 // On success, replace the access-node fast path with the route
                 // that actually served this read, matching the iOS behavior.
                 if (success) {
+                    UserRoutes.confirmReadRoute(user.mid, attemptedReadRoute, user.baseUrl)
                     val accessNodeMid = user.hostIds?.getOrNull(1)
                     val workingIP = user.baseUrl
                         ?.trim()

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -49,10 +50,12 @@ import androidx.core.net.toUri
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -91,12 +94,25 @@ fun MediaItemView(
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
+    }
+    val cachedAuthor by authorStateFlow.collectAsState()
     // An author with no route yet has no address to fetch from — `orEmpty()` turned that
     // into a schemeless URL, which the player accepted as a real one: it failed, was cached
     // under the media id, and the failure was recorded against a video that had never
     // actually been tried. Blank instead, so the media below can decline to load until the
-    // route arrives.
-    val authorBaseUrl = tweet.author?.baseUrl?.takeIf { it.isNotBlank() }
+    // route arrives. ImageViewer receives null below for this waiting state; an empty
+    // string would be treated as a real request and immediately surface Retry.
+    val authorBaseUrl = (cachedAuthor ?: tweet.author)?.baseUrl?.takeIf { it.isNotBlank() }
+    var previousAuthorBaseUrl by remember(tweet.authorId) { mutableStateOf(authorBaseUrl) }
+    LaunchedEffect(authorBaseUrl) {
+        val previousRoute = previousAuthorBaseUrl
+        if (previousRoute != null && authorBaseUrl != null && previousRoute != authorBaseUrl) {
+            mediaItems.forEach { BlackList.resetForRetry(it.mid) }
+        }
+        previousAuthorBaseUrl = authorBaseUrl
+    }
     val attachments = mediaItems.map { item ->
         val inferredType = inferMediaTypeFromAttachment(item)
         val mediaUrl = authorBaseUrl?.let { base -> getMediaUrl(item.mid, base) }.orEmpty()
@@ -137,7 +153,7 @@ fun MediaItemView(
                     fullScreenMediaItems.map {
                         MediaItem(
                             it.mid,
-                            getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                            getMediaUrl(it.mid, authorBaseUrl.orEmpty()).toString(),
                             it.type
                         )
                     },
@@ -164,7 +180,7 @@ fun MediaItemView(
             else -> {
                 // Open other media types with appropriate apps
                 try {
-                    val mediaUrl = getMediaUrl(mediaItems[idx].mid, tweet.author?.baseUrl.orEmpty()).toString()
+                    val mediaUrl = getMediaUrl(mediaItems[idx].mid, authorBaseUrl.orEmpty()).toString()
                     val intent = Intent(Intent.ACTION_VIEW).apply {
                         data = mediaUrl.toUri()
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -181,7 +197,7 @@ fun MediaItemView(
                     Timber.tag("MediaItemView").e("Failed to open file: ${e.message}")
                     // Fallback: try to download the file
                     try {
-                        val mediaUrl = getMediaUrl(mediaItems[idx].mid, tweet.author?.baseUrl.orEmpty()).toString()
+                        val mediaUrl = getMediaUrl(mediaItems[idx].mid, authorBaseUrl.orEmpty()).toString()
                         downloadFile(context, mediaUrl, mediaItems[idx].fileName.toString())
                     } catch (downloadException: Exception) {
                         Timber.tag("MediaItemView").e("Failed to download file: ${downloadException.message}")
@@ -233,7 +249,7 @@ fun MediaItemView(
                         }
                 ) {
                     ImageViewer(
-                        attachment.url,
+                        attachment.url.takeIf { it.isNotBlank() },
                         imageMid = mediaItems[index].mid,
                         modifier = Modifier.fillMaxSize(), // Always fill parent in preview grid
                         enableLongPress = false, // Disable long press to allow clickable to work
@@ -241,7 +257,8 @@ fun MediaItemView(
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
                         resolveImageUrlForRetry = {
-                            viewModel.tweetState.value.author?.baseUrl
+                            (authorStateFlow.value?.baseUrl
+                                ?: viewModel.tweetState.value.author?.baseUrl)
                                 ?.takeIf { it.isNotBlank() }
                                 ?.let { baseUrl -> getMediaUrl(mediaItems[index].mid, baseUrl) }
                         },
@@ -344,7 +361,7 @@ fun MediaItemView(
         val imageAttachments = itemsForNavigation.mapIndexedNotNull { idx, item ->
             val inferredType = inferMediaTypeFromAttachment(item)
             if (inferredType == MediaType.Image) {
-                Triple(idx, item.mid, getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString())
+                Triple(idx, item.mid, getMediaUrl(item.mid, authorBaseUrl.orEmpty()).toString())
             } else {
                 null
             }
@@ -359,7 +376,7 @@ fun MediaItemView(
         val mediaUrl = if (currentImageIndexInList >= 0) {
             imageAttachments[currentImageIndexInList].third
         } else {
-            getMediaUrl(imageMid, tweet.author?.baseUrl.orEmpty()).toString()
+            getMediaUrl(imageMid, authorBaseUrl.orEmpty()).toString()
         }
         
         // Get list of image URLs

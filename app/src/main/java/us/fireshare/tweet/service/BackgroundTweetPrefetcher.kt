@@ -61,7 +61,18 @@ object BackgroundTweetPrefetcher {
     private var nextPage = 0
     /** The backend has run out of pages. */
     private var isExhausted = false
+    /**
+     * Navigation visibility is separate from the process lifecycle: a profile can be
+     * foregrounded while the main feed is no longer visible. Read-ahead must yield to
+     * those interactive requests instead of filling the RPC queue behind the scenes.
+     */
+    @Volatile
+    private var isMainFeedVisible = false
     private var job: Job? = null
+
+    fun setMainFeedVisible(visible: Boolean) {
+        isMainFeedVisible = visible
+    }
 
     /**
      * Warm the app user's following feed on screen entry and after a feed reset.
@@ -167,6 +178,7 @@ object BackgroundTweetPrefetcher {
     }
 
     private suspend fun isTrafficLow(): Boolean {
+        if (!isMainFeedVisible) return false
         if (!HproseInstance.isOnline.value) return false
         // Readiness, re-checked every poll rather than once at start-up.
         //

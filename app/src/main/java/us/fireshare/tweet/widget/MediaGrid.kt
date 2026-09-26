@@ -76,6 +76,7 @@ import us.fireshare.tweet.datamodel.MediaItem
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -101,6 +102,11 @@ fun MediaGrid(
     enableRowPreloading: Boolean = true
 ) {
     val tweet by viewModel.tweetState.collectAsState()
+    val authorStateFlow = remember(tweet.authorId) {
+        TweetCacheManager.getUserStateFlow(tweet.authorId)
+    }
+    val cachedAuthor by authorStateFlow.collectAsState()
+    val authorBaseUrl = (cachedAuthor ?: tweet.author)?.baseUrl
     val navController = LocalNavController.current
     val videoCoordinator = LocalVideoCoordinator.current
     val audioMediaList by remember(mediaItems) {
@@ -194,7 +200,7 @@ fun MediaGrid(
     // Preload images with limited concurrency to avoid thread pool contention.
     // Video preloading is handled by TweetListView/VideoManager directional preloads so
     // hidden grid work does not compete with the primary visible video.
-    LaunchedEffect(limitedMediaList, enableRowPreloading) {
+    LaunchedEffect(limitedMediaList, enableRowPreloading, authorBaseUrl) {
         if (!enableRowPreloading) return@LaunchedEffect
         // Delay preloading so fast-scrolling cancels before starting heavy work
         delay(300)
@@ -202,7 +208,7 @@ fun MediaGrid(
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
             if (mediaType == MediaType.Image) {
-                val mediaUrl = getMediaUrl(item.mid, tweet.author?.baseUrl.orEmpty()).toString()
+                val mediaUrl = getMediaUrl(item.mid, authorBaseUrl.orEmpty()).toString()
                 launch(Dispatchers.IO) {
                     preloadSemaphore.acquire()
                     try {
@@ -240,7 +246,7 @@ fun MediaGrid(
                                 visualMediaList.map {
                                     MediaItem(
                                         it.mid,
-                                        getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty()).toString(),
+                                        getMediaUrl(it.mid, authorBaseUrl.orEmpty()).toString(),
                                         it.type
                                     )
                                 }, 0, tweet.mid, tweet.authorId
@@ -686,7 +692,7 @@ fun MediaGrid(
         if (audioMediaList.isNotEmpty()) {
             SimpleMp3PlaylistPlayer(
                 attachments = audioMediaList,
-                baseUrl = tweet.author?.baseUrl.orEmpty(),
+                baseUrl = authorBaseUrl.orEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = if (limitedMediaList.isNotEmpty()) 8.dp else 0.dp)
@@ -696,7 +702,7 @@ fun MediaGrid(
         if (documentMediaList.isNotEmpty()) {
             DocumentAttachmentsView(
                 documents = documentMediaList,
-                baseUrl = tweet.author?.baseUrl,
+                baseUrl = authorBaseUrl,
                 maxDocuments = 2,
                 modifier = Modifier.padding(top = if (limitedMediaList.isNotEmpty() || audioMediaList.isNotEmpty()) 4.dp else 0.dp)
             )

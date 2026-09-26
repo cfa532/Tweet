@@ -158,9 +158,10 @@ object TweetCacheManager {
     
     /**
      * Save or update a tweet in cache
-     * @param shouldCache If false, the tweet will not be cached (for profile screens)
+     * @param saveAuthor False for batches whose author was already cached once; this
+     * avoids turning one profile page into repeated user database writes and emissions.
      */
-    fun saveTweet(tweet: Tweet?, userId: MimeiId) {
+    fun saveTweet(tweet: Tweet?, userId: MimeiId, saveAuthor: Boolean = true) {
         if (tweet == null) {
             Timber.w("Should not cache: $tweet")
             return
@@ -219,7 +220,9 @@ object TweetCacheManager {
 
             // Keep the shared user/avatar flow in sync for embedded tweets loaded
             // outside the normal feed path. saveUser validates identity before writing.
-            tweet.author?.let { saveUser(it) }
+            if (saveAuthor) {
+                tweet.author?.let { saveUser(it) }
+            }
         } catch (e: Exception) {
             Timber.e("Error saving tweet to cache: $e")
         }
@@ -352,8 +355,8 @@ object TweetCacheManager {
     /**
      * Update an existing cached tweet
      */
-    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId) {
-        saveTweet(tweet, userId)
+    fun updateCachedTweet(tweet: Tweet?, userId: MimeiId, saveAuthor: Boolean = true) {
+        saveTweet(tweet, userId, saveAuthor)
     }
 
     /**
@@ -448,7 +451,7 @@ object TweetCacheManager {
             
             // Create new StateFlow with current cached user (or null)
             val currentUser = synchronized(userCacheLock) {
-                userMemoryCache[userId]
+                userMemoryCache[userId]?.copy()
             }
             val newFlow = MutableStateFlow<User?>(currentUser)
             userStateFlows[userId] = newFlow
@@ -493,7 +496,11 @@ object TweetCacheManager {
             
             // Update StateFlow to notify observers
             synchronized(userStateFlowsLock) {
-                userStateFlows[cachedUser.userId]?.value = cachedUser.user
+                // Keep the flow value detached from the mutable singleton/cache object.
+                // Otherwise get_user mutates the already-emitted instance in place and
+                // StateFlow sees the later assignment as equal, so visible media never
+                // observes a repaired baseUrl.
+                userStateFlows[cachedUser.userId]?.value = cachedUser.user.copy()
                 Timber.tag("TweetCacheManager").d("📡 USER STATEFLOW UPDATED: userId: ${cachedUser.userId}")
             }
         } catch (e: Exception) {

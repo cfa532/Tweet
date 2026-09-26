@@ -21,6 +21,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -44,6 +45,7 @@ import us.fireshare.tweet.HproseInstance.preferenceHelper
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.BottomBarState
 import us.fireshare.tweet.navigation.BottomNavigationBar
+import us.fireshare.tweet.service.BackgroundTweetPrefetcher
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import androidx.compose.ui.res.stringResource
 
@@ -62,6 +64,14 @@ fun TweetFeedScreen(
     viewModel: TweetFeedViewModel
 ) {
     val context = LocalContext.current
+
+    DisposableEffect(Unit) {
+        BackgroundTweetPrefetcher.setMainFeedVisible(true)
+        onDispose {
+            BackgroundTweetPrefetcher.setMainFeedVisible(false)
+        }
+    }
+
     val tabs = listOf(
         TabItem(title = stringResource(R.string.your_followings)),
         TabItem(title = stringResource(R.string.recommendation))

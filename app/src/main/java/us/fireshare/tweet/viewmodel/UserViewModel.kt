@@ -45,6 +45,7 @@ import us.fireshare.tweet.datamodel.TweetEvent
 import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserContentType
+import us.fireshare.tweet.datamodel.UserRoutes
 import us.fireshare.tweet.service.FollowUserWorker
 import java.util.concurrent.ConcurrentHashMap
 
@@ -200,6 +201,9 @@ class UserViewModel @AssistedInject constructor(
      * */
     suspend fun initLoad() {
         try {
+            // Match the iOS profile path: publish the local list before doing any
+            // route validation or RPC work.
+            val cachedPage0 = loadCachedProfileTweets(0)
             val profileUser = user.first { it.mid == userId }
             Timber.tag("initLoad").d("Starting health-first profile load for user: $userId")
 
@@ -209,13 +213,20 @@ class UserViewModel @AssistedInject constructor(
                 return
             }
 
-            // The route is now health-verified. Refresh user fields before loading
-            // pinned and regular tweets so every server read uses the same route.
-            refreshUserDataFromServer()
-
-            // Load first page (page 0) which includes pinned tweets
-            // getTweets loads cached tweets FIRST, then network
-            val page0Tweets = getTweets(0)
+            // The route is now health-verified. Profile fields, pinned tweets and the
+            // regular tweet page are independent reads, so do not put them behind one
+            // another during the startup rush.
+            viewModelScope.launch(IO) {
+                refreshUserDataFromServer()
+            }
+            viewModelScope.launch(IO) {
+                loadPinnedTweets(profileUser)
+            }
+            val page0Tweets = fetchProfileTweetsFromServer(
+                profileUser,
+                pageNumber = 0,
+                cachedFallback = cachedPage0.map { it as Tweet? }
+            )
 
             // Clear loading state after first page loads (whether from cache or network)
             // This ensures UI shows content as soon as any tweets are available
@@ -281,9 +292,13 @@ class UserViewModel @AssistedInject constructor(
         return try {
             Timber.tag("refreshUserData").d("Fetching fresh user data for userId: $userId")
             val previousBaseUrl = _user.value.baseUrl
+            val hasRecentRouteConfirmation = UserRoutes.hasRecentRouteConfirmation(
+                userId,
+                previousBaseUrl
+            )
             val refreshedUser = fetchUser(
                 userId,
-                baseUrl = previousBaseUrl,
+                baseUrl = if (hasRecentRouteConfirmation) previousBaseUrl else "",
                 maxRetries = 2,
                 forceRefresh = true
             )
@@ -318,14 +333,21 @@ class UserViewModel @AssistedInject constructor(
     }
 
     suspend fun resyncProfileUser(ignoreDebounce: Boolean = false) {
-        val currentUser = _user.value
-        if (currentUser.mid != userId || currentUser.baseUrl.isNullOrBlank()) {
-            Timber.tag("UserViewModel").d("Profile route not ready for resync user $userId")
-            return
-        }
-
         withContext(IO) {
             try {
+                // A reachable cached address can still be stale. Pull-to-refresh is an
+                // explicit recovery action, so discover the current ordinary get_user
+                // route before asking that node to perform the heavier resync_user.
+                val routeUser = fetchUser(
+                    userId,
+                    baseUrl = "",
+                    maxRetries = 2,
+                    forceRefresh = true
+                )
+                if (routeUser == null || routeUser.baseUrl.isNullOrBlank()) {
+                    Timber.tag("UserViewModel").w("Could not refresh profile route before resync for $userId")
+                }
+
                 val resyncResult = HproseInstance.resyncUser(userId, ignoreDebounce)
                 if (resyncResult == null) {
                     Timber.tag("UserViewModel").d("No resynced user returned for $userId")
@@ -1521,70 +1543,19 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            // Always load cached tweets FIRST (immediately, before any network calls).
-            // Use the assisted-injected `userId` (always correct) rather than
-            // `user.value.mid`, which may still be GUEST_ID if the `init` block
-            // race hasn't populated _user yet, or if no cached User was found.
-            // Without this, a stale/missing cached User would skip cached-tweet
-            // loading entirely and the UI would just sit on a spinner while the
-            // network call to a stale baseUrl times out.
-            Timber.tag("getTweets").d("Loading cached tweets for user: $userId")
-            val cachedTweets = loadCachedTweetsByAuthor(userId, pageNumber * TW_CONST.PAGE_SIZE, TW_CONST.PAGE_SIZE)
-            val cachedTweetsWithNulls = cachedTweets.map { it as Tweet? }
-            
-            // Update _tweets with cached tweets IMMEDIATELY (shows tweets to user right away)
-            _tweets.update { currentTweets ->
-                val currentTweetIds = currentTweets.map { it.mid }.toSet()
-                val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
-                
-                if (newCachedTweets.isNotEmpty()) {
-                    val mergedTweets = (currentTweets + newCachedTweets)
-                        .distinctBy { tweet: Tweet -> tweet.mid }
-                        .sortedByDescending { tweet: Tweet -> tweet.profileOrderingTimestamp() }
-                    mergedTweets
-                } else {
-                    currentTweets
+            val cachedTweets = loadCachedProfileTweets(pageNumber)
+            val profileUser = user.value
+
+            if (pageNumber == 0) {
+                viewModelScope.launch(IO) {
+                    loadPinnedTweets(profileUser)
                 }
             }
-            
-            Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: $userId")
-
-            // Clear the initial-load spinner as soon as we have something cached
-            // to show. Otherwise, when the user's baseUrl is stale, the network
-            // calls below (loadPinnedTweets + getTweetsByUser) can hang for many
-            // seconds and the UI would keep showing the spinner instead of the
-            // already-loaded cached tweets.
-            if (pageNumber == 0 && (cachedTweets.isNotEmpty() || _tweets.value.isNotEmpty())) {
-                initState.value = false
-            }
-
-            // Load pinned tweets AFTER cached tweets are shown (only for page 0)
-            if (pageNumber == 0) {
-                loadPinnedTweets()
-                Timber.tag("getTweets").d("Pinned tweets loaded: ${pinnedTweets.value.size} tweets")
-            }
-            
-            // If network is available, fetch more tweets from server
-            if (user.value.baseUrl != null && appUser.baseUrl != null) {
-                Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
-                // Fetch tweets of the author and update _tweets
-                val newTweetsWithNulls = HproseInstance.getTweetsByUser(user.value, pageNumber, TW_CONST.PAGE_SIZE)
-
-                // Filter out null elements and get valid tweets
-                val newTweets = newTweetsWithNulls.filterNotNull()
-                rememberTweetRowTimestamps(newTweets)
-
-                Timber.tag("getTweets")
-                    .d("Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) for user: ${user.value.mid}, page: $pageNumber")
-
-                stageOrMergeProfileTweets(visibleRegularProfileTweets(newTweets), pageNumber)
-
-                return newTweetsWithNulls
-            } else {
-                // Network unavailable, return cached tweets only
-                Timber.tag("getTweets").w("Network unavailable, returning cached tweets only")
-                return cachedTweetsWithNulls
-            }
+            fetchProfileTweetsFromServer(
+                profileUser,
+                pageNumber,
+                cachedTweets.map { it as Tweet? }
+            )
         } catch (e: Exception) {
             Timber.tag("getTweets")
                 .e(e, "Error fetching tweets for user: ${user.value.mid}, page: $pageNumber")
@@ -1592,11 +1563,66 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    private suspend fun loadPinnedTweets() {
+    private suspend fun loadCachedProfileTweets(pageNumber: Int): List<Tweet> {
+        // Use the assisted-injected ID: user.value can still be the guest placeholder
+        // while the profile's User object is being restored.
+        Timber.tag("getTweets").d("Loading cached tweets for user: $userId")
+        val cachedTweets = loadCachedTweetsByAuthor(
+            userId,
+            pageNumber * TW_CONST.PAGE_SIZE,
+            TW_CONST.PAGE_SIZE
+        )
+
+        _tweets.update { currentTweets ->
+            val currentTweetIds = currentTweets.map { it.mid }.toSet()
+            val newCachedTweets = cachedTweets.filter { it.mid !in currentTweetIds }
+            if (newCachedTweets.isEmpty()) {
+                currentTweets
+            } else {
+                (currentTweets + newCachedTweets)
+                    .distinctBy { it.mid }
+                    .sortedByDescending { it.profileOrderingTimestamp() }
+            }
+        }
+
+        if (pageNumber == 0 && (cachedTweets.isNotEmpty() || _tweets.value.isNotEmpty())) {
+            initState.value = false
+        }
+        Timber.tag("getTweets").d("Loaded ${cachedTweets.size} cached tweets for user: $userId")
+        return cachedTweets
+    }
+
+    private suspend fun fetchProfileTweetsFromServer(
+        profileUser: User,
+        pageNumber: Int,
+        cachedFallback: List<Tweet?>
+    ): List<Tweet?> {
+        if (profileUser.baseUrl == null || appUser.baseUrl == null) {
+            Timber.tag("getTweets").w("Network unavailable, returning cached tweets only")
+            return cachedFallback
+        }
+
+        Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
+        val newTweetsWithNulls = HproseInstance.getTweetsByUser(
+            profileUser,
+            pageNumber,
+            TW_CONST.PAGE_SIZE
+        )
+        val newTweets = newTweetsWithNulls.filterNotNull()
+        rememberTweetRowTimestamps(newTweets)
+        Timber.tag("getTweets").d(
+            "Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) " +
+                "for user: ${profileUser.mid}, page: $pageNumber"
+        )
+        stageOrMergeProfileTweets(visibleRegularProfileTweets(newTweets), pageNumber)
+        return newTweetsWithNulls
+    }
+
+    private suspend fun loadPinnedTweets(profileUser: User = user.value) {
         try {
 
             // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
-            val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(user.value)
+            val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(profileUser)
 
             Timber.tag("loadPinnedTweets")
                 .d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
