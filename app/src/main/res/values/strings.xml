@@ -358,6 +358,7 @@
     <string name="video_unavailable">Video unavailable</string>
     <string name="audio_unavailable">This audio is not available.</string>
     <string name="retry">Retry</string>
+    <string name="failed_to_load_tweet">Failed to load tweet.</string>
     <string name="mute">Mute</string>
     
     <!-- Node required dialog -->

@@ -26,6 +26,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -86,6 +87,8 @@ fun TweetDetailBody(
     parentEntry: NavBackStackEntry,
     parentTweetId: String? = null,
     parentAuthorId: String? = null,
+    hasFinishedInitialTweetLoad: Boolean = false,
+    onRetryInitialTweetLoad: (() -> Unit)? = null,
     onExpandReply: (() -> Unit)? = null,
     onVideoVisibilityChanged: ((Boolean) -> Unit)? = null
 ) {
@@ -152,17 +155,35 @@ fun TweetDetailBody(
                     // Deep links start with an ID-only tweet. The author can resolve first,
                     // so keep the tweet's content position visible while its payload loads.
                     if (isTweetPayloadPending) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
-                            )
+                        if (hasFinishedInitialTweetLoad) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.failed_to_load_tweet),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Button(onClick = { onRetryInitialTweetLoad?.invoke() }) {
+                                    Text(stringResource(R.string.retry))
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 4.dp
+                                )
+                            }
                         }
                     }
 

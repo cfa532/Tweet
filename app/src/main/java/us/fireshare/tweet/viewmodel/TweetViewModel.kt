@@ -290,12 +290,6 @@ class TweetViewModel @AssistedInject constructor(
                     val cachedTweet = TweetCacheManager.getCachedTweet(tweet.mid)
                     if (cachedTweet != null) {
                         applyFetchedTweet(cachedTweet)
-                        cachedTweet.author?.let { cachedAuthor ->
-                            // A populated author still needs its route checked, but that
-                            // network work must not delay rendering the cached payload.
-                            HproseInstance.validateAndRepairProfileRoute(cachedAuthor)
-                            return@async false
-                        }
                     }
                 }
                 
@@ -311,16 +305,20 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
                 
-                // Step 3: Fetch author if not cached (for deep links)
-                // Pass empty string baseUrl and forceRefresh=true to force provider IP discovery
+                // Step 3: Cached author data is already visible, but a deep-link
+                // route must still be proven by a real get_user response. Candidate
+                // providers are raced three at a time; HEAD is not the selector.
                 var author: User? = cachedUser
+                var resolvedAuthor: User? = null
                 @Suppress("SENSELESS_COMPARISON")
-                if (tweet.authorId != null && author == null) {
+                if (tweet.authorId != null) {
                     try {
-                        author = HproseInstance.fetchUser(tweet.authorId, baseUrl = "", forceRefresh = true)
-                        if (author != null) {
-                            TweetCacheManager.saveUser(author)
-                            _tweetState.update { it.copy(author = author) }
+                        val serverAuthor = HproseInstance.fetchUserForDetail(tweet.authorId)
+                        if (serverAuthor != null) {
+                            author = serverAuthor
+                            resolvedAuthor = serverAuthor
+                            TweetCacheManager.saveUser(serverAuthor)
+                            _tweetState.update { it.copy(author = serverAuthor) }
                         } else {
                             Timber.w("TweetViewModel - Failed to fetch author: ${tweet.authorId}")
                         }
@@ -332,9 +330,15 @@ class TweetViewModel @AssistedInject constructor(
                 // Step 4: Read tweet from server (now that we have author with baseUrl).
                 // Deeplinks land here without a populated wrapper — READ via get_tweet
                 // is enough; cross-node sync is handled by the detail screen on appear.
+                val provenAuthor = resolvedAuthor
                 @Suppress("SENSELESS_COMPARISON")
-                if (tweet.mid != null && tweet.authorId != null) {
-                    val fetched = HproseInstance.getTweet(tweet.mid, tweet.authorId, bypassCache = true)
+                if (tweet.mid != null && tweet.authorId != null && provenAuthor != null) {
+                    val fetched = HproseInstance.getTweet(
+                        tweet.mid,
+                        tweet.authorId,
+                        bypassCache = true,
+                        resolvedAuthor = provenAuthor
+                    )
                     if (fetched != null) {
                         applyFetchedTweet(fetched)
                     } else {

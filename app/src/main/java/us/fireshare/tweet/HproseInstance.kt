@@ -560,6 +560,10 @@ object HproseInstance {
         val message: String,
         val timestampMs: Long
     )
+    private data class UserRouteRaceResult(
+        val userData: Map<String, Any>,
+        val baseUrl: String
+    )
     private const val entryResolveCacheTtlMs = 30_000L
     // Keep this short: prevent retry storms, but still allow fast recovery
     // when DNS/network stabilizes a moment later during app startup.
@@ -3065,12 +3069,13 @@ object HproseInstance {
 
     /**
      * A route can answer the lightweight health probe and still be unable to serve a
-     * profile read. After the real RPC times out twice, move to another advertised
-     * address of the same access node, matching the iOS profile-read recovery path.
+     * real read. Move the user to another advertised address of the same access node
+     * without treating the failed address as globally unhealthy.
      */
-    private suspend fun switchUserReadRouteAfterTimeout(
+    private suspend fun switchUserReadRouteAfterFailure(
         user: User,
-        attemptedBaseUrl: String?
+        attemptedBaseUrl: String?,
+        logTag: String
     ): Boolean {
         if (attemptedBaseUrl.isNullOrBlank()) return false
         val accessNodeMid = user.hostIds?.getOrNull(1) ?: return false
@@ -3085,7 +3090,7 @@ object HproseInstance {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Timber.tag("getTweetsByUser").w(e, "Alternate profile-route lookup failed")
+            Timber.tag(logTag).w(e, "Alternate user-route lookup failed")
             null
         } ?: return false
         val alternateBaseUrl = normalizeHealthCheckUrl(alternateIP).removeSuffix("/")
@@ -3103,8 +3108,8 @@ object HproseInstance {
         UserRoutes.confirmReadRoute(user.mid, alternateBaseUrl, user.baseUrl)
         NodePool.updateNodeIP(accessNodeMid, alternateIP)
         TweetCacheManager.saveUser(user)
-        Timber.tag("getTweetsByUser").w(
-            "Switched route for ${user.mid} after operation timeouts: " +
+        Timber.tag(logTag).w(
+            "Switched route for ${user.mid} after a read failure: " +
                 "$attemptedBaseUrl -> $alternateBaseUrl"
         )
         return true
@@ -3318,9 +3323,10 @@ object HproseInstance {
                     retriedSameRouteAfterTimeout = true
                     continue
                 }
-                if (!usedAlternateAfterTimeout && switchUserReadRouteAfterTimeout(
+                if (!usedAlternateAfterTimeout && switchUserReadRouteAfterFailure(
                         activeUser,
-                        initiallyAttemptedBaseUrl
+                        initiallyAttemptedBaseUrl,
+                        "getTweetsByUser"
                     )
                 ) {
                     usedAlternateAfterTimeout = true
@@ -3502,7 +3508,8 @@ object HproseInstance {
     suspend fun getTweet(
         tweetId: MimeiId?,
         authorId: MimeiId?,
-        bypassCache: Boolean = false
+        bypassCache: Boolean = false,
+        resolvedAuthor: User? = null
     ): Tweet? {
         if (!isOnline.value) {
             Timber.tag("getTweet").d("Offline: skipping")
@@ -3511,7 +3518,9 @@ object HproseInstance {
         if (tweetId == null || authorId == null) return null
         if (TweetCacheManager.isTweetDeleted(tweetId)) return null
 
-        if (isReliabilityBlacklistedTweet(tweetId)) {
+        // A user-triggered detail read gets one bounded recovery attempt even when
+        // an older route failure put this tweet on the reliability blacklist.
+        if (isReliabilityBlacklistedTweet(tweetId) && !bypassCache) {
             Timber.tag("getTweet").d("Tweet $tweetId blacklisted, returning cached")
             return TweetCacheManager.getCachedTweet(tweetId)
         }
@@ -3530,8 +3539,14 @@ object HproseInstance {
         }
 
         return try {
-            val author = TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId)
-            if (author?.hproseService == null) {
+            var author = (resolvedAuthor
+                ?: if (bypassCache) fetchUserForDetail(authorId)
+                else TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId))
+                ?: run {
+                    Timber.tag("getTweet").w("No author for tweetId=$tweetId, authorId=$authorId")
+                    return null
+                }
+            if (author.hproseService == null) {
                 Timber.tag("getTweet").w("No author service for tweetId=$tweetId, authorId=$authorId")
                 return null
             }
@@ -3554,26 +3569,66 @@ object HproseInstance {
                 params["fromdetailview"] = rpcBool(true)
                 author.hostIds?.firstOrNull()?.let { params["authorhostid"] = it }
             }
-            val raw = runStorageRead<Any>(
-                author,
-                "get_tweet",
-                params,
-                Tweet.findInstance(tweetId)?.storageFormat
-                    ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
-            )
-            val data = unwrapV2Response<Map<String, Any>>(raw)
-            if (data != null) {
-                if (TweetCacheManager.isTweetDeleted(tweetId)) return null
-                recordReliabilitySuccessTweet(tweetId)
-                val tweet = Tweet.from(data)
-                tweet.author = author
-                TweetCacheManager.saveTweet(tweet, authorId)
-                tweet
-            } else {
-                Timber.tag("getTweet").d("Tweet not found: $tweetId")
-                recordReliabilityFailureTweet(tweetId)
-                null
+
+            // Detail reads start on a route proven by get_user. A failed tweet read
+            // excludes that address and resolves the author again through another
+            // get_user race before retrying, keeping avatar and tweet co-located.
+            val readAttemptCount = if (bypassCache) 2 else 1
+            for (attempt in 0 until readAttemptCount) {
+                val attemptedBaseUrl = author.baseUrl
+                try {
+                    val raw = runStorageRead<Any>(
+                        author,
+                        "get_tweet",
+                        params,
+                        Tweet.findInstance(tweetId)?.storageFormat
+                            ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
+                    )
+                    val data = unwrapV2Response<Map<String, Any>>(raw)
+                    if (data != null) {
+                        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+                        recordReliabilitySuccessTweet(tweetId)
+                        val tweet = Tweet.from(data)
+                        tweet.author = author
+                        TweetCacheManager.saveTweet(tweet, authorId)
+                        return tweet
+                    }
+
+                    if (attempt + 1 < readAttemptCount) {
+                        val alternateAuthor = fetchUserForDetail(
+                            authorId,
+                            setOf(normalizeIPHealthCacheKey(attemptedBaseUrl.orEmpty())),
+                            recordFailure = false
+                        )
+                        if (alternateAuthor != null) {
+                            author = alternateAuthor
+                            continue
+                        }
+                    }
+
+                    Timber.tag("getTweet").d("Tweet not found: $tweetId")
+                    recordReliabilityFailureTweet(tweetId)
+                    return null
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (attempt + 1 < readAttemptCount) {
+                        val alternateAuthor = fetchUserForDetail(
+                            authorId,
+                            setOf(normalizeIPHealthCacheKey(attemptedBaseUrl.orEmpty())),
+                            recordFailure = false
+                        )
+                        if (alternateAuthor != null) {
+                            author = alternateAuthor
+                            continue
+                        }
+                    }
+                    throw e
+                }
             }
+            null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             recordReliabilityFailureTweet(tweetId)
             Timber.tag("getTweet").e(e, "Error fetching tweet $tweetId")
@@ -5119,6 +5174,94 @@ object HproseInstance {
     }
 
     /**
+     * Resolve a detail-page author by racing actual get_user reads in batches of
+     * three. Cached content is rendered by the ViewModel before this starts and is
+     * not treated as proof that its old route still serves the author.
+     */
+    suspend fun fetchUserForDetail(
+        userId: MimeiId,
+        excludedRoutes: Set<String> = emptySet(),
+        recordFailure: Boolean = true
+    ): User? = coroutineScope {
+        val candidates = getProviderCandidatesForDetail(userId)
+            .filterNot { normalizeIPHealthCacheKey(it) in excludedRoutes }
+        if (candidates.isEmpty()) return@coroutineScope null
+
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v3",
+            "userid" to userId,
+            "v4only" to v4Only.toString()
+        )
+        val routeOwner = getUserInstance(userId)
+
+        for ((batchIndex, batch) in candidates.chunked(3).withIndex()) {
+            Timber.tag("fetchUserForDetail").d(
+                "Racing get_user batch ${batchIndex + 1} with ${batch.size} route(s) for $userId"
+            )
+            val activeJobs = batch.map { address ->
+                async(Dispatchers.IO) {
+                    try {
+                        val baseUrl = normalizeHealthCheckUrl(address).removeSuffix("/")
+                        withTimeoutOrNull(15_000L) {
+                            val service = storageCompatibleRequestedService(
+                                baseUrl,
+                                routeOwner,
+                                params,
+                                timeoutMillis = 15_000
+                            )
+                            val raw = service.runMApp<Any>("get_user", params)
+                            val userData = unwrapV2Response<Map<String, Any>>(raw)
+                                ?: return@withTimeoutOrNull null
+                            val username = userData["username"] as? String
+                            val hostIds = userData["hostIds"] as? List<*>
+                            if (userData["mid"] != userId || username.isNullOrBlank() || hostIds.isNullOrEmpty()) {
+                                return@withTimeoutOrNull null
+                            }
+                            UserRouteRaceResult(userData, baseUrl)
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("fetchUserForDetail").d(e, "get_user failed via $address")
+                        null
+                    }
+                }
+            }.toMutableList()
+
+            var winner: UserRouteRaceResult? = null
+            while (activeJobs.isNotEmpty() && winner == null) {
+                val (completed, result) = select<Pair<Deferred<UserRouteRaceResult?>, UserRouteRaceResult?>> {
+                    activeJobs.forEach { job -> job.onAwait { job to it } }
+                }
+                activeJobs.remove(completed)
+                if (result != null) winner = result
+            }
+            activeJobs.forEach { it.cancel() }
+
+            val winningRoute = winner ?: continue
+            run {
+                val user = getUserInstance(userId)
+                setUserBaseUrlForRequest(user, winningRoute.baseUrl)
+                processUserDataResponse(user, winningRoute.userData, skipRetryAndBlacklist = false)
+                UserRoutes.confirmReadRoute(user.mid, winningRoute.baseUrl, user.baseUrl)
+                user.hostIds?.getOrNull(1)?.let { accessNodeMid ->
+                    NodePool.updateNodeIP(
+                        accessNodeMid,
+                        winningRoute.baseUrl.removePrefix("http://").removePrefix("https://")
+                    )
+                }
+                TweetCacheManager.saveUser(user)
+                return@coroutineScope user
+            }
+        }
+
+        if (recordFailure) recordReliabilityFailureUser(userId)
+        null
+    }
+
+    /**
      * Fetch user data with intelligent retry and caching
      * 
      * @param userId User ID to fetch
@@ -5941,6 +6084,27 @@ object HproseInstance {
             Timber.tag("getProviderIP").w(e, "Network error in getProviderIP for $mid")
             throw e
         }
+    }
+
+    /** Return advertised provider routes without selecting one through HEAD. */
+    private suspend fun getProviderCandidatesForDetail(mid: MimeiId): List<String> {
+        if (!isOnline.value || mid == TW_CONST.GUEST_ID) return emptyList()
+        val entryIP = findEntryIP()
+        val entryClient = HproseClientPool.getRegularClient("http://$entryIP") ?: return emptyList()
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "mid" to mid,
+            "v4only" to v4Only.toString(),
+            "refresh" to "true"
+        )
+        val raw = entryClient.runMApp<Any>("get_provider_ips", params)
+        return unwrapV2Response<List<String>>(raw)
+            .orEmpty()
+            .map(String::trim)
+            .filter { it.isNotEmpty() && Gadget.isValidPublicIpAddress(it) }
+            .distinctBy(::normalizeIPHealthCacheKey)
     }
 
     private suspend fun _getProviderIP(

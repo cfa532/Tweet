@@ -149,6 +149,8 @@ fun TweetDetailScreen(
     var isRefreshingAtTop by remember { mutableStateOf(false) }
     var isRefreshingAtBottom by remember { mutableStateOf(false) }
     var isInitialLoading by remember { mutableStateOf(true) }
+    var hasFinishedInitialTweetLoad by remember(tweetId) { mutableStateOf(false) }
+    var tweetLoadAttempt by remember(tweetId) { mutableIntStateOf(0) }
     var lastLoadedPage by remember { mutableIntStateOf(-1) } // Track last successfully loaded page
     // Set once page 0 has been kicked off. Gates the load-more pagination below so it
     // cannot run before the first page exists.
@@ -480,11 +482,16 @@ fun TweetDetailScreen(
     // Comments load independently above, with one delayed reread. The server (`get_comments`) now handles
     // cleaning up genuinely-stale comment IDs itself, so the client no longer
     // needs to sync individual comments.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(tweetLoadAttempt) {
+        hasFinishedInitialTweetLoad = false
         try {
-            withContext(Dispatchers.IO) {
-                viewModel.doReadTweet(allowRecoveryOnMissingPayload = true)
-                Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.doReadTweet(allowRecoveryOnMissingPayload = true)
+                    Timber.tag("TweetDetailScreen").d("Initial READ completed on screen open")
+                }
+            } finally {
+                hasFinishedInitialTweetLoad = true
             }
             while (isActive) {
                 delay(5 * 60 * 1000)
@@ -630,6 +637,8 @@ fun TweetDetailScreen(
                         parentEntry = parentEntry,
                         parentTweetId = parentTweetId,
                         parentAuthorId = parentAuthorId,
+                        hasFinishedInitialTweetLoad = hasFinishedInitialTweetLoad,
+                        onRetryInitialTweetLoad = { tweetLoadAttempt++ },
                         onExpandReply = { isReplyBoxExpanded = true },
                         onVideoVisibilityChanged = { visible ->
                             commentsCoordinator.isPaused = visible
