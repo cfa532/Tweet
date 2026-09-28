@@ -564,6 +564,9 @@ object HproseInstance {
         val userData: Map<String, Any>,
         val baseUrl: String
     )
+    private data class TweetRouteRaceResult(
+        val tweetData: Map<String, Any>
+    )
     private const val entryResolveCacheTtlMs = 30_000L
     // Keep this short: prevent retry storms, but still allow fast recovery
     // when DNS/network stabilizes a moment later during app startup.
@@ -3493,7 +3496,8 @@ object HproseInstance {
      */
     @Suppress("SENSELESS_COMPARISON")
     /**
-     * READ a tweet from the author's read node (hostIds[1]).
+     * READ a tweet from the author's read node (hostIds[1]). If a detail read
+     * misses there, discover the tweet ID's own providers and try them once.
      *
      * Mirrors iOS `HproseInstance.getTweet(bypassCache:)`. Used by the detail-view
      * READ path on screen-open and pull-to-refresh. Does NOT trigger cross-node
@@ -3503,7 +3507,8 @@ object HproseInstance {
      * - When `bypassCache` is false and a cached tweet exists, the cached value
      *   is returned immediately.
      * - When `bypassCache` is true (the detail-view case), always hits the
-     *   server. Failures are recorded to BlackList, successes saved to the cache.
+     *   server. Author discovery remains first because its larger provider set
+     *   resolves faster; tweet-provider discovery is the bounded fallback.
      */
     suspend fun getTweet(
         tweetId: MimeiId?,
@@ -3539,7 +3544,7 @@ object HproseInstance {
         }
 
         return try {
-            var author = (resolvedAuthor
+            val author = (resolvedAuthor
                 ?: if (bypassCache) fetchUserForDetail(authorId)
                 else TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId))
                 ?: run {
@@ -3570,62 +3575,53 @@ object HproseInstance {
                 author.hostIds?.firstOrNull()?.let { params["authorhostid"] = it }
             }
 
-            // Detail reads start on a route proven by get_user. A failed tweet read
-            // excludes that address and resolves the author again through another
-            // get_user race before retrying, keeping avatar and tweet co-located.
-            val readAttemptCount = if (bypassCache) 2 else 1
-            for (attempt in 0 until readAttemptCount) {
-                val attemptedBaseUrl = author.baseUrl
-                try {
-                    val raw = runStorageRead<Any>(
-                        author,
-                        "get_tweet",
-                        params,
-                        Tweet.findInstance(tweetId)?.storageFormat
-                            ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
-                    )
-                    val data = unwrapV2Response<Map<String, Any>>(raw)
-                    if (data != null) {
-                        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
-                        recordReliabilitySuccessTweet(tweetId)
-                        val tweet = Tweet.from(data)
-                        tweet.author = author
-                        TweetCacheManager.saveTweet(tweet, authorId)
-                        return tweet
-                    }
+            val requiredFormat = Tweet.findInstance(tweetId)?.storageFormat
+                ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
+            var initialFailure: Exception? = null
+            val authorRouteData = try {
+                val raw = runStorageRead<Any>(author, "get_tweet", params, requiredFormat)
+                unwrapV2Response<Map<String, Any>>(raw)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                initialFailure = e
+                Timber.tag("getTweet").d(e, "Author route failed for $tweetId")
+                null
+            }
 
-                    if (attempt + 1 < readAttemptCount) {
-                        val alternateAuthor = fetchUserForDetail(
-                            authorId,
-                            setOf(normalizeIPHealthCacheKey(attemptedBaseUrl.orEmpty())),
-                            recordFailure = false
-                        )
-                        if (alternateAuthor != null) {
-                            author = alternateAuthor
-                            continue
-                        }
-                    }
+            if (authorRouteData != null) {
+                if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+                recordReliabilitySuccessTweet(tweetId)
+                val tweet = Tweet.from(authorRouteData)
+                tweet.author = author
+                TweetCacheManager.saveTweet(tweet, authorId)
+                return tweet
+            }
 
-                    Timber.tag("getTweet").d("Tweet not found: $tweetId")
-                    recordReliabilityFailureTweet(tweetId)
-                    return null
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    if (attempt + 1 < readAttemptCount) {
-                        val alternateAuthor = fetchUserForDetail(
-                            authorId,
-                            setOf(normalizeIPHealthCacheKey(attemptedBaseUrl.orEmpty())),
-                            recordFailure = false
-                        )
-                        if (alternateAuthor != null) {
-                            author = alternateAuthor
-                            continue
-                        }
-                    }
-                    throw e
+            // User-provider discovery is intentionally first because it is much
+            // faster. A new tweet may not have propagated to that access node yet;
+            // only then discover the tweet's own smaller provider set and try once.
+            if (bypassCache) {
+                val fallback = fetchTweetFromProviders(
+                    tweetId = tweetId,
+                    author = author,
+                    params = params,
+                    requiredFormat = requiredFormat,
+                    excludedRoutes = setOf(normalizeIPHealthCacheKey(author.baseUrl.orEmpty()))
+                )
+                if (fallback != null) {
+                    if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+                    recordReliabilitySuccessTweet(tweetId)
+                    val tweet = Tweet.from(fallback.tweetData)
+                    tweet.author = author
+                    TweetCacheManager.saveTweet(tweet, authorId)
+                    return tweet
                 }
             }
+
+            initialFailure?.let { Timber.tag("getTweet").d(it, "Tweet-provider fallback also failed for $tweetId") }
+            Timber.tag("getTweet").d("Tweet not found after author and tweet-provider reads: $tweetId")
+            recordReliabilityFailureTweet(tweetId)
             null
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -5178,13 +5174,8 @@ object HproseInstance {
      * three. Cached content is rendered by the ViewModel before this starts and is
      * not treated as proof that its old route still serves the author.
      */
-    suspend fun fetchUserForDetail(
-        userId: MimeiId,
-        excludedRoutes: Set<String> = emptySet(),
-        recordFailure: Boolean = true
-    ): User? = coroutineScope {
+    suspend fun fetchUserForDetail(userId: MimeiId): User? = coroutineScope {
         val candidates = getProviderCandidatesForDetail(userId)
-            .filterNot { normalizeIPHealthCacheKey(it) in excludedRoutes }
         if (candidates.isEmpty()) return@coroutineScope null
 
         val params = mapOf(
@@ -5257,7 +5248,69 @@ object HproseInstance {
             }
         }
 
-        if (recordFailure) recordReliabilityFailureUser(userId)
+        recordReliabilityFailureUser(userId)
+        null
+    }
+
+    /**
+     * A detail read discovers user providers first because that set is faster to
+     * resolve. Only after the selected user node misses a newly-published tweet do
+     * we discover and race the tweet's own, typically smaller provider set.
+     */
+    private suspend fun fetchTweetFromProviders(
+        tweetId: MimeiId,
+        author: User,
+        params: Map<String, Any>,
+        requiredFormat: String?,
+        excludedRoutes: Set<String>
+    ): TweetRouteRaceResult? = coroutineScope {
+        val candidates = getProviderCandidatesForDetail(tweetId)
+            .filterNot { normalizeIPHealthCacheKey(it) in excludedRoutes }
+
+        for ((batchIndex, batch) in candidates.chunked(3).withIndex()) {
+            Timber.tag("fetchTweetFromProviders").d(
+                "Racing get_tweet batch ${batchIndex + 1} with ${batch.size} route(s) for $tweetId"
+            )
+            val activeJobs = batch.map { address ->
+                async(Dispatchers.IO) {
+                    try {
+                        val baseUrl = normalizeHealthCheckUrl(address).removeSuffix("/")
+                        withTimeoutOrNull(15_000L) {
+                            val service = storageCompatibleRequestedService(
+                                baseUrl,
+                                author,
+                                params,
+                                requiredFormat,
+                                timeoutMillis = 15_000
+                            )
+                            val raw = service.runMApp<Any>("get_tweet", params)
+                            val tweetData = unwrapV2Response<Map<String, Any>>(raw)
+                                ?: return@withTimeoutOrNull null
+                            if (tweetData["mid"] != tweetId || tweetData["authorId"] != author.mid) {
+                                return@withTimeoutOrNull null
+                            }
+                            TweetRouteRaceResult(tweetData)
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("fetchTweetFromProviders").d(e, "get_tweet failed via $address")
+                        null
+                    }
+                }
+            }.toMutableList()
+
+            var winner: TweetRouteRaceResult? = null
+            while (activeJobs.isNotEmpty() && winner == null) {
+                val (completed, result) = select<Pair<Deferred<TweetRouteRaceResult?>, TweetRouteRaceResult?>> {
+                    activeJobs.forEach { job -> job.onAwait { job to it } }
+                }
+                activeJobs.remove(completed)
+                if (result != null) winner = result
+            }
+            activeJobs.forEach { it.cancel() }
+            if (winner != null) return@coroutineScope winner
+        }
         null
     }
 
