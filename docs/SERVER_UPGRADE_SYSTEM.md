@@ -41,8 +41,10 @@ The package must be available before the server advertises it. Reversing these
 steps creates a window in which clients can select an old provider payload and
 correctly reject it as corrupt.
 
-1. Increase `defaultConfig.versionCode` and `defaultConfig.versionName` in
-   `app/build.gradle.kts`. Keep the Play flavor's explicit version code in sync.
+1. Increase `defaultConfig.versionCode` in `app/build.gradle.kts` for every
+   published APK. Change `defaultConfig.versionName` only when intentionally
+   changing the display version. Keep the Play flavor's explicit version code
+   in sync.
 2. Commit and push the Android version change so the APK is reproducible from a
    known source revision.
 3. Build the signed direct-distribution APK:
