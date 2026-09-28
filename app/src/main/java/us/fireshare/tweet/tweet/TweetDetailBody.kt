@@ -25,6 +25,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -98,6 +99,10 @@ fun TweetDetailBody(
     }
     val cachedAuthor by authorStateFlow.collectAsState()
     val author = cachedAuthor ?: tweet.author
+    val isTweetPayloadPending = tweet.content.isNullOrBlank() &&
+        tweet.title.isNullOrBlank() &&
+        tweet.attachments.isNullOrEmpty() &&
+        tweet.originalTweetId == null
 
     Surface(
         // Apply border to the entire TweetBlock
@@ -144,6 +149,23 @@ fun TweetDetailBody(
                     .padding(start = 4.dp, top = 0.dp, bottom = 0.dp, end = 4.dp)
             ) {
                 Column {
+                    // Deep links start with an ID-only tweet. The author can resolve first,
+                    // so keep the tweet's content position visible while its payload loads.
+                    if (isTweetPayloadPending) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp
+                            )
+                        }
+                    }
+
                      tweet.content?.let {
                         SelectableText(
                             modifier = Modifier.padding(bottom = 8.dp),
