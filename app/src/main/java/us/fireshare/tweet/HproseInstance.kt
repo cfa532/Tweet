@@ -3501,8 +3501,7 @@ object HproseInstance {
      *
      * Mirrors iOS `HproseInstance.getTweet(bypassCache:)`. Used by the detail-view
      * READ path on screen-open and pull-to-refresh. Does NOT trigger cross-node
-     * `refresh_tweet` / `node_update_mid_by_score` work — use `refreshTweet()`
-     * for that (the SYNC path).
+     * `refresh_tweet` sync work — use `refreshTweet()` for that (the SYNC path).
      *
      * - When `bypassCache` is false and a cached tweet exists, the cached value
      *   is returned immediately.

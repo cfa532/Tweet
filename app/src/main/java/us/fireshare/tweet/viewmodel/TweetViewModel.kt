@@ -489,7 +489,7 @@ class TweetViewModel @AssistedInject constructor(
      * SYNC path for the detail view (mirrors iOS `doResyncTweet`).
      *
      * Calls `refresh_tweet` which the server uses to pull the latest version
-     * across nodes via `node_update_mid_by_score`. Heavier than `doReadTweet`,
+     * across nodes with a direct MiMeiSync. Heavier than `doReadTweet`,
      * so the detail screen calls it only from explicit pull-to-refresh.
      */
     suspend fun doResyncTweet() {
