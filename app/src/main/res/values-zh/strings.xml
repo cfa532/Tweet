@@ -97,7 +97,7 @@
     <string name="missing_host_for_followed_user">被關注用戶缺少主機</string>
     <string name="tweet_not_found">找不到推文</string>
     <string name="failed_to_load_tweet">推文載入失敗。</string>
-    <string name="loading_quoted_tweet">正在載入引用的推文...</string>
+    <string name="original_tweet_not_found">找不到原推文</string>
     <string name="only_author_can_update_privacy">只有推文作者可以更新隱私設置</string>
     <string name="not_a_friend_of_the_host">不是主機的朋友</string>
     <string name="no_provider_ip_found">找不到提供者IP</string>
@@ -125,4 +125,7 @@
     <string name="search_no_results">找不到結果</string>
     <string name="search_load_more">載入更多</string>
     <string name="search_countdown">%1$d秒</string>
+    <string name="new_tweets_banner_one">%1$s 則新推文</string>
+    <string name="new_tweets_banner_many">%1$s 則新推文</string>
+    <string name="show_more">更多>></string>
 </resources>

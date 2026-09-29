@@ -772,7 +772,7 @@ private fun QuotedTweetContent(
                 )
             ) {
                 Text(
-                    text = stringResource(R.string.loading_quoted_tweet),
+                    text = stringResource(R.string.original_tweet_not_found),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     modifier = Modifier

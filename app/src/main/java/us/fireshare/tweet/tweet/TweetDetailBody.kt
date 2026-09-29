@@ -337,7 +337,7 @@ fun TweetDetailBody(
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                             ) {
                                 Text(
-                                    text = stringResource(R.string.loading_quoted_tweet),
+                                    text = stringResource(R.string.original_tweet_not_found),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 14.sp,
                                     modifier = Modifier

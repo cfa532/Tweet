@@ -379,7 +379,7 @@
     <string name="cannot_get_followed_user">Cannot get followed user</string>
     <string name="missing_host_for_followed_user">Missing host for followed user</string>
     <string name="tweet_not_found">Tweet not found</string>
-    <string name="loading_quoted_tweet">Loading quoted tweet...</string>
+    <string name="original_tweet_not_found">Original tweet not found</string>
     <string name="only_author_can_update_privacy">Only the tweet author can update privacy settings</string>
     <string name="not_a_friend_of_the_host">Not a friend of the host</string>
     <string name="no_provider_ip_found">No provider IP found</string>
@@ -403,4 +403,6 @@
     <string name="search_no_results">No results found</string>
     <string name="search_load_more">Load more</string>
     <string name="search_countdown">%1$ds</string>
+    <string name="new_tweets_banner_one">%1$s new tweet</string>
+    <string name="new_tweets_banner_many">%1$s new tweets</string>
 </resources>

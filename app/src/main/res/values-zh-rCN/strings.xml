@@ -302,7 +302,7 @@
     <string name="missing_host_for_followed_user">被关注用户缺少主机</string>
     <string name="tweet_not_found">找不到推文</string>
     <string name="failed_to_load_tweet">推文加载失败。</string>
-    <string name="loading_quoted_tweet">正在加载引用的推文...</string>
+    <string name="original_tweet_not_found">未找到原推文</string>
     <string name="only_author_can_update_privacy">只有推文作者可以更新隐私设置</string>
     <string name="not_a_friend_of_the_host">不是主机的朋友</string>
     <string name="no_provider_ip_found">找不到提供者IP</string>
@@ -329,4 +329,6 @@
     <string name="search_no_results">未找到结果</string>
     <string name="search_load_more">加载更多</string>
     <string name="search_countdown">%1$d秒</string>
+    <string name="new_tweets_banner_one">%1$s 条新推文</string>
+    <string name="new_tweets_banner_many">%1$s 条新推文</string>
 </resources>

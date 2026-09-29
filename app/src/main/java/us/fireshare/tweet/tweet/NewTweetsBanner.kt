@@ -32,10 +32,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
+import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.profile.UserAvatar
@@ -99,7 +101,11 @@ fun NewTweetsBanner(
                 )
                 if (shouldShowTitle) {
                     Text(
-                        text = if (pendingTweets.size == 1) "1 new tweet" else "$countLabel new tweets",
+                        text = stringResource(
+                            if (pendingTweets.size == 1) R.string.new_tweets_banner_one
+                            else R.string.new_tweets_banner_many,
+                            countLabel
+                        ),
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Normal)
                     )
