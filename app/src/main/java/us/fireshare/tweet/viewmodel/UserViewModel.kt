@@ -1478,10 +1478,11 @@ class UserViewModel @AssistedInject constructor(
                 }
 
                 if (userId == appUser.mid) {
-                    // By default NOT to load fans and followings list of an user object.
-                    // Do it only when opening the user's profile page.
-                    // Only get current user's fans list when opening the app.
-                    refreshFollowingsAndFans()
+                    // The app user's followings drive the follow-button state everywhere, so
+                    // load them here. The fans list is not loaded: the followers screen
+                    // fetches it when opened. Fetching it on every ViewModel creation raced
+                    // with the count from get_user_core_data and overwrote it.
+                    refreshFollowingsFromServer()
                 }
             }
         } else {

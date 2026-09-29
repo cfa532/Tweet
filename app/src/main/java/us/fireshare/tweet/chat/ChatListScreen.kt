@@ -103,7 +103,7 @@ fun ChatListScreen(
         
         // Load followings for the dialog
         withContext(Dispatchers.IO) {
-            userViewModel.refreshFollowingsAndFans()
+            userViewModel.fetchFollowings(0) // dialog needs followings only, not the fans list
         }
         
         // Initial message preview
