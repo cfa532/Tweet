@@ -72,6 +72,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -320,6 +321,10 @@ fun TweetDetailScreen(
             // nothing left to take it down.
             val load = coroutineScope.launch(Dispatchers.IO) {
                 try {
+                    // The detail read of the tweet records the node that served it, and
+                    // comments are read from that node (and the read is what makes the
+                    // node sync the tweet's comments). Cached comments are already shown.
+                    snapshotFlow { hasFinishedInitialTweetLoad }.first { it }
                     reloadFirstCommentPages()
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
@@ -479,7 +484,7 @@ fun TweetDetailScreen(
 
     // On open and every five minutes, reload from the current provider without
     // triggering a cross-node refresh_tweet sync.
-    // Comments load independently above, with one delayed reread. The server (`get_comments`) now handles
+    // Comments load above, once this initial read has finished, with one delayed reread. The server (`get_comments`) now handles
     // cleaning up genuinely-stale comment IDs itself, so the client no longer
     // needs to sync individual comments.
     LaunchedEffect(tweetLoadAttempt) {

@@ -413,12 +413,12 @@ object HproseInstance {
      * whenever one is available. Reads may fall back to the owner's root; writes
      * and explicit synchronization calls continue to use their existing routes.
      */
-    private suspend fun storageCompatibleReadService(
+    private suspend fun storageCompatibleReadRoute(
         owner: User,
         params: Map<*, *>,
         requiredFormat: String? = null,
         timeoutMillis: Int = 30_000
-    ): HproseService {
+    ): ReadRoute {
         val candidateUrl = UserRoutes.readRoute(owner.mid) ?: owner.baseUrl
             ?: throw IllegalStateException("No read route for ${owner.mid}")
         val candidate = HproseClientPool.getRegularClient(candidateUrl, timeoutMillis)
@@ -428,7 +428,7 @@ object HproseInstance {
         if (candidateCapabilities.formats.contains(FILE_STORAGE_FORMAT)
             && candidateCapabilities.formats.contains(required)
         ) {
-            return candidate
+            return ReadRoute(candidate, normalizedServerBaseUrl(candidateUrl))
         }
 
         val rootHostId = owner.hostIds?.firstOrNull()
@@ -447,8 +447,9 @@ object HproseInstance {
                     if (rootCapabilities.formats.contains(FILE_STORAGE_FORMAT)
                         && rootCapabilities.formats.contains(required)
                     ) {
-                        return HproseClientPool.getRegularClient(rootUrl, timeoutMillis)
+                        val rootClient = HproseClientPool.getRegularClient(rootUrl, timeoutMillis)
                             ?: throw IllegalStateException("No root read client for ${owner.mid}")
+                        return ReadRoute(rootClient, normalizedServerBaseUrl(rootUrl))
                     }
                 }
             }
@@ -457,8 +458,11 @@ object HproseInstance {
         if (!candidateCapabilities.formats.contains(required)) {
             throw IllegalStateException("This server needs an update to access this account or tweet")
         }
-        return candidate
+        return ReadRoute(candidate, normalizedServerBaseUrl(candidateUrl))
     }
+
+    /** A read client together with the node it talks to. */
+    private data class ReadRoute(val service: HproseService, val baseUrl: String)
 
     private suspend fun <T> runStorageRead(
         owner: User,
@@ -466,8 +470,25 @@ object HproseInstance {
         params: Map<*, *>,
         requiredFormat: String? = null,
         timeoutMillis: Int = 30_000
-    ): T? = storageCompatibleReadService(owner, params, requiredFormat, timeoutMillis)
-        .runMApp(entry, params)
+    ): T? = storageCompatibleReadRoute(owner, params, requiredFormat, timeoutMillis)
+        .service.runMApp(entry, params)
+
+    /**
+     * [runStorageRead] that also reports which node answered, for callers that record
+     * it as [Tweet.readNodeUrl]. The node is the one the read actually used, which is
+     * not always the owner's route: a node that cannot decode the object graph falls
+     * back to the owner's root host.
+     */
+    private suspend fun <T> runStorageReadFrom(
+        owner: User,
+        entry: String,
+        params: Map<*, *>,
+        requiredFormat: String? = null,
+        timeoutMillis: Int = 30_000
+    ): Pair<T?, String> {
+        val route = storageCompatibleReadRoute(owner, params, requiredFormat, timeoutMillis)
+        return route.service.runMApp<T>(entry, params) to route.baseUrl
+    }
 
     /** Validate a fixed mutation/recovery route without changing its destination. */
     private suspend fun storageCompatibleRequestedService(
@@ -565,7 +586,8 @@ object HproseInstance {
         val baseUrl: String
     )
     private data class TweetRouteRaceResult(
-        val tweetData: Map<String, Any>
+        val tweetData: Map<String, Any>,
+        val readNodeUrl: String
     )
     private const val entryResolveCacheTtlMs = 30_000L
     // Keep this short: prevent retry storms, but still allow fast recovery
@@ -2847,14 +2869,18 @@ object HproseInstance {
                         return emptyList()
                     }
                 }
+                // The node that supplied these tweets; recorded on each as its comment source.
+                var feedNodeUrl: String? = null
                 val response = try {
                     if (entry == "get_tweet_feed") {
-                        runStorageRead<Map<String, Any>>(
+                        val (feedResponse, servedBy) = runStorageReadFrom<Map<String, Any>>(
                             appUser,
                             entry,
                             params,
                             timeoutMillis = GET_TWEET_FEED_TIMEOUT_MS
                         )
+                        feedNodeUrl = servedBy
+                        feedResponse
                     } else {
                         feedService?.runMApp<Map<String, Any>>(entry, params)
                     }
@@ -2888,6 +2914,7 @@ object HproseInstance {
                     if (originalTweetJson != null) {
                         try {
                             val originalTweet = Tweet.from(originalTweetJson)
+                            feedNodeUrl?.let { originalTweet.readNodeUrl = it }
                             
                             // IMPORTANT: Set cached author FIRST (immediate, fast)
                             originalTweet.author = TweetCacheManager.getCachedUser(originalTweet.authorId)
@@ -2914,6 +2941,7 @@ object HproseInstance {
                         // Try to decode the tweet
                         try {
                             val tweet = Tweet.from(tweetPayload(tweetJson))
+                            feedNodeUrl?.let { tweet.readNodeUrl = it }
                             tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
                             
                             // IMPORTANT: Set cached author FIRST (immediate, fast)
@@ -3221,8 +3249,11 @@ object HproseInstance {
                 return emptyList()
             }
             
+            var profileNodeUrl: String? = null
             val response = try {
-                runStorageRead<Map<String, Any>>(activeUser, entry, params)
+                val (profileResponse, servedBy) = runStorageReadFrom<Map<String, Any>>(activeUser, entry, params)
+                profileNodeUrl = servedBy
+                profileResponse
             } catch (e: Exception) {
                 Timber.tag("getTweetsByUser").e(e, "❌ Exception calling runMApp for getTweetsByUser, userId: ${activeUser.mid}")
                 throw e
@@ -3250,6 +3281,7 @@ object HproseInstance {
                 if (originalTweetJson != null) {
                     try {
                         val originalTweet = Tweet.from(originalTweetJson)
+                        profileNodeUrl?.let { originalTweet.readNodeUrl = it }
                         
                         // IMPORTANT: Set cached author FIRST (immediate, fast)
                         // For appUser's tweets, use appUser directly since it's always the most up-to-date
@@ -3286,6 +3318,7 @@ object HproseInstance {
                     // Try to decode the tweet
                     try {
                         val tweet = Tweet.from(tweetPayload(tweetJson))
+                        profileNodeUrl?.let { tweet.readNodeUrl = it }
                         tweet.rowTimestamp = tweetRowTimestamp(tweetJson)
 
                         tweet.author = activeUser
@@ -3421,15 +3454,18 @@ object HproseInstance {
             val cachedAuthor = TweetCacheManager.getCachedUser(authorId)
             val authorForApi = fetchUser(authorId) ?: cachedAuthor
 
+            var servedBy: String? = null
             val rawResponse = try {
                 authorForApi?.let { owner ->
-                    runStorageRead<Map<String, Any>>(
+                    val (raw, node) = runStorageReadFrom<Map<String, Any>>(
                         owner,
                         entry,
                         params,
                         Tweet.findInstance(tweetId)?.storageFormat
                             ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
                     )
+                    servedBy = node
+                    raw
                 }
             } catch (e: Exception) {
                 Timber.tag("fetchTweet").e(e, "Exception calling runMApp for fetchTweet, tweetId: $tweetId, authorId: $authorId")
@@ -3443,6 +3479,7 @@ object HproseInstance {
                 recordReliabilitySuccessTweet(tweetId)
 
                 Tweet.from(it).apply {
+                    readNodeUrl = servedBy
                     // Attach the author before returning; Compose will not observe a later
                     // mutation of this plain Tweet property from a background coroutine.
                     this.author = authorForApi
@@ -3577,8 +3614,10 @@ object HproseInstance {
             val requiredFormat = Tweet.findInstance(tweetId)?.storageFormat
                 ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
             var initialFailure: Exception? = null
+            var authorRouteNode: String? = null
             val authorRouteData = try {
-                val raw = runStorageRead<Any>(author, "get_tweet", params, requiredFormat)
+                val (raw, servedBy) = runStorageReadFrom<Any>(author, "get_tweet", params, requiredFormat)
+                authorRouteNode = servedBy
                 unwrapV2Response<Map<String, Any>>(raw)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -3592,6 +3631,7 @@ object HproseInstance {
                 if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                 recordReliabilitySuccessTweet(tweetId)
                 val tweet = Tweet.from(authorRouteData)
+                tweet.readNodeUrl = authorRouteNode
                 tweet.author = author
                 TweetCacheManager.saveTweet(tweet, authorId)
                 return tweet
@@ -3612,6 +3652,7 @@ object HproseInstance {
                     if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                     recordReliabilitySuccessTweet(tweetId)
                     val tweet = Tweet.from(fallback.tweetData)
+                    tweet.readNodeUrl = fallback.readNodeUrl
                     tweet.author = author
                     TweetCacheManager.saveTweet(tweet, authorId)
                     return tweet
@@ -3674,9 +3715,11 @@ object HproseInstance {
                 "userid" to authorId,
                 "hostid" to (authorForApi.hostIds?.first() ?: "")
             )
+            var refreshedFrom: String? = null
             val rawResponse = try {
                 val baseUrl = UserRoutes.readRoute(authorForApi.mid) ?: authorForApi.baseUrl
                     ?: throw IllegalStateException("No refresh route for $authorId")
+                refreshedFrom = normalizedServerBaseUrl(baseUrl)
                 storageCompatibleRequestedService(
                     baseUrl,
                     authorForApi,
@@ -3711,6 +3754,7 @@ object HproseInstance {
                 recordReliabilitySuccessTweet(tweetId)
 
                 val tweet = Tweet.from(it)
+                tweet.readNodeUrl = refreshedFrom
                 // Set cached author immediately
                 tweet.author = cachedAuthor
 
@@ -4795,6 +4839,12 @@ object HproseInstance {
             throw IllegalStateException("Cannot load comments while offline")
         }
         return try {
+            // Comments are read from the node that served the parent tweet, not from wherever
+            // the author's own route currently points (same rule as iOS and TweetWeb). That
+            // node is recorded by the tweet read, so a parent that has not been read yet has
+            // no comment source; callers read the tweet first.
+            val readNodeUrl = tweet.readNodeUrl
+                ?: throw IllegalStateException("Read the parent tweet before loading its comments")
             if (tweet.author == null) {
                 if (tweet.authorId == appUser.mid) {
                     tweet.author = appUser
@@ -4802,16 +4852,10 @@ object HproseInstance {
                     tweet.author = TweetCacheManager.getCachedUser(tweet.authorId) ?: fetchUser(tweet.authorId)
                 }
             }
-            val author = tweet.author
-            if (author == null || author.baseUrl.isNullOrEmpty()) {
-                val fetched = fetchUser(tweet.authorId)
-                if (fetched == null || fetched.baseUrl.isNullOrEmpty()) {
-                    Timber.tag("fetchComments").e("Cannot resolve author for tweet ${tweet.mid}")
-                    throw IllegalStateException("Cannot resolve comment parent author ${tweet.authorId}")
-                }
-                tweet.author = fetched
-            }
-            checkNotNull(tweet.author?.hproseService) { "No comment read service" }
+            // The author is still needed for storage-format negotiation and for the
+            // comments' interaction host, but not for routing.
+            val owner = tweet.author
+                ?: throw IllegalStateException("Cannot resolve comment parent author ${tweet.authorId}")
 
             val params = mapOf(
                 "aid" to appId,
@@ -4822,12 +4866,12 @@ object HproseInstance {
                 "pn" to pageNumber,
                 "ps" to pageSize
             )
-            val raw = runStorageRead<Any>(
-                tweet.author!!,
-                "get_comments",
+            val raw = storageCompatibleRequestedService(
+                readNodeUrl,
+                owner,
                 params,
                 tweet.storageFormat
-            )
+            ).runMApp<Any>("get_comments", params)
             val response = checkNotNull(unwrapV2Response<List<Map<String, Any>?>>(raw)) {
                 "Invalid comments response"
             }
@@ -4853,6 +4897,8 @@ object HproseInstance {
                     val favoriteOverride = locallyKnown?.favoriteOverride
                     val bookmarkOverride = locallyKnown?.bookmarkOverride
                     val comment = Tweet.from(entry)
+                    // A comment's own replies are read from the node that served it.
+                    comment.readNodeUrl = readNodeUrl
                     favoriteOverride?.let { comment.isFavorite = it }
                     bookmarkOverride?.let { comment.isBookmarked = it }
                     comment.favoriteOverride = favoriteOverride
@@ -5288,7 +5334,7 @@ object HproseInstance {
                             if (tweetData["mid"] != tweetId || tweetData["authorId"] != author.mid) {
                                 return@withTimeoutOrNull null
                             }
-                            TweetRouteRaceResult(tweetData)
+                            TweetRouteRaceResult(tweetData, normalizedServerBaseUrl(baseUrl))
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e

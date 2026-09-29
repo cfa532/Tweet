@@ -41,6 +41,10 @@ data class Tweet(
     var isPrivate: Boolean = false,     // Viewable by the author only, if true.
     var downloadable: Boolean = false,  // only used in web version.
     var storageFormat: String? = null,
+    // The node that served this tweet. Its comments/replies are read from that same node
+    // (the node that supplied the parent), so it is persisted with the cached tweet and
+    // deliberately independent of the author's current route. Null until a read records it.
+    var readNodeUrl: String? = null,
 ) {
     companion object {
         // Singleton dictionary to store tweet instances
@@ -305,6 +309,7 @@ data class Tweet(
         this.isPrivate = from.isPrivate
         this.downloadable = from.downloadable
         this.timestamp = from.timestamp
+        from.readNodeUrl?.let { this.readNodeUrl = it }
     }
 
     /**
