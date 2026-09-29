@@ -222,7 +222,7 @@ fun TweetNavGraph(
                 val viewModel = hiltViewModel<ChatListViewModel>(
                     LocalActivity.current as ComponentActivity
                 )
-                ChatListScreen(viewModel)
+                ChatListScreen(viewModel, sharedViewModel.appUserViewModel)
             }
             // A floating destination retains the originating feed under the dim backdrop.
             dialog<NavTweet.MediaViewer>(

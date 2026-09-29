@@ -72,7 +72,8 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
-    viewModel: ChatListViewModel
+    viewModel: ChatListViewModel,
+    userViewModel: UserViewModel
 ) {
     val chatSessions by viewModel.chatSessions.collectAsState()
     val navController = LocalNavController.current
@@ -83,10 +84,8 @@ fun ChatListScreen(
     // State for showing the followings dialog
     var showFollowingsDialog by remember { mutableStateOf(false) }
     
-    // UserViewModel for getting followings
-    val userViewModel = hiltViewModel<UserViewModel, UserViewModel.UserViewModelFactory> { 
-        it.create(appUser.mid) 
-    }
+    // The shared app-user ViewModel already holds the followings (loaded once at start);
+    // a screen-scoped one would re-fetch them on every open.
     val followings by userViewModel.followings.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -99,11 +98,6 @@ fun ChatListScreen(
         // Set up callback to update badge when new messages are found
         viewModel.setOnNewMessageCallback { count ->
             BadgeStateManager.updateBadgeCount(count)
-        }
-        
-        // Load followings for the dialog
-        withContext(Dispatchers.IO) {
-            userViewModel.fetchFollowings(0) // dialog needs followings only, not the fans list
         }
         
         // Initial message preview

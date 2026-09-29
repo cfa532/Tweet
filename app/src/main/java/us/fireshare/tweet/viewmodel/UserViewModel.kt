@@ -887,15 +887,10 @@ class UserViewModel @AssistedInject constructor(
         followersRefreshedFromServer = true
         followingsRefreshedFromServer = true
 
-        // Update the public count variables for UI
-        _followersCount.value = fans.size
-        _followingsCount.value = followings.size
-
-        // Update the user object with the correct counts and the ID lists,
-        // so both are persisted for instant display on the next access.
+        // Persist the ID lists for instant display on the next access. The counts are
+        // not derived from them: like iOS, they come only from the user object the
+        // server returns (get_user_core_data).
         setUserState(user.value.copy(
-            followersCount = fans.size,
-            followingCount = followings.size,
             fansList = fans,
             followingList = followings
         ))
@@ -927,7 +922,6 @@ class UserViewModel @AssistedInject constructor(
                         Timber.tag("fetchFollowers")
                             .d("Serving ${cachedIds.size} cached follower IDs, refreshing in background")
                         _followers.value = cachedIds
-                        _followersCount.value = cachedIds.size
                         viewModelScope.launch(IO) {
                             try {
                                 refreshFollowersFromServer()
@@ -992,11 +986,7 @@ class UserViewModel @AssistedInject constructor(
         val allFollowers = HproseInstance.getFans(user.value) ?: emptyList()
         followersRefreshedFromServer = true
         _followers.value = allFollowers
-        _followersCount.value = allFollowers.size
-        setUserState(user.value.copy(
-            followersCount = allFollowers.size,
-            fansList = allFollowers
-        ))
+        setUserState(user.value.copy(fansList = allFollowers))
         User.updateUserInstance(_user.value)
         TweetCacheManager.saveUser(_user.value)
         return allFollowers
@@ -1019,7 +1009,6 @@ class UserViewModel @AssistedInject constructor(
                         Timber.tag("fetchFollowings")
                             .d("Serving ${cachedIds.size} cached following IDs, refreshing in background")
                         _followings.value = cachedIds
-                        _followingsCount.value = cachedIds.size
                         viewModelScope.launch(IO) {
                             try {
                                 refreshFollowingsFromServer()
@@ -1074,11 +1063,7 @@ class UserViewModel @AssistedInject constructor(
         val allFollowings = HproseInstance.getFollowings(user.value)
         followingsRefreshedFromServer = true
         _followings.value = allFollowings
-        _followingsCount.value = allFollowings.size
-        setUserState(user.value.copy(
-            followingCount = allFollowings.size,
-            followingList = allFollowings
-        ))
+        setUserState(user.value.copy(followingList = allFollowings))
         User.updateUserInstance(_user.value)
         TweetCacheManager.saveUser(_user.value)
         return allFollowings
