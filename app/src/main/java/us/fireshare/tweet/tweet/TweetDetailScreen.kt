@@ -694,10 +694,12 @@ fun TweetDetailScreen(
                                 .padding(32.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            // Same size as the bottom pagination spinner and iOS's medium
+                            // UIActivityIndicatorView; 48dp was oversized for a list row.
                             CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(20.dp),
                                 color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 4.dp
+                                strokeWidth = 2.5.dp
                             )
                         }
                     }
