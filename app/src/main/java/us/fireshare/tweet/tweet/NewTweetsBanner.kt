@@ -5,7 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -51,8 +48,11 @@ fun NewTweetsBanner(
     modifier: Modifier = Modifier
 ) {
     val pendingTweetIds = pendingTweets.joinToString(separator = "|") { it.mid }
-    val avatarItems = newTweetsAvatarItems(pendingTweets)
-    val shouldShowTitle = avatarItems.size <= 3
+    val authors = pendingTweets
+        .map { tweet -> tweet.author ?: User.getInstance(tweet.authorId) }
+        .distinctBy { it.mid }
+        .take(5)
+    val shouldShowTitle = authors.size <= 3
     val countLabel = if (pendingTweets.size > 9) "9+" else pendingTweets.size.toString()
 
     LaunchedEffect(visible, pendingTweetIds) {
@@ -95,7 +95,7 @@ fun NewTweetsBanner(
                     modifier = Modifier.size(20.dp)
                 )
                 NewTweetsAvatarCluster(
-                    avatarItems = avatarItems,
+                    authors = authors,
                     modifier = Modifier
                         .padding(start = 0.dp, end = 5.dp)
                 )
@@ -115,41 +115,12 @@ fun NewTweetsBanner(
     }
 }
 
-private data class AvatarClusterItem(
-    val user: User?,
-    val opacity: Float
-)
-
-private fun newTweetsAvatarItems(pendingTweets: List<Tweet>): List<AvatarClusterItem> {
-    val authors = pendingTweets
-        .map { tweet -> tweet.author ?: User.getInstance(tweet.authorId) }
-        .distinctBy { it.mid }
-
-    if (authors.isEmpty()) {
-        return listOf(AvatarClusterItem(user = null, opacity = 1f))
-    }
-
-    if (authors.size <= 5) {
-        return authors.map { author ->
-            AvatarClusterItem(user = author, opacity = 1f)
-        }
-    }
-
-    return authors.take(2).map { author ->
-        AvatarClusterItem(user = author, opacity = 1f)
-    } + listOf(
-        AvatarClusterItem(user = null, opacity = 0.42f),
-        AvatarClusterItem(user = null, opacity = 0.42f),
-        AvatarClusterItem(user = authors.last(), opacity = 1f)
-    )
-}
-
 @Composable
 private fun NewTweetsAvatarCluster(
-    avatarItems: List<AvatarClusterItem>,
+    authors: List<User>,
     modifier: Modifier = Modifier
 ) {
-    val avatarCount = avatarItems.size.coerceAtLeast(1)
+    val avatarCount = authors.size
     val avatarSize = 32
     val overlap = 12
     val clusterWidth = avatarSize + (avatarCount - 1) * overlap
@@ -159,45 +130,15 @@ private fun NewTweetsAvatarCluster(
             .width(clusterWidth.dp)
             .height(avatarSize.dp)
     ) {
-        avatarItems.forEachIndexed { index, item ->
-            NewTweetsAvatar(
-                item = item,
+        authors.forEachIndexed { index, author ->
+            Box(
                 modifier = Modifier
                     .offset(x = (index * overlap).dp)
                     .zIndex((avatarCount - index).toFloat())
-            )
-        }
-    }
-}
-
-@Composable
-private fun NewTweetsAvatar(
-    item: AvatarClusterItem,
-    modifier: Modifier = Modifier
-) {
-    if (item.user != null) {
-        Box(
-            modifier = modifier
-                .size(32.dp)
-                .alpha(item.opacity)
-        ) {
-            UserAvatar(user = item.user, size = 32)
-        }
-    } else {
-        Box(
-            modifier = modifier
-                .size(32.dp)
-                .alpha(item.opacity)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(15.dp)
-            )
+                    .size(avatarSize.dp)
+            ) {
+                UserAvatar(user = author, size = avatarSize)
+            }
         }
     }
 }
