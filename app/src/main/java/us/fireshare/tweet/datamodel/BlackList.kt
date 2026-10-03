@@ -155,6 +155,15 @@ object BlackList {
         }
     }
     
+    /** A new visible appearance may retry transient failures without removing a persistent blacklist entry. */
+    suspend fun resetSessionFailures(resourceId: String) {
+        mutex.withLock {
+            sessionFailureCounts.remove(resourceId)
+            sessionBlockedResources.remove(resourceId)
+            lastFailureRecordedAt.remove(resourceId)
+        }
+    }
+
     /** Allow an explicit user retry of one resource without clearing other failures. */
     suspend fun resetForRetry(resourceId: String) {
         mutex.withLock {

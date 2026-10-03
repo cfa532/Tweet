@@ -37,10 +37,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -135,9 +138,53 @@ private fun DocumentRowView(
     baseUrl: String?,
     context: Context
 ) {
-    var isDownloading by remember { mutableStateOf(false) }
-    var isDownloadingForShare by remember { mutableStateOf(false) }
+    var isDownloading by remember(document.mid) { mutableStateOf(false) }
+    var isDownloadingForShare by remember(document.mid) { mutableStateOf(false) }
+    var previewNeedsRetry by rememberSaveable(document.mid) { mutableStateOf(false) }
+    var downloadId by rememberSaveable(document.mid) { mutableStateOf<Long?>(null) }
     val downloadScope = rememberCoroutineScope()
+
+    fun loadPreview(openWhenReady: Boolean) {
+        previewNeedsRetry = true
+        openDocument(
+            context, document, baseUrl, downloadScope,
+            openWhenReady = openWhenReady,
+            onLoaded = { previewNeedsRetry = false },
+            onDownloadingChange = { isDownloading = it }
+        )
+    }
+
+    fun saveDocument(retryOnly: Boolean = false) {
+        downloadScope.launch {
+            val previousId = downloadId
+            if (previousId == null && retryOnly) return@launch
+            if (previousId != null) {
+                val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val status = withContext(Dispatchers.IO) {
+                    manager.query(DownloadManager.Query().setFilterById(previousId)).use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        } else null
+                    }
+                }
+                // Android owns active downloads even while the row is disposed.
+                // Only a terminal failure may create a replacement request.
+                if (downloadId != previousId || status != DownloadManager.STATUS_FAILED) return@launch
+                manager.remove(previousId)
+            }
+            downloadId = downloadDocument(context, document, baseUrl)
+        }
+    }
+
+    LaunchedEffect(downloadId) {
+        val id = downloadId ?: return@LaunchedEffect
+        isDownloadingForShare = true
+        try {
+            if (monitorDocumentDownload(context, id)) downloadId = null
+        } finally {
+            isDownloadingForShare = false
+        }
+    }
 
     val icon = getDocumentIcon(document.type)
     val iconColor = getDocumentIconColor(document.type)
@@ -146,6 +193,12 @@ private fun DocumentRowView(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .onAttachmentVisible(document.mid) {
+                if (!isDownloading && previewNeedsRetry) {
+                    loadPreview(openWhenReady = false)
+                }
+                saveDocument(retryOnly = true)
+            }
             .background(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp)
@@ -157,9 +210,7 @@ private fun DocumentRowView(
             )
             .clickable(enabled = !isDownloading && !isDownloadingForShare) {
                 if (!isDownloading && !isDownloadingForShare) {
-                    openDocument(context, document, baseUrl) {
-                        isDownloading = it
-                    }
+                    loadPreview(openWhenReady = true)
                 }
             }
             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -201,9 +252,7 @@ private fun DocumentRowView(
             IconButton(
                 onClick = {
                     if (!isDownloadingForShare) {
-                        downloadDocument(context, document, baseUrl, downloadScope) {
-                            isDownloadingForShare = it
-                        }
+                        saveDocument()
                     }
                 },
                 enabled = !isDownloading && !isDownloadingForShare
@@ -311,6 +360,9 @@ private fun openDocument(
     context: Context,
     document: MimeiFileType,
     baseUrl: String?,
+    downloadScope: CoroutineScope,
+    openWhenReady: Boolean,
+    onLoaded: () -> Unit,
     onDownloadingChange: (Boolean) -> Unit
 ) {
     val mediaUrl = document.url ?: getMediaUrl(document.mid, baseUrl ?: "") ?: ""
@@ -334,10 +386,9 @@ private fun openDocument(
     // Check if file already exists and is valid
     if (cachedFile.exists() && cachedFile.length() > 0 && cachedFile.canRead()) {
         Timber.d("DocumentAttachmentsView: Using cached file: $uniqueFileName (${cachedFile.length()} bytes)")
-        onDownloadingChange(true)
-        // Present document viewer
-        presentDocumentViewer(context, cachedFile) {
-            onDownloadingChange(false)
+        onLoaded()
+        if (openWhenReady) {
+            presentDocumentViewer(context, cachedFile) { onDownloadingChange(false) }
         }
         return
     }
@@ -347,41 +398,35 @@ private fun openDocument(
     Timber.d("DocumentAttachmentsView: Downloading file from server...")
 
     // Use coroutine scope for async download
-    CoroutineScope(Dispatchers.IO).launch {
+    downloadScope.launch {
         try {
-            val url = URL(mediaUrl)
-            val connection = url.openConnection()
-            connection.connect()
-
-            // Download file
-            connection.getInputStream().use { input ->
-                cachedFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            // Verify file is valid
-            if (cachedFile.exists() && cachedFile.length() > 0 && cachedFile.canRead()) {
-                Timber.d("DocumentAttachmentsView: File downloaded successfully: ${cachedFile.length()} bytes")
-                // Present document viewer on main thread
-                withContext(Dispatchers.Main) {
-                    presentDocumentViewer(context, cachedFile) {
-                        onDownloadingChange(false)
+            withContext(Dispatchers.IO) {
+                // Publish the cache entry only after completion. A failed transfer
+                // must not leave a partial file that the next attempt treats as cached.
+                val partialFile = File.createTempFile("document_", ".part", tempDir)
+                try {
+                    val connection = URL(mediaUrl).openConnection()
+                    connection.getInputStream().use { input ->
+                        partialFile.outputStream().use { output -> input.copyTo(output) }
                     }
-                }
-            } else {
-                Timber.e("DocumentAttachmentsView: Downloaded file is invalid")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
-                    onDownloadingChange(false)
+                    check(partialFile.length() > 0 && partialFile.renameTo(cachedFile)) {
+                        "Could not cache downloaded document"
+                    }
+                } finally {
+                    partialFile.delete()
                 }
             }
+            onLoaded()
+            if (openWhenReady) {
+                presentDocumentViewer(context, cachedFile) { }
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "DocumentAttachmentsView: Download failed")
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Failed to download file: ${e.message}", Toast.LENGTH_SHORT).show()
-                onDownloadingChange(false)
-            }
+            Toast.makeText(context, "Failed to download file: ${e.message}", Toast.LENGTH_SHORT).show()
+        } finally {
+            onDownloadingChange(false)
         }
     }
 }
@@ -392,19 +437,15 @@ private fun openDocument(
 private fun downloadDocument(
     context: Context,
     document: MimeiFileType,
-    baseUrl: String?,
-    monitorScope: CoroutineScope,
-    onDownloadingChange: (Boolean) -> Unit
-) {
+    baseUrl: String?
+): Long? {
     val mediaUrl = document.url ?: getMediaUrl(document.mid, baseUrl ?: "") ?: ""
     if (mediaUrl.isBlank()) {
         Timber.e("DocumentAttachmentsView: Invalid document URL")
-        return
+        return null
     }
 
     val originalFileName = document.fileName ?: getDefaultFileName(document.type)
-
-    onDownloadingChange(true)
 
     val request = DownloadManager.Request(mediaUrl.toUri())
         .setTitle(originalFileName)
@@ -413,9 +454,14 @@ private fun downloadDocument(
         .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, originalFileName)
 
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val downloadId = downloadManager.enqueue(request)
+    return downloadManager.enqueue(request)
+}
 
-    monitorScope.launch(Dispatchers.IO) {
+/** Resume observing the same system download when its row re-enters composition. */
+private suspend fun monitorDocumentDownload(context: Context, downloadId: Long): Boolean =
+    withContext(Dispatchers.IO) {
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        var succeeded = false
         val completed = withTimeoutOrNull(DOWNLOAD_MONITOR_TIMEOUT_MS) {
             var downloading = true
             while (downloading) {
@@ -431,14 +477,13 @@ private fun downloadDocument(
                                         context.getString(R.string.downloading_file),
                                         Toast.LENGTH_SHORT
                                     ).show()
-                                    onDownloadingChange(false)
                                 }
+                                succeeded = true
                                 downloading = false
                             }
                             DownloadManager.STATUS_FAILED -> {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
-                                    onDownloadingChange(false)
                                 }
                                 downloading = false
                             }
@@ -454,12 +499,11 @@ private fun downloadDocument(
 
         if (completed != true) {
             withContext(Dispatchers.Main) {
-                onDownloadingChange(false)
                 Toast.makeText(context, "Download is taking longer than expected", Toast.LENGTH_SHORT).show()
             }
         }
+        succeeded
     }
-}
 
 /**
  * Present document viewer

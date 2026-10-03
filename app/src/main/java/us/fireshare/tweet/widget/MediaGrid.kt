@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -734,13 +735,14 @@ fun SimpleMp3PlaylistPlayer(
     if (mediaItems.isEmpty()) return
 
     val exoPlayer = remember { createAudioExoPlayer(context) }
-    var currentIndex by remember { mutableStateOf(0) }
+    val attachmentIds = attachments.map { it.mid }
+    var currentIndex by rememberSaveable(attachmentIds) { mutableStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var playlistExpanded by remember { mutableStateOf(false) }
     var isPlaybackLoading by remember { mutableStateOf(false) }
-    var playbackLoadFailed by remember { mutableStateOf(false) }
+    var playbackLoadFailed by rememberSaveable(attachmentIds) { mutableStateOf(false) }
     var lastAudioUnavailableToastAtMs by remember { mutableLongStateOf(0L) }
     val audioUnavailableMessage = stringResource(R.string.audio_unavailable)
 
@@ -780,14 +782,14 @@ fun SimpleMp3PlaylistPlayer(
     }
 
     LaunchedEffect(mediaItems) {
+        val targetIndex = if (playbackLoadFailed) currentIndex.coerceIn(0, mediaItems.lastIndex) else 0
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        currentIndex = 0
+        currentIndex = targetIndex
         positionMs = 0L
         durationMs = 0L
         isPlaying = false
         isPlaybackLoading = false
-        playbackLoadFailed = false
     }
 
     DisposableEffect(exoPlayer) {
@@ -812,6 +814,7 @@ fun SimpleMp3PlaylistPlayer(
                 }
                 if (playbackState == Player.STATE_READY) {
                     isPlaybackLoading = false
+                    playbackLoadFailed = false
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     isPlaying = false
@@ -859,7 +862,15 @@ fun SimpleMp3PlaylistPlayer(
     val playerMutedContent = playerContent.copy(alpha = 0.72f)
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.onAttachmentVisible(attachmentIds) {
+            if (playbackLoadFailed && !isPlaybackLoading) {
+                isPlaybackLoading = true
+                // Reload only previously attempted audio; scrolling must not start sound.
+                exoPlayer.setMediaItems(mediaItems, currentIndex, positionMs)
+                exoPlayer.playWhenReady = false
+                exoPlayer.prepare()
+            }
+        },
         shape = MaterialTheme.shapes.small,
         tonalElevation = 1.dp,
         color = playerBackground

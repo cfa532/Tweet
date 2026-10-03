@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +96,17 @@ fun VideoPreview(
     val playerGeneration = VideoManager.playerGenerations[playerKey] ?: 0
     val preloadGeneration = VideoManager.preloadGenerations[playerKey] ?: 0
     val hasWarmPlayer = playerKey?.let { VideoManager.hasWarmVideoPlayer(it) } == true
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    val visibleToUser = effectivelyVisible && lifecycleState.isAtLeast(Lifecycle.State.STARTED)
+
+    // Retry once on re-entry, including foreground return, even for a video that
+    // is visible but not the coordinator's primary video. Errors are not effect keys.
+    LaunchedEffect(playerKey, visibleToUser) {
+        if (visibleToUser && state.hasError) {
+            state.manualRetry(context, url, videoType, retryScope, playerKey)
+        }
+    }
 
     LaunchedEffect(url) {
         val oldUrl = previousUrl
@@ -305,7 +317,6 @@ fun VideoPreview(
     val currentOnLoadComplete by rememberUpdatedState(onLoadComplete)
     val currentOnVideoCompleted by rememberUpdatedState(onVideoCompleted)
     val currentCoordinator by rememberUpdatedState(coordinator)
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(
         lifecycleOwner,

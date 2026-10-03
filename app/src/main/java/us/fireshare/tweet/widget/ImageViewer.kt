@@ -42,6 +42,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -66,6 +67,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.scale
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -868,6 +871,8 @@ fun ImageViewer(
 ) {
     val context = LocalContext.current
     val retryScope = rememberCoroutineScope()
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val visibleToUser = isVisible && lifecycleState.isAtLeast(Lifecycle.State.STARTED)
     var showMenu by remember { mutableStateOf(false) }
     val mid = imageMid
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
@@ -891,15 +896,16 @@ fun ImageViewer(
         }
         mutableStateOf(
             if (cachedBitmap != null) {
-                ImageLoadState(bitmap = cachedBitmap, isLoading = false, isVisible = isVisible)
+                ImageLoadState(bitmap = cachedBitmap, isLoading = false, isVisible = visibleToUser)
             } else {
-                ImageLoadState(isLoading = true, isVisible = isVisible)
+                ImageLoadState(isLoading = true, isVisible = visibleToUser)
             }
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    var retryCount by remember { mutableIntStateOf(0) }
+    // Start the first request only after the visible appearance clears session failures.
+    var retryCount by remember(mid) { mutableIntStateOf(-1) }
     var lastRetryTime by remember { mutableLongStateOf(0L) }
     var retryImageUrl by remember(mid) { mutableStateOf<String?>(null) }
     val effectiveImageUrl = retryImageUrl ?: imageUrl
@@ -971,26 +977,17 @@ fun ImageViewer(
         return true
     }
 
-    // Update visibility state when it changes and retry if needed
-    LaunchedEffect(mid, isVisible) {
-        loadState = loadState.copy(isVisible = isVisible)
-
-        if (mid != null) {
-            if (isVisible) {
-                ImageCacheManager.markImageVisible(mid)
-                // If image becomes visible again, resume any paused download
-                ImageCacheManager.resumeDownload(mid)
-
-                applyCachedBitmapIfAvailable("visible")
-
-                // If previous load failed, retry
-                if (loadState.hasError && retryCount <= 3) {
-                    MediaLog.d("ImageViewer") { "Image reappeared with error, attempting retry: $imageUrl, retryCount: $retryCount" }
-                    retryCount++
-                }
-            } else {
-                ImageCacheManager.markImageNotVisible(mid)
-                MediaLog.d("ImageViewer") { "Image became invisible, paused download: $imageUrl" }
+    // Scroll re-entry and foreground return each grant one fresh load, even after
+    // the automatic retry budget is exhausted. Errors are not effect keys.
+    LaunchedEffect(mid, visibleToUser) {
+        loadState = loadState.copy(isVisible = visibleToUser)
+        if (mid != null && visibleToUser) {
+            val cached = applyCachedBitmapIfAvailable("visible")
+            if (!cached) {
+                BlackList.resetSessionFailures(mid)
+            }
+            if (!cached || retryCount < 0) {
+                retryCount++
             }
         }
     }
@@ -1015,16 +1012,21 @@ fun ImageViewer(
         }
     }
 
-    DisposableEffect(mid) {
+    DisposableEffect(mid, visibleToUser) {
+        if (mid != null && visibleToUser) {
+            ImageCacheManager.markImageVisible(mid)
+        }
         onDispose {
-            mid?.let { ImageCacheManager.markImageNotVisible(it) }
+            if (mid != null && visibleToUser) {
+                ImageCacheManager.markImageNotVisible(mid)
+            }
         }
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, effectiveImageUrl, retryCount) {
-        // Early return if the current URL or mid is null
-        if (effectiveImageUrl == null || mid == null) {
+        // Wait for visibility to clear the session block before the first attempt.
+        if (effectiveImageUrl == null || mid == null || !visibleToUser || retryCount < 0) {
             return@LaunchedEffect
         }
 

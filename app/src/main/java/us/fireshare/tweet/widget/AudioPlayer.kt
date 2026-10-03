@@ -194,6 +194,11 @@ fun AudioPlayer(
                 }
             },
             modifier = Modifier
+                .onAttachmentVisible(resolvedAttachments.map { it.mid }) {
+                    if (exoPlayer.playerError != null) {
+                        exoPlayer.prepare()
+                    }
+                }
                 .aspectRatio(aspectRatio)
                 .clipToBounds() // Ensure content is clipped to bounds
         )
