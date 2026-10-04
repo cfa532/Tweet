@@ -21,10 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -34,9 +35,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import us.fireshare.tweet.ui.theme.mediaGridBorderColor
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import us.fireshare.tweet.HproseInstance
@@ -54,7 +60,6 @@ import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
-import java.util.concurrent.TimeUnit
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
@@ -424,24 +429,41 @@ private fun isDocumentType(type: MediaType): Boolean {
 
 @Composable
 fun localizedTimeDifference(timestamp: Long): String {
-    val currentTime = System.currentTimeMillis()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentTime by produceState(
+        initialValue = System.currentTimeMillis(),
+        key1 = timestamp,
+        key2 = lifecycleOwner
+    ) {
+        // Refresh on screen return and stop ticking in the background or when disposed.
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                value = now
+                // Keep seconds live for new posts; older labels need only minute updates.
+                delay(if (now - timestamp < 60_000L) 1_000L else 60_000L)
+            }
+        }
+    }
     val diffInMillis = currentTime - timestamp
 
-    val seconds = TimeUnit.MILLISECONDS.toSeconds(diffInMillis)
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(diffInMillis)
-    val hours = TimeUnit.MILLISECONDS.toHours(diffInMillis)
-    val days = TimeUnit.MILLISECONDS.toDays(diffInMillis)
+    // Shared with iOS and TweetWeb: floor elapsed seconds, then completed units,
+    // with 30-day months and 365-day years.
+    val seconds = Math.floorDiv(diffInMillis, 1_000L)
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
     val weeks = days / 7
     val months = days / 30
     val years = days / 365
 
     return when {
-        seconds < 60 -> stringResource(id = R.string.seconds_ago, seconds)
-        minutes < 60 -> stringResource(id = R.string.minutes_ago, minutes)
-        hours < 24 -> stringResource(id = R.string.hours_ago, hours)
-        days < 7 -> stringResource(id = R.string.days_ago, days)
-        weeks < 4 -> stringResource(id = R.string.weeks_ago, weeks)
-        months < 12 -> stringResource(id = R.string.months_ago, months + 1)
-        else -> stringResource(id = R.string.years_ago, years)
+        seconds < 60 -> pluralStringResource(R.plurals.seconds_ago, seconds.toInt(), seconds)
+        minutes < 60 -> pluralStringResource(R.plurals.minutes_ago, minutes.toInt(), minutes)
+        hours < 24 -> pluralStringResource(R.plurals.hours_ago, hours.toInt(), hours)
+        days < 7 -> pluralStringResource(R.plurals.days_ago, days.toInt(), days)
+        months < 1 -> pluralStringResource(R.plurals.weeks_ago, weeks.toInt(), weeks)
+        years < 1 -> pluralStringResource(R.plurals.months_ago, months.toInt(), months)
+        else -> pluralStringResource(R.plurals.years_ago, years.toInt(), years)
     }
 }

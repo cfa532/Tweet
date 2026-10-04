@@ -34,13 +34,27 @@
     <string name="unfollow">取关</string>
     <string name="edit">编辑</string>
     <string name="login_follow">登录后关注</string>
-    <string name="seconds_ago">%d秒</string>
-    <string name="minutes_ago">%d分</string>
-    <string name="hours_ago">%d小时</string>
-    <string name="days_ago">%d天</string>
-    <string name="weeks_ago">%d周</string>
-    <string name="months_ago">%d月</string>
-    <string name="years_ago">%d年</string>
+    <plurals name="seconds_ago">
+        <item quantity="other">%1$d秒前</item>
+    </plurals>
+    <plurals name="minutes_ago">
+        <item quantity="other">%1$d分钟前</item>
+    </plurals>
+    <plurals name="hours_ago">
+        <item quantity="other">%1$d小时前</item>
+    </plurals>
+    <plurals name="days_ago">
+        <item quantity="other">%1$d天前</item>
+    </plurals>
+    <plurals name="weeks_ago">
+        <item quantity="other">%1$d周前</item>
+    </plurals>
+    <plurals name="months_ago">
+        <item quantity="other">%1$d个月前</item>
+    </plurals>
+    <plurals name="years_ago">
+        <item quantity="other">%1$d年前</item>
+    </plurals>
     <string name="fans">粉丝</string>
     <string name="posts">帖子</string>
     <string name="show_more">更多>></string>
