@@ -84,7 +84,7 @@ fun NewTweetsBanner(
         ) {
             Row(
                 modifier = Modifier
-                    .padding(start = 12.dp, top = 4.dp, end = 14.dp, bottom = 4.dp),
+                    .padding(start = 12.dp, top = 6.dp, end = 14.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
