@@ -283,7 +283,12 @@ class UserViewModel @AssistedInject constructor(
             val routeChanged = refreshUserDataFromServer() ?: return@launch
             if (routeChanged || _tweets.value.isEmpty()) {
                 Timber.tag("refreshUserData").d("Route changed or tweets empty; refreshing profile tweets without clearing existing list")
-                getTweets(0)
+                try {
+                    getTweets(0)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    Timber.tag("refreshUserData").w(e, "Profile tweet refresh failed; keeping existing list")
+                }
             }
         }
     }
@@ -1114,12 +1119,19 @@ class UserViewModel @AssistedInject constructor(
         // Use the most up-to-date user data (appUser) instead of potentially stale user.value
         val currentUser = if (userId == appUser.mid) appUser else user.value
 
-        val tweetsWithNulls = getUserTweetsByType(
-            currentUser,
-            UserContentType.BOOKMARKS,
-            pageNumber,
-            TW_CONST.PAGE_SIZE
-        )
+        val tweetsWithNulls = try {
+            getUserTweetsByType(
+                currentUser,
+                UserContentType.BOOKMARKS,
+                pageNumber,
+                TW_CONST.PAGE_SIZE
+            )
+        } catch (e: Exception) {
+            // Leave the list as it is (page 0 would otherwise be replaced by nothing) and
+            // stop the initial spinner; the caller reports the failure.
+            if (pageNumber == 0) _bookmarksInitialLoadComplete.value = true
+            throw e
+        }
 
         // Filter out null elements and get valid tweets
         val validTweets = tweetsWithNulls.filterNotNull()
@@ -1259,12 +1271,18 @@ class UserViewModel @AssistedInject constructor(
         // Use the most up-to-date user data (appUser) instead of potentially stale user.value
         val currentUser = if (userId == appUser.mid) appUser else user.value
 
-        val tweetsWithNulls = getUserTweetsByType(
-            currentUser,
-            UserContentType.FAVORITES,
-            pageNumber,
-            TW_CONST.PAGE_SIZE
-        )
+        val tweetsWithNulls = try {
+            getUserTweetsByType(
+                currentUser,
+                UserContentType.FAVORITES,
+                pageNumber,
+                TW_CONST.PAGE_SIZE
+            )
+        } catch (e: Exception) {
+            // Same as getBookmarks: keep the list, end the initial spinner, let the caller report it.
+            if (pageNumber == 0) _favoritesInitialLoadComplete.value = true
+            throw e
+        }
 
         // Filter out null elements and get valid tweets
         val validTweets = tweetsWithNulls.filterNotNull()
@@ -1543,9 +1561,11 @@ class UserViewModel @AssistedInject constructor(
                 cachedTweets.map { it as Tweet? }
             )
         } catch (e: Exception) {
+            // Rethrow: returning an empty list made the list view treat a failed page as the end
+            // of the profile ("No more tweets") and stop loading until a manual refresh.
             Timber.tag("getTweets")
                 .e(e, "Error fetching tweets for user: ${user.value.mid}, page: $pageNumber")
-            emptyList()
+            throw e
         }
     }
 

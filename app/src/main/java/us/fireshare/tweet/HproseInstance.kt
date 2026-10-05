@@ -4652,8 +4652,10 @@ object HproseInstance {
                 }
             } ?: emptyList()
         } catch (e: Exception) {
+            // Rethrow: an empty list here read as "no more entries" to the list view and, for
+            // page 0, replaced the saved list with nothing. A failed read is not an empty one.
             Timber.tag("getUserTweetsByType").e(e)
-            emptyList()
+            throw e
         }
     }
 

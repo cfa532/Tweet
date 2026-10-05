@@ -9,6 +9,7 @@
     <string name="upgrade_required_message">新しいツイートを投稿するには、完全版へのアップグレードが必要です（5つ以上のツイートがあります）。サーバーから最新版をダウンロードします。</string>
     <string name="upgrade_now">今すぐアップグレード</string>
     <string name="no_more_tweets">これ以上のツイートはありません</string>
+    <string name="fetch_failed">ツイートを読み込めませんでした。もう一度お試しください。</string>
     <string name="no_more_comments">これ以上のコメントはありません</string>
     <string name="loading_more_comments">コメントを読み込んでいます…</string>
     <string name="upgrade_failed_no_server">アップグレードに失敗しました：どのサーバーからもダウンロードできません</string>

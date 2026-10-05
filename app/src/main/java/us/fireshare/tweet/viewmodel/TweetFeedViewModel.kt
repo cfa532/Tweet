@@ -637,7 +637,10 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     initState.value = false  // Stop showing spinner after all retries exhausted
                     Timber.tag("MainFeed").w("⚠️ Network fetch failed after retries, showing ${_tweets.value.size} cached tweets")
                 }
-                cachedTweets
+                // Rethrow instead of returning the cached page as if it were the server's
+                // answer: a short or empty cached page read as "server depleted" and showed
+                // "No more tweets". The cached rows were already merged into the feed above.
+                throw e
             }
             
             // Clear retry message and loading state on success
@@ -779,9 +782,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
             }
             return tweetsWithNulls
         } catch (e: Exception) {
+            // Rethrow: callers (the guest feed's list view, updateFollowingsTweets) decide what a
+            // failure means; an empty list is indistinguishable from "no more tweets".
             Timber.tag("GetTweets").e("❌ Error fetching tweets for user: $userId: ${e.message}")
+            throw e
         }
-        return emptyList()
     }
 
     /**
@@ -796,7 +801,12 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         if (isFollowing) {
             // add the tweets of a user after following it.
             // Fetch directly from user's node since server update takes time
-            getTweets(userId)
+            try {
+                getTweets(userId)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Timber.tag("updateFollowingsTweets").w(e, "Could not load tweets of newly followed user $userId")
+            }
         } else {
             // remove all tweets of this user from list after unfollowing it.
             _tweets.update { currentTweets ->

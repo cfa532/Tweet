@@ -52,6 +52,7 @@ import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
+import timber.log.Timber
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,7 +97,13 @@ fun UserBookmarks(
             withFrameNanos { }
         }
         withContext(Dispatchers.IO) {
-            viewModel.getBookmarks(0)
+            try {
+                viewModel.getBookmarks(0)
+            } catch (e: Exception) {
+                // The cached rows stay on screen; a failed refresh must not crash the screen.
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Timber.tag("getBookmarks").w(e, "Initial refresh failed")
+            }
         }
     }
 

@@ -71,6 +71,7 @@
     <string name="profile_update_ok">User profile updated successfully</string>
     <string name="profile_update_failed">Update user data failed</string>
     <string name="no_more_tweets">No more tweets</string>
+    <string name="fetch_failed">Couldn\'t load tweets. Please try again.</string>
     <string name="no_more_comments">No more comments</string>
     <string name="loading_more_comments">Loading more comments…</string>
     <string name="registration_ok">Registration is successful. Please wait a few minutes before login.</string>

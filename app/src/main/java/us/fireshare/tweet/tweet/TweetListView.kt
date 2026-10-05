@@ -1,6 +1,7 @@
 package us.fireshare.tweet.tweet
 
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
@@ -60,6 +61,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -247,6 +249,11 @@ fun TweetListView(
     // Use activity scope if parentEntry is null, otherwise use parentEntry for proper lifecycle
     val activity = LocalActivity.current as ComponentActivity
     val androidContext = LocalContext.current
+    // A failed page is reported, never mistaken for "no more tweets": pagination state is left
+    // as it was so the next scroll or pull retries. Same behavior and wording as iOS.
+    fun reportFetchFailure() {
+        Toast.makeText(androidContext, R.string.fetch_failed, Toast.LENGTH_SHORT).show()
+    }
     val tweetListViewModel = if (parentEntry != null) {
         hiltViewModel<TweetListViewModel>(viewModelStoreOwner = parentEntry, key = context)
     } else {
@@ -897,7 +904,9 @@ fun TweetListView(
                             )
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Timber.tag("TweetListView-LoadMore").e(e, "Error loading more")
+                        reportFetchFailure()
                     } finally {
                         withContext(NonCancellable + Dispatchers.Main) {
                             timeoutJob.cancel()
@@ -949,7 +958,9 @@ fun TweetListView(
                         firstVisibleItemKey = if (headerContent != null) "header" else visibleTweets.firstOrNull()?.mid
                     )
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Timber.tag("TweetListView").e(e, "Error during pull refresh")
+                    reportFetchFailure()
                 } finally {
                     isRefreshingAtTop = false
                 }
@@ -979,7 +990,9 @@ fun TweetListView(
                         )
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Timber.tag("TweetListView").e(e, "Preload error")
+                    reportFetchFailure()
                 } finally {
                     withContext(NonCancellable + Dispatchers.Main) {
                         val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
