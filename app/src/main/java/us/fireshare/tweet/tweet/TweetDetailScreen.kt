@@ -99,7 +99,7 @@ import kotlin.math.abs
  * the tweet author first (up to three `fetchUser` attempts) before `get_comments`.
  * Without this cap a slow node keeps a spinner up for minutes.
  */
-private const val MAX_SPINNER_MS = 6_000L
+private const val MAX_SPINNER_MS = 15_000L
 private const val COMMENT_PAGE_SIZE = 20
 
 @RequiresApi(Build.VERSION_CODES.R)
