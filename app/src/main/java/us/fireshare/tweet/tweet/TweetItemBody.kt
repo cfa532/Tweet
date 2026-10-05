@@ -438,10 +438,10 @@ fun localizedTimeDifference(timestamp: Long): String {
         // Refresh on screen return and stop ticking in the background or when disposed.
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
-                val now = System.currentTimeMillis()
-                value = now
-                // Keep seconds live for new posts; older labels need only minute updates.
-                delay(if (now - timestamp < 60_000L) 1_000L else 60_000L)
+                value = System.currentTimeMillis()
+                // One tick per minute for every post, matching iOS and TweetWeb. A new
+                // post's seconds label may lag up to a minute before it becomes "1m".
+                delay(60_000L)
             }
         }
     }
