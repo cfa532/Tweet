@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -283,6 +284,10 @@ fun EditProfileScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // The window is edge-to-edge and this screen has no app bar. Without the
+                // status-bar inset the close button sits under the status bar, which
+                // swallows taps there, leaving only its bottom edge tappable.
+                .statusBarsPadding()
                 .padding(8.dp)
         ) {
         Column(
