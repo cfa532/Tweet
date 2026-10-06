@@ -1,10 +1,12 @@
 package us.fireshare.tweet
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -24,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getString
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -62,6 +65,10 @@ class TweetActivity : ComponentActivity() {
     @Inject
     lateinit var chatSessionRepository: ChatSessionRepository
 
+    private companion object {
+        const val LOCAL_NETWORK_PERMISSION_MIN_SDK = 37
+    }
+
     // Register activity result launcher for notification permission
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -70,9 +77,20 @@ class TweetActivity : ComponentActivity() {
         NotificationPermissionManager.markNotificationPermissionAsked(this)
     }
 
+    // Android 17 gates connections to on-link (local network) addresses behind a runtime
+    // permission. A node on the user's own LAN is reachable only at such an address, and
+    // without the grant its health check times out and the node's users never load.
+    private val localNetworkPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        Timber.tag("TweetActivity").d("Local network permission result: $isGranted")
+    }
+
     @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        requestLocalNetworkPermissionIfNeeded()
 
         // Lock the app to portrait orientation by default
         OrientationManager.lockToPortrait(this)
@@ -203,6 +221,21 @@ class TweetActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+    }
+
+    /**
+     * Ask for local network access on Android 17+ (API 37), where the system enforces it
+     * for apps targeting that level. Earlier releases have no such permission. The system
+     * dialog itself suppresses repeat prompts after the user declines, so this is asked
+     * on every launch until granted. A failed health check is cached for only 30s, so a
+     * grant given after startup recovers on the next retry without further handling.
+     */
+    private fun requestLocalNetworkPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < LOCAL_NETWORK_PERMISSION_MIN_SDK) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK)
+            == PackageManager.PERMISSION_GRANTED
+        ) return
+        localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
     }
 
     /**
