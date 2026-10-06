@@ -331,7 +331,11 @@ data class User(
                 return null
             }
 
-            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "true", usePool = false)
+            // v4Only = "false": a root host can advertise only an IPv6 address, and asking
+            // for IPv4 only then returns no IPs at all, so every write fails with an
+            // unresolved writableUrl. Matches Tweet-iOS and the root-address lookups in
+            // HproseInstance, which also accept IPv6 write routes.
+            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "false", usePool = false)
             if (hostIP != null) {
                 
                 // Extract clean IP and port
