@@ -45,6 +45,7 @@
     <string name="cancel">キャンセル</string>
     <string name="delete_tweet_confirmation_title">ツイートを削除しますか？</string>
     <string name="delete_tweet_confirmation_message">このツイートは完全に削除されます。この操作は元に戻せません。</string>
+    <string name="remove_tweet_from_feed_confirmation_message">このツイートはフィードから削除されます。投稿者のツイート自体は削除されません。</string>
     <string name="delete_comment_confirmation_title">コメントを削除しますか？</string>
     <string name="delete_comment_confirmation_message">このコメントは完全に削除されます。この操作は元に戻せません。</string>
     <string name="photo_mode">写真モード</string>

@@ -154,7 +154,16 @@ fun TweetDropdownMenuItems(
                 onDismissRequest()
             },
             title = { Text(stringResource(R.string.delete_tweet_confirmation_title)) },
-            text = { Text(stringResource(R.string.delete_tweet_confirmation_message)) },
+            // Only the author destroys a tweet; for anyone else the backend just removes it
+            // from the requester's own lists, so "permanently deleted" would be false.
+            text = {
+                Text(
+                    stringResource(
+                        if (tweet.authorId == appUser.mid) R.string.delete_tweet_confirmation_message
+                        else R.string.remove_tweet_from_feed_confirmation_message
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

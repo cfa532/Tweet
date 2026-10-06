@@ -103,6 +103,7 @@
     <string name="delete_failed">Tweet deletion failed. Please try again.</string>
     <string name="delete_tweet_confirmation_title">Delete tweet?</string>
     <string name="delete_tweet_confirmation_message">This tweet will be permanently deleted. This action cannot be undone.</string>
+    <string name="remove_tweet_from_feed_confirmation_message">This tweet will be removed from your feed. The author\'s tweet is not deleted.</string>
     <string name="delete_comment_confirmation_title">Delete comment?</string>
     <string name="delete_comment_confirmation_message">This comment will be permanently deleted. This action cannot be undone.</string>
     <string name="confirm_pwd">Please confirm password</string>
