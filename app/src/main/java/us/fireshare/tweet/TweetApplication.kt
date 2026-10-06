@@ -44,6 +44,9 @@ class TweetApplication : Application(), ComponentCallbacks2 {
             // App has come to foreground
             Timber.tag("AppLifecycle").d("App came to foreground, online=${HproseInstance.isOnline.value}")
             MainFeedCheckWorker.reschedule(this@TweetApplication)
+            // Session blocks never expire on their own, so a stale-background app would keep
+            // hiding tweets and skipping media that failed while it was away.
+            applicationScope.launch { BlackList.resetAllSessionFailures() }
             if (!HproseInstance.isOnline.value) {
                 Timber.tag("AppLifecycle").d("Offline: skipping appUser refresh")
                 return

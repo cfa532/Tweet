@@ -164,6 +164,20 @@ object BlackList {
         }
     }
 
+    /**
+     * Forget every process-local failure count and session block; persisted candidates and
+     * blacklist entries stay. Failures recorded while the app was backgrounded (dead sockets,
+     * a node address that changed) are not evidence about the network the user returns to,
+     * and without this a session block lasts until the process is killed.
+     */
+    suspend fun resetAllSessionFailures() {
+        mutex.withLock {
+            sessionFailureCounts.clear()
+            sessionBlockedResources.clear()
+            lastFailureRecordedAt.clear()
+        }
+    }
+
     /** Allow an explicit user retry of one resource without clearing other failures. */
     suspend fun resetForRetry(resourceId: String) {
         mutex.withLock {

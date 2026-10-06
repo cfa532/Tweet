@@ -848,6 +848,17 @@ object VideoManager {
         resolvedHlsUrl: String? = null,
         mediaMid: MimeiId = videoMid
     ): ExoPlayer {
+        // The offline branch below caches a player with no media under this key. A feed that
+        // is rebuilt while the network is down (e.g. resuming a long-stale app before the
+        // connectivity callback fires, or after a trim released the real players) would
+        // otherwise keep reusing that empty player once the network is back, and it can
+        // never play. Replace it with a real one.
+        if (us.fireshare.tweet.HproseInstance.isOnline.value &&
+            videoPlayers[videoMid]?.mediaItemCount == 0
+        ) {
+            releasePlayer(videoMid)
+        }
+
         adoptWarmPreloadForKey(videoMid, mediaMid)
 
         if (preloadQueue.remove(videoMid) || synchronized(currentDirectionalPreloadVideos) {
