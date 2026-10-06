@@ -203,7 +203,15 @@ class TweetViewModel @AssistedInject constructor(
             snapshot.bookmarkOverride = fetched.bookmarkOverride
         }
 
-        resolvedTweet.author?.let { TweetCacheManager.saveUser(it) }
+        // Seed the shared user cache only when it has no entry for this author (deep link
+        // opened with nothing cached). A tweet's embedded author is a snapshot taken when
+        // the tweet was loaded and can be older than the cache; saving it unconditionally
+        // reverted a freshly fetched avatar on every row refresh.
+        resolvedTweet.author?.let { author ->
+            if (TweetCacheManager.getUserStateFlow(author.mid).value.user == null) {
+                TweetCacheManager.saveUser(author)
+            }
+        }
         _tweetState.value = resolvedTweet
         _attachments.value = resolvedTweet.attachments
     }
