@@ -65,6 +65,7 @@ import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatListViewModel
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -291,7 +292,7 @@ fun ChatUserItem(
     ) { factory ->
         factory.create(userId)
     }
-    val user by userViewModel.user.collectAsState()
+    val user by userViewModel.collectUserAsState()
     
     // Proactively load user data for every user ID
     LaunchedEffect(userId) {

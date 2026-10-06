@@ -35,6 +35,7 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.ui.theme.XLightSecondaryText
 import us.fireshare.tweet.ui.theme.XLightText
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 
 @Composable
 fun ProfileDetail(
@@ -43,8 +44,8 @@ fun ProfileDetail(
 ) {
     val sharedViewModel = hiltViewModel<SharedViewModel>()
     val appUserViewModel = sharedViewModel.appUserViewModel
-    val user by viewModel.user.collectAsState()
-    val appUser by appUserViewModel.user.collectAsState()
+    val user by viewModel.collectUserAsState()
+    val appUser by appUserViewModel.collectUserAsState()
 
     // Use the ViewModel's user data directly for display, as it's more reliable
     // The ViewModel's user state is updated when profile changes

@@ -32,6 +32,7 @@ import us.fireshare.tweet.navigation.SharedViewModel
 import us.fireshare.tweet.ui.theme.DebouncedButton
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +46,7 @@ fun ProfileTopBarButton(
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val appUserViewModel = sharedViewModel.appUserViewModel
     val followings by appUserViewModel.followings.collectAsState()
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.collectUserAsState()
     val activity = LocalActivity.current as ComponentActivity
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     val context = LocalContext.current

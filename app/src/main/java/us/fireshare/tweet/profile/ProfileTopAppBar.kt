@@ -53,6 +53,7 @@ import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.navigation.requireAuthenticatedUser
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 import us.fireshare.tweet.widget.AdvancedImageViewer
 import us.fireshare.tweet.widget.SelectableText
 import java.text.SimpleDateFormat
@@ -65,7 +66,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                      navController: NavHostController,
                      scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.collectUserAsState()
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
     val context = LocalContext.current

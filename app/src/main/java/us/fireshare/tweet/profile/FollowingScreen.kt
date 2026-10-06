@@ -50,6 +50,7 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -70,7 +71,7 @@ fun FollowingScreen(
     ) { factory ->
         factory.create(userId)
     }
-    val userOfProfile by viewModel.user.collectAsState()
+    val userOfProfile by viewModel.collectUserAsState()
 
     Scaffold(
         topBar = {
@@ -137,7 +138,7 @@ fun FollowingItem(
     viewModel: UserViewModel,
     appUserViewModel: UserViewModel
 ) {
-    val viewModelUser by viewModel.user.collectAsState()
+    val viewModelUser by viewModel.collectUserAsState()
     val cachedUserStateFlow = remember(userId) {
         TweetCacheManager.getUserStateFlow(userId)
     }

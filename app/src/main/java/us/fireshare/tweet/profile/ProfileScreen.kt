@@ -62,6 +62,7 @@ import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
+import us.fireshare.tweet.viewmodel.collectUserAsState
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
@@ -93,7 +94,7 @@ fun ProfileScreen(
     }
 
     val initState by viewModel.initState.collectAsState()
-    val profileUser by viewModel.user.collectAsState()
+    val profileUser by viewModel.collectUserAsState()
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
