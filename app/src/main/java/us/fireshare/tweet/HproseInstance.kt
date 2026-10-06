@@ -4679,12 +4679,11 @@ object HproseInstance {
             Timber.tag("deleteTweet").d("Offline: skipping")
             throw Exception("No network connection")
         }
-        val requestUser = if (tweetAuthorId == appUser.mid) {
-            appUser
-        } else {
-            fetchUser(tweetAuthorId)
-                ?: throw IllegalStateException("Tweet author $tweetAuthorId is not available")
-        }
+        // The requester is always appUser: the backend destroys the tweet only when
+        // userid == authorid, and otherwise just removes it from the requester's own lists
+        // on the requester's root node. A main-feed delete of someone else's tweet must
+        // therefore name appUser here, not the author (matches Tweet-iOS, non-admin path).
+        val requestUser = appUser
 
         val entry = "delete_tweet"
         val params = mapOf(
