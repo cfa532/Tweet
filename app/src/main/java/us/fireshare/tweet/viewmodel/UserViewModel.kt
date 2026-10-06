@@ -1412,7 +1412,8 @@ class UserViewModel @AssistedInject constructor(
 
         if (userId != TW_CONST.GUEST_ID) {
             viewModelScope.launch {
-                TweetCacheManager.getUserStateFlow(userId).collect { cachedUser ->
+                TweetCacheManager.getUserStateFlow(userId).collect { cachedState ->
+                    val cachedUser = cachedState.user
                     if (cachedUser != null && !cachedUser.username.isNullOrBlank()) {
                         val updatedUser = cachedUser.copy()
                         setUserState(updatedUser)

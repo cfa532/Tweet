@@ -56,6 +56,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -94,10 +95,7 @@ fun MediaItemView(
     var showFullScreenImage by remember { mutableStateOf(false) }
     var fullScreenImageMid by remember { mutableStateOf<String?>(null) }
     val tweet by viewModel.tweetState.collectAsState()
-    val authorStateFlow = remember(tweet.authorId) {
-        TweetCacheManager.getUserStateFlow(tweet.authorId)
-    }
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
     // An author with no route yet has no address to fetch from — `orEmpty()` turned that
     // into a schemeless URL, which the player accepted as a real one: it failed, was cached
     // under the media id, and the failure was recorded against a video that had never
@@ -257,7 +255,7 @@ fun MediaItemView(
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
                         resolveImageUrlForRetry = {
-                            (authorStateFlow.value?.baseUrl
+                            (cachedAuthor?.baseUrl
                                 ?: viewModel.tweetState.value.author?.baseUrl)
                                 ?.takeIf { it.isNotBlank() }
                                 ?.let { baseUrl -> getMediaUrl(mediaItems[index].mid, baseUrl) }

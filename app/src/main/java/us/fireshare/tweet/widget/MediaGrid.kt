@@ -78,6 +78,7 @@ import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.MediaViewerParams
 import us.fireshare.tweet.navigation.NavTweet
@@ -103,10 +104,7 @@ fun MediaGrid(
     enableRowPreloading: Boolean = true
 ) {
     val tweet by viewModel.tweetState.collectAsState()
-    val authorStateFlow = remember(tweet.authorId) {
-        TweetCacheManager.getUserStateFlow(tweet.authorId)
-    }
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
     val authorBaseUrl = (cachedAuthor ?: tweet.author)?.baseUrl
     val navController = LocalNavController.current
     val videoCoordinator = LocalVideoCoordinator.current

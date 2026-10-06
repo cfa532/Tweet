@@ -67,6 +67,7 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -483,10 +484,7 @@ private fun RetweetWithContent(
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val viewModel = rememberTweetRowViewModel(tweet)
     
-    val authorStateFlow = remember(tweet.authorId) {
-        TweetCacheManager.getUserStateFlow(tweet.authorId)
-    }
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
 
     // Prefer the reactive user cache so avatar/profile updates recompose visible feed rows.
     val author = cachedAuthor ?: tweet.author

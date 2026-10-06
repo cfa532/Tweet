@@ -1,5 +1,9 @@
 package us.fireshare.tweet.datamodel
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,7 +83,7 @@ object TweetCacheManager {
     private val userCacheLock = Any()
     
     // StateFlows for reactive user updates - allows UI to observe user changes (evicted with user cache)
-    private val userStateFlows = mutableMapOf<String, MutableStateFlow<User?>>()
+    private val userStateFlows = mutableMapOf<String, MutableStateFlow<CachedUserState>>()
     private val userStateFlowsLock = Any()
 
     fun getMainFeedCacheId(userId: MimeiId): MimeiId {
@@ -415,7 +419,7 @@ object TweetCacheManager {
             userMemoryCache.remove(eldestKey)
             userCacheTimestamps.remove(eldestKey)
             synchronized(userStateFlowsLock) {
-                userStateFlows[eldestKey]?.value = null
+                userStateFlows[eldestKey]?.value = CachedUserState(null)
                 userStateFlows.remove(eldestKey)
             }
         }
@@ -442,7 +446,7 @@ object TweetCacheManager {
      * Get or create a StateFlow for observing a specific user.
      * This allows UI components to reactively update when user data changes.
      */
-    fun getUserStateFlow(userId: MimeiId): StateFlow<User?> {
+    fun getUserStateFlow(userId: MimeiId): StateFlow<CachedUserState> {
         synchronized(userStateFlowsLock) {
             val existingFlow = userStateFlows[userId]
             if (existingFlow != null) {
@@ -453,7 +457,7 @@ object TweetCacheManager {
             val currentUser = synchronized(userCacheLock) {
                 userMemoryCache[userId]?.copy()
             }
-            val newFlow = MutableStateFlow<User?>(currentUser)
+            val newFlow = MutableStateFlow(CachedUserState(currentUser))
             userStateFlows[userId] = newFlow
             return newFlow.asStateFlow()
         }
@@ -496,11 +500,11 @@ object TweetCacheManager {
             
             // Update StateFlow to notify observers
             synchronized(userStateFlowsLock) {
-                // Keep the flow value detached from the mutable singleton/cache object.
-                // Otherwise get_user mutates the already-emitted instance in place and
-                // StateFlow sees the later assignment as equal, so visible media never
-                // observes a repaired baseUrl.
-                userStateFlows[cachedUser.userId]?.value = cachedUser.user.copy()
+                // Keep the flow value detached from the mutable singleton/cache object, which
+                // get_user mutates in place. Each save is a new CachedUserState: User.equals is
+                // keyed by mid, so assigning a bare User copy would be dropped by the StateFlow
+                // as "unchanged" and observers would never see a new avatar or route.
+                userStateFlows[cachedUser.userId]?.value = CachedUserState(cachedUser.user.copy())
                 Timber.tag("TweetCacheManager").d("📡 USER STATEFLOW UPDATED: userId: ${cachedUser.userId}")
             }
         } catch (e: Exception) {
@@ -602,7 +606,7 @@ object TweetCacheManager {
             
             // Update StateFlow to notify observers that user is no longer available
             synchronized(userStateFlowsLock) {
-                userStateFlows[userId]?.value = null
+                userStateFlows[userId]?.value = CachedUserState(null)
             }
 
             Timber.d("User completely removed from cache (memory + database): $userId")
@@ -627,7 +631,7 @@ object TweetCacheManager {
             
             // Clear all StateFlows
             synchronized(userStateFlowsLock) {
-                userStateFlows.values.forEach { it.value = null }
+                userStateFlows.values.forEach { it.value = CachedUserState(null) }
                 userStateFlows.clear()
             }
         } catch (e: Exception) {
@@ -873,4 +877,28 @@ object TweetCacheManager {
         val expiredUsers: Int,
         val expirationTimeMs: Long
     )
+}
+
+/**
+ * Holder for a cached user that is compared by identity.
+ *
+ * `User.equals` is keyed by `mid` only, so a `StateFlow<User?>` drops every update to the
+ * same account. Wrapping each update in a fresh holder makes it a distinct emission.
+ * Deliberately no equals/hashCode.
+ */
+class CachedUserState(val user: User?)
+
+/**
+ * The cached user for [userId] as Compose state, recomposing the reader when the user is
+ * saved again with changed fields (avatar, name, route). Null while the user is not in the
+ * in-memory cache.
+ */
+@Composable
+fun collectCachedUserAsState(userId: MimeiId): State<User?> {
+    val holder = remember(userId) { TweetCacheManager.getUserStateFlow(userId) }.collectAsState()
+    return remember(holder) {
+        object : State<User?> {
+            override val value: User? get() = holder.value.user
+        }
+    }
 }

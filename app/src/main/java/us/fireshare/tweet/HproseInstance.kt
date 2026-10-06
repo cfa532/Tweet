@@ -4905,7 +4905,7 @@ object HproseInstance {
                     comment.favoriteOverride = favoriteOverride
                     comment.bookmarkOverride = bookmarkOverride
                     comment.interactionHostAuthor = tweet.author
-                    comment.author = TweetCacheManager.getUserStateFlow(comment.authorId).value
+                    comment.author = TweetCacheManager.getUserStateFlow(comment.authorId).value.user
                     comments.add(comment)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     // Cancellation must not become an unresolved comment row.

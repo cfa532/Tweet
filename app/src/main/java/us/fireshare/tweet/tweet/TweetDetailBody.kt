@@ -69,6 +69,7 @@ import us.fireshare.tweet.datamodel.MimeiFileType
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -97,10 +98,7 @@ fun TweetDetailBody(
     
     // Observe author changes reactively via StateFlow
     // This ensures the tweet detail updates when user data becomes available
-    val authorStateFlow = remember(tweet.authorId) {
-        TweetCacheManager.getUserStateFlow(tweet.authorId)
-    }
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
     val author = cachedAuthor ?: tweet.author
     val isTweetPayloadPending = tweet.content.isNullOrBlank() &&
         tweet.title.isNullOrBlank() &&

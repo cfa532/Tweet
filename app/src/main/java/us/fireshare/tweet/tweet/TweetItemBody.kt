@@ -51,6 +51,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.profile.UserAvatar
@@ -81,10 +82,7 @@ fun TweetItemBody(
 
     // Observe author changes reactively via StateFlow
     // This ensures all tweets from the same author update when user data becomes available
-    val authorStateFlow = remember(tweet.authorId) {
-        TweetCacheManager.getUserStateFlow(tweet.authorId)
-    }
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
     val author = cachedAuthor ?: tweet.author
 
     val hasContent by remember(tweet.content) {

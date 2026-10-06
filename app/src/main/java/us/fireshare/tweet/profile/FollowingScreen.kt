@@ -46,6 +46,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -139,10 +140,7 @@ fun FollowingItem(
     appUserViewModel: UserViewModel
 ) {
     val viewModelUser by viewModel.collectUserAsState()
-    val cachedUserStateFlow = remember(userId) {
-        TweetCacheManager.getUserStateFlow(userId)
-    }
-    val cachedUser by cachedUserStateFlow.collectAsState()
+    val cachedUser by collectCachedUserAsState(userId)
     val navController = LocalNavController.current
 
     LaunchedEffect(userId) {

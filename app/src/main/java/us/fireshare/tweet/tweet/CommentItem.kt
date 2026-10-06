@@ -56,6 +56,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -85,14 +86,11 @@ fun CommentItem(
     
     // Observe author changes reactively via StateFlow
     // This ensures all comments from the same author update when user data becomes available
-    val authorStateFlow = remember(comment.authorId) {
-        TweetCacheManager.getUserStateFlow(comment.authorId)
-    }
     // The StateFlow only carries users that are in the in-memory cache; comments hydrated
     // from Room can name an author nobody has called saveUser() for yet, and the flow then
     // emits null. Fall back to the author the comment itself carries (same as TweetDetailBody)
     // instead of rendering "No One / @unknown".
-    val cachedAuthor by authorStateFlow.collectAsState()
+    val cachedAuthor by collectCachedUserAsState(comment.authorId)
     val author = cachedAuthor ?: comment.author
 
     Column(
