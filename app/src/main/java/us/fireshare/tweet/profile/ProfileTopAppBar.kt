@@ -1,6 +1,7 @@
 package us.fireshare.tweet.profile
 
 import android.os.SystemClock
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,7 +89,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
         TopAppBar(
             title = {
                 Text(
-                    text = user.name ?: "No one",
+                    text = user.name ?: stringResource(R.string.no_one),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -179,7 +180,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Text(
-                                text = user.name ?: "No one",
+                                text = user.name ?: stringResource(R.string.no_one),
                                 fontSize = 18.sp,
                                 lineHeight = 16.sp,
                                 fontWeight = FontWeight.Bold,
@@ -188,7 +189,7 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "@" + (user.username ?: "NoOne"),
+                                text = user.username?.let { "@$it" } ?: stringResource(R.string.no_one),
                                 fontSize = 14.sp,
                                 lineHeight = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -199,9 +200,13 @@ fun ProfileTopAppBar(viewModel: UserViewModel,
                             )
                             // Show registration date
                             val date = Date(user.timestamp)
-                            val dateFormat = SimpleDateFormat("MMM yyyy", LocalLocale.current.platformLocale)
+                            val locale = LocalLocale.current.platformLocale
+                            val dateFormat = SimpleDateFormat(
+                                DateFormat.getBestDateTimePattern(locale, "yMMM"),
+                                locale
+                            )
                             Text(
-                                text = "${stringResource(R.string.joined)} ${dateFormat.format(date)}",
+                                text = stringResource(R.string.profile_joined_date, dateFormat.format(date)),
                                 fontSize = 12.sp,
                                 lineHeight = 14.sp,
                                 maxLines = 1,

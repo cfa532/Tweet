@@ -472,7 +472,7 @@ fun BlobLink(
 fun downloadFile(context: Context, url: String, fileName: String) {
     val request = DownloadManager.Request(url.toUri())
         .setTitle(fileName)
-        .setDescription("Downloading")
+        .setDescription(context.getString(R.string.downloading_file))
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
 

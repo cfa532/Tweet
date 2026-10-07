@@ -9,6 +9,8 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.datamodel.ChatDatabase
 import us.fireshare.tweet.datamodel.ChatMessage
@@ -104,11 +106,17 @@ class MessageCheckWorker @AssistedInject constructor(
             val messagePreview = when {
                 !firstMessage.content.isNullOrBlank() -> firstMessage.content
                 !firstMessage.attachments.isNullOrEmpty() -> {
-                    // Show attachment type in preview
-                    val attachmentType = firstMessage.attachments.first().type.name.lowercase()
-                    "Sent $attachmentType"
+                    val description = when (firstMessage.attachments.first().type) {
+                        MediaType.Image -> R.string.image_sent
+                        MediaType.Video, MediaType.HLS_VIDEO -> R.string.video_sent
+                        MediaType.Audio -> R.string.audio_sent
+                        MediaType.Zip -> R.string.archive_sent
+                        MediaType.Unknown -> R.string.attachment_sent
+                        else -> R.string.document_sent
+                    }
+                    applicationContext.getString(description)
                 }
-                else -> "New message"
+                else -> applicationContext.getString(R.string.notification_new_chat_message_simple)
             }
             
             // Count messages from the same sender

@@ -390,7 +390,7 @@ class UploadTweetWorker @AssistedInject constructor(
 
     private fun createForegroundNotification(context: Context): Notification {
         val channelId = "video_upload_channel"
-        val channelName = "Video Upload"
+        val channelName = context.getString(R.string.video_upload)
 
         // Create notification channel for Android 8.0+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -399,15 +399,15 @@ class UploadTweetWorker @AssistedInject constructor(
                 channelName,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows video upload progress"
+                description = context.getString(R.string.video_upload_progress_description)
             }
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
 
         return NotificationCompat.Builder(context, channelId)
-            .setContentTitle("Uploading Video")
-            .setContentText("Processing video for upload...")
+            .setContentTitle(context.getString(R.string.uploading_video))
+            .setContentText(context.getString(R.string.processing_video_upload))
             .setSmallIcon(android.R.drawable.ic_menu_upload)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

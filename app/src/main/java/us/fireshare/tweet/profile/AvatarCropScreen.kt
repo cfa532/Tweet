@@ -122,7 +122,7 @@ fun AvatarCropScreen(
                 originalBitmap = bitmap
             } catch (e: Exception) {
                 Timber.e("Error loading image: ${e.message}")
-                uploadError = "Failed to load image"
+                uploadError = context.getString(R.string.failed_to_load_image)
             }
         }
     }
@@ -203,7 +203,7 @@ fun AvatarCropScreen(
                                         } catch (e: Exception) {
                                             Timber.e("Error during crop/upload: ${e.message}")
                                             isCropping = false
-                                            uploadError = "Failed to process image"
+                                            uploadError = context.getString(R.string.failed_to_process_image)
                                         }
                                     }
                                 }

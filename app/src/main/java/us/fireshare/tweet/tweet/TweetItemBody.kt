@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -379,7 +380,7 @@ fun TweetHeaderText(
 ) {
     val primaryColor = MaterialTheme.colorScheme.onSurface
     val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val safeUsername = username?.takeIf { it.isNotBlank() } ?: "unknown"
+    val safeUsername = username?.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_one)
 
     Text(
         text = buildAnnotatedString {
@@ -389,7 +390,7 @@ fun TweetHeaderText(
                     fontWeight = FontWeight.Bold
                 )
             ) {
-                append(authorName?.takeIf { it.isNotBlank() } ?: "No One")
+                append(authorName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_one))
             }
             withStyle(SpanStyle(color = secondaryColor)) {
                 append(" @$safeUsername")

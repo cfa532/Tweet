@@ -242,11 +242,11 @@ fun FollowerItem(
                     modifier = Modifier.weight(1f)
                 ) {
                     UserRowIdentityText(
-                        displayName = user.name ?: "No One",
+                        displayName = user.name ?: stringResource(R.string.no_one),
                         username = user.username
                     )
                     Text(
-                        text = "Joined ${formatUserCreationDate(user.timestamp)}",
+                        text = stringResource(R.string.profile_joined_date, formatUserCreationDate(user.timestamp, androidx.compose.ui.platform.LocalLocale.current.platformLocale)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp)
@@ -265,8 +265,8 @@ fun FollowerItem(
     }
 }
 
-private fun formatUserCreationDate(timestamp: Long): String {
+private fun formatUserCreationDate(timestamp: Long, locale: Locale): String {
     val date = Date(timestamp)
-    val dateFormat = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+    val dateFormat = SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "yMMM"), locale)
     return dateFormat.format(date)
 }

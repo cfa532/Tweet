@@ -169,7 +169,7 @@ fun LoginScreen(register: ()->Unit, popBack: ()->Unit) {
                 )
             } else {
                 Text(
-                    text = if (hasError) "Retry Login" else stringResource(R.string.login),
+                    text = if (hasError) stringResource(R.string.retry_login) else stringResource(R.string.login),
                     color = Color.White
                 )
             }

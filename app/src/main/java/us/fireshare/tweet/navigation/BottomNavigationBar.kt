@@ -55,7 +55,7 @@ object BottomBarState {
 }
 
 data class BottomNavigationItem(
-    val title: String,
+    @androidx.annotation.StringRes val titleRes: Int,
     val route: NavTweet,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
@@ -75,18 +75,19 @@ fun BottomNavigationBar(
     val guestReminderText = stringResource(R.string.guest_reminder)
 
     // PERFORMANCE FIX: Create items list once without badgeCount dependency
-    // Badge count will be accessed directly when rendering to avoid recreating all items
+    // Badge count will be accessed directly when rendering to avoid recreating all items.
+    // Keep resource IDs here so remembered items are translated in the current locale.
     val items = remember {
         listOf(
             BottomNavigationItem(
-                title = "Home",
+                titleRes = R.string.nav_home,
                 route = NavTweet.TweetFeed,
                 selectedIcon = Icons.Filled.Home,
                 unselectedIcon = Icons.Outlined.Home,
                 hasNews = false,
             ),
             BottomNavigationItem(
-                title = "Chat",
+                titleRes = R.string.nav_chat,
                 route = NavTweet.ChatList,
                 selectedIcon = Icons.Filled.Email,
                 unselectedIcon = Icons.Outlined.Email,
@@ -94,14 +95,14 @@ fun BottomNavigationBar(
                 badgeCount = null,  // Will be replaced with actual badgeCount during rendering
             ),
             BottomNavigationItem(
-                title = "Post",
+                titleRes = R.string.nav_post,
                 route = NavTweet.ComposeTweet,
                 selectedIcon = Icons.Filled.Create,
                 unselectedIcon = Icons.Outlined.Create,
                 hasNews = true
             ),
             BottomNavigationItem(
-                title = "Search",
+                titleRes = R.string.search,
                 route = NavTweet.Search,
                 selectedIcon = Icons.Filled.Search,
                 unselectedIcon = Icons.Outlined.Search,
@@ -249,7 +250,7 @@ fun BottomNavigationBar(
                     ) {
                         Icon(
                             imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.title,
+                            contentDescription = stringResource(item.titleRes),
                             modifier = Modifier.size(finalSize),
                             tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
                                 alpha = 0.6f

@@ -1149,7 +1149,7 @@ fun ChatMediaPreview(
                             localBitmap?.let { bitmap ->
                                 androidx.compose.foundation.Image(
                                     bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Local image",
+                                    contentDescription = stringResource(R.string.local_image),
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
@@ -1201,14 +1201,14 @@ fun ChatMediaPreview(
                             videoThumbnail?.let { bitmap ->
                                 androidx.compose.foundation.Image(
                                     bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Video thumbnail",
+                                    contentDescription = stringResource(R.string.video_thumbnail),
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                                 // Play icon overlay
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
+                                    contentDescription = stringResource(R.string.play),
                                     modifier = Modifier
                                         .align(Alignment.Center)
                                         .size(48.dp)
@@ -1240,7 +1240,7 @@ fun ChatMediaPreview(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Uploading...",
+                                text = stringResource(R.string.uploading),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

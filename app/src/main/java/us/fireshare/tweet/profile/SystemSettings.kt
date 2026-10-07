@@ -283,8 +283,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 tweetCacheStats = TweetCacheManager.getCacheStats()
                                 userCacheStats = TweetCacheManager.getUserCacheStats()
                                 videoCacheStats = VideoManager.getCacheStats(context)
-                                videoManagerStats = VideoManager.getCacheStats()
-                                videoMemoryStats = VideoManager.getMemoryStats()
+                                videoManagerStats = VideoManager.getPlayerStats(context)
+                                videoMemoryStats = VideoManager.getMemoryStats(context)
                             }
 
                             Column(
@@ -322,7 +322,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 Text(
                                     stringResource(
                                         R.string.image_cache_stats,
-                                        ImageCacheManager.getMemoryCacheStats()
+                                        ImageCacheManager.getMemoryCacheStats(context)
                                     ),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -540,7 +540,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         contentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Privacy Policy")
+                    Text(stringResource(R.string.privacy_policy))
                 }
                 // Show IP address for guest users
                 if (appUser.isGuest()) {
@@ -551,7 +551,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     )
                 }
                 Text(
-                    "Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                     color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -577,36 +577,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     ) {
                         item {
                             Text(
-                                "\nPrivacy Policy\n" +
-                                        "\n" +
-                                        "We operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n" +
-                                        "\n" +
-                                        "Information Collection and Use\n" +
-                                        "\n" +
-                                        "We collect several types of information for various purposes to provide and improve our App for you.\n" +
-                                        "\n" +
-                                        "Types of Data Collected\n" +
-                                        "\n" +
-                                        "Personal Data: While using our App, we may ask you to provide us with certain personally identifiable information, such as your name, email address.\n" +
-                                        "\n" +
-                                        "Usage Data: We may collect information on how the App is accessed and used, such as your device's Internet Protocol address (e.g., IP address), browser type, browser version, the pages of our App that you visit, the time and date of your visit, and other diagnostic data.\n" +
-                                        "\n" +
-                                        "Cookies and Tracking Technologies: We use cookies and similar tracking technologies to track the activity on our App and hold certain information.\n" +
-                                        "\n" +
-                                        "Use of Data\n" +
-                                        "\n" +
-                                        "We use the collected data for various purposes:\n" +
-                                        "\n" +
-                                        "To provide and maintain our App\n" +
-                                        "To notify you about changes to our App\n" +
-                                        "To allow you to participate in interactive features of our App when you choose to do so\n" +
-                                        "To provide customer support\n" +
-                                        "To gather analysis or valuable information so that we can improve our App\n" +
-                                        "To monitor the usage of our App\n" +
-                                        "To detect, prevent, and address technical issues\n" +
-                                        "Data Security\n" +
-                                        "\n" +
-                                        "The security of your data is important to us, but remember that no method of transmission over the Internet is 100% secure. While we try our best to protect you data, there is always potential leakholes. Do not disclose sensitive personal information on this App.",
+                                stringResource(R.string.privacy_policy_body),
                             )
                             Spacer(modifier = Modifier.height(24.dp))
                             TextButton(
@@ -617,7 +588,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                 },
                             ) {
                                 Text(
-                                    "Confirm",
+                                    stringResource(R.string.confirm),
                                     fontWeight = FontWeight.Bold
                                 )
                             }

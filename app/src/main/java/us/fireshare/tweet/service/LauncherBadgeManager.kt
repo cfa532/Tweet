@@ -1,5 +1,6 @@
 package us.fireshare.tweet.service
 
+import us.fireshare.tweet.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -18,7 +19,6 @@ object LauncherBadgeManager {
     
     private const val BADGE_NOTIFICATION_ID = 1001
     private const val BADGE_CHANNEL_ID = "badge_channel"
-    private const val BADGE_CHANNEL_NAME = "Badge Notifications"
     
     /**
      * Updates the launcher badge count
@@ -53,7 +53,7 @@ object LauncherBadgeManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 BADGE_CHANNEL_ID,
-                BADGE_CHANNEL_NAME,
+                context.getString(R.string.badge_notifications),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 setShowBadge(true)
@@ -67,8 +67,8 @@ object LauncherBadgeManager {
         if (count > 0) {
             // Show notification with badge
             val notification = NotificationCompat.Builder(context, BADGE_CHANNEL_ID)
-                .setContentTitle("New Messages")
-                .setContentText("You have $count new message${if (count > 1) "s" else ""}")
+                .setContentTitle(context.getString(R.string.notification_channel_chat_messages))
+                .setContentText(context.getString(R.string.notification_new_chat_messages_simple, count))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setNumber(count)
                 .setAutoCancel(false)

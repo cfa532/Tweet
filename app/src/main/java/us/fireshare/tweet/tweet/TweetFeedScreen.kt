@@ -50,7 +50,7 @@ import us.fireshare.tweet.viewmodel.TweetFeedViewModel
 import androidx.compose.ui.res.stringResource
 
 data class TabItem(
-    val title: String = "Followings",
+    val title: String,
     val unselectedIcon :ImageVector? = null,
     val selectedIcon :ImageVector? = null,
 )
@@ -273,7 +273,7 @@ fun TweetFeedScreen(
                                     }
                                 } else {
                                     // Fallback for API < 30
-                                    Text("Followings not available on this Android version")
+                                    Text(stringResource(R.string.followings_unavailable))
                                 }
                             }
 

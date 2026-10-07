@@ -320,7 +320,7 @@ fun ChatUserItem(
                 .weight(1f)
         ) {
             Text(
-                text = user.name ?: "No One",
+                text = user.name ?: stringResource(R.string.no_one),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )

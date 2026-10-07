@@ -170,7 +170,7 @@ fun MediaBrowser(
                     modifier = Modifier.size(48.dp)
                 )
                 androidx.compose.material3.Text(
-                    text = "Loading...",
+                    text = stringResource(R.string.loading),
                     color = Color.White,
                     modifier = Modifier.padding(top = 16.dp)
                 )

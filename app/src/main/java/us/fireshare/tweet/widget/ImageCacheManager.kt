@@ -1,5 +1,6 @@
 package us.fireshare.tweet.widget
 
+import us.fireshare.tweet.R
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -1877,12 +1878,23 @@ object ImageCacheManager {
     /**
      * Get memory cache statistics
      */
-    fun getMemoryCacheStats(): String {
+    fun getMemoryCacheStats(context: Context): String {
         val maxSize = MAX_MEMORY_CACHE_SIZE
         val currentSize = memoryCache.size
         val currentMemory = currentMemoryUsage.get()
 
-        return "Memory: $currentSize items (${currentMemory / 1024 / 1024}MB/${maxSize / 1024 / 1024}MB), Available Slots: visible=${visibleDownloadSemaphore.availablePermits}/$MAX_VISIBLE_DOWNLOADS, background=${backgroundDownloadSemaphore.availablePermits}/$MAX_BACKGROUND_DOWNLOADS, avatar=${avatarDownloadSemaphore.availablePermits}/$MAX_AVATAR_DOWNLOADS"
+        return context.getString(
+            R.string.image_memory_usage,
+            currentSize,
+            currentMemory / 1024 / 1024,
+            maxSize / 1024 / 1024,
+            visibleDownloadSemaphore.availablePermits,
+            MAX_VISIBLE_DOWNLOADS,
+            backgroundDownloadSemaphore.availablePermits,
+            MAX_BACKGROUND_DOWNLOADS,
+            avatarDownloadSemaphore.availablePermits,
+            MAX_AVATAR_DOWNLOADS
+        )
     }
 
     /**

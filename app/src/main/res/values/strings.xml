@@ -428,4 +428,53 @@
     <string name="search_countdown">%1$ds</string>
     <string name="new_tweets_banner_one">%1$s new tweet</string>
     <string name="new_tweets_banner_many">%1$s new tweets</string>
+
+    <!-- Profile and profile editor -->
+    <string name="profile_joined_date">Joined %1$s</string>
+    <string name="failed_to_process_image">Failed to process image</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+
+    <!-- Localized controls across app screens -->
+    <string name="nav_home">Home</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_post">Post</string>
+    <string name="retry_login">Retry Login</string>
+    <string name="whats_happening">What\'s happening?</string>
+    <string name="followings_unavailable">Followings not available on this Android version</string>
+    <string name="switch_front_camera">Switch to Front Camera</string>
+    <string name="switch_back_camera">Switch to Back Camera</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="stop_recording">Stop Recording</string>
+    <string name="start_recording">Start Recording</string>
+    <string name="local_image">Local image</string>
+    <string name="video_thumbnail">Video thumbnail</string>
+    <string name="uploading">Uploading...</string>
+    <string name="image_options">Image Options</string>
+    <string name="save_to_gallery">Save to Gallery</string>
+    <string name="open_audio_playlist">Open audio playlist</string>
+    <string name="previous_track">Previous track</string>
+    <string name="next_track">Next track</string>
+    <string name="document">Document</string>
+    <string name="failed_to_download_file">Failed to download file</string>
+    <string name="failed_to_download_file_detail">Failed to download file: %1$s</string>
+    <string name="download_taking_long">Download is taking longer than expected</string>
+    <string name="no_app_to_open_file">No app available to open this file</string>
+    <string name="failed_to_open_document">Failed to open document</string>
+    <string name="starting">Starting...</string>
+    <string name="cancelling">Cancelling...</string>
+    <string name="downloading_app_version">Downloading Tweet %1$s</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="app_version">Version: %1$s (%2$d)</string>
+    <string name="confirm">Confirm</string>
+    <string name="video_upload">Video Upload</string>
+    <string name="video_upload_progress_description">Shows video upload progress</string>
+    <string name="uploading_video">Uploading Video</string>
+    <string name="processing_video_upload">Processing video for upload...</string>
+    <string name="badge_notifications">Badge Notifications</string>
+    <string name="privacy_policy_body" formatted="false">\nPrivacy Policy\n\nWe operate the Tweet mobile application (the \"App\"). This page informs you of our policies regarding the collection, use, and disclosure of Personal Information when you use our App.\n\nInformation Collection and Use\n\nWe collect several types of information for various purposes to provide and improve our App for you.\n\nTypes of Data Collected\n\nPersonal Data: While using our App, we may ask you to provide us with certain personally identifiable information, such as your name, email address.\n\nUsage Data: We may collect information on how the App is accessed and used, such as your device\'s Internet Protocol address (e.g., IP address), browser type, browser version, the pages of our App that you visit, the time and date of your visit, and other diagnostic data.\n\nCookies and Tracking Technologies: We use cookies and similar tracking technologies to track the activity on our App and hold certain information.\n\nUse of Data\n\nWe use the collected data for various purposes:\n\nTo provide and maintain our App\nTo notify you about changes to our App\nTo allow you to participate in interactive features of our App when you choose to do so\nTo provide customer support\nTo gather analysis or valuable information so that we can improve our App\nTo monitor the usage of our App\nTo detect, prevent, and address technical issues\nData Security\n\nThe security of your data is important to us, but remember that no method of transmission over the Internet is 100% secure. While we try our best to protect you data, there is always potential leakholes. Do not disclose sensitive personal information on this App.</string>
+    <string name="video_player_counts">Cached videos: %1$d, Active videos: %2$d, Visible: %3$d, Preloaded: %4$d</string>
+    <string name="video_memory_usage">Memory: %1$dMB used, %2$dMB free, %3$dMB total, %4$dMB max</string>
+    <string name="image_memory_usage">Memory: %1$d items (%2$dMB/%3$dMB), Available Slots: visible=%4$d/%5$d, background=%6$d/%7$d, avatar=%8$d/%9$d</string>
+    <string name="more_documents">+%1$d more</string>
 </resources>

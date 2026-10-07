@@ -141,11 +141,8 @@ class TweetActivity : ComponentActivity() {
                     activityViewModel.isAppReady.value = true
                 }
                 
-                // Background tasks - independent of init callback
-                launch(IO) {
-                    delay(5000) // Check for upgrade 5s after start
-                    activityViewModel.checkForUpgrade(this@TweetActivity)
-                }
+                // Fetch the profile's default share domain as soon as the backend is ready.
+                activityViewModel.checkForUpgrade(this@TweetActivity)
                 
                 // Always refresh entry URLs on every startup (best-effort, non-blocking)
                 launch(IO) {
@@ -389,20 +386,19 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
         }
     }
 
-    // Direct builds trust only complete, explicitly enabled release metadata.
+    // All builds load the share domain; only direct builds process release metadata.
     fun checkForUpgrade(context: Context) {
-        if (BuildConfig.IS_PLAY_VERSION) {
-            Timber.tag("checkForUpgrade").d("Play version detected, skipping upgrade check")
-            return
-        }
         viewModelScope.launch(IO) {
             try {
-                UpgradeDownloadState.clearIfAppWasUpgraded(context)
-                val trackedDownload = UpgradeDownloadState.trackedDownloadId(context)
+                val trackedDownload = if (BuildConfig.IS_PLAY_VERSION) {
+                    -1L
+                } else {
+                    UpgradeDownloadState.clearIfAppWasUpgraded(context)
+                    UpgradeDownloadState.trackedDownloadId(context)
+                }
                 if (trackedDownload != -1L) {
                     isDownloading = true
                     observeUpgradeDownload(context, trackedDownload)
-                    return@launch
                 }
 
                 val versionInfo = HproseInstance.checkUpgrade()
@@ -414,9 +410,13 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
 
                 // Store system domainToShare from backend response
                 versionInfo["domain"]?.let { domain ->
-                    systemDomainToShare.value = domain
+                    withContext(Main) {
+                        systemDomainToShare.value = domain
+                    }
                     Timber.tag("checkForUpgrade").d("Retrieved system domainToShare: $domain")
                 }
+
+                if (BuildConfig.IS_PLAY_VERSION || trackedDownload != -1L) return@launch
 
                 if (versionInfo["enabled"] != "true") {
                     Timber.tag("checkForUpgrade").d("Direct update advertisement is disabled")
@@ -500,7 +500,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     // Show clear initiated state before leaving the dialog.
                     updateButton.isEnabled = false
                     cancelButton.isEnabled = false
-                    updateButton.text = "Starting..."
+                    updateButton.text = context.getString(R.string.starting)
                     cancelButton.text = ""
                     updateButton.animate().alpha(1f).setDuration(80L).start()
                     downloadAndInstall(context, release)
@@ -518,7 +518,7 @@ class ActivityViewModel  @Inject constructor(): ViewModel() {
                     updateButton.isEnabled = false
                     cancelButton.isEnabled = false
                     updateButton.text = ""
-                    cancelButton.text = "Cancelling..."
+                    cancelButton.text = context.getString(R.string.cancelling)
                     cancelButton.animate().alpha(1f).setDuration(80L).start()
                     dialog.dismiss()
                 }

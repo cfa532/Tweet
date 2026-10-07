@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -55,6 +56,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -167,7 +171,9 @@ fun EyeSlashButton(
     ) {
         Icon(painter = painterResource(
             if (isPasswordVisible) R.drawable.eyes else R.drawable.eye_slash
-        ), contentDescription = null)
+        ), contentDescription = stringResource(
+            if (isPasswordVisible) R.string.hide_password else R.string.show_password
+        ))
     }
 }
 
@@ -182,7 +188,7 @@ fun EditProfileScreen(
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
     val activityViewModel: ActivityViewModel = hiltViewModel(LocalActivity.current as ComponentActivity)
-    val domainToShareFocusRequester = remember { FocusRequester() }
+    val systemDomainToShare by activityViewModel.systemDomainToShare
     // Observe appUserState to react to avatar changes
     val appUser by appUserState.collectAsState()
     val username by viewModel.username
@@ -200,7 +206,6 @@ fun EditProfileScreen(
     val isUploading = remember { mutableStateOf(false) }
     val uploadError = remember { mutableStateOf<String?>(null) }
     val hostIdFocused = remember { mutableStateOf(false) }
-    val domainToShareFocused = remember { mutableStateOf(false) }
 
     // Debounce state to prevent rapid button clicks (similar to iOS DebounceButton)
     val lastClickTime = remember { mutableLongStateOf(0L) }
@@ -463,26 +468,31 @@ fun EditProfileScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                     )
                 }
-                OutlinedTextField(
-                    value = domainToShare,
-                    onValueChange = { viewModel.onDomainToShareChange(it) },
-                    label = {
-                        val labelText = if (domainToShareFocused.value) {
-                            activityViewModel.systemDomainToShare.value ?: ""
-                        } else {
-                            stringResource(R.string.domain_to_share)
-                        }
-                        Text(labelText)
-                    },
+                // Keep the default as a visible hint, not a saved user override, matching iOS.
+                Column(
                     modifier = Modifier
                         .padding(top = 8.dp)
-                        .fillMaxWidth()
-                        .focusRequester(domainToShareFocusRequester)
-                        .onFocusChanged { focusState ->
-                            domainToShareFocused.value = focusState.isFocused
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val shareDomainLabel = stringResource(R.string.domain_to_share)
+                    Text(shareDomainLabel, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = domainToShare,
+                        onValueChange = { viewModel.onDomainToShareChange(it) },
+                        placeholder = {
+                            Text(systemDomainToShare.orEmpty().removePrefix("https://").removePrefix("http://"))
                         },
-                    singleLine = true
-                )
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = shareDomainLabel },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                            autoCorrectEnabled = false
+                        ),
+                        singleLine = true
+                    )
+                }
             }
             Button(
                 onClick = {

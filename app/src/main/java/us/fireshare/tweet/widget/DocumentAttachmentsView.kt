@@ -1,5 +1,6 @@
 package us.fireshare.tweet.widget
 
+import androidx.compose.ui.res.stringResource
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
@@ -120,7 +121,7 @@ fun DocumentAttachmentsView(
                     modifier = Modifier.padding(end = 4.dp)
                 )
                 Text(
-                    text = "+${documents.size - displayedDocuments.size} more",
+                    text = stringResource(R.string.more_documents, documents.size - displayedDocuments.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -188,7 +189,7 @@ private fun DocumentRowView(
 
     val icon = getDocumentIcon(document.type)
     val iconColor = getDocumentIconColor(document.type)
-    val displayFileName = truncateFileName(document.fileName ?: "Document", maxLength = 30)
+    val displayFileName = truncateFileName(document.fileName ?: stringResource(R.string.document), maxLength = 30)
 
     Box(
         modifier = Modifier
@@ -265,7 +266,7 @@ private fun DocumentRowView(
                 } else {
                     Icon(
                         imageVector = Icons.Filled.FileDownload,
-                        contentDescription = "Download",
+                        contentDescription = stringResource(R.string.download),
                         tint = iconColor
                     )
                 }
@@ -424,7 +425,7 @@ private fun openDocument(
             throw e
         } catch (e: Exception) {
             Timber.e(e, "DocumentAttachmentsView: Download failed")
-            Toast.makeText(context, "Failed to download file: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.failed_to_download_file_detail, e.message), Toast.LENGTH_SHORT).show()
         } finally {
             onDownloadingChange(false)
         }
@@ -449,7 +450,7 @@ private fun downloadDocument(
 
     val request = DownloadManager.Request(mediaUrl.toUri())
         .setTitle(originalFileName)
-        .setDescription("Downloading")
+        .setDescription(context.getString(R.string.downloading_file))
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, originalFileName)
 
@@ -483,7 +484,7 @@ private suspend fun monitorDocumentDownload(context: Context, downloadId: Long):
                             }
                             DownloadManager.STATUS_FAILED -> {
                                 withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.failed_to_download_file), Toast.LENGTH_SHORT).show()
                                 }
                                 downloading = false
                             }
@@ -499,7 +500,7 @@ private suspend fun monitorDocumentDownload(context: Context, downloadId: Long):
 
         if (completed != true) {
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Download is taking longer than expected", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.download_taking_long), Toast.LENGTH_SHORT).show()
             }
         }
         succeeded
@@ -529,11 +530,11 @@ private fun presentDocumentViewer(context: Context, file: File, onDismiss: () ->
         if (intent.resolveActivity(context.packageManager) != null) {
             context.startActivity(intent)
         } else {
-            Toast.makeText(context, "No app available to open this file", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.no_app_to_open_file), Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
         Timber.e(e, "DocumentAttachmentsView: Failed to open document")
-        Toast.makeText(context, "Failed to open document", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.failed_to_open_document), Toast.LENGTH_SHORT).show()
     } finally {
         onDismiss()
     }

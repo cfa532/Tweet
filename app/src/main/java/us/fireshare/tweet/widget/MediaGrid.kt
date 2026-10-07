@@ -908,7 +908,7 @@ fun SimpleMp3PlaylistPlayer(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = "Open audio playlist",
+                            contentDescription = stringResource(R.string.open_audio_playlist),
                             tint = playerContent
                         )
                     }
@@ -958,7 +958,7 @@ fun SimpleMp3PlaylistPlayer(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Previous track",
+                        contentDescription = stringResource(R.string.previous_track),
                         tint = playerContent,
                         modifier = Modifier.size(30.dp)
                     )
@@ -986,7 +986,7 @@ fun SimpleMp3PlaylistPlayer(
                     } else {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
                             tint = playerContent,
                             modifier = Modifier.size(34.dp)
                         )
@@ -1001,7 +1001,7 @@ fun SimpleMp3PlaylistPlayer(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Next track",
+                        contentDescription = stringResource(R.string.next_track),
                         tint = playerContent,
                         modifier = Modifier.size(30.dp)
                     )

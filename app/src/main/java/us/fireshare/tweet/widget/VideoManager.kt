@@ -1,5 +1,6 @@
 package us.fireshare.tweet.widget
 
+import us.fireshare.tweet.R
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -1995,10 +1996,16 @@ object VideoManager {
     }
 
     /**
-     * Get cache statistics
+     * Get localized player statistics for the settings screen.
      */
-    fun getCacheStats(): String {
-        return "Cached videos: ${getCachedVideoCount()}, Active videos: ${getActiveVideoCount()}, Visible: ${visibleVideos.size}, Preloaded: ${preloadedVideos.size}"
+    fun getPlayerStats(context: Context): String {
+        return context.getString(
+            R.string.video_player_counts,
+            getCachedVideoCount(),
+            getActiveVideoCount(),
+            visibleVideos.size,
+            preloadedVideos.size
+        )
     }
 
     // Player count checking removed - now relies entirely on system memory warnings
@@ -2006,14 +2013,20 @@ object VideoManager {
     /**
      * Get detailed memory statistics
      */
-    fun getMemoryStats(): String {
+    fun getMemoryStats(context: Context): String {
         val runtime = Runtime.getRuntime()
         val totalMemory = runtime.totalMemory()
         val freeMemory = runtime.freeMemory()
         val usedMemory = totalMemory - freeMemory
         val maxMemory = runtime.maxMemory()
 
-        return "Memory: ${usedMemory / (1024 * 1024)}MB used, ${freeMemory / (1024 * 1024)}MB free, ${totalMemory / (1024 * 1024)}MB total, ${maxMemory / (1024 * 1024)}MB max"
+        return context.getString(
+            R.string.video_memory_usage,
+            usedMemory / (1024 * 1024),
+            freeMemory / (1024 * 1024),
+            totalMemory / (1024 * 1024),
+            maxMemory / (1024 * 1024)
+        )
     }
 
     // ===== SEQUENTIAL PLAYBACK =====

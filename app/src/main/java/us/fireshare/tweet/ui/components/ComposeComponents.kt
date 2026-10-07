@@ -79,7 +79,7 @@ fun ComposeTextField(
                 onClearSuggestions()
             }
         },
-        label = { Text("What's happening?") },
+        label = { Text(stringResource(R.string.whats_happening)) },
         maxLines = maxLines,
         modifier = modifier
             .fillMaxWidth()

@@ -65,7 +65,7 @@ object UpgradeDownloadState {
                 fileName(release.versionCode),
             )
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setTitle("Downloading Tweet ${release.versionName}")
+            .setTitle(context.getString(R.string.downloading_app_version, release.versionName))
         val downloadId = manager(context).enqueue(request)
         prefs(context).edit {
             putLong(KEY_DOWNLOAD_ID, downloadId)

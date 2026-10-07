@@ -228,7 +228,7 @@ fun CameraXPreview(
             ) {
                 Icon(
                     imageVector = Icons.Default.FlipCameraAndroid,
-                    contentDescription = if (isBackCamera) "Switch to Front Camera" else "Switch to Back Camera",
+                    contentDescription = if (isBackCamera) stringResource(R.string.switch_front_camera) else stringResource(R.string.switch_back_camera),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp).alpha(0.8f)
                 )
@@ -341,7 +341,7 @@ fun CameraXPreview(
             ) {
                 Icon(
                     imageVector = if (captureMode == "photo") Icons.Default.CameraAlt else if (isRecording) Icons.Default.Stop else Icons.Default.Videocam,
-                    contentDescription = if (captureMode == "photo") "Take Photo" else if (isRecording) "Stop Recording" else "Start Recording",
+                    contentDescription = if (captureMode == "photo") stringResource(R.string.take_photo) else if (isRecording) stringResource(R.string.stop_recording) else stringResource(R.string.start_recording),
                     modifier = Modifier.size(32.dp),
                     tint = if (isRecording) MaterialTheme.colorScheme.onError else Color.White
                 )

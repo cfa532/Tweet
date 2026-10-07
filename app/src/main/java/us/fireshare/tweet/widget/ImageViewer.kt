@@ -756,7 +756,7 @@ fun AdvancedImageViewer(
                     ) {
                         // Menu title
                         Text(
-                            text = "Image Options",
+                            text = stringResource(R.string.image_options),
                             style = MaterialTheme.typography.titleSmall,
                             color = Color.Black,
                             modifier = Modifier.padding(bottom = 8.dp)
@@ -794,7 +794,7 @@ fun AdvancedImageViewer(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Save to Gallery",
+                                text = stringResource(R.string.save_to_gallery),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Black
                             )
@@ -809,7 +809,7 @@ fun AdvancedImageViewer(
                             contentPadding = PaddingValues(vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Cancel",
+                                text = stringResource(R.string.cancel),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
