@@ -60,6 +60,27 @@ These details should be reflected in current canonical docs instead of split acr
 Multiple older docs covered similar upgrade/version topics (flow, quick references, validation, fixes).
 Current docs should prefer one main flow doc plus one implementation detail doc.
 
+## Feed Synchronization Decision (2026-10-09)
+
+An appUser may follow hundreds of users. Leither provider replication keeps
+followed Users and their directly referenced Tweets current; main-feed pulls
+must not force synchronization or network checks against every followed root.
+The shared backend still scans local following tweet lists on appUser's root,
+checking `MiMeiIsProvider` and calling `MiMeiProvide` only when needed.
+
+Android main-feed pull-to-refresh awaits `sync_user` for appUser alone on its
+separate access node, then continues the existing cached and server page reload.
+It skips synchronization when access and root are the same node or the app is
+offline/guest. Failures are logged and ordinary reload continues; cancellation
+still propagates. Explicit pulls do not depend on finding new tweets first.
+
+Following collection runs at startup and through the existing foreground and
+background checks, rather than after each page-zero read. These automatic checks
+retain the existing root-response banner and conditional access-node catch-up.
+A main-feed pull retrieves the feed already assembled on appUser's root; it does
+not discover posts that root has not yet collected. Profile recovery uses the
+shared backend's 40 most recent tweet IDs. See the canonical backend sync contract.
+
 ## 6) Recommended Reading Order (Current)
 
 1. `./QUICK_START_GUIDE.md`

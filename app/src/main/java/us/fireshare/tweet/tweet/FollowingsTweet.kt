@@ -77,7 +77,8 @@ fun FollowingsTweet(
                     viewModel.removeTweet(tweetId)
                 },
                 context = "followingsTweet",
-                scrollToTopTrigger = scrollToTopTrigger
+                scrollToTopTrigger = scrollToTopTrigger,
+                onPullRefresh = { viewModel.syncAppUserForUserPull() }
             )
         }
     }

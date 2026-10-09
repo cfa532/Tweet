@@ -939,8 +939,8 @@ fun TweetListView(
             val refreshJob = coroutineScope.launch {
                 isRefreshingAtTop = true
                 try {
-                    // Profile recovery must synchronize the access node before
-                    // page 0 is read. Non-profile lists have no extra callback.
+                    // Main-feed and profile recovery must finish before page 0
+                    // is read. Other lists can omit this pull-only callback.
                     onPullRefresh?.invoke()
                     withContext(Dispatchers.IO) {
                         serverDepleted = false

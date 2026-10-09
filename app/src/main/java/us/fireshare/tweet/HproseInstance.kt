@@ -2775,6 +2775,37 @@ object HproseInstance {
         return tweetsData?.size ?: 0
     }
 
+    /** Pull appUser's assembled feed; following-user replication belongs to Leither. */
+    suspend fun syncAppUserForFeedRefresh() = withContext(Dispatchers.IO) {
+        val user = appUser
+        if (!isOnline.value || user.isGuest()) return@withContext
+        val hostIds = user.hostIds.orEmpty()
+        val rootHostId = hostIds.firstOrNull()
+        check(!rootHostId.isNullOrBlank()) { "Root unavailable for main feed synchronization" }
+        val accessHostId = hostIds.getOrNull(1) ?: rootHostId
+        if (accessHostId == rootHostId) return@withContext
+        val accessUrl = user.baseUrl
+        check(!accessUrl.isNullOrBlank()) { "Access route unavailable for main feed synchronization" }
+
+        val params = mapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "mid" to user.mid,
+            "appuserid" to user.mid
+        )
+        // Use the existing access route and await recovery before get_tweet_feed.
+        // Explicit pulls are not gated by a new-tweet count or the background cooldown.
+        val rawResponse = storageCompatibleRequestedService(
+            accessUrl,
+            user,
+            params,
+            timeoutMillis = RESYNC_USER_TIMEOUT_MS
+        ).runMApp<Any>("sync_user", params)
+        val result = unwrapV2Response<Map<String, Any>>(rawResponse)
+        check(result?.get("success") == true) { "Main feed appUser synchronization failed" }
+    }
+
     suspend fun getTweetFeed(
         pageNumber: Int = 0,
         pageSize: Int = 5,

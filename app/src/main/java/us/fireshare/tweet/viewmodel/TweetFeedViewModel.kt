@@ -273,6 +273,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                     // App open shows fresh tweets directly. Foreground return and timer
                     // checks use the banner path.
                     refresh(0)
+                    // Collect followings on startup, not on every page-zero read.
+                    fetchAndStageFollowingTweets(TW_CONST.PAGE_SIZE)
                 }
             } catch (e: Exception) {
                 Timber.tag("TweetFeedViewModel").e(e, "Error during ViewModel initialization: ${e.message}")
@@ -492,6 +494,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    suspend fun syncAppUserForUserPull() {
+        if (!waitForAppUser(timeoutAction = "skipping main feed synchronization")) return
+        try {
+            HproseInstance.syncAppUserForFeedRefresh()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("TweetFeedViewModel").e(e, "Main feed appUser sync failed")
+        }
+    }
+
     private suspend fun fetchAndStageFollowingTweets(pageSize: Int) {
         if (!HproseInstance.isOnline.value || appUser.isGuest()) return
 
@@ -668,7 +681,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                 tweetsWithNulls
             }
 
-            if (pageNumber == 0) fetchAndStageFollowingTweets(pageSize)
             return responseTweets
         }
         } finally {
