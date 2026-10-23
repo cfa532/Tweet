@@ -313,15 +313,23 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
                 
-                // Step 3: Cached author data is already visible. Its saved route is
+                // Step 3: Cached author data is already visible. For a deeplink stub (no
+                // content even after the cache step above) the author's saved route is
                 // health-checked first; only without a healthy one is a real get_user
-                // response raced across candidate providers (three at a time).
+                // response raced across candidate providers (three at a time). A tweet
+                // that already has content keeps plain discovery. Mirrors iOS
+                // `isDeeplinkStub` in `doReadTweet`.
                 var author: User? = cachedUser
                 var resolvedAuthor: User? = null
+                val isDeeplinkStub = !tweetState.value.hasDisplayPayload()
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.authorId != null) {
                     try {
-                        val serverAuthor = HproseInstance.authorForDetail(tweet.authorId)
+                        val serverAuthor = if (isDeeplinkStub) {
+                            HproseInstance.authorForDetail(tweet.authorId)
+                        } else {
+                            HproseInstance.fetchUserForDetail(tweet.authorId)
+                        }
                         if (serverAuthor != null) {
                             author = serverAuthor
                             resolvedAuthor = serverAuthor
@@ -475,10 +483,24 @@ class TweetViewModel @AssistedInject constructor(
                 }
             } else {
                 if (alreadyRead) return
+                // Reaching here with no content means the init read above failed (or the
+                // Retry button re-entered). Use the same saved-route author check as the
+                // init read so this second attempt does not depend on the entry node again.
+                val stubAuthor = if (allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()) {
+                    try {
+                        HproseInstance.authorForDetail(currentTweet.authorId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("TweetViewModel").w(e, "authorForDetail failed for ${currentTweet.mid}")
+                        null
+                    }
+                } else null
                 val fetched = HproseInstance.getTweet(
                     currentTweet.mid,
                     currentTweet.authorId,
-                    bypassCache = true
+                    bypassCache = true,
+                    resolvedAuthor = stubAuthor
                 )
                 if (fetched != null) {
                     applyFetchedTweet(fetched)
