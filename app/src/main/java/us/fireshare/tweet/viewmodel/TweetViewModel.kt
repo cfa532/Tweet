@@ -313,15 +313,15 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
                 
-                // Step 3: Cached author data is already visible, but a deep-link
-                // route must still be proven by a real get_user response. Candidate
-                // providers are raced three at a time; HEAD is not the selector.
+                // Step 3: Cached author data is already visible. Its saved route is
+                // health-checked first; only without a healthy one is a real get_user
+                // response raced across candidate providers (three at a time).
                 var author: User? = cachedUser
                 var resolvedAuthor: User? = null
                 @Suppress("SENSELESS_COMPARISON")
                 if (tweet.authorId != null) {
                     try {
-                        val serverAuthor = HproseInstance.fetchUserForDetail(tweet.authorId)
+                        val serverAuthor = HproseInstance.authorForDetail(tweet.authorId)
                         if (serverAuthor != null) {
                             author = serverAuthor
                             resolvedAuthor = serverAuthor

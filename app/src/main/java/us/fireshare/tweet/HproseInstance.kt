@@ -5247,6 +5247,30 @@ object HproseInstance {
     }
 
     /**
+     * Resolve the author for a deep-link detail load, checking the saved route before
+     * discovery. Only the deep-link path uses it: a detail opened from a feed already
+     * has an author with a working route, so it keeps plain discovery.
+     *
+     * Discovery goes through the entry node, so a stalled entry node failed a
+     * cold-start deep link even when the author's saved route was alive. A profile
+     * opens fine on that same route because it probes it first;
+     * [validateAndRepairProfileRoute] is that probe (fresh health check, replacement
+     * route when it fails). Only an author with no saved route, or none that can be
+     * made healthy, falls through to [fetchUserForDetail]. A healthy route is not proof
+     * the profile fields are current; profile and feed reads refresh those.
+     * Mirrors iOS `HproseInstance.authorForDetail`.
+     */
+    suspend fun authorForDetail(userId: MimeiId): User? {
+        val cached = TweetCacheManager.getCachedUser(userId)
+        val hasSavedRoute = cached != null && !cached.username.isNullOrBlank() &&
+            !(UserRoutes.readRoute(cached.mid) ?: cached.baseUrl).isNullOrBlank()
+        if (cached != null && hasSavedRoute && validateAndRepairProfileRoute(cached)) {
+            return cached
+        }
+        return fetchUserForDetail(userId)
+    }
+
+    /**
      * Resolve a detail-page author by racing actual get_user reads in batches of
      * three. Cached content is rendered by the ViewModel before this starts and is
      * not treated as proof that its old route still serves the author.
