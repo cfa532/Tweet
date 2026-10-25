@@ -2,7 +2,7 @@ package us.fireshare.tweet.service
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,10 +41,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -181,62 +181,69 @@ fun SearchScreen(
                 }
             }
 
-            when {
-                uiState.isLoading -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
-                    ) {
-                        CircularProgressIndicator(Modifier.size(40.dp))
-                        Text(
-                            stringResource(R.string.search_countdown, uiState.countdownSeconds),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            // Any tap in the results area (outside the search bar) closes the keyboard. Taps on
+            // result rows and buttons are consumed by them first and do not reach this.
+            Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    detectTapGestures { focusManager.clearFocus() }
                 }
-                uiState.hasError -> SearchEmptyState(
-                    title = stringResource(R.string.search_generic_error),
-                    subtitle = stringResource(R.string.try_different_search),
-                    onTap = { focusManager.clearFocus() }
-                )
-                uiState.userResults.isEmpty() && uiState.tweetResults.isEmpty() -> SearchEmptyState(
-                    title = stringResource(
-                        if (uiState.submittedQuery == uiState.query.trim()) R.string.search_no_results else R.string.search
-                    ),
-                    subtitle = stringResource(
-                        if (uiState.submittedQuery == uiState.query.trim()) R.string.try_different_search else R.string.search_hint
-                    ),
-                    onTap = { focusManager.clearFocus() }
-                )
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        if (uiState.userResults.isNotEmpty()) {
-                            item("users_header") {
-                                SearchSectionHeader(stringResource(R.string.search_section_users))
-                            }
-                            itemsIndexed(uiState.userResults, key = { _, user -> "user_${user.mid}" }) { index, user ->
-                                UserSearchResult(user, navController)
-                                if (index < uiState.userResults.lastIndex) SearchResultDivider()
-                            }
+            ) {
+                when {
+                    uiState.isLoading -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+                        ) {
+                            CircularProgressIndicator(Modifier.size(40.dp))
+                            Text(
+                                stringResource(R.string.search_countdown, uiState.countdownSeconds),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        if (uiState.tweetResults.isNotEmpty()) {
-                            item("tweets_header") {
-                                if (uiState.userResults.isNotEmpty()) Spacer(Modifier.height(16.dp))
-                                SearchSectionHeader(stringResource(R.string.search_section_tweets))
+                    }
+                    uiState.hasError -> SearchEmptyState(
+                        title = stringResource(R.string.search_generic_error),
+                        subtitle = stringResource(R.string.try_different_search)
+                    )
+                    uiState.userResults.isEmpty() && uiState.tweetResults.isEmpty() -> SearchEmptyState(
+                        title = stringResource(
+                            if (uiState.submittedQuery == uiState.query.trim()) R.string.search_no_results else R.string.search
+                        ),
+                        subtitle = stringResource(
+                            if (uiState.submittedQuery == uiState.query.trim()) R.string.try_different_search else R.string.search_hint
+                        )
+                    )
+                    else -> {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            if (uiState.userResults.isNotEmpty()) {
+                                item("users_header") {
+                                    SearchSectionHeader(stringResource(R.string.search_section_users))
+                                }
+                                itemsIndexed(uiState.userResults, key = { _, user -> "user_${user.mid}" }) { index, user ->
+                                    UserSearchResult(user, navController)
+                                    if (index < uiState.userResults.lastIndex) SearchResultDivider()
+                                }
                             }
-                            itemsIndexed(uiState.visibleTweets, key = { _, tweet -> "tweet_${tweet.mid}" }) { index, tweet ->
-                                TweetSearchResult(tweet, navController)
-                                if (index < uiState.visibleTweets.lastIndex) SearchResultDivider()
-                            }
-                            if (uiState.hasMoreTweets) {
-                                item("more_tweets") {
-                                    TextButton(onClick = viewModel::loadNextTweetPage, modifier = Modifier.fillMaxWidth()) {
-                                        Text(stringResource(R.string.search_load_more))
+                            if (uiState.tweetResults.isNotEmpty()) {
+                                item("tweets_header") {
+                                    if (uiState.userResults.isNotEmpty()) Spacer(Modifier.height(16.dp))
+                                    SearchSectionHeader(stringResource(R.string.search_section_tweets))
+                                }
+                                itemsIndexed(uiState.visibleTweets, key = { _, tweet -> "tweet_${tweet.mid}" }) { index, tweet ->
+                                    TweetSearchResult(tweet, navController)
+                                    if (index < uiState.visibleTweets.lastIndex) SearchResultDivider()
+                                }
+                                if (uiState.hasMoreTweets) {
+                                    item("more_tweets") {
+                                        TextButton(onClick = viewModel::loadNextTweetPage, modifier = Modifier.fillMaxWidth()) {
+                                            Text(stringResource(R.string.search_load_more))
+                                        }
                                     }
                                 }
                             }
@@ -249,12 +256,9 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchEmptyState(title: String, subtitle: String, onTap: () -> Unit) {
+private fun SearchEmptyState(title: String, subtitle: String) {
     Column(
-        modifier = Modifier.fillMaxSize().clickable(
-            interactionSource = remember { MutableInteractionSource() }, indication = null,
-            onClick = onTap
-        ).padding(horizontal = 24.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
     ) {
