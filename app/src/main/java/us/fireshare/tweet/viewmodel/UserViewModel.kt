@@ -601,7 +601,7 @@ class UserViewModel @AssistedInject constructor(
             try {
                 withContext(IO) {
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        // Downsample avatar to max 256px to save memory on low-end devices
+                        // Decode at half size to save memory; cacheImage then stores the avatar thumbnail
                         val options = android.graphics.BitmapFactory.Options().apply {
                             inSampleSize = 2
                             inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
@@ -609,8 +609,7 @@ class UserViewModel @AssistedInject constructor(
                         val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream, null, options)
                         if (bitmap != null) {
                             Timber.tag("updateAvatar").d("Caching new avatar locally for CID: $avatarId")
-                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, avatarId, bitmap)
-                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, "${avatarId}_original", bitmap)
+                            us.fireshare.tweet.widget.ImageCacheManager.cacheImage(context, avatarId, bitmap, isAvatar = true)
                         }
                     }
                 }
@@ -618,7 +617,7 @@ class UserViewModel @AssistedInject constructor(
                 Timber.tag("updateAvatar").e(e, "Failed to cache new avatar locally")
             }
             
-            // Clear old avatar cache (both regular and "_original" keys used by UserAvatar)
+            // Clear old avatar cache: the thumbnail, and the "_original" the full-size avatar dialog saves
             oldAvatarId?.let { oldId ->
                 if (oldId != avatarId) {  // Only clear if it's different
                     withContext(IO) {

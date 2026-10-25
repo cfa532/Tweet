@@ -91,12 +91,10 @@ fun UserAvatar(
         loadState = AvatarLoadState()
         
         if (!avatarMid.isNullOrEmpty()) {
-            // Check cache for original image (loadOriginalImageWithScope uses "${mid}_original" key)
-            val originalMid = "${avatarMid}_original"
+            // Use the cached thumbnail only. The full-size original ("${mid}_original") is
+            // for the full-size avatar dialog; drawing a small circle from it wastes memory.
             val cachedBitmap = withContext(Dispatchers.IO) {
-                // Try original cache key first, then fallback to regular key
-                ImageCacheManager.getCachedImage(context, originalMid) 
-                    ?: ImageCacheManager.getCachedImage(context, avatarMid)
+                ImageCacheManager.getCachedImage(context, avatarMid)
             }
             if (cachedBitmap != null) {
                 // Use cached avatar immediately

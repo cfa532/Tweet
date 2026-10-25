@@ -62,6 +62,9 @@ object ImageCacheManager {
     private const val MAX_MEMORY_CACHE_COUNT = 200 // Maximum number of images in memory
     private const val COMPRESS_QUALITY = 80 // JPEG quality
     private const val MAX_IMAGE_DIMENSION = 1024 // Maximum image dimension
+    // Avatars are cached as thumbnails: the largest one shown is 80dp, so 240px
+    // covers a 3x screen. The full-size avatar dialog loads the original itself.
+    private const val MAX_AVATAR_DIMENSION = 240
     private const val CONNECTION_TIMEOUT = 5000 // 5 seconds - balanced timeout
     private const val READ_TIMEOUT = 20000 // 20 seconds - IPFS can be slow, give it more time
     private const val MAX_VISIBLE_DOWNLOADS = 6
@@ -645,9 +648,10 @@ object ImageCacheManager {
                     try {
                         val bitmap = performDownload(imageUrl, mid, context, isAvatar)
                         if (bitmap != null && !bitmap.isRecycled) {
-                            cacheImage(context, mid, bitmap)
+                            val cached = cacheImage(context, mid, bitmap, isAvatar)
                             us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
-                            return@withContext bitmap
+                            // An avatar is shown from its thumbnail, not the full-size download.
+                            return@withContext if (isAvatar) cached ?: bitmap else bitmap
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1051,7 +1055,7 @@ object ImageCacheManager {
                                 if (getMemoryCachedBitmap(mid) == null &&
                                     getCachedImageFile(context, mid) == null
                                 ) {
-                                    cacheImage(context, mid, bitmap)
+                                    cacheImage(context, mid, bitmap, isAvatar)
                                 }
                                 // FIX P1-4: Store result with size limit enforcement
                                 storeDownloadResult(originalMid, bitmap)
@@ -1356,17 +1360,19 @@ object ImageCacheManager {
     }
 
     /**
-     * Cache and compress a bitmap by mid
+     * Cache and compress a bitmap by mid. Avatars are cached at thumbnail size.
+     * @return the bitmap that was cached, or null if it could not be cached
      */
-    suspend fun cacheImage(context: Context, mid: String, bitmap: Bitmap) =
+    suspend fun cacheImage(context: Context, mid: String, bitmap: Bitmap, isAvatar: Boolean = false): Bitmap? =
         withContext(Dispatchers.IO) {
             try {
                 if (bitmap.isRecycled) {
-                    return@withContext
+                    return@withContext null
                 }
 
                 // Compress bitmap
-                val compressed = compressBitmap(bitmap)
+                val maxDimension = if (isAvatar) MAX_AVATAR_DIMENSION else MAX_IMAGE_DIMENSION
+                val compressed = compressBitmap(bitmap, maxDimension)
                 if (compressed != null && !compressed.isRecycled) {
                     addToMemoryCache(mid, compressed)
 
@@ -1393,19 +1399,24 @@ object ImageCacheManager {
                     } catch (e: IOException) {
                         // Ignore disk write errors
                     }
+                    compressed
+                } else {
+                    null
                 }
             } catch (e: OutOfMemoryError) {
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError caching image")
                 clearMemoryCache()
+                null
             } catch (e: Exception) {
                 // Ignore other caching errors
+                null
             }
         }
 
     /**
      * Compress a bitmap to JPEG with quality
      */
-    private fun compressBitmap(bitmap: Bitmap): Bitmap? {
+    private fun compressBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap? {
         try {
             if (bitmap.isRecycled) return null
 
@@ -1413,11 +1424,11 @@ object ImageCacheManager {
             val height = bitmap.height
 
             // Check if resizing is needed
-            if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
+            if (width <= maxDimension && height <= maxDimension) {
                 return bitmap
             }
 
-            val scale = MAX_IMAGE_DIMENSION / maxOf(width, height).toFloat()
+            val scale = maxDimension / maxOf(width, height).toFloat()
             val newW = (width * scale).toInt().coerceAtLeast(1)
             val newH = (height * scale).toInt().coerceAtLeast(1)
 
