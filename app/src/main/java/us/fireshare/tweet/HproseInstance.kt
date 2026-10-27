@@ -821,7 +821,7 @@ object HproseInstance {
     /**
      * Find the best IP by trying URLs and parsing HTML parameters
      */
-    private suspend fun findEntryIP(): String {
+    internal suspend fun findEntryIP(forceRefresh: Boolean = false): String {
         var inFlightResolve: CompletableDeferred<String>? = null
         var shouldResolveNow = false
         var cachedResult: String? = null
@@ -840,7 +840,7 @@ object HproseInstance {
                 val cache = entryResolveCache
                 val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
 
-                if (isFailureBackoffActive) {
+                if (!forceRefresh && isFailureBackoffActive) {
                     val age = now - failureCache.timestampMs
                     Timber.tag("findEntryIP").w(
                         "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCache.message}"
@@ -848,7 +848,7 @@ object HproseInstance {
                     cachedFailure = IllegalStateException(
                         "Entry IP resolution is in failure backoff (${age}ms): ${failureCache.message}"
                     )
-                } else if (isCacheValid) {
+                } else if (!forceRefresh && isCacheValid) {
                     // Keep appId aligned with the cached entry resolution metadata.
                     _appId = cache.appId
                     cachedResult = cache.ip

@@ -3,6 +3,7 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -199,18 +200,22 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         isMainFeedAtTop = isAtTop
     }
 
-    private var hasEnteredBackground = false
+    private var backgroundStartedAt: Long? = null
+    private var entryResolutionPendingAfterBackground = false
     private var behindBannerRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            if (hasEnteredBackground) {
-                hasEnteredBackground = false
+            backgroundStartedAt?.let { startedAt ->
+                if (SystemClock.elapsedRealtime() - startedAt > 30 * 60 * 1000L) {
+                    entryResolutionPendingAfterBackground = true
+                }
+                backgroundStartedAt = null
                 refreshFeedDirectlyAfterForeground()
             }
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            hasEnteredBackground = true
+            backgroundStartedAt = SystemClock.elapsedRealtime()
         }
     }
 
@@ -496,6 +501,17 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     suspend fun syncAppUserForUserPull() {
         if (!waitForAppUser(timeoutAction = "skipping main feed synchronization")) return
+        // A long background stay requires fresh entry discovery on the next manual pull.
+        if (entryResolutionPendingAfterBackground && HproseInstance.isOnline.value) {
+            try {
+                HproseInstance.findEntryIP(forceRefresh = true)
+                entryResolutionPendingAfterBackground = false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag("TweetFeedViewModel").e(e, "Entry IP resolution after long background stay failed")
+            }
+        }
         try {
             HproseInstance.syncAppUserForFeedRefresh()
         } catch (e: CancellationException) {
