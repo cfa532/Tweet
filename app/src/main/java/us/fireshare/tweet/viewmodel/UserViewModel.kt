@@ -1809,7 +1809,8 @@ class UserViewModel @AssistedInject constructor(
                 username.value = appUser.username
                 name.value = appUser.name ?: ""
                 profile.value = appUser.profile ?: ""
-                hostId.value = appUser.hostIds?.firstOrNull() ?: ""
+                // Blank means no migration; keep an entered destination on failure.
+                hostId.value = ""
                 cloudDrivePort.value = if (appUser.cloudDrivePort == 0) "" else appUser.cloudDrivePort.toString()
                 refreshFollowingsAndFans()
                 
@@ -1920,21 +1921,6 @@ class UserViewModel @AssistedInject constructor(
             }
         }
 
-        if (this.hostId.value.isNotEmpty() && appUser.mid == TW_CONST.GUEST_ID) {
-            // Find IP of the desired node. User can change its value to appoint to
-            // a different host node later.
-            HproseInstance.getHostIP(hostId.value)?.let { ip ->
-                val updatedUser = appUser.copy(baseUrl = "http://$ip")
-                User.updateUserInstance(updatedUser, true)
-                appUser = User.getInstance(updatedUser.mid)
-                setUserState(latestUser.copy(baseUrl = "http://$ip"))
-            } ?: run {
-                hostIdError.value = context.getString(R.string.node_not_found)
-                isLoading.value = false
-                return
-            }
-        }
-
         // Call the new separate functions based on user type
         val (success, errorMessage) = if (appUser.isGuest()) {
             HproseInstance.registerUser(
@@ -1971,8 +1957,9 @@ class UserViewModel @AssistedInject constructor(
                     popBack()
                 }
             } else {
-                // Update existing user profile - the updateUserCore function handles all UI updates internally
+                // The save is confirmed; the next edit starts with no destination.
                 withContext(Dispatchers.Main) {
+                    hostId.value = ""
                     Toast.makeText(
                         context,
                         context.getString(R.string.profile_update_ok),

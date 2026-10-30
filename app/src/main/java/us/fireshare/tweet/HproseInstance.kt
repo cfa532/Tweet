@@ -244,6 +244,7 @@ object NodePool {
 @Suppress("UNCHECKED_CAST")
 object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
+    private const val MIGRATION_TIMEOUT_MS = 60_000
     private const val ADD_TWEET_TIMEOUT_MS = 60_000
     private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
     private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
@@ -1861,7 +1862,10 @@ object HproseInstance {
     ): String? {
         // Step 2: Try lookup using appUser's client
         try {
-            val hostIP = _getHostIP(nodeId, v4Only, appUser.hproseService, excludedIP)
+            val lookupClient = if (!usePool) {
+                appUser.baseUrl?.let { HproseClientPool.getRegularClient(it, MIGRATION_TIMEOUT_MS) }
+            } else appUser.hproseService
+            val hostIP = _getHostIP(nodeId, v4Only, lookupClient, excludedIP)
             if (hostIP != null) {
                 // Successfully resolved healthy IP
                 if (usePool) {
@@ -1880,6 +1884,9 @@ object HproseInstance {
             // Continue to fallback logic instead of giving up
         }
         
+        // Write discovery has one route. No entry-node substitution after failure.
+        if (!usePool) return null
+
         // Step 3: No healthy IPs found - check if it's because appUser is unhealthy
         val appUserBaseUrl = appUser.baseUrl
         if (appUserBaseUrl.isNullOrBlank()) {
@@ -2068,7 +2075,16 @@ object HproseInstance {
         )
 
         try {
-            val response = appUser.hproseService?.runMApp<Map<String, Any>>(entry, params)
+            // Registration's destination is an API responsibility, not UI state.
+            val root = hostId?.trim()?.takeIf { it.isNotEmpty() }
+            val registrationClient = if (root != null) {
+                val address = getHostIP(root, v4Only = "false", usePool = false)
+                    ?: return Pair(false, "Cannot resolve the selected registration host")
+                HproseClientPool.getWritableClient(User.resolvedNodeUrl(address), 30_000)
+            } else {
+                appUser.hproseService
+            }
+            val response = registrationClient?.runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("registerUser").e("Registration failed: No response from server")
@@ -2175,6 +2191,10 @@ object HproseInstance {
             }
         }
 
+        val destinationHost = hostId?.trim()?.takeIf { it.isNotEmpty() }
+        val currentHost = appUser.hostIds?.firstOrNull()
+        val migrating = destinationHost != null
+
         val updatedUser = User(
             mid = appUser.mid,
             name = alias,
@@ -2192,13 +2212,23 @@ object HproseInstance {
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
+            "migrate" to rpcBool(migrating),
             "user" to Json.encodeToString(updatedUser)
         )
 
         try {
-            // Mutation: route through appUser's writable host (hostIds[0]).
-            val response = requireWritableClient(appUser, "updateUserCore")
-                .runMApp<Map<String, Any>>(entry, params)
+            val destinationUrl = if (migrating) {
+                val address = getHostIP(destinationHost, v4Only = "false", usePool = false)
+                    ?: return Pair(false, "Cannot resolve the new root host")
+                User.resolvedNodeUrl(address)
+            } else null
+            // Only an explicit host change may write a surviving account copy.
+            val client = if (migrating) {
+                profileMigrationClient(appUser.mid, currentHost)
+            } else {
+                requireWritableClient(appUser, "updateUserCore")
+            }
+            val response = client.runMApp<Map<String, Any>>(entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -2215,10 +2245,31 @@ object HproseInstance {
             }
 
             if (isSuccess) {
+                if (migrating) {
+                    if (response["migrationSaved"] != true) {
+                        return Pair(false, "The server did not acknowledge the migration source. Keep this session open and retry with an updated backend.")
+                    }
+                    val destinationClient = HproseClientPool.getWritableClient(
+                        requireNotNull(destinationUrl), MIGRATION_TIMEOUT_MS
+                    ) ?: throw IllegalStateException("Cannot create destination migration client")
+                    val synced = unwrapV2Response<Map<String, Any>>(destinationClient.runMApp<Any>(
+                        "sync_user", mapOf(
+                            "aid" to appId, "ver" to "last", "version" to "v2", "mid" to appUser.mid,
+                            "hostid" to destinationHost, "migrate" to "true"
+                        )
+                    ))
+                    val user = synced?.get("user") as? Map<*, *>
+                    val hosts = user?.get("hostIds") as? List<*>
+                    if (synced?.get("migrationComplete") != true || user?.get("mid") != appUser.mid ||
+                        hosts?.getOrNull(0) != destinationHost || hosts?.getOrNull(1) != destinationHost) {
+                        return Pair(false, "The new root did not confirm migration. Keep this session open and retry the same Host ID.")
+                    }
+                }
                 Timber.tag("updateUserCore").d("Profile update successful")
 
                 // Update in-memory appUser with new values
-                updateAppUserInMemory(alias, profile, hostId, cloudDrivePort)
+                updateAppUserInMemory(alias, profile, destinationHost, cloudDrivePort)
+                if (destinationUrl != null) appUser.writableUrl = destinationUrl
 
                 // Save updated appUser to cache so cached tweets maintain their author reference
                 TweetCacheManager.saveUser(appUser)
@@ -2235,8 +2286,40 @@ object HproseInstance {
             }
         } catch (e: Exception) {
             Timber.tag("updateUserCore").e(e, "Profile update error")
+            if (migrating && e.hasTimeoutCause()) {
+                return Pair(false, "Migration timed out and may still be completing. Keep this session open and retry the same Host ID to verify completion.")
+            }
             return Pair(false, e.message ?: "Unknown error")
         }
+    }
+
+    /** Resolution errors stop migration. Only a failed read permits provider recovery. */
+    private suspend fun profileMigrationClient(userId: MimeiId, currentHost: MimeiId?): HproseService {
+        val hostId = currentHost ?: throw IllegalStateException("Current root host is missing")
+        val root = getHostIP(hostId, v4Only = "false", usePool = false)
+            ?: throw IllegalStateException("Cannot resolve the current root IP and port")
+        suspend fun sourceClient(address: String): HproseService? {
+            val url = User.resolvedNodeUrl(address)
+            val client = HproseClientPool.getWritableClient(url, MIGRATION_TIMEOUT_MS)
+                ?: throw IllegalStateException("Cannot create migration client")
+            val record = try {
+                unwrapV2Response<Map<String, Any>>(client.runMApp<Any>(
+                    "get_user_core_data",
+                    mapOf("aid" to appId, "ver" to "last", "version" to "v2", "userid" to userId)
+                ))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            return if (record != null && record["mid"] == userId &&
+                !(record["hostIds"] as? List<*>).isNullOrEmpty()) client else null
+        }
+        sourceClient(root)?.let { return it }
+        for (address in getProviderCandidatesForDetail(userId)) {
+            sourceClient(address)?.let { return it }
+        }
+        throw IllegalStateException("No surviving account copy is available for migration")
     }
 
     suspend fun setUserAvatar(user: User, avatar: MimeiId): MimeiId? {

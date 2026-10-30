@@ -167,6 +167,17 @@ data class User(
 ) : Parcelable {
 
     companion object {
+        /** Discovery owns both the host and port; missing values are errors. */
+        fun resolvedNodeUrl(address: String): String {
+            val uri = java.net.URI("http://${address.trim()}")
+            require(!uri.host.isNullOrBlank() && uri.port in 1..65535 &&
+                uri.rawUserInfo == null && uri.rawPath.isNullOrEmpty() &&
+                uri.rawQuery == null && uri.rawFragment == null) {
+                "Node resolution did not return a valid IP and explicit port"
+            }
+            return uri.toString()
+        }
+
         // Singleton dictionary to store user instances
         private val userInstances = mutableMapOf<String, User>()
 
@@ -319,87 +330,12 @@ data class User(
     suspend fun resolveWritableUrl(): String? {
         clearWritableClient()
         writableUrl = null
-
-        suspend fun tryResolve(): String? {
-            if (hostIds.isNullOrEmpty()) {
-                return null
-            }
-
-            val firstHostId = hostIds?.first()
-
-            if (firstHostId.isNullOrEmpty()) {
-                return null
-            }
-
-            // v4Only = "false": a root host can advertise only an IPv6 address, and asking
-            // for IPv4 only then returns no IPs at all, so every write fails with an
-            // unresolved writableUrl. Matches Tweet-iOS and the root-address lookups in
-            // HproseInstance, which also accept IPv6 write routes.
-            val hostIP = HproseInstance.getHostIP(firstHostId, v4Only = "false", usePool = false)
-            if (hostIP != null) {
-                
-                // Extract clean IP and port
-                val (cleanIP, port) = when {
-                    hostIP.startsWith("[") && hostIP.contains("]:") -> {
-                        // IPv6 with port
-                        val endBracket = hostIP.indexOf("]")
-                        val colon = hostIP.indexOf(":", endBracket)
-                        if (endBracket != -1 && colon != -1) {
-                            val ipv6 = hostIP.substring(1, endBracket)
-                            val portStr = hostIP.substring(colon + 1).trim()
-                            ipv6 to portStr
-                        } else {
-                            Timber.w("[resolveWritableUrl] Failed to parse IPv6 with port: $hostIP")
-                            return null
-                        }
-                    }
-                    hostIP.contains(":") && !hostIP.contains("]: ") && !hostIP.contains("[") -> {
-                        // IPv4 with port
-                        val parts = hostIP.split(":", limit = 2)
-                        if (parts.size == 2) {
-                            parts[0] to parts[1]
-                        } else {
-                            Timber.w("[resolveWritableUrl] Failed to parse IPv4 with port: $hostIP")
-                            return null
-                        }
-                    }
-                    else -> {
-                        // No port specified - cannot construct URL
-                        Timber.w("[resolveWritableUrl] No port specified in hostIP: $hostIP")
-                        return null
-                    }
-                }
-
-                val portNumber = port.toIntOrNull()
-                if (portNumber == null || portNumber !in 1..65535) {
-                    Timber.w("[resolveWritableUrl] Port $port is not a valid port (1-65535)")
-                    return null
-                }
-
-                // Construct URL string
-                val urlString = if (isIPv6Address(cleanIP)) {
-                    "http://[$cleanIP]:$port"
-                } else {
-                    "http://$cleanIP:$port"
-                }
-
-                writableUrl = urlString
-                return urlString
-            } else {
-                Timber.w("[resolveWritableUrl] Failed to resolve hostIP for hostId: $firstHostId")
-            }
-
-            return null
-        }
-
-        // First attempt
-        val firstAttempt = tryResolve()
-        if (!firstAttempt.isNullOrEmpty()) {
-            return firstAttempt
-        }
-        // Retry once if first attempt failed
-        val retryAttempt = tryResolve()
-        return retryAttempt
+        val hostId = hostIds?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val address = HproseInstance.getHostIP(hostId, v4Only = "false", usePool = false)
+            ?: return null
+        val url = resolvedNodeUrl(address)
+        writableUrl = url
+        return url
     }
 
     /**
@@ -523,13 +459,6 @@ data class User(
     }
 
     /**
-     * Check if IP address is IPv6
-     */
-    private fun isIPv6Address(ip: String): Boolean {
-        return ip.contains(":")
-    }
-
-    /**
      * Computed property that returns writableUrl with cloudDrivePort
      * Used for accessing TUS server (resumable upload server) and transcode services
      * Note: Preserves full path, query, and fragment from writableUrl since TUS server may be hosted at a subpath
@@ -547,7 +476,7 @@ data class User(
             return try {
                 val uri = java.net.URI(baseUrl)
                 val scheme = uri.scheme ?: "http"
-                val host = uri.host ?: return baseUrl
+                val host = uri.host ?: return null
                 val path = uri.path ?: ""
                 val query = uri.query?.let { "?$it" } ?: ""
                 val fragment = uri.fragment?.let { "#$it" } ?: ""
