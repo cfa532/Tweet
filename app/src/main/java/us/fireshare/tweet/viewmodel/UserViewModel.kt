@@ -567,25 +567,9 @@ class UserViewModel @AssistedInject constructor(
             
             Timber.tag("updateAvatar").d("Upload successful, CID: ${uploadResult.mid}, calling setUserAvatar...")
             val avatarId = withContext(IO) {
-                try {
-                    HproseInstance.setUserAvatar(appUser, uploadResult.mid)
-                } catch (e: Exception) {
-                    Timber.tag("updateAvatar").e(e, "Exception during setUserAvatar: ${e.message}")
-                    null
-                }
+                HproseInstance.setUserAvatar(appUser, uploadResult.mid)
             }
-            Timber.tag("updateAvatar").d("setUserAvatar returned: ${avatarId ?: "null"}")
-            if (avatarId == null) {
-                Timber.tag("updateAvatar").e("Failed to set user avatar on server")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.avatar_update_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                return
-            }
+            Timber.tag("updateAvatar").d("setUserAvatar returned: $avatarId")
             
             // Update the user objects with new avatar (on Main thread for immediate UI update)
             withContext(Dispatchers.Main) {
@@ -633,13 +617,16 @@ class UserViewModel @AssistedInject constructor(
             // Preload the new avatar so it's ready for display
             // Note: Preloading happens in background, UI will load it when needed
             // The key is that appUserState has already been updated, so UserAvatar will see the new avatarMid
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag("updateAvatar").e(e, "Error updating avatar")
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     context,
-                    context.getString(R.string.avatar_update_failed),
-                    Toast.LENGTH_SHORT
+                    e.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(R.string.avatar_update_failed),
+                    Toast.LENGTH_LONG
                 ).show()
             }
         } finally {

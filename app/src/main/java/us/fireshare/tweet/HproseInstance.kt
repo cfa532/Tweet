@@ -2324,26 +2324,24 @@ object HproseInstance {
         throw IllegalStateException("No surviving account copy is available for migration")
     }
 
-    suspend fun setUserAvatar(user: User, avatar: MimeiId): MimeiId? {
-        if (!isOnline.value) {
-            Timber.tag("setUserAvatar").d("Offline: skipping")
-            return null
-        }
+    suspend fun setUserAvatar(user: User, avatar: MimeiId): MimeiId {
+        check(isOnline.value) { "No network connection" }
         val entry = "set_user_avatar"
-        val json = """
-            {"aid": $appId, "ver": "last", "userid": ${user.mid}, "avatar": $avatar}
-        """.trimIndent()
-        val gson = Gson()
-        val request = gson.fromJson(json, Map::class.java)
-        return try {
-            // Mutation: route through appUser's writable host (hostIds[0]).
-            val response = requireWritableClient(appUser, "setUserAvatar").runMApp<MimeiId>(entry, request)
-            adoptWriteRouteForReads(appUser, entry)
-            response
-        } catch (e: Exception) {
-            Timber.tag("setUserAvatar").e(e)
-            null
+        // v2 preserves the server's error message; the legacy API returns only null.
+        val request = mapOf(
+            "aid" to appId, "ver" to "last", "version" to "v2",
+            "userid" to user.mid, "avatar" to avatar
+        )
+        val response = requireWritableClient(user, "setUserAvatar")
+            .runMApp<Map<String, Any>>(entry, request)
+            ?: throw IllegalStateException("Server did not respond")
+        check(response["success"] == true) {
+            response["message"] as? String ?: "Avatar update failed"
         }
+        val confirmedAvatar = response["data"] as? String
+        check(!confirmedAvatar.isNullOrBlank()) { "Server did not confirm the avatar update" }
+        adoptWriteRouteForReads(user, entry)
+        return confirmedAvatar
     }
 
     /**
