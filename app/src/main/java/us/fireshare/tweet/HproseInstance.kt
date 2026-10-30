@@ -1863,7 +1863,9 @@ object HproseInstance {
         // Step 2: Try lookup using appUser's client
         try {
             val lookupClient = if (!usePool) {
-                appUser.baseUrl?.let { HproseClientPool.getRegularClient(it, MIGRATION_TIMEOUT_MS) }
+                // Match ordinary reads, including a root adopted after a successful write.
+                val discoveryUrl = UserRoutes.readRoute(appUser.mid) ?: appUser.baseUrl
+                discoveryUrl?.let { HproseClientPool.getRegularClient(it, MIGRATION_TIMEOUT_MS) }
             } else appUser.hproseService
             val hostIP = _getHostIP(nodeId, v4Only, lookupClient, excludedIP)
             if (hostIP != null) {

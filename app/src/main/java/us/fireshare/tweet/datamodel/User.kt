@@ -329,7 +329,7 @@ data class User(
      */
     suspend fun resolveWritableUrl(): String? {
         clearWritableClient()
-        writableUrl = null
+        // Keep the active root read route during discovery; callers stop on a null result.
         val hostId = hostIds?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
         val address = HproseInstance.getHostIP(hostId, v4Only = "false", usePool = false)
             ?: return null
