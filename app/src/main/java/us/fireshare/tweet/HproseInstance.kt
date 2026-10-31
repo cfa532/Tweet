@@ -5906,7 +5906,7 @@ object HproseInstance {
      */
     private val ipHealthCache = mutableMapOf<String, Pair<Boolean, Long>>()
     private val ipCacheMutex = Mutex()
-    private const val IP_CACHE_DURATION_MS = 30_000 // 30 seconds in milliseconds
+    private const val IP_CACHE_DURATION_MS = 5 * 60 * 1000 // Five minutes for either probe result
 
     private val providerIPRequests = mutableMapOf<Pair<MimeiId, Boolean>, Deferred<String?>>()
     private val providerIPRequestsMutex = Mutex()
@@ -5947,7 +5947,7 @@ object HproseInstance {
         val (isHealthy, timestamp) = cached
         val now = System.currentTimeMillis()
         
-        if (now - timestamp > IP_CACHE_DURATION_MS) {
+        if (now - timestamp >= IP_CACHE_DURATION_MS) {
             // Cache expired, remove it
             ipHealthCache.remove(cacheKey)
             return@withLock null
