@@ -69,7 +69,6 @@ import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
 import us.fireshare.tweet.widget.Gadget
-import us.fireshare.tweet.widget.Gadget.entryIpCandidates
 import us.fireshare.tweet.widget.VideoManager
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -147,24 +146,10 @@ object NodePool {
     }
     
     /**
-     * Rejects routes that can never work off the advertising machine's own network:
-     * Tailscale CGNAT (100.64.0.0/10), RFC 1918 LANs, loopback, link-local. A private
-     * address that health-checks fine on the developer's tailnet would be cached here and
-     * then fail for every other user. Hostnames pass through — baseUrl is a domain in
-     * normal operation, and only IP literals can be judged private.
-     */
-    private fun isUnroutable(ip: String, nodeMid: MimeiId): Boolean {
-        if (!Gadget.isPrivateHostAddress(ip)) return false
-        Timber.tag("NodePool").d("🚫 Rejecting private address $ip for node $nodeMid")
-        return true
-    }
-
-    /**
      * Update node's IP list (replaces existing IPs)
      * Called after re-resolution when fetch fails
      */
     suspend fun updateNodeIP(nodeMid: MimeiId, newIP: String) = nodeMutex.withLock {
-        if (isUnroutable(newIP, nodeMid)) return@withLock
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
             if (nodeInfo.ips.size == 1 && nodeInfo.hasIP(newIP)) {
@@ -199,7 +184,6 @@ object NodePool {
      * Called when discovering new IPs for a node
      */
     suspend fun addIPToNode(nodeMid: MimeiId, ip: String) = nodeMutex.withLock {
-        if (isUnroutable(ip, nodeMid)) return@withLock
         val nodeInfo = nodes[nodeMid]
         if (nodeInfo != null) {
             // Add IP if not already present
@@ -951,26 +935,20 @@ object HproseInstance {
                          * Each pair is an ArrayList of two elements. The first is the IP address,
                          * and the second is the time spent to get response from the IP.
                          *
-                         * entryIpCandidates keeps that per-node grouping and hands back every
-                         * usable address, ordered so the next one after a failure belongs to a
-                         * different node. Committing to the single fastest address without ever
-                         * contacting it — what this did — meant a node that had gone down took
-                         * the deep link down with it, since nothing here could try anywhere else.
+                         * Race two public IPs per node, or two other IPs if that node
+                         * has no public route. Keep additional public interfaces for
+                         * failover if the initial race cannot reach any node.
                          * */
                         Timber.tag("findEntryIP").d("Successfully parsed paramMap: $paramMap")
-                        val candidates = entryIpCandidates(paramMap["addrs"] as List<*>)
-                        if (candidates.isEmpty()) {
-                            Timber.tag("findEntryIP").w("No usable entry address for URL: $url")
-                        }
-                        for (candidate in candidates) {
-                            // Fresh verdict per resolution: a cached one is what
-                            // sent us to this node in the first place.
-                            if (isServerHealthy("http://$candidate", useCache = false)) {
-                                Timber.tag("findEntryIP").d("Entry IP answered: $candidate")
-                                return candidate
-                            }
-                            Timber.tag("findEntryIP").w("Entry IP failed health check: $candidate")
-                        }
+                        val nodeList = paramMap["addrs"] as List<*>
+                        val candidates = Gadget.entryIpCandidates(nodeList, addressesPerNode = 2)
+                        val winner = tryIpAddresses(
+                            candidates, "findEntryIP", batchSize = candidates.size, forceFresh = true
+                        ) ?: tryIpAddresses(
+                            Gadget.entryIpCandidates(nodeList).filterNot { it in candidates },
+                            "findEntryIP fallback", forceFresh = true
+                        )
+                        if (winner != null) return winner
                     }
                 } else {
                     Timber.tag("findEntryIP").w("No data found within window.setParam() for URL: $url")
@@ -1948,7 +1926,7 @@ object HproseInstance {
         // If ipArray is valid, try each IP and return the best one
         if (!ipArray.isNullOrEmpty()) {
             val excludedKey = excludedIP?.let(::normalizeIPHealthCacheKey)
-            val candidateIPs = ipArray.filterNot {
+            val candidateIPs = Gadget.preferredIpAddresses(ipArray).filterNot {
                 normalizeIPHealthCacheKey(it) == excludedKey
             }
             val ipCount = candidateIPs.size
@@ -5998,42 +5976,39 @@ object HproseInstance {
     }
 
     /**
-     * Race IP addresses in pairs and return the first healthy IP in the current pair.
-     * Move to the next pair only when neither IP is healthy.
+     * Race IP addresses in batches, returning the first reachable address.
+     * Entry discovery races its per-node sample together; other lookups use pairs.
      * Cached unhealthy IPs are skipped briefly, but cached healthy IPs are probed
      * again so an old cache hit cannot keep selecting a slow route.
      * @param rawAddresses List of IP addresses to test
      * @param logPrefix Prefix for logging messages
      * @return First healthy IP address in a pair, or null if none found
      */
-    private suspend fun tryIpAddresses(rawAddresses: List<String>, logPrefix: String = ""): String? = coroutineScope {
-        // Nodes advertise every address they are bound to, including Tailscale CGNAT
-        // (100.64.0.0/10), LAN and link-local addresses that are unreachable — or, worse,
-        // reachable but wrong — from another network. Such an address health-checks green
-        // on the advertising machine's own network and then fails for everyone else, so it
-        // is never a route candidate. This is the single choke point for both
-        // server-advertised lists (_getHostIP and _getProviderIP).
-        val ipAddresses = rawAddresses.filter { Gadget.isValidPublicIpAddress(it) }
-        if (ipAddresses.size != rawAddresses.size) {
-            Timber.tag("getProviderIP").d(
-                "$logPrefix - Dropped ${rawAddresses.size - ipAddresses.size} non-public address(es)"
-            )
-        }
+    private suspend fun tryIpAddresses(
+        rawAddresses: List<String>,
+        logPrefix: String = "",
+        batchSize: Int = 2,
+        forceFresh: Boolean = false
+    ): String? = coroutineScope {
+        // Provider lists are already selected per node by the backend. A global
+        // public-only filter would discard a private-only node's valid fallback.
+        val ipAddresses = rawAddresses.map(String::trim).filter { Gadget.isValidIpAddress(it) }.distinct()
 
         if (ipAddresses.isEmpty()) {
             return@coroutineScope null
         }
 
         if (logPrefix.isNotEmpty()) {
-            Timber.tag("getProviderIP").d("$logPrefix - Racing ${ipAddresses.size} IP health checks in pairs")
+            Timber.tag("getProviderIP").d("$logPrefix - Racing ${ipAddresses.size} IP health checks in batches of $batchSize")
         }
 
-        // Limit concurrent probes to two; exhaust each pair before starting the next.
-        for (pair in ipAddresses.withIndex().chunked(2)) {
+        // Entry selection races two addresses from every node together. Other
+        // discovery calls retain their existing limit of two probes at a time.
+        for (pair in ipAddresses.withIndex().chunked(batchSize)) {
             val activeJobs = pair.map { (globalIndex, ipAddress) ->
                 async(Dispatchers.IO) {
                     try {
-                        if (getCachedHealth(ipAddress) == false) {
+                        if (!forceFresh && getCachedHealth(ipAddress) == false) {
                             return@async null
                         }
 
@@ -6340,7 +6315,7 @@ object HproseInstance {
         return unwrapV2Response<List<String>>(raw)
             .orEmpty()
             .map(String::trim)
-            .filter { it.isNotEmpty() && Gadget.isValidPublicIpAddress(it) }
+            .filter { it.isNotEmpty() && Gadget.isValidIpAddress(it) }
             .distinctBy(::normalizeIPHealthCacheKey)
     }
 

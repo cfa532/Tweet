@@ -1,5 +1,6 @@
 package us.fireshare.tweet.widget
 
+import java.net.InetAddress
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -163,17 +164,22 @@ object Gadget {
      * consecutive candidates on different machines, and the published response
      * time orders the round so the quickest still leads.
      *
-     * Only public IPs are considered, on any port, and IPv4 and IPv6 are
-     * treated equally — unchanged from the previous behaviour.
+     * Prefer public IPv4/IPv6 per node. If none exist, retain two other IPs.
+     * The initial race takes two per node; the full list retains other public
+     * addresses for failover, matching TweetWeb.
      *
-     * Tweet-iOS applies the same ordering in `HproseInstance.entryIPCandidates`,
+     * Tweet-iOS applies the same ordering in `Gadget.entryIPCandidates`,
      * and TweetWeb in `src/utils/entryRoutes.ts`.
      */
-    fun entryIpCandidates(nodeList: List<*>): List<String> {
+    fun entryIpCandidates(nodeList: List<*>, addressesPerNode: Int = Int.MAX_VALUE): List<String> {
         val nodes = nodeList.mapNotNull { node ->
             (node as? List<*>)
                 ?.mapNotNull { rankedAddress(it) }
                 ?.sortedBy { it.responseTime }
+                ?.let { addresses ->
+                    val public = addresses.filter { isValidPublicIpAddress(it.ip) }
+                    (public.ifEmpty { addresses.take(2) }).take(addressesPerNode)
+                }
                 ?.takeIf { it.isNotEmpty() }
         }
 
@@ -199,15 +205,13 @@ object Gadget {
     /** One published address/response-time pair, or null when it is unusable. */
     private fun rankedAddress(ipData: Any?): RankedAddress? {
         val pair = ipData as? List<*> ?: return null
-        if (pair.size < 2) return null
-
-        val ip = pair[0].toString()
+        val ip = (pair.firstOrNull() as? String)?.trim() ?: return null
         // Response time arrives in scientific format for the slower interfaces.
-        val responseTime = pair[1].toString().toDoubleOrNull() ?: return null
+        val responseTime = (pair.getOrNull(1) as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: Double.POSITIVE_INFINITY
 
-        ip.getIP() ?: return null
-        if (ip.substringAfterLast(":", "8080").toIntOrNull() == null) return null
-        if (!isValidPublicIpAddress(ip)) return null
+        if (!isValidIpAddress(ip)) return null
+        val port = ip.substringAfterLast(":").toIntOrNull() ?: return null
+        if (port !in 1..65535) return null
 
         return RankedAddress(ip, responseTime)
     }
@@ -231,36 +235,35 @@ object Gadget {
      */
     fun isPrivateIP(ip: String): Boolean {
         val address = ip.lowercase().trim('[', ']')
-
         if (isIPv6Address(address)) {
-            // IPv4-mapped IPv6 (::ffff:10.0.0.1) is classified by its IPv4 half.
-            if (address.startsWith("::ffff:") && address.substringAfter("::ffff:").contains(".")) {
-                return isPrivateIP(address.substringAfter("::ffff:"))
-            }
-            return when {
-                address == "::1" || address == "::" -> true            // loopback / unspecified
-                // Unique local fc00::/7 — includes Tailscale's fd7a:115c:a1e0::/48
-                address.startsWith("fc") || address.startsWith("fd") -> true
-                // Link-local fe80::/10
-                address.startsWith("fe8") || address.startsWith("fe9") ||
-                    address.startsWith("fea") || address.startsWith("feb") -> true
-                address.startsWith("ff") -> true                       // multicast ff00::/8
-                else -> false
-            }
+            val words = ipv6Words(address) ?: return true
+            return words[0] !in 0x2000..0x3fff ||
+                (words[0] == 0x2001 && words[1] == 0xdb8) ||
+                (words[0] == 0x3fff && words[1] < 0x1000) ||
+                (words[0] == 0x2001 && words[1] == 2 && words[2] == 0) ||
+                (words.take(4) == listOf(0x2001, 0, 0, 0) &&
+                    words.subList(4, 7).all { it == 0xffff } && words[7] in 0xfff0..0xfff3)
         }
-
         val octets = ipv4Octets(address) ?: return false
-        return when (octets[0]) {
-            0 -> true                              // 0.0.0.0/8 "this network"
-            10 -> true                             // 10.0.0.0/8 private
-            100 -> octets[1] in 64..127            // 100.64.0.0/10 CGNAT — Tailscale
-            127 -> true                            // 127.0.0.0/8 loopback
-            169 -> octets[1] == 254                // 169.254.0.0/16 link-local
-            172 -> octets[1] in 16..31             // 172.16.0.0/12 private
-            192 -> octets[1] == 168                // 192.168.0.0/16 private
-            in 224..255 -> true                    // multicast + reserved + broadcast
-            else -> false
-        }
+        val (a, b, c) = octets
+        return a == 0 || a == 10 || a == 127 || a >= 224 ||
+            (a == 26 && b == 26 && c == 26) ||
+            (a == 100 && b in 64..127) || (a == 169 && b == 254) ||
+            (a == 172 && b in 16..31) || (a == 192 && b == 168) ||
+            (a == 192 && b == 0 && (c == 0 || c == 2)) ||
+            (a == 192 && b == 88 && c == 99) || (a == 198 && b in 18..19) ||
+            (a == 198 && b == 51 && c == 100) || (a == 203 && b == 0 && c == 113)
+    }
+
+    // Only numeric IPv6 literals reach InetAddress; never resolve a hostname.
+    private fun ipv6Bytes(ip: String): ByteArray? {
+        if (!ip.contains(':') || !ip.all { it in "0123456789abcdefABCDEF:." }) return null
+        return runCatching { InetAddress.getByName(ip).address }.getOrNull()
+    }
+
+    private fun ipv6Words(ip: String): List<Int>? {
+        val bytes = ipv6Bytes(ip)?.takeIf { it.size == 16 } ?: return null
+        return (0 until 16 step 2).map { ((bytes[it].toInt() and 255) shl 8) or (bytes[it + 1].toInt() and 255) }
     }
 
     /**
@@ -307,12 +310,19 @@ object Gadget {
      */
     fun isValidPublicIpAddress(fullIp: String): Boolean {
         val ip = hostComponent(fullIp) ?: return false
+        return isValidIpAddress(fullIp) && !isPrivateIP(ip)
+    }
 
-        if (isIPv6Address(ip)) {
-            return !isPrivateIP(ip)
-        }
-        if (ipv4Octets(ip) == null) return false
-        return !isPrivateIP(ip)
+    fun isValidIpAddress(fullIp: String): Boolean {
+        val ip = hostComponent(fullIp) ?: return false
+        return if (isIPv6Address(ip)) ipv6Bytes(ip) != null else ipv4Octets(ip) != null
+    }
+
+    /** Same per-node preference as TweetWeb; input is already ranked. */
+    fun preferredIpAddresses(addresses: List<String>): List<String> {
+        val valid = addresses.map(String::trim).filter(::isValidIpAddress).distinct()
+        val public = valid.filter(::isValidPublicIpAddress)
+        return public.ifEmpty { valid.take(2) }
     }
 
     /**
