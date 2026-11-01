@@ -4,11 +4,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -703,9 +709,13 @@ object TweetCacheManager {
     /**
      * Perform a partial search across locally cached users (memory + database).
      * Matches both username and display name, case-insensitively.
+     * Publish matches after each cache source and each fetched tweet author.
      */
-    suspend fun searchUsers(query: String, limit: Int = 20): List<User> = withContext(Dispatchers.IO) {
-        if (query.isBlank() || limit <= 0) return@withContext emptyList()
+    fun searchUsersIncremental(query: String, limit: Int = 20): Flow<List<User>> = flow {
+        if (query.isBlank() || limit <= 0) {
+            emit(emptyList())
+            return@flow
+        }
 
         val normalizedQuery = query.normalizedLowercase()
         val results = LinkedHashMap<String, Pair<Int, User>>(limit)
@@ -719,8 +729,23 @@ object TweetCacheManager {
             }
         }
 
+        fun getSortedResults(): List<User> = results.values
+            .sortedWith(
+                compareBy(
+                    { it.first },
+                    {
+                        it.second.username?.normalizedLowercase()
+                            ?: it.second.name?.normalizedLowercase()
+                            ?: it.second.mid
+                    }
+                )
+            )
+            .map { it.second }
+            .take(limit)
+
         val memoryUsers = synchronized(userCacheLock) { userMemoryCache.values.toList() }
         memoryUsers.forEach(::consider)
+        if (results.isNotEmpty()) emit(getSortedResults())
 
         if (results.size < limit) {
             try {
@@ -728,13 +753,16 @@ object TweetCacheManager {
                     consider(cachedUser.user)
                     if (results.size >= limit) return@forEach
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "searchUsers: Unable to read cached users from database")
             }
+            emit(getSortedResults())
         }
 
         if (results.size < limit) {
-            try {
+            val candidateIds = try {
                 val candidateIds = mutableSetOf<String>()
 
                 synchronized(userCacheLock) {
@@ -750,42 +778,41 @@ object TweetCacheManager {
                 HproseInstance.dao.getRecentCachedTweets(200).forEach { cachedTweet ->
                     candidateIds.add(cachedTweet.originalTweet.authorId)
                 }
-
-                for (userId in candidateIds) {
-                    if (results.size >= limit || results.containsKey(userId)) continue
-                    try {
-                        val user = HproseInstance.fetchUser(userId)
-                        consider(user)
-                    } catch (e: Exception) {
-                        Timber.tag("TweetCacheManager").v(e, "searchUsers: Failed to fetch user $userId")
-                    }
-                }
+                candidateIds
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "searchUsers: Failed to enrich results with tweet authors")
+                emptySet<String>()
+            }
+
+            for (userId in candidateIds) {
+                currentCoroutineContext().ensureActive()
+                if (results.size >= limit || results.containsKey(userId)) continue
+                val user = try {
+                    HproseInstance.fetchUser(userId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("TweetCacheManager").v(e, "searchUsers: Failed to fetch user $userId")
+                    null
+                }
+                consider(user)
+                emit(getSortedResults())
             }
         }
-
-        return@withContext results.values
-            .sortedWith(
-                compareBy(
-                    { it.first },
-                    {
-                        it.second.username?.normalizedLowercase()
-                            ?: it.second.name?.normalizedLowercase()
-                            ?: it.second.mid
-                    }
-                )
-            )
-            .map { it.second }
-            .take(limit)
-    }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * Perform a partial search across locally cached tweets (memory + database).
      * Matches tweet content and title case-insensitively.
+     * Publish memory matches before reading the persistent cache.
      */
-    suspend fun searchTweets(query: String, limit: Int = 40): List<Tweet> = withContext(Dispatchers.IO) {
-        if (query.isBlank() || limit <= 0) return@withContext emptyList()
+    fun searchTweetsIncremental(query: String, limit: Int = 40): Flow<List<Tweet>> = flow {
+        if (query.isBlank() || limit <= 0) {
+            emit(emptyList())
+            return@flow
+        }
 
         val normalizedQuery = query.normalizedLowercase()
         val results = LinkedHashMap<String, Pair<Int, Tweet>>(limit)
@@ -799,11 +826,27 @@ object TweetCacheManager {
             }
         }
 
+        suspend fun getSortedResults(): List<Tweet> {
+            val sortedTweets = results.values
+                .sortedWith(compareBy({ it.first }, { -it.second.timestamp }))
+                .map { it.second }
+                .take(limit)
+
+            for (tweet in sortedTweets) {
+                if (tweet.author == null) {
+                    // Prepare local author data for every batch without waiting for profile RPCs.
+                    tweet.author = getCachedUser(tweet.authorId)
+                }
+            }
+            return sortedTweets
+        }
+
         synchronized(cacheLock) {
             memoryCache.values.forEach { cachedTweet ->
                 consider(cachedTweet.originalTweet)
             }
         }
+        if (results.isNotEmpty()) emit(getSortedResults())
 
         // The result limit applies after matching and ranking the entire cache.
         // Read-ahead can evict an opened tweet from memory while it remains on disk.
@@ -811,26 +854,13 @@ object TweetCacheManager {
             HproseInstance.dao.getAllCachedTweets().forEach { cachedTweet ->
                 consider(cachedTweet.originalTweet)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "searchTweets: Unable to read cached tweets from database")
         }
-
-        val sortedTweets = results.values
-            .sortedWith(compareBy({ it.first }, { -it.second.timestamp }))
-            .map { it.second }
-            .take(limit)
-            .toMutableList()
-
-        for (tweet in sortedTweets) {
-            if (tweet.author == null) {
-                // Like iOS, use local author data so profile RPCs cannot hold back
-                // matches until the search deadline cancels the request.
-                tweet.author = getCachedUser(tweet.authorId)
-            }
-        }
-
-        return@withContext sortedTweets
-    }
+        emit(getSortedResults())
+    }.flowOn(Dispatchers.IO)
 
     private fun String.normalizedLowercase(): String =
         lowercase(Locale.getDefault()).trim()

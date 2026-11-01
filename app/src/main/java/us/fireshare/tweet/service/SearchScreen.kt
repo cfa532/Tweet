@@ -76,6 +76,7 @@ import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.User
+import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
@@ -189,7 +190,7 @@ fun SearchScreen(
                 }
             ) {
                 when {
-                    uiState.isLoading -> {
+                    uiState.isLoading && uiState.userResults.isEmpty() && uiState.tweetResults.isEmpty() -> {
                         Column(
                             modifier = Modifier.fillMaxSize(),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -244,6 +245,22 @@ fun SearchScreen(
                                         TextButton(onClick = viewModel::loadNextTweetPage, modifier = Modifier.fillMaxWidth()) {
                                             Text(stringResource(R.string.search_load_more))
                                         }
+                                    }
+                                }
+                            }
+                            if (uiState.isLoading) {
+                                item("search_progress") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(Modifier.size(20.dp))
+                                        Text(
+                                            stringResource(R.string.search_countdown, uiState.countdownSeconds),
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                             }
@@ -310,7 +327,9 @@ fun UserSearchResult(user: User, navController: NavController) {
 
 @Composable
 fun TweetSearchResult(tweet: Tweet, navController: NavController) {
-    val author = tweet.author ?: User(mid = tweet.authorId)
+    // Keep search rows in sync with author/profile updates made by detail view.
+    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
+    val author = cachedAuthor ?: tweet.author ?: User(mid = tweet.authorId)
     val focusManager = LocalFocusManager.current
     Row(
         modifier = Modifier.fillMaxWidth().clickable {
@@ -433,24 +452,37 @@ class SearchViewModel @Inject constructor() : ViewModel() {
                 val userQuery = sanitizedQuery.removePrefix("@").trim()
 
                 val queries = launch {
+                    // These children publish on main; retain exact-match priority as local batches arrive.
+                    var exactUser: User? = null
                     if (userQuery.isNotEmpty()) {
                         launch {
                             try {
-                                val mergedUsers = withContext(IO) {
-                                    val exactUser = if (isUsernameOnly || !userQuery.contains(" ")) {
-                                        fetchExactUser(userQuery)
-                                    } else {
-                                        null
-                                    }
-                                    val localUsers = TweetCacheManager.searchUsers(userQuery, USER_RESULT_LIMIT)
-                                    mergeUserResults(exactUser, localUsers)
+                                TweetCacheManager.searchUsersIncremental(userQuery, USER_RESULT_LIMIT).collect { users ->
+                                    ensureActive()
+                                    _uiState.value = _uiState.value.copy(
+                                        userResults = mergeUserResults(exactUser, users)
+                                    )
                                 }
-                                ensureActive()
-                                _uiState.value = _uiState.value.copy(userResults = mergedUsers)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 Timber.tag("SearchViewModel").e(e, "User search failed")
+                            }
+                        }
+                        if (isUsernameOnly || !userQuery.contains(" ")) {
+                            launch {
+                                try {
+                                    val user = withContext(IO) { fetchExactUser(userQuery) }
+                                    ensureActive()
+                                    exactUser = user
+                                    _uiState.value = _uiState.value.copy(
+                                        userResults = mergeUserResults(user, _uiState.value.userResults)
+                                    )
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Timber.tag("SearchViewModel").e(e, "Exact user search failed")
+                                }
                             }
                         }
                     }
@@ -458,9 +490,10 @@ class SearchViewModel @Inject constructor() : ViewModel() {
                     if (!isUsernameOnly) {
                         launch {
                             try {
-                                val tweetResults = TweetCacheManager.searchTweets(sanitizedQuery, TWEET_RESULT_LIMIT)
-                                ensureActive()
-                                _uiState.value = _uiState.value.copy(tweetResults = tweetResults)
+                                TweetCacheManager.searchTweetsIncremental(sanitizedQuery, TWEET_RESULT_LIMIT).collect { tweets ->
+                                    ensureActive()
+                                    _uiState.value = _uiState.value.copy(tweetResults = tweets)
+                                }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
