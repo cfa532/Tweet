@@ -476,11 +476,9 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                             confirmButton = {
                                 TextButton(onClick = {
                                     showLogoutDialog = false
-                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                    appUserViewModel.viewModelScope.launch {
                                         appUserViewModel.logout {
-                                            appUserViewModel.viewModelScope.launch(Dispatchers.Main) {
-                                                navController.navigate(NavTweet.TweetFeed)
-                                            }
+                                            navController.navigate(NavTweet.TweetFeed)
                                         }
                                     }
                                 }) { Text(stringResource(R.string.logout), color = MaterialTheme.colorScheme.error) }

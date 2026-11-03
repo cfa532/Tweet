@@ -1825,13 +1825,12 @@ class UserViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun logout(popBack: () -> Unit) {
+    suspend fun logout(popBack: () -> Unit) = withContext(Dispatchers.Main.immediate) {
         preferenceHelper.setUserId(null)
         Tweet.clearInteractionOverrides()
-        val ip = HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
-        appUser = User.getInstance(TW_CONST.GUEST_ID)
-        appUser.baseUrl = "http://$ip"
-        appUser.followingList = HproseInstance.getAlphaIds()
+        val guestUser = User.getInstance(TW_CONST.GUEST_ID)
+        guestUser.followingList = HproseInstance.getAlphaIds()
+        appUser = guestUser
 
         /**
          * Do NOT clear the UserViewModel object. It will be reused by other users.
@@ -1848,6 +1847,13 @@ class UserViewModel @AssistedInject constructor(
         )
         
         popBack()
+
+        // Publish the signed-out UI before discovery; a slow lookup must not delay logout.
+        // Keep the result on the guest instance if another account logs in meanwhile.
+        val ip = withContext(IO) {
+            HproseInstance.getProviderIP(HproseInstance.getAlphaIds().first())
+        }
+        guestUser.baseUrl = "http://$ip"
     }
 
     suspend fun deleteAccount(onDone: () -> Unit, onError: () -> Unit = {}) {
