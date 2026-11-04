@@ -32,6 +32,15 @@ class PreferenceHelper(context: Context) {
         }
     }
 
+    // Keep pin order separately from tweet creation timestamps, as on iOS.
+    fun getPinnedTweetIds(userId: String): List<String> =
+        sharedPreferences.getString("profile_pins_$userId", "")
+            .orEmpty().split(",").filter { it.isNotEmpty() }
+
+    fun savePinnedTweetIds(userId: String, tweetIds: List<String>) {
+        sharedPreferences.edit { putString("profile_pins_$userId", tweetIds.joinToString(",")) }
+    }
+
     /**
      * Helper function to ensure URL has http:// prefix
      */

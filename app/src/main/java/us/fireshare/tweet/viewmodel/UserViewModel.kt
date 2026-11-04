@@ -22,6 +22,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,6 +121,9 @@ class UserViewModel @AssistedInject constructor(
     private val _showNewTweetsBanner = MutableStateFlow(false)
     val showNewTweetsBanner: StateFlow<Boolean> get() = _showNewTweetsBanner.asStateFlow()
     private var isProfileHeaderVisible = true
+    private val _profileTweetsRefreshToken = MutableStateFlow(0)
+    val profileTweetsRefreshToken = _profileTweetsRefreshToken.asStateFlow()
+    private var pinnedTweetIds = preferenceHelper.getPinnedTweetIds(userId).toSet()
 
     // pinned tweets
     private val _pinnedTweets = MutableStateFlow<List<Tweet>>(emptyList())
@@ -190,82 +194,30 @@ class UserViewModel @AssistedInject constructor(
 
     var initState = MutableStateFlow(true)      // initial load state
 
-    /**
-     * Initial load of tweets of an user. Execute only once.
-     * OPTIMIZED: Clears loading state immediately after cached tweets are loaded,
-     * then continues fetching from network in the background.
-     * */
+    /** Prepare cache and routing; TweetListView owns all server page requests. */
     suspend fun initLoad() {
         try {
-            // Match the iOS profile path: publish the local list before doing any
-            // route validation or RPC work.
-            val cachedPage0 = loadCachedProfileTweets(0)
+            val cachedPinIds = preferenceHelper.getPinnedTweetIds(userId)
+            val cachedPins = cachedPinIds.mapNotNull { TweetCacheManager.getCachedTweet(it) }
+            applyPinnedTweets(cachedPins, cachedPinIds.toSet())
+            loadCachedProfileTweets(0)
             val profileUser = userState.first { it.user.mid == userId }.user
-            Timber.tag("initLoad").d("Starting health-first profile load for user: $userId")
-
-            val routeIsReady = HproseInstance.validateAndRepairProfileRoute(profileUser)
-            if (!routeIsReady) {
-                Timber.tag("initLoad").w("No health-verified route for $userId; keeping cached profile")
+            if (!HproseInstance.validateAndRepairProfileRoute(profileUser)) {
+                initState.value = false
                 return
             }
 
-            // The route is now health-verified. Profile fields, pinned tweets and the
-            // regular tweet page are independent reads, so do not put them behind one
-            // another during the startup rush.
+            _profileTweetsRefreshToken.value += 1
             viewModelScope.launch(IO) {
-                refreshUserDataFromServer()
-            }
-            viewModelScope.launch(IO) {
-                loadPinnedTweets(profileUser)
-            }
-            val page0Tweets = fetchProfileTweetsFromServer(
-                profileUser,
-                pageNumber = 0,
-                cachedFallback = cachedPage0.map { it as Tweet? }
-            )
-
-            // Clear loading state after first page loads (whether from cache or network)
-            // This ensures UI shows content as soon as any tweets are available
-            initState.value = false
-            Timber.tag("initLoad").d("Cleared loading state after page 0 loaded - found ${tweets.value.size} tweets and ${pinnedTweets.value.size} pinned tweets")
-            
-            // Check if page 0 indicates server depletion
-            // If server returns fewer than PAGE_SIZE tweets, it's depleted (regardless of null/valid)
-            val page0ValidTweets = page0Tweets.filterNotNull()
-            if (page0Tweets.size < TW_CONST.PAGE_SIZE) {
-                // Server is depleted - returned fewer than a full page
-                Timber.tag("initLoad").d("Page 0 returned ${page0Tweets.size} tweets (${page0ValidTweets.size} valid), server depleted - stopping initial load")
-            } else {
-                // Load additional pages if needed to get at least 5 viewable tweets
-                var pageNumber = 1
-                var serverDepleted = false
-                
-                while (tweets.value.size < 5 && pageNumber < 10 && !serverDepleted) {
-                    val pageTweets = getTweets(pageNumber)
-                    val validTweets = pageTweets.filterNotNull()
-                    
-                    // Check if server is depleted (returned fewer tweets than PAGE_SIZE)
-                    if (pageTweets.size < TW_CONST.PAGE_SIZE) {
-                        serverDepleted = true
-                        Timber.tag("initLoad").d("Server depleted at page $pageNumber, returned ${pageTweets.size} tweets (${validTweets.size} valid)")
-                    }
-                    
-                    // Also stop if we got no valid tweets from server
-                    if (validTweets.isEmpty() && serverDepleted) {
-                        Timber.tag("initLoad").d("Page $pageNumber returned no valid tweets, stopping initial load")
-                        break
-                    }
-                    
-                    pageNumber++
+                if (refreshUserDataFromServer() == true) {
+                    // Reads already in progress used the previous node. Reload both lists.
+                    _profileTweetsRefreshToken.value += 1
                 }
             }
-
-            Timber.tag("initLoad")
-                .d("Initial load completed. Pinned tweets: ${pinnedTweets.value.size}, Regular tweets: ${tweets.value.size}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Timber.tag("initLoad").e(e, "Error during initial load for user: ${latestUser.mid}")
-        } finally {
-            // Always clear loading state on completion or error
+            Timber.tag("initLoad").e(e, "Error opening profile $userId")
             initState.value = false
         }
     }
@@ -279,12 +231,7 @@ class UserViewModel @AssistedInject constructor(
             val routeChanged = refreshUserDataFromServer() ?: return@launch
             if (routeChanged || _tweets.value.isEmpty()) {
                 Timber.tag("refreshUserData").d("Route changed or tweets empty; refreshing profile tweets without clearing existing list")
-                try {
-                    getTweets(0)
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    Timber.tag("refreshUserData").w(e, "Profile tweet refresh failed; keeping existing list")
-                }
+                _profileTweetsRefreshToken.value += 1
             }
         }
     }
@@ -438,7 +385,6 @@ class UserViewModel @AssistedInject constructor(
     }
 
     private fun visibleRegularProfileTweets(incomingTweets: List<Tweet>): List<Tweet> {
-        val pinnedTweetIds = pinnedTweets.value.map { it.mid }.toSet()
         return incomingTweets
             .filter { tweet -> tweet.authorId == userId }
             .filterNot { tweet -> tweet.isPrivate && tweet.authorId != appUser.mid }
@@ -1439,22 +1385,6 @@ class UserViewModel @AssistedInject constructor(
                     _tweetCount.value = initialUser.tweetCount
                 }
 
-                // Load cached tweets immediately for instant UI display
-                if (userId != TW_CONST.GUEST_ID) {
-                    val cachedTweets = loadCachedTweetsByAuthor(userId, 0, TW_CONST.PAGE_SIZE)
-                    if (cachedTweets.isNotEmpty()) {
-                        _tweets.value = cachedTweets
-                        Timber.tag("UserViewModel").d("Loaded ${cachedTweets.size} cached tweets immediately for user $userId")
-                    }
-                }
-
-                // Keep the tweet list loading until the first network request has
-                // completed when there are no cached tweets. A cached user record
-                // alone must not make the empty-state label visible prematurely.
-                if (_tweets.value.isNotEmpty()) {
-                    initState.value = false
-                }
-
                 if (userId == appUser.mid) {
                     // The app user's followings drive the follow-button state everywhere, so
                     // load them here. The fans list is not loaded: the followers screen
@@ -1522,25 +1452,22 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun getTweets(pageNumber: Int): List<Tweet?> {
         return try {
-            val cachedTweets = loadCachedProfileTweets(pageNumber)
-            val profileUser = latestUser
-
-            if (pageNumber == 0) {
-                viewModelScope.launch(IO) {
-                    loadPinnedTweets(profileUser)
-                }
+            // Paint cached next-page rows immediately, but let the server response
+            // advance the cursor. A cache hit never proves a page is exhausted.
+            if (pageNumber > 0) loadCachedProfileTweets(pageNumber)
+            coroutineScope {
+                // Keep pins parallel with regular rows, and cancel both on a route reload.
+                if (pageNumber == 0) launch { loadPinnedTweets(latestUser) }
+                fetchProfileTweetsFromServer(latestUser, pageNumber)
             }
-            fetchProfileTweetsFromServer(
-                profileUser,
-                pageNumber,
-                cachedTweets.map { it as Tweet? }
-            )
         } catch (e: Exception) {
             // Rethrow: returning an empty list made the list view treat a failed page as the end
             // of the profile ("No more tweets") and stop loading until a manual refresh.
             Timber.tag("getTweets")
                 .e(e, "Error fetching tweets for user: ${latestUser.mid}, page: $pageNumber")
             throw e
+        } finally {
+            if (pageNumber == 0) initState.value = false
         }
     }
 
@@ -1548,11 +1475,11 @@ class UserViewModel @AssistedInject constructor(
         // Use the assisted-injected ID: latestUser can still be the guest placeholder
         // while the profile's User object is being restored.
         Timber.tag("getTweets").d("Loading cached tweets for user: $userId")
-        val cachedTweets = loadCachedTweetsByAuthor(
+        val cachedTweets = visibleRegularProfileTweets(loadCachedTweetsByAuthor(
             userId,
             pageNumber * TW_CONST.PAGE_SIZE,
             TW_CONST.PAGE_SIZE
-        )
+        ))
 
         _tweets.update { currentTweets ->
             val currentTweetIds = currentTweets.map { it.mid }.toSet()
@@ -1575,13 +1502,8 @@ class UserViewModel @AssistedInject constructor(
 
     private suspend fun fetchProfileTweetsFromServer(
         profileUser: User,
-        pageNumber: Int,
-        cachedFallback: List<Tweet?>
+        pageNumber: Int
     ): List<Tweet?> {
-        if (profileUser.baseUrl == null || appUser.baseUrl == null) {
-            Timber.tag("getTweets").w("Network unavailable, returning cached tweets only")
-            return cachedFallback
-        }
 
         Timber.tag("getTweets").d("Network available, fetching additional tweets from server")
         val newTweetsWithNulls = HproseInstance.getTweetsByUser(
@@ -1595,23 +1517,42 @@ class UserViewModel @AssistedInject constructor(
             "Received ${newTweetsWithNulls.size} tweets (${newTweets.size} valid) " +
                 "for user: ${profileUser.mid}, page: $pageNumber"
         )
-        stageOrMergeProfileTweets(visibleRegularProfileTweets(newTweets), pageNumber)
-        return newTweetsWithNulls
+        val visibleTweets = visibleRegularProfileTweets(newTweets)
+        stageOrMergeProfileTweets(visibleTweets, pageNumber)
+        // Preserve server page length even when a pinned/private row cannot render.
+        val visibleIds = visibleTweets.map { it.mid }.toSet()
+        return newTweetsWithNulls.map { it?.takeIf { tweet -> tweet.mid in visibleIds } }
+    }
+
+    private fun applyPinnedTweets(newPins: List<Tweet>, ids: Set<MimeiId> = newPins.map { it.mid }.toSet()) {
+        val unpinned = _pinnedTweets.value.filter { it.mid !in ids }
+        pinnedTweetIds = ids
+        _pinnedTweets.value = newPins
+        _tweets.update { current ->
+            visibleRegularProfileTweets(current + unpinned)
+                .distinctBy { it.mid }
+                .sortedByDescending { it.profileOrderingTimestamp() }
+        }
+    }
+
+    private fun persistPinnedTweets() {
+        _pinnedTweets.value.forEach { TweetCacheManager.saveTweet(it, it.authorId, saveAuthor = false) }
+        preferenceHelper.savePinnedTweetIds(userId, _pinnedTweets.value.map { it.mid })
     }
 
     private suspend fun loadPinnedTweets(profileUser: User = latestUser) {
         try {
 
             // Get pinned tweets from getPinnedList which returns List<Map<String, Any>>
-            val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(profileUser)
+            val pinnedTweetsResponse = HproseInstance.getPinnedTweetsWithTimestamp(profileUser) ?: return
 
             Timber.tag("loadPinnedTweets")
-                .d("Retrieved ${pinnedTweetsResponse?.size ?: 0} pinned tweets")
+                .d("Retrieved ${pinnedTweetsResponse.size} pinned tweets")
             
             Timber.tag("loadPinnedTweets")
                 .d("Pinned tweets response: $pinnedTweetsResponse")
 
-            if (!pinnedTweetsResponse.isNullOrEmpty()) {
+            if (pinnedTweetsResponse.isNotEmpty()) {
                 // Parse the response: List<{tweet: Tweet, timestamp: Long}>
                 val pinnedTweetsWithPinnedTimestamp = pinnedTweetsResponse.mapNotNull { map ->
                     try {
@@ -1655,9 +1596,10 @@ class UserViewModel @AssistedInject constructor(
                         if (tweet != null && pinnedTimestamp != null) {
                             // Ensure the author field is set correctly for pinned tweets
                             val tweetWithAuthor = if (tweet.author == null) {
-                                // Check cache first before fetching from server
-                                val cachedAuthor = TweetCacheManager.getCachedUser(tweet.authorId)
-                                tweet.copy(author = cachedAuthor ?: fetchUser(tweet.authorId))
+                                // Render cached authors immediately; author loading must not delay pins.
+                                val cachedAuthor = if (tweet.authorId == userId) latestUser
+                                    else TweetCacheManager.getCachedUser(tweet.authorId)
+                                tweet.copy(author = cachedAuthor ?: User.getInstance(tweet.authorId))
                             } else {
                                 tweet
                             }
@@ -1680,49 +1622,14 @@ class UserViewModel @AssistedInject constructor(
                     .sortedByDescending { (_, pinnedTimestamp) -> pinnedTimestamp }
                     .map { (tweet, _) -> tweet } // Extract just the tweets, keeping their original timestamps
 
-                // Load original tweets for quoted tweets and filter out those that fail to load
-                val validPinnedTweets = mutableListOf<Tweet>()
-
-                for (tweet in sortedPinnedTweets) {
-                    if (tweet.originalTweetId != null && tweet.originalAuthorId != null) {
-                        // This is a quoted tweet, try to load the original tweet
-                        try {
-                            Timber.tag("loadPinnedTweets")
-                                .d("Loading original tweet for pinned quoted tweet: ${tweet.originalTweetId}")
-                            val originalTweet = HproseInstance.fetchTweet(
-                                tweet.originalTweetId!!,
-                                tweet.originalAuthorId!!
-                            )
-
-                            if (originalTweet != null) {
-                                Timber.tag("loadPinnedTweets")
-                                    .d("Successfully loaded original tweet for pinned tweet: ${tweet.mid}")
-                                validPinnedTweets.add(tweet)
-                            } else {
-                                Timber.tag("loadPinnedTweets")
-                                    .w("Failed to load original tweet for pinned tweet: ${tweet.mid}, removing from list")
-                                // Don't add to validPinnedTweets - this removes it from the list
-                            }
-                        } catch (e: Exception) {
-                            Timber.tag("loadPinnedTweets").e(
-                                e,
-                                "Error loading original tweet for pinned tweet: ${tweet.mid}, removing from list"
-                            )
-                            // Don't add to validPinnedTweets - this removes it from the list
-                        }
-                    } else {
-                        // This is not a quoted tweet, add it directly
-                        validPinnedTweets.add(tweet)
-                    }
-                }
-
-                _pinnedTweets.value = validPinnedTweets
+                applyPinnedTweets(sortedPinnedTweets)
             } else {
-                // Clear pinned tweets if none found
-                _pinnedTweets.value = emptyList()
-                Timber.tag("loadPinnedTweets").d("No pinned tweets found, cleared list")
+                applyPinnedTweets(emptyList())
             }
+            persistPinnedTweets()
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag("loadPinnedTweets")
                 .e(e, "Error loading pinned tweets for user: ${latestUser.mid}")
@@ -1738,35 +1645,12 @@ class UserViewModel @AssistedInject constructor(
     suspend fun pinToTop(tweet: Tweet) {
         HproseInstance.togglePinnedTweet(tweet.mid)?.let { isPinned ->
             if (isPinned) {
-                // Tweet is now pinned: remove from tweets and add to pinned tweets
-                _tweets.update { currentTweets ->
-                    currentTweets.filterNot { it.mid == tweet.mid }
-                }
-
-                // Add to pinned tweets with current timestamp as pinned timestamp
-                val currentTime = System.currentTimeMillis()
-                val tweetWithPinnedTimestamp = tweet.copy(timestamp = currentTime)
-                _pinnedTweets.update { currentPinnedTweets ->
-                    (listOf(tweetWithPinnedTimestamp) + currentPinnedTweets)
-                        .distinctBy { it.mid }
-                }
-
-                Timber.tag("pinToTop").d("Tweet ${tweet.mid} pinned successfully at $currentTime")
+                // Pin order changes; the post's creation timestamp must not change.
+                applyPinnedTweets((listOf(tweet) + _pinnedTweets.value).distinctBy { it.mid })
             } else {
-                // Tweet is now unpinned: remove from pinned tweets and add back to tweets
-                _pinnedTweets.update { currentPinnedTweets ->
-                    currentPinnedTweets.filterNot { it.mid == tweet.mid }
-                }
-
-                // Add back to regular tweets using the same ordering as the main list
-                _tweets.update { currentTweets ->
-                    (listOf(tweet) + currentTweets)
-                        .distinctBy { it.mid }
-                        .sortedByDescending { it.profileOrderingTimestamp() }
-                }
-
-                Timber.tag("pinToTop").d("Tweet ${tweet.mid} unpinned successfully")
+                applyPinnedTweets(_pinnedTweets.value.filterNot { it.mid == tweet.mid })
             }
+            persistPinnedTweets()
 
             // Don't override tweet count - it should come from server data, not local list size
         }
@@ -2090,6 +1974,8 @@ class UserViewModel @AssistedInject constructor(
 
                             _tweets.value = updatedTweets
                             _pinnedTweets.value = updatedPinnedTweets
+                            pinnedTweetIds = pinnedTweetIds - event.tweetId
+                            persistPinnedTweets()
                             _favorites.value = updatedFavorites
                             _bookmarks.value = updatedBookmarks
 
@@ -2162,6 +2048,8 @@ class UserViewModel @AssistedInject constructor(
 
         _tweets.value = updatedTweets
         _pinnedTweets.value = updatedPinnedTweets
+        pinnedTweetIds = pinnedTweetIds - tweetId
+        persistPinnedTweets()
         _favorites.value = updatedFavorites
         _bookmarks.value = updatedBookmarks
     }
@@ -2171,7 +2059,8 @@ class UserViewModel @AssistedInject constructor(
             _tweets.value = (listOf(tweet) + tweets.value).distinctBy { it.mid }.sortedByDescending { it.profileOrderingTimestamp() }
         }
         if (inPinned && !pinnedTweets.value.any { it.mid == tweet.mid }) {
-            _pinnedTweets.value = (listOf(tweet) + pinnedTweets.value).distinctBy { it.mid }.sortedByDescending { it.profileOrderingTimestamp() }
+            applyPinnedTweets((listOf(tweet) + pinnedTweets.value).distinctBy { it.mid })
+            persistPinnedTweets()
         }
         if (inFavorites && !favorites.value.any { it.mid == tweet.mid }) {
             _favorites.value = (listOf(tweet) + favorites.value).distinctBy { it.mid }

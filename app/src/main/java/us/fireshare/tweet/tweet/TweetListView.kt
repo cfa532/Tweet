@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,12 +47,14 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -65,6 +68,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,6 +93,7 @@ import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import java.util.Collections
 import kotlin.math.abs
+import kotlin.math.ceil
 
 enum class ScrollDirection {
     UP, DOWN, NONE
@@ -239,7 +245,8 @@ fun TweetListView(
     pinnedTweets: List<Tweet> = emptyList(), // Pinned tweets to include in video navigation
     onScrolledToTop: (() -> Unit)? = null, // Callback after scroll-to-top completes (e.g. reset navbar/toolbar)
     onHeaderVisibilityChange: ((Boolean) -> Unit)? = null,
-    onPullRefresh: (suspend () -> Unit)? = null
+    onPullRefresh: (suspend () -> Unit)? = null,
+    externalRefreshToken: Int? = null
 
 ) {
     // Inject SharedViewModel to get TweetListViewModel
@@ -300,6 +307,9 @@ fun TweetListView(
     var lastUserId by remember { mutableStateOf<MimeiId?>(null) }
     var pendingLoadMorePage by remember { mutableIntStateOf(-1) }
     var isInitializingData by remember { mutableStateOf(false) }
+    // The long-lived scroll collector must see current parent loading/routing values.
+    val currentInitialLoading by rememberUpdatedState(isInitialLoading)
+    val currentRefreshToken by rememberUpdatedState(externalRefreshToken)
     // Track whether the user has actually scrolled, to prevent preloading on initial layout
     var hasUserScrolled by remember { mutableStateOf(false) }
     var lastNoMoreTweetsShown by remember { mutableLongStateOf(0L) }
@@ -314,6 +324,7 @@ fun TweetListView(
     // Pagination states
     var lastLoadedPage by rememberSaveable { mutableIntStateOf(-1) }
     var serverDepleted by rememberSaveable { mutableStateOf(false) }
+    var nextPageFailed by remember(context, currentUserId) { mutableStateOf(false) }
     // Track pages currently being fetched to prevent duplicate in-flight requests
     val inFlightPages = remember { mutableSetOf<Int>() }
     val listState = rememberLazyListState(
@@ -321,6 +332,17 @@ fun TweetListView(
         initialFirstVisibleItemScrollOffset = initialScrollPosition.second
     )
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current.density
+    val isDragging by listState.interactionSource.collectIsDraggedAsState()
+    var autoLoadsThisGesture by remember(context, currentUserId) { mutableIntStateOf(0) }
+    var rowCountAtLastAutoLoad by remember(context, currentUserId) { mutableIntStateOf(-1) }
+
+    LaunchedEffect(isDragging) {
+        if (isDragging) {
+            autoLoadsThisGesture = 0
+            rowCountAtLastAutoLoad = -1
+        }
+    }
 
     // Track active jobs for cleanup - using map to easily manage by ID
     val activeJobs = remember { mutableMapOf<String, Job>() }
@@ -527,7 +549,7 @@ fun TweetListView(
 
             // If tweets already loaded (e.g., by ViewModel.initialize()), just infer state.
             // Skip redundant fetchTweets(0) — the ViewModel already handles initial loading.
-            if (tweets.isNotEmpty()) {
+            if (externalRefreshToken == null && tweets.isNotEmpty()) {
                 serverDepleted = tweets.size < TW_CONST.PAGE_SIZE
                 lastLoadedPage = 0
             }
@@ -539,7 +561,7 @@ fun TweetListView(
     // EFFECT 2: Video list creation and ViewModel updates (incremental)
     LaunchedEffect(tweets.size, isInitialLoading, currentUserId) {
         // Initialize lastLoadedPage if needed
-        if (lastLoadedPage == -1 && tweets.isNotEmpty()) {
+        if (externalRefreshToken == null && lastLoadedPage == -1 && tweets.isNotEmpty()) {
             lastLoadedPage = 0
         }
         
@@ -603,10 +625,7 @@ fun TweetListView(
 
     // Derived states for pagination - optimized with throttling
     var isAtLastTweet by remember { mutableStateOf(false) }
-    var isNearBottom by remember { mutableStateOf(false) }
-    var nearBottomPreloadToken by remember { mutableLongStateOf(0L) }
-    var lastNearBottomPreloadScrollSignature by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    val minimumTweetsBeforeStoppingPagination = 4
+    val minimumTweetsBeforeStoppingPagination = 5
     val maxAutoLoadedExtraPages = 200
 
     val visibleTweetIndexById = remember(visibleTweets) {
@@ -617,6 +636,7 @@ fun TweetListView(
         startPage: Int,
         logTag: String
     ): Int {
+        if (startPage == 0) nextPageFailed = false
         var currentPage = startPage
         var autoLoadedExtraPages = 0
         var loadedValidCount = 0
@@ -626,6 +646,7 @@ fun TweetListView(
         while (!serverDepleted) {
             Timber.tag(logTag).d("Fetching page=$currentPage")
             val result = fetchTweets(currentPage)
+            nextPageFailed = false
             val validTweets = result.filterNotNull()
             val validCount = validTweets.size
             val responseWasFull = result.size >= TW_CONST.PAGE_SIZE
@@ -671,6 +692,31 @@ fun TweetListView(
         return loadedValidCount
     }
 
+    // Profile startup and route changes use the same cursor and raw response rules
+    // as scroll pagination. Cached/filtered row counts never prove server depletion.
+    LaunchedEffect(currentUserId, externalRefreshToken) {
+        if (externalRefreshToken == null || externalRefreshToken == 0) return@LaunchedEffect
+        isInitializingData = true
+        try {
+            val previousLoads = activeJobs.filterKeys {
+                it.startsWith("loadMore-") || it == "pullRefresh"
+            }.values.toList()
+            previousLoads.forEach { it.cancel() }
+            previousLoads.forEach { it.join() }
+            serverDepleted = false
+            lastLoadedPage = -1
+            withContext(Dispatchers.IO) {
+                fetchPagesUsingIosPaginationRule(0, "TweetListView-ProfileRefresh")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("TweetListView").w(e, "Profile page refresh failed; keeping cached rows")
+        } finally {
+            isInitializingData = false
+        }
+    }
+
     // EFFECT 3: Unified scroll tracking + pagination in a single snapshotFlow collector
     LaunchedEffect(listState, visibleTweets) {
         var previousFirstVisibleItem = listState.firstVisibleItemIndex
@@ -690,16 +736,34 @@ fun TweetListView(
         var lastMediaPreloadScrolling: Boolean? = null
         var lastMediaPreloadTime = 0L
         var lastHeaderVisible: Boolean? = null
+        var previousItemOffsets = emptyMap<Any, Int>()
+        var lastVelocitySampleTime = 0L
 
-	        snapshotFlow {
-	            Triple(
-	                listState.firstVisibleItemIndex,
-	                listState.firstVisibleItemScrollOffset,
-	                listState.isScrollInProgress
-	            )
-	        }
-	            .collect { (firstVisibleItem, scrollOffset, isScrolling) ->
+        snapshotFlow {
+            Triple(
+                Triple(
+                    listState.firstVisibleItemIndex,
+                    listState.firstVisibleItemScrollOffset,
+                    listState.isScrollInProgress
+                ),
+                Pair(pendingLoadMorePage, isRefreshingAtBottom),
+                Triple(isInitializingData || isRefreshingAtTop, currentInitialLoading, currentRefreshToken)
+            )
+        }.collect { (scroll, _, _) ->
+                val (firstVisibleItem, scrollOffset, isScrolling) = scroll
                 val now = System.currentTimeMillis()
+                val layoutInfo = listState.layoutInfo
+                // Measure motion using a row visible in both samples: index changes and
+                // variable-height tweets must not create artificial velocity spikes.
+                val scrollDelta = layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { item ->
+                    previousItemOffsets[item.key]?.let { previousOffset -> previousOffset - item.offset }
+                } ?: 0
+                val elapsed = now - lastVelocitySampleTime
+                val velocityDp = if (isScrolling && lastVelocitySampleTime > 0 && elapsed > 0) {
+                    abs(scrollDelta.toFloat()) / density * 1000f / elapsed
+                } else 0f
+                previousItemOffsets = layoutInfo.visibleItemsInfo.associate { it.key to it.offset }
+                lastVelocitySampleTime = now
                 val headerVisible = headerContent != null && firstVisibleItem == 0
                 if (headerVisible != lastHeaderVisible) {
                     onHeaderVisibilityChange?.invoke(headerVisible)
@@ -832,38 +896,43 @@ fun TweetListView(
                     hasUserScrolled = true
                 }
 
-                // --- Pagination checks (only when scroll stops) ---
-                if (isScrolling) return@collect
-
-                val layoutInfo = listState.layoutInfo
+                // Match iOS: fetch while dragging/coasting, with one page of runway
+                // normally and up to four pages' distance during a fast fling.
                 val lastIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                val totalItems = layoutInfo.totalItemsCount
-
                 val wasAtBottom = isAtLastTweet
-                isAtLastTweet = lastIndex == totalItems - 1
-                isNearBottom = lastIndex >= totalItems - 5 && lastIndex < totalItems - 1
-                if (isNearBottom) {
-                    val scrollSignature = Pair(firstVisibleItem, scrollOffset)
-                    if (hasUserScrolled && lastNearBottomPreloadScrollSignature != scrollSignature) {
-                        lastNearBottomPreloadScrollSignature = scrollSignature
-                        nearBottomPreloadToken++
-                    }
-                } else {
-                    lastNearBottomPreloadScrollSignature = null
-                }
+                isAtLastTweet = lastIndex == layoutInfo.totalItemsCount - 1
+                val lastVisibleTweetIndex = layoutInfo.visibleItemsInfo
+                    .mapNotNull { visibleTweetIndexById[it.key] }
+                    .maxOrNull()
+                val remainingRows = if (lastVisibleTweetIndex != null) {
+                    visibleTweets.size - 1 - lastVisibleTweetIndex
+                } else visibleTweets.size
+                val triggerRows = if (velocityDp > 300f) {
+                    ceil(velocityDp / 250f * 1.2f).toInt().coerceIn(10, 40)
+                } else 10
 
                 if (isAtLastTweet != wasAtBottom) {
                     Timber.tag("TweetListView-Position").d("isAtLastTweet=$isAtLastTweet")
                     onIsAtLastTweetChange?.invoke(isAtLastTweet)
                 }
 
-                // Load-more trigger when at bottom (only after user has scrolled)
-                if (!isAtLastTweet) return@collect
+                if (remainingRows >= triggerRows) return@collect
                 if (!hasUserScrolled) return@collect
-                if (serverDepleted) return@collect
-                if (isRefreshingAtBottom) return@collect
+                if (serverDepleted || currentRefreshToken == 0) return@collect
+                if (isRefreshingAtBottom || isRefreshingAtTop || isInitializingData || currentInitialLoading) return@collect
                 if (tweets.isEmpty()) return@collect
                 if (pendingLoadMorePage != -1) return@collect
+
+                // A reached bottom is demand for another page even if scrolling stopped
+                // while a previous read was busy. Apply preload limits only before it.
+                val waitingAtBottom = remainingRows == 0
+                if (isScrolling) {
+                    if (!waitingAtBottom && autoLoadsThisGesture >= 2) return@collect
+                } else {
+                    if (!waitingAtBottom && currentRefreshToken != null && visibleTweets.size >= 5) return@collect
+                    // A response that added no rows must not start an endless load chain.
+                    if (rowCountAtLastAutoLoad >= visibleTweets.size) return@collect
+                }
 
                 val timeSinceLastTrigger = now - lastLoadMoreTrigger
                 val timeSinceLastMessage = now - lastNoMoreTweetsShown
@@ -878,6 +947,8 @@ fun TweetListView(
                 val nextPage = lastLoadedPage + 1
                 if (nextPage in inFlightPages) return@collect // Deduplicate in-flight request
                 pendingLoadMorePage = nextPage
+                if (isScrolling) autoLoadsThisGesture += 1
+                rowCountAtLastAutoLoad = visibleTweets.size
                 lastLoadMoreTrigger = now
                 inFlightPages.add(nextPage)
 
@@ -886,31 +957,25 @@ fun TweetListView(
                 isRefreshingAtBottom = true
                 val spinnerShowTime = System.currentTimeMillis()
 
-                val timeoutJob = coroutineScope.launch {
-                    delay(10000)
-                    Timber.tag("TweetListView-LoadMore").w("TIMEOUT: forcing spinner to hide")
-                    isRefreshingAtBottom = false
-                    pendingLoadMorePage = -1
-                    inFlightPages.remove(nextPage)
-                }
-
                 val loadJob = coroutineScope.launch {
                     var validTweetsLoaded = 0
                     try {
-                        withContext(Dispatchers.IO) {
-                            validTweetsLoaded = fetchPagesUsingIosPaginationRule(
-                                startPage = nextPage,
-                                logTag = "TweetListView-LoadMore"
-                            )
+                        // The existing load timeout ends the request as well as the
+                        // spinner, so continued scrolling cannot overlap a timed-out page.
+                        withTimeout(10_000) {
+                            withContext(Dispatchers.IO) {
+                                validTweetsLoaded = fetchPagesUsingIosPaginationRule(
+                                    startPage = nextPage,
+                                    logTag = "TweetListView-LoadMore"
+                                )
+                            }
                         }
                     } catch (e: Exception) {
-                        if (e is CancellationException) throw e
+                        if (e is CancellationException && e !is TimeoutCancellationException) throw e
                         Timber.tag("TweetListView-LoadMore").e(e, "Error loading more")
-                        reportFetchFailure()
+                        nextPageFailed = true
                     } finally {
                         withContext(NonCancellable + Dispatchers.Main) {
-                            timeoutJob.cancel()
-
                             val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
                             if (spinnerDuration < 500L) {
                                 delay(500L - spinnerDuration)
@@ -935,7 +1000,8 @@ fun TweetListView(
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshingAtTop,
-        onRefresh = {
+        onRefresh = refresh@ {
+            if (isInitializingData || isInitialLoading || isRefreshingAtBottom || isRefreshingAtTop) return@refresh
             val refreshJob = coroutineScope.launch {
                 isRefreshingAtTop = true
                 try {
@@ -969,45 +1035,6 @@ fun TweetListView(
         }
     )
 
-    // EFFECT 4: Preload next page once per near-bottom scroll position.
-    // Do not key this to lastLoadedPage; otherwise a successful preload can
-    // immediately trigger the next page while the user has not moved.
-    LaunchedEffect(nearBottomPreloadToken, serverDepleted) {
-        if (nearBottomPreloadToken > 0 && isNearBottom && hasUserScrolled && !serverDepleted && tweets.size >= 4 && pendingLoadMorePage == -1) {
-            val nextPage = lastLoadedPage + 1
-            if (nextPage in inFlightPages) return@LaunchedEffect // Deduplicate in-flight request
-            pendingLoadMorePage = nextPage
-            inFlightPages.add(nextPage)
-            
-            val preloadJob = coroutineScope.launch {
-                isRefreshingAtBottom = true
-                val spinnerShowTime = System.currentTimeMillis()
-                try {
-                    withContext(Dispatchers.IO) {
-                        fetchPagesUsingIosPaginationRule(
-                            startPage = nextPage,
-                            logTag = "TweetListView-Preload"
-                        )
-                    }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Timber.tag("TweetListView").e(e, "Preload error")
-                    reportFetchFailure()
-                } finally {
-                    withContext(NonCancellable + Dispatchers.Main) {
-                        val spinnerDuration = System.currentTimeMillis() - spinnerShowTime
-                        if (spinnerDuration < 500L) {
-                            delay(500L - spinnerDuration)
-                        }
-                        isRefreshingAtBottom = false
-                        pendingLoadMorePage = -1
-                        inFlightPages.remove(nextPage)
-                    }
-                }
-            }
-            addJob("preload-$nextPage", preloadJob)
-        }
-    }
 
     Box(
         modifier = modifier
@@ -1088,10 +1115,13 @@ fun TweetListView(
                 }
             }
 
-            // Loading spinner at bottom with animation
+            // Cached rows can reach the bottom while their initial/refresh read is
+            // still running. Keep the backend wait visible there as well as on pagination.
             item(key = "loading_spinner") {
                 AnimatedVisibility(
-                    visible = isRefreshingAtBottom,
+                    visible = visibleTweets.isNotEmpty() && (
+                        isRefreshingAtBottom || isInitializingData || isInitialLoading || isRefreshingAtTop
+                    ),
                     enter = fadeIn(animationSpec = tween(300)) + slideInVertically(
                         animationSpec = tween(300),
                         initialOffsetY = { it / 2 }
@@ -1116,8 +1146,11 @@ fun TweetListView(
                 }
             }
             
-            // Show "no more tweets" message persistently when server is depleted
-            if (serverDepleted && tweets.isNotEmpty()) {
+            // Keep a failed next page visible in the same footer as end-of-list status.
+            // A retry leaves the cursor available and clears this message on success.
+            if ((nextPageFailed || serverDepleted) && tweets.isNotEmpty() &&
+                !isRefreshingAtBottom && !isInitializingData && !isInitialLoading && !isRefreshingAtTop
+            ) {
                 item(key = "no_more_tweets") {
                     Box(
                         modifier = Modifier
@@ -1126,7 +1159,9 @@ fun TweetListView(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.no_more_tweets),
+                            text = stringResource(
+                                if (nextPageFailed) R.string.fetch_failed else R.string.no_more_tweets
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )

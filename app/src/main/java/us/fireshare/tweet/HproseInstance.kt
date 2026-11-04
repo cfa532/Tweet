@@ -3316,7 +3316,7 @@ object HproseInstance {
     ): List<Tweet?> {
         if (!isOnline.value) {
             Timber.tag("getTweetsByUser").d("Offline: skipping network call")
-            return emptyList()
+            throw IllegalStateException("Cannot load profile tweets while offline")
         }
         var activeUser = user
         var refreshedRoute = false
@@ -3338,7 +3338,7 @@ object HproseInstance {
             
             if (activeUser.hproseService == null) {
                 Timber.tag("getTweetsByUser").e("❌ user.hproseService is NULL! Cannot fetch tweets")
-                return emptyList()
+                throw IllegalStateException("Profile client is not initialized for ${activeUser.mid}")
             }
             
             var profileNodeUrl: String? = null
@@ -3360,7 +3360,7 @@ object HproseInstance {
                 Timber.tag("getTweetsByUser")
                     .e("Tweets loading failed for user ${activeUser.mid}: ${serverMessage ?: "Unknown error occurred"}")
 
-                return emptyList()
+                throw IllegalStateException(serverMessage ?: "Profile tweet request failed")
             }
 
             // Extract tweets and originalTweets from the new response format
@@ -3436,6 +3436,7 @@ object HproseInstance {
             NodePool.updateFromUser(activeUser)
             return result
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // The iOS path gives a freshly resolved or alternate route one attempt.
             // Do not restart the original recovery ladder from that new destination.
             if (refreshedRoute || usedAlternateAfterTimeout) {
@@ -6495,6 +6496,8 @@ object HproseInstance {
         return try {
             val rawResponse = runStorageRead<Any>(user, entry, params)
             unwrapV2Response<List<Map<String, Any>>>(rawResponse)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag("getPinnedList").e("Error getting pinned tweets for user: ${user.mid}")
             Timber.tag("getPinnedList").e("Exception: $e")

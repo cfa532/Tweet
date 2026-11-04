@@ -139,68 +139,55 @@ fun ProfileScreen(
                     .background(MaterialTheme.colorScheme.background)
                     .padding(innerPadding)
             ) {
-                if (initState) {
-                    // Show loading spinner while initial data is being loaded
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp
-                        )
-                    }
-                } else {
-                    // Use a dedicated coordinator for this profile so leaving main feed
-                    // (or returning from profile) does not clear this list's playback state.
-                    CompositionLocalProvider(
-                        LocalVideoCoordinator provides profileCoordinator
-                    ) {
-                        ProfileContentWithTweetListView(
-                            viewModel = viewModel,
-                            navController = navController,
-                            parentEntry = parentEntry,
-                            scrollBehavior = scrollBehavior,
-                            initState = initState,
-                            userId = userId,
-                            onScrollStateChange = { newScrollState ->
-                                scrollState = newScrollState
+                // Use a dedicated coordinator for this profile so leaving main feed
+                // (or returning from profile) does not clear this list's playback state.
+                CompositionLocalProvider(
+                    LocalVideoCoordinator provides profileCoordinator
+                ) {
+                    ProfileContentWithTweetListView(
+                        viewModel = viewModel,
+                        navController = navController,
+                        parentEntry = parentEntry,
+                        scrollBehavior = scrollBehavior,
+                        initState = initState,
+                        userId = userId,
+                        onScrollStateChange = { newScrollState ->
+                            scrollState = newScrollState
 
-                                // Update bottom bar transparency based on scroll direction
-                                when (newScrollState.direction) {
-                                    ScrollDirection.UP -> {
-                                        // Scroll UP (content moves down): restore header and bottom bar
-                                        BottomBarState.opacity = 0.98f
-                                    }
+                            // Update bottom bar transparency based on scroll direction
+                            when (newScrollState.direction) {
+                                ScrollDirection.UP -> {
+                                    // Scroll UP (content moves down): restore header and bottom bar
+                                    BottomBarState.opacity = 0.98f
+                                }
 
-                                    ScrollDirection.DOWN -> {
-                                        // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
-                                        coroutineScope.launch {
-                                            withContext(Dispatchers.Main) {
-                                                delay(100) // Small delay for smooth transition
-                                                if (scrollState.direction == ScrollDirection.DOWN) {
-                                                    BottomBarState.opacity = 0.2f
-                                                }
+                                ScrollDirection.DOWN -> {
+                                    // Scroll DOWN (content moves up): collapse header and reduce bottom bar opacity
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.Main) {
+                                            delay(100) // Small delay for smooth transition
+                                            if (scrollState.direction == ScrollDirection.DOWN) {
+                                                BottomBarState.opacity = 0.2f
                                             }
                                         }
                                     }
-
-                                    ScrollDirection.NONE -> {
-                                        // Idle state: keep current opacity, don't restore automatically
-                                        // Only restore when user starts scrolling up
-                                    }
                                 }
-                            },
-                            onScrolledToTop = {
-                                BottomBarState.opacity = 0.98f
-                                scrollState = ScrollState(false, ScrollDirection.NONE)
-                                scrollBehavior.state.heightOffset = 0f
-                            },
-                            scrollToTopTrigger = scrollToTopTrigger,
-                            scrollToTweetId = scrollToTweetId,
-                            scrollToTweetTrigger = scrollToTweetTrigger
-                        )
-                    }
+
+                                ScrollDirection.NONE -> {
+                                    // Idle state: keep current opacity, don't restore automatically
+                                    // Only restore when user starts scrolling up
+                                }
+                            }
+                        },
+                        onScrolledToTop = {
+                            BottomBarState.opacity = 0.98f
+                            scrollState = ScrollState(false, ScrollDirection.NONE)
+                            scrollBehavior.state.heightOffset = 0f
+                        },
+                        scrollToTopTrigger = scrollToTopTrigger,
+                        scrollToTweetId = scrollToTweetId,
+                        scrollToTweetTrigger = scrollToTweetTrigger
+                    )
                 }
 
             }
@@ -262,6 +249,7 @@ private fun ProfileContentWithTweetListView(
 ) {
     val tweets by viewModel.tweets.collectAsState()
     val pinnedTweets by viewModel.pinnedTweets.collectAsState()
+    val refreshToken by viewModel.profileTweetsRefreshToken.collectAsState()
 
     // Create header content with profile details and pinned tweets - make it stable
     // Use remember with no dependencies to create a stable reference that doesn't change
@@ -331,6 +319,7 @@ private fun ProfileContentWithTweetListView(
     // TweetListView handles its own pull-to-refresh functionality
     TweetListView(
         tweets = tweets,
+        externalRefreshToken = refreshToken,
         fetchTweets = { pageNumber ->
             viewModel.fetchTweets(pageNumber)
         },
