@@ -9,6 +9,13 @@ interface HproseService {
     fun<T> runMApp(entry: String, request: Map<*, *>, args: List<ByteArray?> = emptyList()): T?
     fun getVarByContext(sid: String, context: String, mapOpt: Map<String, String>? = null): String
     fun login(ppt: String): Map<String, String>
+
+    // Leither's own byname login and registration, reached on the node's RPC
+    // surface (not a MApp entry): the caller-identity sign-in the owner-only
+    // writes port relies on. Method names match the remote RPCs exactly.
+    fun Login(username: String, password: String): Map<String, String>
+    fun Register(name: String, password: String, email: String): String
+
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String
     fun mmCreate(
         sid: String,

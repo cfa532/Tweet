@@ -1711,6 +1711,9 @@ class UserViewModel @AssistedInject constructor(
 
     suspend fun logout(popBack: () -> Unit) = withContext(Dispatchers.Main.immediate) {
         preferenceHelper.setUserId(null)
+        // Signing out ends the caller's identity everywhere: the guest
+        // credential and every cached Leither session go with it.
+        HproseInstance.clearOwnerIdentity()
         Tweet.clearInteractionOverrides()
         val guestUser = User.getInstance(TW_CONST.GUEST_ID)
         guestUser.followingList = HproseInstance.getAlphaIds()

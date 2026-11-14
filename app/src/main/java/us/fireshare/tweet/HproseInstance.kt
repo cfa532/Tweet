@@ -65,6 +65,7 @@ import us.fireshare.tweet.datamodel.UserRoutes
 import us.fireshare.tweet.datamodel.User.Companion.getInstance
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.network.HproseClientPool
+import us.fireshare.tweet.network.UserSession
 import us.fireshare.tweet.service.MediaUploadService
 import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.utils.ErrorMessageUtils
@@ -295,6 +296,16 @@ object HproseInstance {
 
     private data class BackendStorageCapabilities(
         val formats: Set<String>,
+        // health flags beyond storage: userSessions says this node checks the
+        // caller's Leither session ("usersid"); commentDelegation says it routes
+        // comments through the writer's own root; engagementDelegation the same
+        // for likes, bookmarks and retweet counts; messageDelegation for
+        // messages. All false on an older backend, which keeps the old wire
+        // forms.
+        val userSessions: Boolean,
+        val commentDelegation: Boolean,
+        val engagementDelegation: Boolean,
+        val messageDelegation: Boolean,
         val checkedAt: Long
     )
 
@@ -374,7 +385,14 @@ object HproseInstance {
             } else {
                 setOf(DATABASE_STORAGE_FORMAT)
             }
-            val result = BackendStorageCapabilities(formats, System.currentTimeMillis())
+            val result = BackendStorageCapabilities(
+                formats,
+                userSessions = reply["userSessions"] == true,
+                commentDelegation = reply["commentDelegation"] == true,
+                engagementDelegation = reply["engagementDelegation"] == true,
+                messageDelegation = reply["messageDelegation"] == true,
+                checkedAt = System.currentTimeMillis()
+            )
             synchronized(storageCapabilitiesLock) {
                 storageCapabilitiesCache[key] = result
             }
@@ -1160,23 +1178,32 @@ object HproseInstance {
         // Step 1: Send to sender's own node (message_outgoing) with retry
         Timber.tag("sendMessage").d("📤 Step 1: Sending message_outgoing to sender's node")
         val senderSendResult = sendToSenderNodeWithRetry(receiptId, msg, maxRetries = 2)
-        
+
         if (!senderSendResult.first) {
             return senderSendResult
         }
-        
+
         Timber.tag("sendMessage").d("✅ Step 1 completed: Successfully sent to sender's node")
-        
+
+        // On a delegating backend, message_outgoing delivered both halves — it
+        // asked the recipient's node itself, through the guarded peer entry no
+        // client may call. Only an older backend still needs the client to
+        // write the recipient's copy directly.
+        if (nodeSupportsMessageDelegation(appUser)) {
+            Timber.tag("sendMessage").d("✅ Sender's node delivered both halves; skipping direct recipient write")
+            return Pair(true, null)
+        }
+
         // Step 2: Send to recipient's node (message_incoming) with retry
         Timber.tag("sendMessage").d("📤 Step 2: Sending message_incoming to recipient's node")
         val recipientSendResult = sendToRecipientNodeWithRetry(receiptId, msg, maxRetries = 2)
-        
+
         if (!recipientSendResult.first) {
             return recipientSendResult
         }
-        
+
         Timber.tag("sendMessage").d("✅ Step 2 completed: Successfully sent to recipient's node")
-        
+
         // Both steps succeeded
         return Pair(true, null)
     }
@@ -1210,7 +1237,10 @@ object HproseInstance {
             }
             
             val entry = "message_outgoing"
-            val params = mapOf(
+            // message_outgoing now writes both halves on a delegating backend —
+            // the sender's copy, then the recipient's through a cross-node peer
+            // call — so the window must cover two writes, not one.
+            val params = mutableMapOf<String, Any?>(
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
@@ -1220,8 +1250,8 @@ object HproseInstance {
                 "msg" to Json.encodeToString(msg),
                 "hostid" to (appUser.hostIds?.first() ?: "")
             )
-            
-            val senderClient = messagingClient(appUser, forceResolve = forceRefresh && !lastFailureWasTimeout)
+
+            val senderClient = messagingClient(appUser, forceResolve = forceRefresh && !lastFailureWasTimeout, timeoutMillis = 30_000)
             if (senderClient == null) {
                 val errorMsg = "Failed to create client for sender node"
                 Timber.tag("sendMessage").e("❌ $errorMsg - writableUrl: ${appUser.writableUrl}")
@@ -1231,11 +1261,25 @@ object HproseInstance {
                 }
                 return Pair(false, errorMsg)
             }
-            
+
             Timber.tag("sendMessage").d("📤 Sending to sender node (attempt ${attempt + 1}/${maxRetries + 1}) - writableUrl: ${appUser.writableUrl}")
-            
+
             try {
-                val response = senderClient.runMApp<Any>(entry, params)
+                val senderUrl = appUser.writableUrl ?: appUser.resolveWritableUrl()
+                // Attach the caller's session (message_outgoing is an
+                // owner-checked entry), with one re-sign-in if it dropped.
+                val owner = params["userid"] as? String
+                if (owner != null && senderUrl != null) {
+                    userSession(owner, senderUrl, senderClient)?.let { params["usersid"] = it }
+                }
+                var response = senderClient.runMApp<Any>(entry, params)
+                if (owner != null && senderUrl != null && UserSession.isSessionInvalid(response)) {
+                    UserSession.discardSession(owner, senderUrl)
+                    userSession(owner, senderUrl, senderClient)?.let { renewed ->
+                        params["usersid"] = renewed
+                        response = senderClient.runMApp<Any>(entry, params)
+                    }
+                }
                 
                 // Handle different response types
                 val isSuccess = when (response) {
@@ -1393,7 +1437,7 @@ object HproseInstance {
             return null
         }
         val entry = "message_fetch"
-        val params = mapOf(
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
@@ -1405,8 +1449,9 @@ object HproseInstance {
         return try {
             // Get raw response and unwrap v2 format (matching iOS implementation)
             // message_fetch marks the conversation read, so it writes and belongs on
-            // the root node that holds the message store.
-            val rawResponse = messagingClient(appUser, forceResolve = false)?.runMApp<Any>(entry, params)
+            // the root node that holds the message store. runWrite attaches the
+            // caller's session — the entry is owner-checked.
+            val rawResponse = runWrite<Any>(appUser, "fetchMessages", entry, params)
             Timber.tag("fetchMessages").d("Raw response type: ${rawResponse?.javaClass?.simpleName}, value: $rawResponse")
 
             // Handle v2 response format: {success: true, data: [...]} or {success: false, error: ...} or direct array
@@ -1675,14 +1720,38 @@ object HproseInstance {
                 }
                 
                 val entry = "login"
-                val params = mapOf(
+                // A backend with userSessions identifies the caller by a Leither
+                // session rather than a stored password. Sign in on the account's
+                // root node — where an older account still carrying a password is
+                // bound on its first login — and present the session alongside the
+                // credentials (the password is what binds that older account and
+                // is ignored once bound). An older backend takes the same entry on
+                // the provider node, unchanged.
+                var loginParams = mapOf(
                     "aid" to appId,
                     "ver" to "last",
                     "version" to "v2",
                     "username" to username,
                     "password" to password
                 )
-                val rawResponse = runStorageRead<Map<String, Any>>(user, entry, params)
+                try {
+                    val rootUrl = user.resolveWritableUrl()
+                    if (rootUrl != null &&
+                        storageCapabilities(rootUrl, mapOf("aid" to appId, "ver" to "last")).userSessions
+                    ) {
+                        val rootClient = HproseClientPool.getWritableClient(rootUrl)
+                        if (rootClient != null) {
+                            UserSession.leitherLogin(rootClient, username, password)?.let { sid ->
+                                UserSession.rememberSession(userId, rootUrl, sid)
+                                loginParams = loginParams + mapOf("usersid" to sid)
+                                Timber.tag("Login").d("Signed in to Leither on the account root; presenting usersid")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("Login").w(e, "session sign-in failed; falling back to password login")
+                }
+                val rawResponse = runStorageRead<Map<String, Any>>(user, entry, loginParams)
                 val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
                 // Handle v2 response format: {success: true, data: {user: ..., status: "success"}} or {success: false, message: "..."}
@@ -1694,6 +1763,9 @@ object HproseInstance {
                         if (userData != null) {
                             user.from(userData)
                         }
+                        // Keep the guest credential for this device: later writes
+                        // re-open Leither sessions with it.
+                        UserSession.storeCredential(applicationContext, userId, username, password)
                         Timber.tag("Login").d("Login successful for user: ${user.username}")
                         return Pair(user, null)
                     } else {
@@ -2046,13 +2118,53 @@ object HproseInstance {
             hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
         }
 
+        // A backend with userSessions registers the guest with Leither on this
+        // node first; the app account is then created with the session and
+        // stores no password. An older backend takes the password in the user
+        // blob, as before.
+        var payloadUser = newUser
+        var usersid: String? = null
+        try {
+            val registrationNodeUrl = if (hostId?.trim()?.isNotEmpty() == true) {
+                val root = hostId!!.trim()
+                val address = getHostIP(root, v4Only = "false", usePool = false)
+                if (address != null) User.resolvedNodeUrl(address) else null
+            } else {
+                null
+            }
+            val probeUrl = registrationNodeUrl
+                ?: PreferenceHelper(applicationContext).getAppUrls().firstOrNull()
+            if (probeUrl != null &&
+                storageCapabilities(probeUrl, mapOf("aid" to appId, "ver" to "last")).userSessions
+            ) {
+                val client = registrationNodeUrl?.let {
+                    HproseClientPool.getWritableClient(it, 30_000)
+                } ?: appUser.hproseService
+                if (client != null) {
+                    val uid = UserSession.leitherRegister(client, username, password)
+                    if (uid != null) {
+                        val sid = UserSession.leitherLogin(client, username, password)
+                        if (sid != null) {
+                            usersid = sid
+                            payloadUser = newUser.copy(password = null)
+                        } else {
+                            return Pair(false, "Registered with the node, but sign-in failed. Try logging in.")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("registerUser").w(e, "Leither registration not attempted; using the old form")
+        }
+
         val entry = "register"
-        val params = mapOf(
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
-            "user" to Json.encodeToString(newUser)
+            "user" to Json.encodeToString(payloadUser)
         )
+        usersid?.let { params["usersid"] = it }
 
         try {
             // Registration's destination is an API responsibility, not UI state.
@@ -2085,6 +2197,19 @@ object HproseInstance {
                 val registeredUserId = userDict?.get("mid") as? String
                 val registeredUserHostId = (userDict?.get("hostIds") as? List<*>)
                     ?.firstOrNull() as? String
+
+                // The new account writes with the session just opened for it,
+                // and the auto-follow below re-uses the credential.
+                if (usersid != null && registeredUserId != null) {
+                    UserSession.storeCredential(applicationContext, registeredUserId, username, password)
+                    if (!registeredUserHostId.isNullOrBlank()) {
+                        val nodeUrl = getHostIP(registeredUserHostId, v4Only = "false", usePool = false)
+                            ?.let { User.resolvedNodeUrl(it) }
+                        if (nodeUrl != null) {
+                            UserSession.rememberSession(registeredUserId, nodeUrl, usersid)
+                        }
+                    }
+                }
 
                 if (registeredUserId != null && !registeredUserHostId.isNullOrBlank()) {
                     CoroutineScope(Dispatchers.IO).launch {
@@ -2332,14 +2457,22 @@ object HproseInstance {
      * or a retry asks for a fresh one. Returns null instead of throwing, because
      * the callers retry on a missing client rather than failing outright.
      */
-    private suspend fun messagingClient(user: User, forceResolve: Boolean): HproseService? {
-        if (!forceResolve) {
+    private suspend fun messagingClient(
+        user: User,
+        forceResolve: Boolean,
+        timeoutMillis: Int? = null
+    ): HproseService? {
+        if (!forceResolve && timeoutMillis == null) {
             user.writableClient?.let { return it }
         }
-        if (user.resolveWritableUrl().isNullOrBlank()) {
+        val url = user.resolveWritableUrl()
+        if (url.isNullOrBlank()) {
             return null
         }
-        return user.writableClient
+        if (timeoutMillis == null) {
+            return user.writableClient
+        }
+        return HproseClientPool.getWritableClient(url, timeoutMillis)
     }
 
     private suspend fun requireWritableClient(
@@ -2358,6 +2491,137 @@ object HproseInstance {
         }
         return client
             ?: throw IllegalStateException("$operation failed: writable client not available for $writableUrl")
+    }
+
+    // ------------------------------------------------------------------
+    // Caller sessions (owner-only writes)
+    // ------------------------------------------------------------------
+
+    /**
+     * The account an entry writes to, for the entries where the backend checks
+     * that the caller owns it. Mirrors the requireOwner call sites in
+     * TweetBackendApp; null for every other entry.
+     */
+    private fun ownedAccountKey(entry: String, params: Map<*, *>): String? {
+        fun jsonField(raw: Any?, key: String): String? {
+            val text = raw as? String ?: return null
+            return try {
+                val obj = Json.parseToJsonElement(text).let { it as? kotlinx.serialization.json.JsonObject }
+                    ?: return null
+                (obj[key] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            } catch (e: Exception) {
+                null
+            }
+        }
+        return when (entry) {
+            "update_tweet", "toggle_tweet_privacy", "toggle_pinned_tweet", "delete_comment",
+            "toggle_favorite", "retweet_added", "retweet_removed"
+            -> params["appuserid"] as? String
+            "delete_tweet", "toggle_following", "toggle_bookmark", "block_user",
+            "remove_blacklisted_relationship", "set_user_avatar", "delete_account",
+            "message_outgoing", "message_fetch", "share_file"
+            -> params["userid"] as? String
+            "add_tweet" -> jsonField(params["tweet"], "authorId")
+            "add_comment" -> jsonField(params["comment"], "authorId")
+            "set_author_core_data" -> jsonField(params["user"], "mid")
+            else -> null
+        }
+    }
+
+    /**
+     * The Leither session proving to the node at nodeUrl that this caller
+     * controls accountId. Only an account whose guest credential this device
+     * holds can be signed in — an account with no stored credential (an admin
+     * acting on another user's data, or a pre-session account that has not
+     * signed in since) writes without a session, as before.
+     */
+    private suspend fun userSession(accountId: String, nodeUrl: String, client: HproseService): String? {
+        val credential = UserSession.loadCredential(applicationContext, accountId) ?: return null
+        UserSession.cachedSession(accountId, nodeUrl)?.let { return it }
+        return try {
+            val capabilities = storageCapabilities(nodeUrl, mapOf("aid" to appId, "ver" to "last"))
+            if (!capabilities.userSessions) return null
+            val sid = UserSession.leitherLogin(client, credential.first, credential.second) ?: return null
+            UserSession.rememberSession(accountId, nodeUrl, sid)
+            sid
+        } catch (e: Exception) {
+            Timber.tag("UserSession").w(e, "session probe failed; writing without a session")
+            null
+        }
+    }
+
+    /**
+     * Every write to the signed-in user's own data passes through here: the
+     * session is attached when the device holds the account's credential, and a
+     * node that dropped the session ("Session invalid") gets one re-signed-in
+     * attempt before the failure is returned. Resolves the writable client the
+     * same way requireWritableClient does.
+     */
+    private suspend fun <T : Any> runWrite(
+        user: User,
+        operation: String,
+        entry: String,
+        params: MutableMap<String, Any?>,
+        timeoutMillis: Int? = null
+    ): T? {
+        val nodeUrl = user.resolveWritableUrl()
+        if (nodeUrl.isNullOrBlank()) {
+            throw IllegalStateException("$operation failed: writableUrl could not be resolved for user ${user.mid}")
+        }
+        val client = (if (timeoutMillis == null) user.writableClient
+        else HproseClientPool.getWritableClient(nodeUrl, timeoutMillis))
+            ?: throw IllegalStateException("$operation failed: writable client not available for $nodeUrl")
+
+        val owner = ownedAccountKey(entry, params)
+        if (owner != null) {
+            userSession(owner, nodeUrl, client)?.let { params["usersid"] = it }
+        }
+        var reply = client.runMApp<T>(entry, params)
+        if (owner != null && UserSession.isSessionInvalid(reply)) {
+            UserSession.discardSession(owner, nodeUrl)
+            val renewed = userSession(owner, nodeUrl, client)
+            if (renewed != null) {
+                params["usersid"] = renewed
+                reply = client.runMApp<T>(entry, params)
+            }
+        }
+        return reply
+    }
+
+    /**
+     * Whether the node behind this user's writable route advertises a
+     * capability flag. No answer or an old backend reads as false, which keeps
+     * the old wire form.
+     */
+    private suspend fun nodeAdvertises(
+        user: User,
+        flag: (BackendStorageCapabilities) -> Boolean
+    ): Boolean {
+        return try {
+            val url = user.resolveWritableUrl() ?: return false
+            flag(storageCapabilities(url, mapOf("aid" to appId, "ver" to "last")))
+        } catch (e: Exception) {
+            Timber.tag("UserSession").w(e, "capability probe failed; using the old wire form")
+            false
+        }
+    }
+
+    private suspend fun nodeSupportsCommentDelegation(user: User) =
+        nodeAdvertises(user) { it.commentDelegation }
+
+    private suspend fun nodeSupportsEngagementDelegation(user: User) =
+        nodeAdvertises(user) { it.engagementDelegation }
+
+    private suspend fun nodeSupportsMessageDelegation(user: User) =
+        nodeAdvertises(user) { it.messageDelegation }
+
+    /**
+     * Signing out ends the caller's identity everywhere: the guest credential
+     * and every cached Leither session go with it.
+     */
+    fun clearOwnerIdentity() {
+        UserSession.clearCredential(applicationContext)
+        UserSession.clearAll()
     }
 
     /**
@@ -2903,7 +3167,7 @@ object HproseInstance {
             return emptyList()
         }
         
-        val params = mutableMapOf(
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
@@ -3246,7 +3510,7 @@ object HproseInstance {
      */
     private suspend fun updateCurrentHostFollowingTweetsIfNeeded(
         homeResponse: Map<String, Any>,
-        params: Map<String, Any>
+        params: Map<String, Any?>
     ) {
         val hostIds = appUser.hostIds.orEmpty()
         val homeHostId = hostIds.getOrNull(0)
@@ -4118,7 +4382,7 @@ object HproseInstance {
             return null
         }
         val entry = if (direction == 1) "retweet_added" else "retweet_removed"
-        val params = mapOf(
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
@@ -4131,13 +4395,12 @@ object HproseInstance {
         return try {
             val author = originalTweet.author ?: fetchUser(originalTweet.authorId)
                 ?: throw IllegalStateException("Original tweet author is not available")
-            val client = requireWritableClient(
-                author,
-                "updateRetweetCount",
-                TOGGLE_MUTATION_TIMEOUT_MS
-            )
+            // On a delegating backend the retweeter's own root performs the
+            // request and the original author's node is only the target of its
+            // delegation.
+            val targetUser = if (nodeSupportsEngagementDelegation(author)) appUser else author
             val rawResponse = try {
-                client.runMApp<Map<String, Any>>(entry, params)
+                runWrite<Map<String, Any>>(targetUser, "updateRetweetCount", entry, params, TOGGLE_MUTATION_TIMEOUT_MS)
             } catch (e: Exception) {
                 Timber.tag("updateRetweetCount").e(e, "Exception calling runMApp for updateRetweetCount, tweetId: ${originalTweet.mid}")
                 throw e
@@ -4171,18 +4434,21 @@ object HproseInstance {
         Timber.tag("HproseInstance").d("uploadTweet called for tweet: ${tweet.mid}, content: '${tweet.content}', attachments: ${tweet.attachments?.size ?: 0}")
 
         val entry = "add_tweet"
-        val params = mapOf(
+        // The requestid names this submission: the tweet's server id is derived
+        // from it, so a retry after a lost response resolves the same tweet
+        // instead of creating a duplicate. Old backends ignore the param.
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "hostid" to (appUser.hostIds?.first() ?: ""),
-            "tweet" to Json.encodeToString(tweet)
+            "tweet" to Json.encodeToString(tweet),
+            "requestid" to "tw-${java.util.UUID.randomUUID()}"
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            val client = requireWritableClient(appUser, "uploadTweet", ADD_TWEET_TIMEOUT_MS)
             val rawResponse = try {
-                client.runMApp<Map<String, Any>>(entry, params)
+                runWrite<Map<String, Any>>(appUser, "uploadTweet", entry, params, ADD_TWEET_TIMEOUT_MS)
             } catch (e: Exception) {
                 Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
                 throw e
@@ -4250,26 +4516,25 @@ object HproseInstance {
             throw Exception("No network connection")
         }
         val entry = "delete_comment"
-        val params = mapOf(
+        // As with add_comment: on a delegating backend the request goes to the
+        // deleter's own root, signed by their session; the param naming the
+        // deleter is appuserid on the new contract.
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "entry" to entry,
             "tweetid" to parentTweet.mid,
             "commentid" to commentId,
-            "userid" to appUser.mid,
+            "appuserid" to appUser.mid,
             "hostid" to (parentTweet.author?.hostIds?.first() ?: "")
         )
         try {
             val parentAuthor = parentTweet.author ?: fetchUser(parentTweet.authorId)
                 ?: throw IllegalStateException("Parent tweet author is not available")
-            val client = requireWritableClient(
-                parentAuthor,
-                "delComment",
-                TOGGLE_MUTATION_TIMEOUT_MS
-            )
+            val targetUser = if (nodeSupportsCommentDelegation(parentAuthor)) appUser else parentAuthor
             val rawResponse = try {
-                client.runMApp<Any>(entry, params)
+                runWrite<Any>(targetUser, "delComment", entry, params, TOGGLE_MUTATION_TIMEOUT_MS)
             } catch (e: Exception) {
                 Timber.tag("delComment").e(e, "Exception calling runMApp for delComment, tweetId: ${parentTweet.mid}, commentId: $commentId")
                 throw e
@@ -4303,7 +4568,7 @@ object HproseInstance {
         // followingid_hostid hints the target's primary host so the call routes
         // to the right shard (matches iOS cachedFollowing.hostIds?.first).
         val cachedFollowing = getInstance(followedId)
-        val params = mapOf(
+        val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
@@ -4330,9 +4595,11 @@ object HproseInstance {
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
 
-            // Wrap in try-catch to catch any exceptions from hprose client
+            // Wrap in try-catch to catch any exceptions from hprose client.
+            // runWrite attaches the caller's session when this device holds
+            // the acting account's credential.
             val rawResponse = try {
-                homeService.runMApp<Any>(entry, params)
+                runWrite<Any>(actingUser, "toggleFollowing", entry, params, TOGGLE_MUTATION_TIMEOUT_MS)
             } catch (e: Throwable) {
                 Timber.tag("toggleFollowing").e(e, "Exception thrown by runMApp: ${e.javaClass.simpleName}, message: ${e.message}")
                 Timber.tag("toggleFollowing").e(e, "Full exception: $e")
@@ -4509,14 +4776,16 @@ object HproseInstance {
         if (!isOnline.value) throw Exception("No network connection")
 
         val author = resolveSavedTweetStorageAuthor(tweet)
-        val authorClient = requireWritableClient(
-            author,
+        // A backend with engagementDelegation takes the toggle on the signed-in
+        // user's own root, signed by their session; that node asks the tweet
+        // author's node to perform its half. An older backend takes the toggle
+        // on the author's node, in the old form.
+        val targetUser = if (nodeSupportsEngagementDelegation(author)) appUser else author
+        val rawResponse = runWrite<Map<String, Any>>(
+            targetUser,
             "toggleFavorite",
-            TOGGLE_MUTATION_TIMEOUT_MS
-        )
-        val rawResponse = authorClient.runMApp<Map<String, Any>>(
             "toggle_favorite",
-            mapOf(
+            mutableMapOf(
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
@@ -4525,7 +4794,8 @@ object HproseInstance {
                 "authorid" to author.mid,
                 "userhostid" to (appUser.hostIds?.first() ?: ""),
                 "isfavorite" to rpcBool(isFavorite)
-            )
+            ),
+            TOGGLE_MUTATION_TIMEOUT_MS
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             ?: throw IllegalStateException("toggle_favorite returned invalid data")
@@ -4561,14 +4831,14 @@ object HproseInstance {
         if (!isOnline.value) throw Exception("No network connection")
 
         val author = resolveSavedTweetStorageAuthor(tweet)
-        val authorClient = requireWritableClient(
-            author,
+        // As with toggle_favorite: the user's own root on a delegating backend,
+        // the author's node otherwise.
+        val targetUser = if (nodeSupportsEngagementDelegation(author)) appUser else author
+        val rawResponse = runWrite<Map<String, Any>>(
+            targetUser,
             "toggleBookmark",
-            TOGGLE_MUTATION_TIMEOUT_MS
-        )
-        val rawResponse = authorClient.runMApp<Map<String, Any>>(
             "toggle_bookmark",
-            mapOf(
+            mutableMapOf(
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
@@ -4577,7 +4847,8 @@ object HproseInstance {
                 "authorid" to author.mid,
                 "userhostid" to (appUser.hostIds?.first() ?: ""),
                 "isbookmarked" to rpcBool(isBookmarked)
-            )
+            ),
+            TOGGLE_MUTATION_TIMEOUT_MS
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             ?: throw IllegalStateException("toggle_bookmark returned invalid data")
@@ -5051,7 +5322,15 @@ object HproseInstance {
                     ?: throw IllegalStateException("Parent author ${tweet.authorId} is unavailable")
                 val parentHostId = parentAuthor.hostIds?.firstOrNull()
                     ?: throw IllegalStateException("Parent author ${tweet.authorId} has no writable host")
-                val params = mapOf(
+                // A backend with commentDelegation takes add_comment on the
+                // signed-in user's own root, signed by their session; that node
+                // asks the parent author's node to perform the write, so a guest
+                // never needs a session anywhere but their own node. An older
+                // backend takes the request on the parent author's node, in the
+                // old form. The requestid names this submission: a retry after a
+                // lost response resolves the same comment instead of creating a
+                // duplicate.
+                val params = mutableMapOf<String, Any?>(
                     "aid" to appId,
                     "ver" to "last",
                     "version" to "v2",
@@ -5059,10 +5338,11 @@ object HproseInstance {
                     "tweetid" to tweet.mid,
                     "comment" to Json.encodeToString(comment),
                     "tweetauthorid" to parentAuthor.mid,
-                    "hostid" to parentHostId
+                    "hostid" to parentHostId,
+                    "requestid" to "cmt-${java.util.UUID.randomUUID()}"
                 )
-                val added = requireWritableClient(parentAuthor, "uploadComment")
-                    .runMApp<Map<String, Any>>(entry, params)
+                val targetUser = if (nodeSupportsCommentDelegation(parentAuthor)) appUser else parentAuthor
+                val added = runWrite<Map<String, Any>>(targetUser, "uploadComment", entry, params)
                 adoptWriteRouteForReads(parentAuthor, entry)
                 added
             } catch (e: Exception) {
