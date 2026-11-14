@@ -15,6 +15,7 @@ interface HproseService {
     // writes port relies on. Method names match the remote RPCs exactly.
     fun Login(username: String, password: String): Map<String, String>
     fun Register(name: String, password: String, email: String): String
+    fun SetUserInfo(sid: String, params: Map<String, String>)
 
     fun getVar(sid: String, name: String, arg1: String? = null, arg2: String? = null): String
     fun mmCreate(

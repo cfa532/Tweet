@@ -93,7 +93,7 @@ object UserSession {
             val reply = service.Login(username, password)
             val sid = (reply["Sid"] ?: reply["sid"]) as? String
             if (!sid.isNullOrEmpty()) sid else {
-                Timber.tag(TAG).w("Login returned no session: %s", reply)
+                Timber.tag(TAG).w("Login returned no session")
                 null
             }
         } catch (e: Exception) {

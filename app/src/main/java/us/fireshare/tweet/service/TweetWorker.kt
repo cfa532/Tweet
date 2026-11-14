@@ -162,14 +162,14 @@ class UploadCommentWorker @AssistedInject constructor(
                 null
             }
 
-            val updatedTweet = HproseInstance.uploadComment(parentTweet, comment)
+            val updatedTweet = HproseInstance.uploadComment(parentTweet, comment, id.toString())
             if (updatedTweet != null) {
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 if (quotePayload != null) {
                     // Creating the quote increments the original's retweetCount here; deleting
                     // it decrements via HproseInstance.deleteTweet, keyed by the same mid.
-                    HproseInstance.uploadTweet(quotePayload)?.let { quoteTweet ->
+                    HproseInstance.uploadTweet(quotePayload, "$id-quote")?.let { quoteTweet ->
                         updateRetweetCount(parentTweet, quoteTweet.mid)?.let {
                             updatedTweet.retweetCount = it.retweetCount
                         }
@@ -328,7 +328,8 @@ class UploadTweetWorker @AssistedInject constructor(
                 )
 
                 Timber.tag("UploadTweetWorker").d("Calling uploadTweet for tweet: ${tweet.mid}")
-                val uploadResult = HproseInstance.uploadTweet(tweet)
+                val requestId = inputData.getString("requestId") ?: id.toString()
+                val uploadResult = HproseInstance.uploadTweet(tweet, requestId)
                 Timber.tag("UploadTweetWorker").d("uploadTweet returned: ${uploadResult?.mid ?: "null"}")
 
                 uploadResult?.let { uploadedTweet: Tweet ->

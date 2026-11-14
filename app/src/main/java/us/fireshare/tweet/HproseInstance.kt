@@ -306,6 +306,7 @@ object HproseInstance {
         val commentDelegation: Boolean,
         val engagementDelegation: Boolean,
         val messageDelegation: Boolean,
+        val guestRegistration: Boolean,
         val checkedAt: Long
     )
 
@@ -391,6 +392,7 @@ object HproseInstance {
                 commentDelegation = reply["commentDelegation"] == true,
                 engagementDelegation = reply["engagementDelegation"] == true,
                 messageDelegation = reply["messageDelegation"] == true,
+                guestRegistration = reply["guestRegistration"] != false,
                 checkedAt = System.currentTimeMillis()
             )
             synchronized(storageCapabilitiesLock) {
@@ -1720,38 +1722,34 @@ object HproseInstance {
                 }
                 
                 val entry = "login"
-                // A backend with userSessions identifies the caller by a Leither
-                // session rather than a stored password. Sign in on the account's
-                // root node — where an older account still carrying a password is
-                // bound on its first login — and present the session alongside the
-                // credentials (the password is what binds that older account and
-                // is ignored once bound). An older backend takes the same entry on
-                // the provider node, unchanged.
-                var loginParams = mapOf(
+                val loginParams = mapOf(
                     "aid" to appId,
                     "ver" to "last",
                     "version" to "v2",
                     "username" to username,
                     "password" to password
                 )
-                try {
-                    val rootUrl = user.resolveWritableUrl()
-                    if (rootUrl != null &&
-                        storageCapabilities(rootUrl, mapOf("aid" to appId, "ver" to "last")).userSessions
-                    ) {
-                        val rootClient = HproseClientPool.getWritableClient(rootUrl)
-                        if (rootClient != null) {
-                            UserSession.leitherLogin(rootClient, username, password)?.let { sid ->
-                                UserSession.rememberSession(userId, rootUrl, sid)
-                                loginParams = loginParams + mapOf("usersid" to sid)
-                                Timber.tag("Login").d("Signed in to Leither on the account root; presenting usersid")
-                            }
-                        }
+                val rootUrl = user.resolveWritableUrl()
+                val sessionCapabilities = rootUrl?.let { url ->
+                    try {
+                        storageCapabilities(url, loginParams)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("Login").w(e, "Could not check login capabilities on the root")
+                        null
                     }
-                } catch (e: Exception) {
-                    Timber.tag("Login").w(e, "session sign-in failed; falling back to password login")
                 }
-                val rawResponse = runStorageRead<Map<String, Any>>(user, entry, loginParams)
+                val rootClient = if (rootUrl != null && sessionCapabilities?.userSessions == true) {
+                    HproseClientPool.getWritableClient(rootUrl)
+                } else null
+                val sid = rootClient?.let { UserSession.leitherLogin(it, username, password) }
+                // A Leither session can only be resolved by the root that issued it.
+                val rawResponse = if (sid != null) {
+                    rootClient.runMApp<Map<String, Any>>(entry, loginParams + ("usersid" to sid))
+                } else {
+                    runStorageRead<Map<String, Any>>(user, entry, loginParams)
+                }
                 val response = unwrapV2Response<Map<String, Any>>(rawResponse)
 
                 // Handle v2 response format: {success: true, data: {user: ..., status: "success"}} or {success: false, message: "..."}
@@ -1763,9 +1761,27 @@ object HproseInstance {
                         if (userData != null) {
                             user.from(userData)
                         }
-                        // Keep the guest credential for this device: later writes
-                        // re-open Leither sessions with it.
-                        UserSession.storeCredential(applicationContext, userId, username, password)
+                        // A verified legacy password lets the root bind the existing account.
+                        if (rootClient != null && rootUrl != null) {
+                            val boundSid = sid ?: try {
+                                UserSession.leitherRegister(rootClient, username, password)
+                                UserSession.leitherLogin(rootClient, username, password)?.takeIf { legacySid ->
+                                    val bound = rootClient.runMApp<Map<String, Any>>(
+                                        entry, loginParams + ("usersid" to legacySid)
+                                    )
+                                    unwrapV2Response<Map<String, Any>>(bound)?.get("status") == "success"
+                                }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Timber.tag("Login").w(e, "Could not bind the legacy account on its root")
+                                null
+                            }
+                            if (boundSid != null) {
+                                UserSession.storeCredential(applicationContext, userId, username, password)
+                                UserSession.rememberSession(userId, rootUrl, boundSid)
+                            }
+                        }
                         Timber.tag("Login").d("Login successful for user: ${user.username}")
                         return Pair(user, null)
                     } else {
@@ -2049,8 +2065,8 @@ object HproseInstance {
                     Timber.tag("registerUser").w("Default user $alphaId has no root host; skipping")
                     continue
                 }
-                val raw = client.runMApp<Any>(
-                    "toggle_following",
+                val raw = runWrite<Any>(
+                    rootUrl, client, "toggle_following",
                     mapOf(
                         "aid" to appId,
                         "ver" to "last",
@@ -2118,65 +2134,37 @@ object HproseInstance {
             hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
         }
 
-        // A backend with userSessions registers the guest with Leither on this
-        // node first; the app account is then created with the session and
-        // stores no password. An older backend takes the password in the user
-        // blob, as before.
-        var payloadUser = newUser
-        var usersid: String? = null
         try {
-            val registrationNodeUrl = if (hostId?.trim()?.isNotEmpty() == true) {
-                val root = hostId!!.trim()
-                val address = getHostIP(root, v4Only = "false", usePool = false)
-                if (address != null) User.resolvedNodeUrl(address) else null
-            } else {
-                null
-            }
-            val probeUrl = registrationNodeUrl
-                ?: PreferenceHelper(applicationContext).getAppUrls().firstOrNull()
-            if (probeUrl != null &&
-                storageCapabilities(probeUrl, mapOf("aid" to appId, "ver" to "last")).userSessions
-            ) {
-                val client = registrationNodeUrl?.let {
-                    HproseClientPool.getWritableClient(it, 30_000)
-                } ?: appUser.hproseService
-                if (client != null) {
-                    val uid = UserSession.leitherRegister(client, username, password)
-                    if (uid != null) {
-                        val sid = UserSession.leitherLogin(client, username, password)
-                        if (sid != null) {
-                            usersid = sid
-                            payloadUser = newUser.copy(password = null)
-                        } else {
-                            return Pair(false, "Registered with the node, but sign-in failed. Try logging in.")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag("registerUser").w(e, "Leither registration not attempted; using the old form")
-        }
-
-        val entry = "register"
-        val params = mutableMapOf<String, Any?>(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "user" to Json.encodeToString(payloadUser)
-        )
-        usersid?.let { params["usersid"] = it }
-
-        try {
-            // Registration's destination is an API responsibility, not UI state.
+            // Leither login and Tweet registration must use the same node.
             val root = hostId?.trim()?.takeIf { it.isNotEmpty() }
-            val registrationClient = if (root != null) {
+            val registrationUrl = if (root != null) {
                 val address = getHostIP(root, v4Only = "false", usePool = false)
                     ?: return Pair(false, "Cannot resolve the selected registration host")
-                HproseClientPool.getWritableClient(User.resolvedNodeUrl(address), 30_000)
+                User.resolvedNodeUrl(address)
             } else {
-                appUser.hproseService
+                UserRoutes.readRoute(appUser.mid) ?: appUser.baseUrl
+                    ?: return Pair(false, "No registration node is available")
             }
-            val response = registrationClient?.runMApp<Map<String, Any>>(entry, params)
+            val registrationClient = HproseClientPool.getWritableClient(registrationUrl, 30_000)
+                ?: return Pair(false, "No connection to the registration node")
+            val params = mutableMapOf<String, Any?>(
+                "aid" to appId, "ver" to "last", "version" to "v2"
+            )
+            val capabilities = storageCapabilities(registrationUrl, params)
+            if (!capabilities.guestRegistration) {
+                return Pair(false, "This node does not accept new registrations")
+            }
+
+            val usersid = if (capabilities.userSessions) {
+                // Login also handles a retry after Leither registration already succeeded.
+                UserSession.leitherRegister(registrationClient, username, password)
+                UserSession.leitherLogin(registrationClient, username, password)
+                    ?: return Pair(false, "Could not sign in to the registration node")
+            } else null
+            usersid?.let { params["usersid"] = it }
+            params["user"] = Json.encodeToString(if (usersid == null) newUser else newUser.copy(password = null))
+
+            val response = registrationClient.runMApp<Map<String, Any>>("register", params)
 
             if (response == null) {
                 Timber.tag("registerUser").e("Registration failed: No response from server")
@@ -2202,13 +2190,7 @@ object HproseInstance {
                 // and the auto-follow below re-uses the credential.
                 if (usersid != null && registeredUserId != null) {
                     UserSession.storeCredential(applicationContext, registeredUserId, username, password)
-                    if (!registeredUserHostId.isNullOrBlank()) {
-                        val nodeUrl = getHostIP(registeredUserHostId, v4Only = "false", usePool = false)
-                            ?.let { User.resolvedNodeUrl(it) }
-                        if (nodeUrl != null) {
-                            UserSession.rememberSession(registeredUserId, nodeUrl, usersid)
-                        }
-                    }
+                    UserSession.rememberSession(registeredUserId, registrationUrl, usersid)
                 }
 
                 if (registeredUserId != null && !registeredUserHostId.isNullOrBlank()) {
@@ -2300,27 +2282,7 @@ object HproseInstance {
         val currentHost = appUser.hostIds?.firstOrNull()
         val migrating = destinationHost != null
 
-        val updatedUser = User(
-            mid = appUser.mid,
-            name = alias,
-            password = password,
-            profile = profile,
-            cloudDrivePort = cloudDrivePort,
-            domainToShare = domainToShare
-        ).apply {
-            // Set hostIds only if hostId is a valid Mimei ID (at least 27 characters after trimming)
-            hostId?.trim()?.takeIf { it.isNotEmpty() && it.length >= 27 }?.let { this.hostIds = listOf(it) }
-        }
-
         val entry = "set_author_core_data"
-        val params = mapOf(
-            "aid" to appId,
-            "ver" to "last",
-            "version" to "v2",
-            "migrate" to rpcBool(migrating),
-            "user" to Json.encodeToString(updatedUser)
-        )
-
         try {
             val destinationUrl = if (migrating) {
                 val address = getHostIP(destinationHost, v4Only = "false", usePool = false)
@@ -2328,12 +2290,36 @@ object HproseInstance {
                 User.resolvedNodeUrl(address)
             } else null
             // Only an explicit host change may write a surviving account copy.
-            val client = if (migrating) {
+            val source = if (migrating) {
                 profileMigrationClient(appUser.mid, currentHost)
             } else {
-                requireWritableClient(appUser, "updateUserCore")
+                val url = appUser.resolveWritableUrl()
+                    ?: return Pair(false, "Cannot resolve the account root")
+                val client = HproseClientPool.getWritableClient(url)
+                    ?: return Pair(false, "No connection to the account root")
+                ReadRoute(client, url)
             }
-            val response = client.runMApp<Map<String, Any>>(entry, params)
+            val sessionPasswords = !password.isNullOrEmpty() &&
+                storageCapabilities(source.baseUrl, mapOf("aid" to appId, "ver" to "last")).userSessions
+            val credential = if (sessionPasswords) {
+                UserSession.loadCredential(applicationContext, appUser.mid)
+                    ?: return Pair(false, "Sign in again before changing your password")
+            } else null
+            val updatedUser = User(
+                mid = appUser.mid,
+                name = alias,
+                password = password.takeUnless { sessionPasswords },
+                profile = profile,
+                hostIds = destinationHost?.let { listOf(it) },
+                cloudDrivePort = cloudDrivePort,
+                domainToShare = domainToShare
+            )
+            val params = mapOf(
+                "aid" to appId, "ver" to "last", "version" to "v2",
+                "migrate" to rpcBool(migrating),
+                "user" to Json.encodeToString(updatedUser)
+            )
+            val response = runWrite<Map<String, Any>>(source.baseUrl, source.service, entry, params)
 
             if (response == null) {
                 Timber.tag("updateUserCore").e("Profile update failed: No response from server")
@@ -2370,6 +2356,15 @@ object HproseInstance {
                         return Pair(false, "The new root did not confirm migration. Keep this session open and retry the same Host ID.")
                     }
                 }
+                if (credential != null) {
+                    val accountId = appUser.mid
+                    val newPassword = requireNotNull(password)
+                    val sid = userSession(accountId, source.baseUrl, source.service)
+                        ?: return Pair(false, "Could not sign in to change your password")
+                    source.service.SetUserInfo(sid, mapOf("newpass" to newPassword))
+                    UserSession.storeCredential(applicationContext, accountId, credential.first, newPassword)
+                    UserSession.discardSession(accountId, source.baseUrl)
+                }
                 Timber.tag("updateUserCore").d("Profile update successful")
 
                 // Update in-memory appUser with new values
@@ -2399,11 +2394,11 @@ object HproseInstance {
     }
 
     /** Resolution errors stop migration. Only a failed read permits provider recovery. */
-    private suspend fun profileMigrationClient(userId: MimeiId, currentHost: MimeiId?): HproseService {
+    private suspend fun profileMigrationClient(userId: MimeiId, currentHost: MimeiId?): ReadRoute {
         val hostId = currentHost ?: throw IllegalStateException("Current root host is missing")
         val root = getHostIP(hostId, v4Only = "false", usePool = false)
             ?: throw IllegalStateException("Cannot resolve the current root IP and port")
-        suspend fun sourceClient(address: String): HproseService? {
+        suspend fun sourceClient(address: String): ReadRoute? {
             val url = User.resolvedNodeUrl(address)
             val client = HproseClientPool.getWritableClient(url, MIGRATION_TIMEOUT_MS)
                 ?: throw IllegalStateException("Cannot create migration client")
@@ -2418,7 +2413,7 @@ object HproseInstance {
                 null
             }
             return if (record != null && record["mid"] == userId &&
-                !(record["hostIds"] as? List<*>).isNullOrEmpty()) client else null
+                !(record["hostIds"] as? List<*>).isNullOrEmpty()) ReadRoute(client, url) else null
         }
         sourceClient(root)?.let { return it }
         for (address in getProviderCandidatesForDetail(userId)) {
@@ -2435,8 +2430,7 @@ object HproseInstance {
             "aid" to appId, "ver" to "last", "version" to "v2",
             "userid" to user.mid, "avatar" to avatar
         )
-        val response = requireWritableClient(user, "setUserAvatar")
-            .runMApp<Map<String, Any>>(entry, request)
+        val response = runWrite<Map<String, Any>>(user, "setUserAvatar", entry, request)
             ?: throw IllegalStateException("Server did not respond")
         check(response["success"] == true) {
             response["message"] as? String ?: "Avatar update failed"
@@ -2561,29 +2555,34 @@ object HproseInstance {
         user: User,
         operation: String,
         entry: String,
-        params: MutableMap<String, Any?>,
+        params: Map<String, Any?>,
         timeoutMillis: Int? = null
     ): T? {
         val nodeUrl = user.resolveWritableUrl()
         if (nodeUrl.isNullOrBlank()) {
             throw IllegalStateException("$operation failed: writableUrl could not be resolved for user ${user.mid}")
         }
-        val client = (if (timeoutMillis == null) user.writableClient
+        val client = (if (timeoutMillis == null) HproseClientPool.getWritableClient(nodeUrl)
         else HproseClientPool.getWritableClient(nodeUrl, timeoutMillis))
             ?: throw IllegalStateException("$operation failed: writable client not available for $nodeUrl")
 
+        return runWrite(nodeUrl, client, entry, params)
+    }
+
+    private suspend fun <T : Any> runWrite(
+        nodeUrl: String,
+        client: HproseService,
+        entry: String,
+        params: Map<String, Any?>
+    ): T? {
         val owner = ownedAccountKey(entry, params)
-        if (owner != null) {
-            userSession(owner, nodeUrl, client)?.let { params["usersid"] = it }
-        }
-        var reply = client.runMApp<T>(entry, params)
+        val sid = owner?.let { userSession(it, nodeUrl, client) }
+        val request = if (sid != null) params + ("usersid" to sid) else params
+        val reply = client.runMApp<T>(entry, request)
         if (owner != null && UserSession.isSessionInvalid(reply)) {
             UserSession.discardSession(owner, nodeUrl)
             val renewed = userSession(owner, nodeUrl, client)
-            if (renewed != null) {
-                params["usersid"] = renewed
-                reply = client.runMApp<T>(entry, params)
-            }
+            if (renewed != null) return client.runMApp<T>(entry, params + ("usersid" to renewed))
         }
         return reply
     }
@@ -4426,7 +4425,7 @@ object HproseInstance {
         }
     }
 
-    suspend fun uploadTweet(tweet: Tweet): Tweet? {
+    suspend fun uploadTweet(tweet: Tweet, requestId: String = UUID.randomUUID().toString()): Tweet? {
         if (!isOnline.value) {
             Timber.tag("uploadTweet").d("Offline: skipping")
             throw Exception("No network connection")
@@ -4443,7 +4442,7 @@ object HproseInstance {
             "version" to "v2",
             "hostid" to (appUser.hostIds?.first() ?: ""),
             "tweet" to Json.encodeToString(tweet),
-            "requestid" to "tw-${java.util.UUID.randomUUID()}"
+            "requestid" to "tw-$requestId"
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
@@ -4590,7 +4589,6 @@ object HproseInstance {
                 fetchUser(followingId)
                     ?: throw IllegalStateException("Acting user $followingId is not available")
             }
-            val homeService = requireWritableClient(actingUser, "toggleFollowing", TOGGLE_MUTATION_TIMEOUT_MS)
             Timber.tag("toggleFollowing").d("Calling toggle_following: followedId=$followedId, followingId=$followingId, homeHostId=${actingUser.hostIds?.firstOrNull()}")
             Timber.tag("toggleFollowing").d("About to call runMApp with entry=$entry, params=$params")
             val startTime = System.currentTimeMillis()
@@ -5101,9 +5099,8 @@ object HproseInstance {
 
         return try {
             // Mutation: route through the tweet author's writable host (hostIds[0]).
-            val client = requireWritableClient(requestUser, "deleteTweet")
             val rawResponse = try {
-                client.runMApp<Map<String, Any>>(entry, params)
+                runWrite<Map<String, Any>>(requestUser, "deleteTweet", entry, params)
             } catch (e: Exception) {
                 if (isTweetNotFoundDeleteFailure(error = e)) {
                     Timber.tag("deleteTweet")
@@ -5177,8 +5174,7 @@ object HproseInstance {
             "userid" to appUser.mid
         )
         // Mutation: route through appUser's writable host (hostIds[0]).
-        val client = requireWritableClient(appUser, "deleteAccount", DELETE_ACCOUNT_TIMEOUT_MS)
-        val rawResponse = client.runMApp<Any>(entry, params)
+        val rawResponse = runWrite<Any>(appUser, "deleteAccount", entry, params, DELETE_ACCOUNT_TIMEOUT_MS)
         return unwrapV2Response<Map<String, Any>>(rawResponse) ?: emptyMap()
     }
 
@@ -5310,7 +5306,7 @@ object HproseInstance {
      * The mid of "comment" is updated here, used to be null.
      * @Return the updated parent tweet.
      * */
-    suspend fun uploadComment(tweet: Tweet, comment: Tweet): Tweet? {
+    suspend fun uploadComment(tweet: Tweet, comment: Tweet, requestId: String): Tweet? {
         if (!isOnline.value) {
             Timber.tag("uploadComment").d("Offline: skipping")
             throw Exception("No network connection")
@@ -5339,7 +5335,7 @@ object HproseInstance {
                     "comment" to Json.encodeToString(comment),
                     "tweetauthorid" to parentAuthor.mid,
                     "hostid" to parentHostId,
-                    "requestid" to "cmt-${java.util.UUID.randomUUID()}"
+                    "requestid" to "cmt-$requestId"
                 )
                 val targetUser = if (nodeSupportsCommentDelegation(parentAuthor)) appUser else parentAuthor
                 val added = runWrite<Map<String, Any>>(targetUser, "uploadComment", entry, params)
@@ -6706,10 +6702,9 @@ object HproseInstance {
         )
         return try {
             // Mutation: route through appUser's writable host (hostIds[0]).
-            val pinClient = requireWritableClient(appUser, "togglePinnedTweet")
             // For v2 API: server returns {success: true, data: {isPinned: bool}}
             // After unwrapping, we need to extract isPinned from the data dictionary
-            val rawResponse = pinClient.runMApp<Any>(entry, params)
+            val rawResponse = runWrite<Any>(appUser, "togglePinnedTweet", entry, params)
             adoptWriteRouteForReads(appUser, entry)
             when (rawResponse) {
                 is Boolean -> {
@@ -7127,7 +7122,7 @@ object HproseInstance {
                                 isPrivate = upload.isPrivate
                             )
 
-                            uploadTweet(tweet)?.let { uploadedTweet ->
+                            uploadTweet(tweet, upload.workId)?.let { uploadedTweet ->
                                 Timber.tag("HproseInstance").d("Successfully completed resumed video upload: ${uploadedTweet.mid}")
                                 removeIncompleteUpload(context, upload.workId)
                             } ?: run {
@@ -7170,7 +7165,8 @@ object HproseInstance {
                     "tweetContent" to upload.tweetContent,
                     "attachmentUris" to validUris.toTypedArray(),
                     "isPrivate" to upload.isPrivate,
-                    "isResume" to true
+                    "isResume" to true,
+                    "requestId" to (upload.workId)
                 )
                 
                 val uploadRequest = OneTimeWorkRequest.Builder(
