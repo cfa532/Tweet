@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,11 +125,16 @@ fun TweetFeedScreen(
         }
     }
 
-    // When home button is tapped from ANY screen (including TweetDetail, Profile, etc.),
-    // BottomBarState.homeTapTrigger increments. Reset toolbar + scroll to top here.
-    LaunchedEffect(BottomBarState.homeTapTrigger) {
-        if (BottomBarState.homeTapTrigger > 0) {
-            scrollToTopTrigger++
+    val homeTapTrigger = BottomBarState.homeTapTrigger
+    // Navigation can recreate this composition. Keep the last handled request
+    // with the feed's saved state so Back restores the list without replaying it.
+    var handledHomeTapTrigger by rememberSaveable { mutableIntStateOf(homeTapTrigger) }
+    LaunchedEffect(homeTapTrigger) {
+        if (homeTapTrigger != handledHomeTapTrigger) {
+            handledHomeTapTrigger = homeTapTrigger
+            if (homeTapTrigger > 0) {
+                scrollToTopTrigger++
+            }
         }
     }
 
@@ -289,8 +295,7 @@ fun TweetFeedScreen(
                 .alpha(BottomBarState.opacity)
                 .align(Alignment.BottomCenter),
             navController,
-            selectedBottomBarItemIndex,
-            onScrollToTop = { scrollToTopTrigger += 1 }
+            selectedBottomBarItemIndex
         )
     }
 }

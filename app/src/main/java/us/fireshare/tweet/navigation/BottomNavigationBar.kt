@@ -49,8 +49,7 @@ import us.fireshare.tweet.service.BadgeStateManager
  *  at the same translucency the user left it in. */
 object BottomBarState {
     var opacity by mutableFloatStateOf(0.98f)
-    /** Incremented every time the Home button is tapped; TweetFeedScreen
-     *  observes this to reset toolbar + scroll to top. */
+    /** Scroll-to-top requests from a Home retap or the new-tweets banner. */
     var homeTapTrigger by mutableIntStateOf(0)
 }
 
@@ -67,8 +66,7 @@ data class BottomNavigationItem(
 fun BottomNavigationBar(
     modifier: Modifier = Modifier,
     navController: NavController,
-    selectedIndex: Int = 100,
-    onScrollToTop: () -> Unit = {}
+    selectedIndex: Int = 100
 ) {
     val badgeCount by BadgeStateManager.badgeCount.collectAsState()
     val context = LocalContext.current
@@ -164,7 +162,6 @@ fun BottomNavigationBar(
             // Only scroll to top when user was already on feed (second tap); otherwise keep persisted position.
             if (isOnTweetFeed) {
                 BottomBarState.homeTapTrigger++
-                onScrollToTop()
             }
             return@onNavigationClick
         }
