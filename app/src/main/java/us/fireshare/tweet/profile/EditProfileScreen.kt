@@ -193,7 +193,7 @@ fun EditProfileScreen(
     val appUser by appUserState.collectAsState()
     val username by viewModel.username
     val password by viewModel.password
-    val confirm = remember { mutableStateOf(password) }
+    val confirm = remember { mutableStateOf("") }
     val showConfirm = remember { mutableStateOf(false) }
     val name by viewModel.name
     val profile by viewModel.profile
@@ -370,6 +370,7 @@ fun EditProfileScreen(
                         .focusRequester(focusRequester),
                     visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     singleLine = true
                 )
                 if (viewModel.passwordError.value.isNotEmpty()) {
@@ -391,6 +392,7 @@ fun EditProfileScreen(
                             .focusRequester(focusRequester),
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = { EyeSlashButton(viewModel, isPasswordVisible) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
                     )
                     if (viewModel.confirmPasswordError.value.isNotEmpty()) {
@@ -506,21 +508,13 @@ fun EditProfileScreen(
                     // Additional check for loading state
                     if (isLoading) return@Button
 
+                    val submittedPassword = password
+                    if (submittedPassword.isNotEmpty() && submittedPassword != confirm.value) {
+                        viewModel.confirmPasswordError.value = context.getString(R.string.confirm_pwd)
+                        return@Button
+                    }
                     viewModel.viewModelScope.launch(Dispatchers.IO) {
-                        // Clear previous validation errors
-                        viewModel.usernameError.value = ""
-                        viewModel.passwordError.value = ""
-                        viewModel.confirmPasswordError.value = ""
-                        viewModel.hostIdError.value = ""
-                        viewModel.cloudDrivePortError.value = ""
-
-                        if (password.isNotEmpty() && password != confirm.value) {
-                            viewModel.confirmPasswordError.value = context.getString(R.string.confirm_pwd)
-                            return@launch
-                        }
-                        viewModel.register(context) {
-                            // Callback is not used by register function - navigation is handled internally
-                            // Registration success message is shown in register function for new registrations only
+                        viewModel.register(context, submittedPassword) {
                             viewModel.viewModelScope.launch(Dispatchers.Main) {
                                 navController.popBackStack()
                             }

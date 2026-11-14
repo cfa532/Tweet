@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.navigation.ComposeComment
@@ -189,9 +190,13 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
                 return@IconButton
             }
 
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
+            // A tweet row can leave composition while the save is in flight.
+            appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                if (appUserViewModel.userId != appUser.mid) return@launch
                 viewModel.toggleFavorite { tweet, isFavorite, phase ->
-                    appUserViewModel.updateFavorite(tweet, isFavorite, phase)
+                    if (appUserViewModel.userId == appUser.mid) {
+                        appUserViewModel.updateFavorite(tweet, isFavorite, phase)
+                    }
                 }
             }
         }
@@ -242,9 +247,13 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                 return@IconButton
             }
 
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
+            // A tweet row can leave composition while the save is in flight.
+            appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                if (appUserViewModel.userId != appUser.mid) return@launch
                 viewModel.toggleBookmark { tweet, isBookmarked, phase ->
-                    appUserViewModel.updateBookmark(tweet, isBookmarked, phase)
+                    if (appUserViewModel.userId == appUser.mid) {
+                        appUserViewModel.updateBookmark(tweet, isBookmarked, phase)
+                    }
                 }
             }
         }

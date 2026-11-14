@@ -2362,8 +2362,11 @@ object HproseInstance {
                     val sid = userSession(accountId, source.baseUrl, source.service)
                         ?: return Pair(false, "Could not sign in to change your password")
                     source.service.SetUserInfo(sid, mapOf("newpass" to newPassword))
+                    // Confirm the exact password through the same login path used after sign-out.
+                    val verifiedSid = UserSession.leitherLogin(source.service, credential.first, newPassword)
+                        ?: return Pair(false, "The node did not confirm the new password. Keep this session open and try again.")
                     UserSession.storeCredential(applicationContext, accountId, credential.first, newPassword)
-                    UserSession.discardSession(accountId, source.baseUrl)
+                    UserSession.rememberSession(accountId, source.baseUrl, verifiedSid)
                 }
                 Timber.tag("updateUserCore").d("Profile update successful")
 
@@ -4773,12 +4776,14 @@ object HproseInstance {
     suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? {
         if (!isOnline.value) throw Exception("No network connection")
 
+        val actingUser = appUser
         val author = resolveSavedTweetStorageAuthor(tweet)
         // A backend with engagementDelegation takes the toggle on the signed-in
         // user's own root, signed by their session; that node asks the tweet
         // author's node to perform its half. An older backend takes the toggle
         // on the author's node, in the old form.
-        val targetUser = if (nodeSupportsEngagementDelegation(author)) appUser else author
+        val delegates = nodeSupportsEngagementDelegation(author)
+        val targetUser = if (delegates) actingUser else author
         val rawResponse = runWrite<Map<String, Any>>(
             targetUser,
             "toggleFavorite",
@@ -4787,12 +4792,14 @@ object HproseInstance {
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
-                "appuserid" to appUser.mid,
+                "appuserid" to actingUser.mid,
                 "tweetid" to tweet.mid,
                 "authorid" to author.mid,
-                "userhostid" to (appUser.hostIds?.first() ?: ""),
+                "userhostid" to (actingUser.hostIds?.firstOrNull() ?: ""),
                 "isfavorite" to rpcBool(isFavorite)
-            ),
+            ).apply {
+                if (delegates) put("hostid", author.hostIds?.firstOrNull().orEmpty())
+            },
             TOGGLE_MUTATION_TIMEOUT_MS
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
@@ -4800,10 +4807,10 @@ object HproseInstance {
         // The tweet's counters live on the author's host; the app user's favorites list
         // lives on its own (userhostid). Both sides were written.
         adoptWriteRouteForReads(author, "toggle_favorite")
-        adoptWriteRouteForReads(appUser, "toggle_favorite")
+        adoptWriteRouteForReads(actingUser, "toggle_favorite")
         (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
-            appUser.from(updatedUserData)
-            TweetCacheManager.saveUser(appUser)
+            actingUser.from(updatedUserData)
+            TweetCacheManager.saveUser(actingUser)
         }
         val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
             Tweet.from(updatedTweetData).also {
@@ -4828,10 +4835,12 @@ object HproseInstance {
     suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? {
         if (!isOnline.value) throw Exception("No network connection")
 
+        val actingUser = appUser
         val author = resolveSavedTweetStorageAuthor(tweet)
         // As with toggle_favorite: the user's own root on a delegating backend,
         // the author's node otherwise.
-        val targetUser = if (nodeSupportsEngagementDelegation(author)) appUser else author
+        val delegates = nodeSupportsEngagementDelegation(author)
+        val targetUser = if (delegates) actingUser else author
         val rawResponse = runWrite<Map<String, Any>>(
             targetUser,
             "toggleBookmark",
@@ -4840,12 +4849,14 @@ object HproseInstance {
                 "aid" to appId,
                 "ver" to "last",
                 "version" to "v2",
-                "userid" to appUser.mid,
+                "userid" to actingUser.mid,
                 "tweetid" to tweet.mid,
                 "authorid" to author.mid,
-                "userhostid" to (appUser.hostIds?.first() ?: ""),
+                "userhostid" to (actingUser.hostIds?.firstOrNull() ?: ""),
                 "isbookmarked" to rpcBool(isBookmarked)
-            ),
+            ).apply {
+                if (delegates) put("hostid", author.hostIds?.firstOrNull().orEmpty())
+            },
             TOGGLE_MUTATION_TIMEOUT_MS
         )
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
@@ -4853,10 +4864,10 @@ object HproseInstance {
         // Same split as toggle_favorite: author's host for the tweet, app user's host
         // for the bookmark list.
         adoptWriteRouteForReads(author, "toggle_bookmark")
-        adoptWriteRouteForReads(appUser, "toggle_bookmark")
+        adoptWriteRouteForReads(actingUser, "toggle_bookmark")
         (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
-            appUser.from(updatedUserData)
-            TweetCacheManager.saveUser(appUser)
+            actingUser.from(updatedUserData)
+            TweetCacheManager.saveUser(actingUser)
         }
         val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
             Tweet.from(updatedTweetData).also {

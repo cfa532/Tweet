@@ -1766,7 +1766,7 @@ class UserViewModel @AssistedInject constructor(
      * Handle both register and update of user profile. Username, password are required.
      * Do NOT update appUser, wait for the new user to login.
      * */
-    suspend fun register(context: Context, popBack: () -> Unit) {
+    suspend fun register(context: Context, submittedPassword: String, popBack: () -> Unit) {
         // Prevent repeated submission
         if (isLoading.value) return
 
@@ -1794,7 +1794,7 @@ class UserViewModel @AssistedInject constructor(
                 isLoading.value = false
                 return
             }
-            if (password.value.isEmpty()) {
+            if (submittedPassword.isEmpty()) {
                 passwordError.value = context.getString(R.string.password_required)
                 isLoading.value = false
                 return
@@ -1805,7 +1805,7 @@ class UserViewModel @AssistedInject constructor(
         val (success, errorMessage) = if (appUser.isGuest()) {
             HproseInstance.registerUser(
                 username = username.value!!.lowercase().trim(),
-                password = password.value,
+                password = submittedPassword,
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
                 hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
@@ -1814,7 +1814,7 @@ class UserViewModel @AssistedInject constructor(
             )
         } else {
             HproseInstance.updateUserCore(
-                password = password.value,
+                password = submittedPassword,
                 alias = name.value.trim(),
                 profile = profile.value.trim(),
                 hostId = hostId.value.trim().takeIf { it.isNotEmpty() },
@@ -1928,7 +1928,7 @@ class UserViewModel @AssistedInject constructor(
     }
 
     fun onPasswordChange(pwd: String) {
-        password.value = pwd.trim()
+        password.value = pwd
         isLoading.value = false
         loginError.value = ""
     }
