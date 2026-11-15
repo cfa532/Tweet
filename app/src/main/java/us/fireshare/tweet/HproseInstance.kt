@@ -228,6 +228,7 @@ object HproseInstance {
     private const val ADD_TWEET_WITH_ATTACHMENTS_TIMEOUT_MS = 180_000
     private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
     private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
+    private const val UPDATE_TWEET_TIMEOUT_MS = 240_000
     private const val GET_TWEET_FEED_TIMEOUT_MS = 15_000
     private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
     private const val STORAGE_CAPABILITY_TTL_MS = 60_000L
@@ -2363,7 +2364,7 @@ object HproseInstance {
             "update_tweet", "toggle_tweet_privacy", "toggle_pinned_tweet", "delete_comment",
             "toggle_favorite", "retweet_added", "retweet_removed"
             -> params["appuserid"] as? String
-            "delete_tweet", "toggle_following", "toggle_bookmark", "block_user",
+            "delete_tweet", "admin_mutate_tweet", "toggle_following", "toggle_bookmark", "block_user",
             "remove_blacklisted_relationship", "set_user_avatar", "delete_account",
             "message_outgoing", "message_fetch", "share_file"
             -> params["userid"] as? String
@@ -4829,15 +4830,58 @@ object HproseInstance {
         }
     }
 
+    internal fun canModerateTweet(tweet: Tweet, user: User): Boolean =
+        !user.isGuest() && user.username == "admin" &&
+            (tweet.parentTweetId.isNullOrBlank() || !tweet.originalTweetId.isNullOrBlank())
+
+    suspend fun editTweetAsAdmin(
+        tweet: Tweet,
+        content: String,
+        attachments: List<MimeiFileType>?
+    ) {
+        val admin = appUser
+        check(canModerateTweet(tweet, admin)) { "Only admin can moderate a top-level tweet" }
+
+        val delegated = tweet.authorId != admin.mid
+        val entry = if (delegated) "admin_mutate_tweet" else "update_tweet"
+        val params = mutableMapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            "userid" to admin.mid,
+            "appuserid" to admin.mid,
+            "authorid" to tweet.authorId,
+            "tweetid" to tweet.mid,
+            "content" to content
+        )
+        if (delegated) params["action"] = "update"
+        if (attachments != null) {
+            params["attachments"] = Json.encodeToString(attachments.map { it.copy(url = null) })
+        }
+        val raw = runWrite<Map<String, Any>>(admin, "editTweetAsAdmin", entry, params, UPDATE_TWEET_TIMEOUT_MS)
+        val response = unwrapV2Response<Map<String, Any>>(raw)
+        check(response?.get("mid") == tweet.mid) {
+            raw?.get("message") as? String ?: "The server did not confirm the edit"
+        }
+
+        val current = Tweet.findInstance(tweet.mid) ?: tweet
+        current.content = content
+        if (attachments != null) current.attachments = attachments
+        val updated = current.copy().also {
+            it.rowTimestamp = current.rowTimestamp
+            it.favoriteOverride = current.favoriteOverride
+            it.bookmarkOverride = current.bookmarkOverride
+        }
+        updateCachedTweet(updated)
+        TweetNotificationCenter.post(TweetEvent.TweetUpdated(updated))
+        adoptWriteRouteForReads(admin, entry)
+    }
+
     /**
-     * Delete a tweet and return the deleted tweetId.
-     * The backend decides whether to permanently delete the tweet or remove it
-     * from the current user's personal lists.
-     */
-    /**
-     * @param originalTweetId/[originalAuthorId] the retweet link of the tweet being deleted,
-     *   for callers that evict it from cache before calling (TweetFeedViewModel.delTweet does).
-     *   Omit them and the link is read from cache instead.
+     * Direct deletes run on the requesting user's root. Admins delegate
+     * permanent deletion of another author's tweet from that same root.
+     * @param originalTweetId link captured before the caller evicts the tweet from cache
+     * @param originalAuthorId author of that linked tweet
      */
     suspend fun deleteTweet(
         tweetId: MimeiId,
@@ -4845,17 +4889,10 @@ object HproseInstance {
         originalTweetId: MimeiId? = null,
         originalAuthorId: MimeiId? = null
     ): MimeiId {
-        if (!isOnline.value) {
-            Timber.tag("deleteTweet").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        // The requester is always appUser: the backend destroys the tweet only when
-        // userid == authorid, and otherwise just removes it from the requester's own lists
-        // on the requester's root node. A main-feed delete of someone else's tweet must
-        // therefore name appUser here, not the author (matches Tweet-iOS, non-admin path).
+        if (!isOnline.value) throw IllegalStateException("No network connection")
         val requestUser = appUser
-
-        val entry = "delete_tweet"
+        val isOwnTweet = requestUser.mid == tweetAuthorId
+        val delegated = !isOwnTweet && requestUser.username == "admin"
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
@@ -4865,112 +4902,75 @@ object HproseInstance {
             "tweetid" to tweetId
         )
 
-        // Snapshot the retweet link BEFORE deleting: evictDeletedTweet() drops the cache row,
-        // so afterwards there is no way to find the original. The backend's delete_tweet never
-        // unlinks a deleted retweet from the original's tweet_retweet_list, so the client is
-        // what keeps the original's retweetCount honest.
-        val deletedTweet = TweetCacheManager.getCachedTweet(tweetId)
-        val linkedOriginalId = originalTweetId ?: deletedTweet?.originalTweetId
-        val linkedOriginalAuthorId = originalAuthorId ?: deletedTweet?.originalAuthorId
+        val cached = TweetCacheManager.getCachedTweet(tweetId)
+        val linkedOriginalId = originalTweetId ?: cached?.originalTweetId
+        val linkedOriginalAuthorId = originalAuthorId ?: cached?.originalAuthorId
 
-        /**
-         * Unlink a deleted retweet/quote from its original and refresh the original's count.
-         * retweet_removed is an idempotent Hdel, so it is safe on the already-missing paths too.
-         */
-        suspend fun decrementOriginalRetweetCount() {
-            if (linkedOriginalId == null || linkedOriginalAuthorId == null) return
+        suspend fun delete(entry: String, request: Map<String, String>): Map<String, Any>? =
+            runWrite(requestUser, "deleteTweet", entry, request, TOGGLE_MUTATION_TIMEOUT_MS)
+
+        var entry = if (delegated) "admin_mutate_tweet" else "delete_tweet"
+        val deletedTweetId = try {
+            var raw = delete(entry, if (delegated) params + ("action" to "delete") else params)
+            if (delegated && raw?.get("success") == false &&
+                raw["message"] == "User $tweetAuthorId is not known here"
+            ) {
+                // With no author route, the admin can still remove the feed entry.
+                entry = "delete_tweet"
+                raw = delete(entry, params)
+            }
+            val response = unwrapV2Response<Map<String, Any>>(raw)
+            when {
+                response?.get("tweetid") == tweetId -> tweetId
+                response == null && isTweetNotFoundDeleteFailure(response = raw) -> tweetId
+                else -> throw IllegalStateException(
+                    raw?.get("message") as? String ?: "The server did not confirm the deletion"
+                )
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!isTweetNotFoundDeleteFailure(error = e)) throw e
+            tweetId
+        }
+
+        TweetCacheManager.evictDeletedTweet(deletedTweetId)
+        if (entry == "admin_mutate_tweet") {
+            // The author's node already deleted the object and unlinked any retweet.
+            // Clearing the admin's own lists is a separate, feed-only write.
+            TweetApplication.applicationScope.launch(Dispatchers.IO) {
+                try {
+                    val cleanup = unwrapV2Response<Map<String, Any>>(delete("delete_tweet", params))
+                    check(cleanup?.get("tweetid") == tweetId) { "The server did not confirm admin feed cleanup" }
+                    adoptWriteRouteForReads(requestUser, "delete_tweet")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag("deleteTweet").w(e, "Tweet deleted, but admin feed cleanup failed for $tweetId")
+                }
+            }
+        }
+        adoptWriteRouteForReads(requestUser, entry)
+
+        if (isOwnTweet && linkedOriginalId != null && linkedOriginalAuthorId != null) {
             val original = TweetCacheManager.getCachedTweet(linkedOriginalId)
                 ?: getTweet(linkedOriginalId, linkedOriginalAuthorId)
-            if (original == null) {
-                Timber.tag("deleteTweet")
-                    .w("Original tweet $linkedOriginalId unavailable — retweetCount not decremented")
-                return
-            }
-            updateRetweetCount(original, tweetId, -1)
+            if (original != null) updateRetweetCount(original, tweetId, -1)
         }
 
-        suspend fun refreshAppUserAfterDelete() {
-            try {
-                val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
-                if (refreshedUser != null && !refreshedUser.isGuest()) {
-                    // Update singleton and set appUser to it
-                    User.updateUserInstance(refreshedUser, true)
-                    appUser = getInstance(refreshedUser.mid)
-
-                    // Notify other ViewModels that user data has been updated
-                    TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
-                }
-            } catch (e: Exception) {
-                Timber.tag("deleteTweet").w("Failed to refresh appUser after deletion: $e")
+        try {
+            val refreshed = fetchUser(requestUser.mid, requestUser.baseUrl, maxRetries = 1, forceRefresh = true)
+            if (refreshed != null && !refreshed.isGuest() && appUser.mid == requestUser.mid) {
+                User.updateUserInstance(refreshed, true)
+                appUser = getInstance(refreshed.mid)
+                TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
             }
-        }
-
-        return try {
-            // Mutation: route through the tweet author's writable host (hostIds[0]).
-            val rawResponse = try {
-                runWrite<Map<String, Any>>(requestUser, "deleteTweet", entry, params)
-            } catch (e: Exception) {
-                if (isTweetNotFoundDeleteFailure(error = e)) {
-                    Timber.tag("deleteTweet")
-                        .d("Tweet $tweetId is already missing on server; treating delete as success")
-                    TweetCacheManager.evictDeletedTweet(tweetId)
-                    decrementOriginalRetweetCount()
-                    refreshAppUserAfterDelete()
-                    return tweetId
-                }
-                Timber.tag("deleteTweet").e(e, "Exception calling runMApp for deleteTweet, tweetId: $tweetId")
-                throw e
-            }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-
-            if (response == null) {
-                if (isTweetNotFoundDeleteFailure(response = rawResponse)) {
-                    Timber.tag("deleteTweet")
-                        .d("Tweet $tweetId is already missing on server; treating delete as success")
-                    TweetCacheManager.evictDeletedTweet(tweetId)
-                    decrementOriginalRetweetCount()
-                    refreshAppUserAfterDelete()
-                    return tweetId
-                }
-                val errorMsg = "Delete tweet failed: server returned null response"
-                Timber.tag("deleteTweet").e(errorMsg)
-                throw Exception(errorMsg)
-            }
-
-            val deletedTweetId = response["tweetid"] as? MimeiId
-
-            if (deletedTweetId == null) {
-                val errorMsg = "Delete tweet failed: server returned success but no tweetid"
-                Timber.tag("deleteTweet").e(errorMsg)
-                throw Exception(errorMsg)
-            }
-
-            adoptWriteRouteForReads(requestUser, entry)
-
-            TweetCacheManager.evictDeletedTweet(deletedTweetId)
-
-            // Deleting a retweet/quote must unlink it from the original's retweet list,
-            // otherwise the original keeps counting a retweet that no longer exists.
-            decrementOriginalRetweetCount()
-
-            // Refresh appUser from server to get updated tweetCount and other properties
-            refreshAppUserAfterDelete()
-
-            deletedTweetId
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (isTweetNotFoundDeleteFailure(error = e)) {
-                Timber.tag("deleteTweet")
-                    .d("Tweet $tweetId is already missing on server; treating delete as success")
-                TweetCacheManager.evictDeletedTweet(tweetId)
-                decrementOriginalRetweetCount()
-                refreshAppUserAfterDelete()
-                return tweetId
-            }
-            Timber.tag("deleteTweet").e(e, "Error deleting tweet: ${e.message}")
-            Timber.tag("deleteTweet").e("Stack trace: ${e.stackTraceToString()}")
-            // Re-throw with original message or provide default
-            throw Exception(e.message ?: "Unknown error occurred while deleting tweet")
+            Timber.tag("deleteTweet").w(e, "Failed to refresh app user after deletion")
         }
+        return deletedTweetId
     }
 
     suspend fun deleteAccount(): Map<String, Any> {

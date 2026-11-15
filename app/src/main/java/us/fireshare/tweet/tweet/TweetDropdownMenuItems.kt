@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Share
@@ -67,6 +68,7 @@ fun TweetDropdownMenuItems(
     tweet: Tweet,
     parentEntry: NavBackStackEntry,
     onDismissRequest: () -> Unit,
+    onEditRequest: () -> Unit,
     contextType: String = "default", // Context to determine where this dropdown is shown
     viewModel: TweetViewModel? = null
 ) {
@@ -83,8 +85,8 @@ fun TweetDropdownMenuItems(
     val guestReminderText = stringResource(R.string.guest_reminder)
     var showDeleteConfirmation by remember(tweet.mid) { mutableStateOf(false) }
 
-    // Show delete button based on context
-    val shouldShowDeleteButton = when (contextType) {
+    val canModerate = HproseInstance.canModerateTweet(tweet, appUser)
+    val shouldShowDeleteButton = canModerate || when (contextType) {
         "followingsTweet" -> true // Show delete for all tweets in main feed
         "appUserProfile" -> tweet.authorId == appUser.mid // Show delete only for app user's tweets in profile
         "tweetDetail" -> tweet.authorId == appUser.mid // Show delete for user's own tweets in detail view
@@ -95,6 +97,17 @@ fun TweetDropdownMenuItems(
     ) { factory ->
         factory.create(Tweet.getInstance(tweet.originalTweetId!!, tweet.originalAuthorId!!))
     } else null
+
+    if (canModerate) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.edit_tweet)) },
+            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+            onClick = {
+                onDismissRequest()
+                onEditRequest()
+            }
+        )
+    }
 
     if (shouldShowDeleteButton) {
         DropdownMenuItem(
@@ -118,7 +131,7 @@ fun TweetDropdownMenuItems(
                 }
 
                 // Check if hproseService is available
-                if (appUser.hproseService == null) {
+                if (!canModerate && appUser.hproseService == null) {
                     Timber.tag("TweetDropdownMenuItems").w("Cannot delete tweet: hproseService is null")
                     Toast.makeText(
                         context,
@@ -154,13 +167,14 @@ fun TweetDropdownMenuItems(
                 onDismissRequest()
             },
             title = { Text(stringResource(R.string.delete_tweet_confirmation_title)) },
-            // Only the author destroys a tweet; for anyone else the backend just removes it
-            // from the requester's own lists, so "permanently deleted" would be false.
             text = {
                 Text(
                     stringResource(
-                        if (tweet.authorId == appUser.mid) R.string.delete_tweet_confirmation_message
-                        else R.string.remove_tweet_from_feed_confirmation_message
+                        when {
+                            tweet.authorId == appUser.mid -> R.string.delete_tweet_confirmation_message
+                            canModerate -> R.string.admin_delete_tweet_confirmation_message
+                            else -> R.string.remove_tweet_from_feed_confirmation_message
+                        }
                     )
                 )
             },
@@ -175,13 +189,9 @@ fun TweetDropdownMenuItems(
                             try {
                                 Timber.tag("TweetDropdownMenuItems").d("Starting optimistic deletion of tweet: ${tweet.mid}")
 
-                                tweetFeedViewModel.delTweet(tweet.mid, appUserViewModel) {
+                                tweetFeedViewModel.delTweet(tweet, appUserViewModel) {
                                     Timber.tag("TweetDropdownMenuItems").d("Tweet ${tweet.mid} deleted successfully")
 
-                                    // The original's retweetCount is decremented inside
-                                    // HproseInstance.deleteTweet, so every delete path gets it —
-                                    // this one only ran when originTweetViewModel was non-null,
-                                    // which left feed deletions uncounted.
                                 }
                             } catch (e: Exception) {
                                 Timber.tag("TweetDropdownMenuItems")

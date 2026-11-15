@@ -557,8 +557,9 @@ fun TweetDropdownMenu(
     context: String = "default",
     viewModel: TweetViewModel? = null
 ) {
-    // Use tweet.mid as key to ensure state is reset when tweet changes
-    var expanded by remember(tweet.mid) { mutableStateOf(false) }
+    val menuTweet = parentTweet ?: tweet
+    var expanded by remember(menuTweet.mid) { mutableStateOf(false) }
+    var editing by remember(menuTweet.mid) { mutableStateOf(false) }
 
     // Dismiss popup menu when tweet is deleted or becomes unavailable
     LaunchedEffect(tweet.mid) {
@@ -592,18 +593,21 @@ fun TweetDropdownMenu(
                     shape = RoundedCornerShape(4.dp)
                 ),
         ) {
-            if (parentTweet != null) {
-                // this is a retweet. Show menu for the retweet if current user is the retweet author
-                if (parentTweet.authorId == appUser.mid) {
-                    TweetDropdownMenuItems(parentTweet, parentEntry, {
-                        expanded = false
-                    }, context, viewModel = viewModel)
-                }
-            } else {
-                TweetDropdownMenuItems(tweet, parentEntry, {
-                    expanded = false
-                }, context, viewModel = viewModel)
+            if (parentTweet == null || parentTweet.authorId == appUser.mid ||
+                HproseInstance.canModerateTweet(parentTweet, appUser)
+            ) {
+                TweetDropdownMenuItems(
+                    menuTweet,
+                    parentEntry,
+                    onDismissRequest = { expanded = false },
+                    onEditRequest = { editing = true },
+                    contextType = context,
+                    viewModel = viewModel
+                )
             }
         }
+    }
+    if (editing) {
+        AdminTweetEditDialog(menuTweet, onDismiss = { editing = false })
     }
 }
