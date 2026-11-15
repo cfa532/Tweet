@@ -254,6 +254,7 @@
     <string name="updating_avatar">アバターを更新中…</string>
     <string name="avatar_update_success">アバターを更新しました</string>
     <string name="delete_account">アカウントを削除</string>
+    <string name="edit_by_admin">編集（管理者）</string>
     <string name="edit_tweet">ツイートを編集</string>
     <string name="comment">コメント</string>
     <string name="reply_to">返信先</string>

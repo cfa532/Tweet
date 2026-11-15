@@ -100,7 +100,7 @@ fun TweetDropdownMenuItems(
 
     if (canModerate) {
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.edit)) },
+            text = { Text(stringResource(R.string.edit_by_admin)) },
             leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
             onClick = {
                 onDismissRequest()

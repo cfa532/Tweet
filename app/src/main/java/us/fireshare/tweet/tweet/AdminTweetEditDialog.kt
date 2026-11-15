@@ -158,7 +158,7 @@ internal fun AdminTweetEditDialog(tweet: Tweet, onDismiss: () -> Unit) {
             topBar = {
                 Column {
                     TopAppBar(
-                        title = { Text(stringResource(R.string.edit)) },
+                        title = { Text(stringResource(R.string.edit_by_admin)) },
                         navigationIcon = {
                             IconButton(onClick = closeEditor, enabled = !saving) {
                                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
