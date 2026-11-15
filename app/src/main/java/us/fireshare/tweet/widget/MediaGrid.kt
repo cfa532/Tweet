@@ -207,11 +207,11 @@ fun MediaGrid(
         limitedMediaList.forEach { item ->
             val mediaType = inferMediaTypeFromAttachment(item)
             if (mediaType == MediaType.Image) {
-                val mediaUrl = getMediaUrl(item.mid, authorBaseUrl.orEmpty()).toString()
+                val mediaUrl = getMediaUrl(item.mid, authorBaseUrl?.takeIf { it.isNotBlank() })
                 launch(Dispatchers.IO) {
                     preloadSemaphore.acquire()
                     try {
-                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl)
+                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl, tweet.authorId)
                     } catch (e: Exception) {
                         Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
                     } finally {
@@ -245,10 +245,10 @@ fun MediaGrid(
                                 visualMediaList.map {
                                     MediaItem(
                                         it.mid,
-                                        getMediaUrl(it.mid, authorBaseUrl.orEmpty()).toString(),
+                                        getMediaUrl(it.mid, authorBaseUrl?.takeIf { url -> url.isNotBlank() }).orEmpty(),
                                         it.type
                                     )
-                                }, 0, tweet.mid, tweet.authorId
+                                }, 0, tweet.mid, tweet.authorId, imageOwnerId = tweet.authorId
                             )
                             if (params.mediaItems.getOrNull(0)?.type == MediaType.Video ||
                                 params.mediaItems.getOrNull(0)?.type == MediaType.HLS_VIDEO

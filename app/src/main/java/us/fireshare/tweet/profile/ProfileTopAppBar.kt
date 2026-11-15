@@ -261,12 +261,11 @@ fun ImageModalDialog(
                     color = Color.Gray
                 )
                 user.avatar?.let { avatarMid ->
-                    getMediaUrl(avatarMid, currentBaseUrl)?.let {
-                        AdvancedImageViewer(
-                            imageUrl = it,
-                            imageMid = avatarMid
-                        )
-                    }
+                    AdvancedImageViewer(
+                        imageUrl = getMediaUrl(avatarMid, currentBaseUrl?.takeIf { it.isNotBlank() }),
+                        imageMid = avatarMid,
+                        ownerId = user.mid
+                    )
                 }
             }
 

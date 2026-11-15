@@ -76,8 +76,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.R
+import us.fireshare.tweet.TweetApplication.Companion.foregroundImageRoutes
 import us.fireshare.tweet.datamodel.BlackList
+import us.fireshare.tweet.datamodel.MimeiId
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.min
@@ -115,7 +118,7 @@ fun AnimatedLoadingText(
  */
 @Composable
 fun AdvancedImageViewer(
-    imageUrl: String,
+    imageUrl: String?,
     imageMid: String,
     modifier: Modifier = Modifier,
     enableLongPress: Boolean = true,
@@ -127,7 +130,8 @@ fun AdvancedImageViewer(
     onNextImage: (() -> Unit)? = null, // Callback to load next image
     onPreviousImage: (() -> Unit)? = null, // Callback to load previous image
     drawBackdrop: Boolean = true,
-    onDismissDrag: (Float) -> Unit = {}
+    onDismissDrag: (Float) -> Unit = {},
+    ownerId: MimeiId? = null
 ) {
     if (drawBackdrop) FullscreenMediaWindow()
     val context = LocalContext.current
@@ -145,7 +149,9 @@ fun AdvancedImageViewer(
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
-    var retryCount by remember { mutableIntStateOf(0) }
+    val imageRoutes by foregroundImageRoutes.collectAsState()
+    val isOnline by HproseInstance.isOnline.collectAsState()
+    var retryCount by remember(mid, imageRoutes, isOnline) { mutableIntStateOf(0) }
     var isVisible by remember { mutableStateOf(true) }
     var lastRetryTime by remember { mutableLongStateOf(0L) }
     var currentImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -243,10 +249,8 @@ fun AdvancedImageViewer(
     }
 
     // Load image using ImageCacheManager with proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, imageUrl, retryCount) {
-        // Store the current job for potential cancellation
-        // Only attempt loading if retry count is within limit
-        if (retryCount > 3) {
+    LaunchedEffect(mid, imageUrl, ownerId, imageRoutes, isOnline, retryCount) {
+        if (imageRoutes == null || !isOnline || retryCount > 3) {
             return@LaunchedEffect
         }
         
@@ -310,7 +314,8 @@ fun AdvancedImageViewer(
                         context = context,
                         imageUrl = imageUrl,
                         mid = mid,
-                        isVisible = true
+                        isVisible = true,
+                        ownerId = ownerId
                     )
                     if (previewBitmap != null && !previewBitmap.isRecycled) {
                         val hasOriginalBitmap = imageFile?.name == "${mid}_original.jpg"
@@ -338,7 +343,7 @@ fun AdvancedImageViewer(
             if (initialBitmap == null) {
                 try {
                     val originalMid = "${mid}_original"
-                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible) { preview ->
+                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible, ownerId = ownerId) { preview ->
                         // Show partial (low-res) image while full image loads so user sees progress
                         if (loadState.isLoading && !preview.isRecycled) {
                             loadState = loadState.copy(bitmap = preview)
@@ -867,12 +872,15 @@ fun ImageViewer(
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null,
     onBitmapLoaded: ((Bitmap?) -> Unit)? = null,
-    resolveImageUrlForRetry: (() -> String?)? = null
+    ownerId: MimeiId? = null
 ) {
     val context = LocalContext.current
     val retryScope = rememberCoroutineScope()
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val visibleToUser = isVisible && lifecycleState.isAtLeast(Lifecycle.State.STARTED)
+    val isOnline by HproseInstance.isOnline.collectAsState()
+    val imageRoutes by foregroundImageRoutes.collectAsState()
+    val canDownload = visibleToUser && isOnline && imageRoutes != null
     var showMenu by remember { mutableStateOf(false) }
     val mid = imageMid
     val imageSavedMessage = stringResource(R.string.image_saved_to_gallery)
@@ -896,25 +904,17 @@ fun ImageViewer(
         }
         mutableStateOf(
             if (cachedBitmap != null) {
-                ImageLoadState(bitmap = cachedBitmap, isLoading = false, isVisible = visibleToUser)
+                ImageLoadState(bitmap = cachedBitmap, isLoading = false)
             } else {
-                ImageLoadState(isLoading = true, isVisible = visibleToUser)
+                ImageLoadState(isLoading = true)
             }
         )
     }
     var imageFile by remember { mutableStateOf<File?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    // Start the first request only after the visible appearance clears session failures.
-    var retryCount by remember(mid) { mutableIntStateOf(-1) }
-    var lastRetryTime by remember { mutableLongStateOf(0L) }
-    var retryImageUrl by remember(mid) { mutableStateOf<String?>(null) }
-    val effectiveImageUrl = retryImageUrl ?: imageUrl
-
-    LaunchedEffect(imageUrl) {
-        // A normal parent recomposition supplied a newer route, so it supersedes
-        // any URL selected by an earlier manual retry.
-        retryImageUrl = null
-    }
+    // A visible image gets a fresh retry budget when the screen returns or reconnects.
+    var retryCount by remember(mid, canDownload, imageRoutes) { mutableIntStateOf(0) }
+    var lastRetryTime by remember(mid, canDownload, imageRoutes) { mutableLongStateOf(0L) }
 
     suspend fun applyCachedBitmapIfAvailable(reason: String): Boolean {
         val currentMid = mid ?: return false
@@ -977,21 +977,6 @@ fun ImageViewer(
         return true
     }
 
-    // Scroll re-entry and foreground return each grant one fresh load, even after
-    // the automatic retry budget is exhausted. Errors are not effect keys.
-    LaunchedEffect(mid, visibleToUser) {
-        loadState = loadState.copy(isVisible = visibleToUser)
-        if (mid != null && visibleToUser) {
-            val cached = applyCachedBitmapIfAvailable("visible")
-            if (!cached) {
-                BlackList.resetSessionFailures(mid)
-            }
-            if (!cached || retryCount < 0) {
-                retryCount++
-            }
-        }
-    }
-
     LaunchedEffect(mid, loadOriginalImage) {
         val currentMid = mid ?: return@LaunchedEffect
         val cacheKeys = if (loadOriginalImage) {
@@ -1024,9 +1009,8 @@ fun ImageViewer(
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, effectiveImageUrl, retryCount) {
-        // Wait for visibility to clear the session block before the first attempt.
-        if (effectiveImageUrl == null || mid == null || !visibleToUser || retryCount < 0) {
+    LaunchedEffect(mid, imageUrl, ownerId, canDownload, imageRoutes, retryCount) {
+        if ((imageUrl == null && ownerId == null) || mid == null || !canDownload) {
             return@LaunchedEffect
         }
 
@@ -1054,6 +1038,8 @@ fun ImageViewer(
                                 MediaLog.d("ImageViewer") { "Using cached original image (forced): $imageUrl" }
                                 return@LaunchedEffect
                             }
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             Timber.tag("ImageViewer").w("Failed to load cached original image: $e")
                         }
@@ -1084,35 +1070,22 @@ fun ImageViewer(
             
             // Step 2: Load image from server (only if no cached images found)
             try {
+                if (retryCount == 0) BlackList.resetSessionFailures(mid)
                 if (loadOriginalImage) {
                     // Load original high-res image from server (deferred so cancellation can be debounced)
                     val originalMid = "${mid}_original"
-                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, effectiveImageUrl, mid, isVisible) { preview ->
+                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible, ownerId = ownerId) { preview ->
                         // Show partial (low-res) image while full image loads so user sees progress
                         if (loadState.isLoading && !preview.isRecycled) {
                             loadState = loadState.copy(bitmap = preview)
                         }
                     }
-                    val downloadedBitmap = try {
-                        deferred.await()
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        loadState = loadState.copy(isLoading = false)
-                        if (ImageCacheManager.isImageProtected(originalMid)) {
-                            ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
-                        } else {
-                            ImageCacheManager.cancelImageLoad(originalMid)
-                        }
-                        MediaLog.d("ImageViewer") { "Image loading cancelled: $imageUrl" }
-                        return@LaunchedEffect
-                    }
+                    val downloadedBitmap = deferred.await()
                     
                     if (downloadedBitmap != null) {
                         // Update with loaded original image
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
                         onBitmapLoaded?.invoke(downloadedBitmap)
-                        
-                        // Reset retry count on successful load
-                        retryCount = 0
                         
                         // Update file for SubsamplingScaleImageView
                         val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, originalMid)
@@ -1132,7 +1105,7 @@ fun ImageViewer(
                             Timber.tag("ImageViewer").e("Failed to load original image from server: $imageUrl - hasError: true, retryCount: $retryCount")
                             
                             // Auto-retry if within limit, visible, and debounced
-                            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                            if (retryCount < 3 && shouldRetry()) {
                                 loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                                 delay(2000L) // Wait 2 seconds before retry
                                 retryCount++
@@ -1147,18 +1120,16 @@ fun ImageViewer(
                     // Load compressed image from server (downloads and compresses automatically)
                     val downloadedBitmap = ImageCacheManager.downloadAndCacheImage(
                         context,
-                        effectiveImageUrl,
+                        imageUrl,
                         mid,
-                        isVisible = isVisible
+                        isVisible = isVisible,
+                        ownerId = ownerId
                     )
                     
                     if (downloadedBitmap != null) {
                         // Update with loaded compressed image
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
                         onBitmapLoaded?.invoke(downloadedBitmap)
-                        
-                        // Reset retry count on successful load
-                        retryCount = 0
                         
                         // Update file for SubsamplingScaleImageView (use compressed cache key)
                         val updatedCachedFile = ImageCacheManager.getCachedImageFile(context, mid)
@@ -1177,7 +1148,7 @@ fun ImageViewer(
                             Timber.tag("ImageViewer").e("Failed to load compressed image from server: $imageUrl - hasError: true, retryCount: $retryCount")
                             
                             // Auto-retry if within limit, visible, and debounced
-                            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                            if (retryCount < 3 && shouldRetry()) {
                                 loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                                 delay(2000L) // Wait 2 seconds before retry
                                 retryCount++
@@ -1200,7 +1171,7 @@ fun ImageViewer(
                     )
                     
                     // Auto-retry if within limit, visible, and debounced
-                    if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+                    if (retryCount < 3 && shouldRetry()) {
                         loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                         delay(2000L) // Wait 2 seconds before retry
                         retryCount++
@@ -1215,13 +1186,11 @@ fun ImageViewer(
             MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
             // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
             loadState = loadState.copy(isLoading = false)
-            if (ImageCacheManager.isImageProtected(mid)) {
-                ImageCacheManager.schedulePauseDownload(mid, 3000L)
-                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
-            } else {
-                ImageCacheManager.cancelImageLoad(mid)
+            if (loadOriginalImage) {
+                // The shared original download owns its queue entry even when this viewer stops awaiting it.
+                ImageCacheManager.schedulePauseDownload("${mid}_original")
             }
-            return@LaunchedEffect
+            throw e
         } catch (e: Exception) {
             loadState = loadState.copy(
                 isLoading = false,
@@ -1230,7 +1199,7 @@ fun ImageViewer(
             MediaLog.d("ImageViewer") { "Error loading image: $e" }
             
             // Auto-retry if within limit, visible, and debounced
-            if (retryCount < 3 && loadState.isVisible && shouldRetry()) {
+            if (retryCount < 3 && shouldRetry()) {
                 loadState = loadState.copy(isLoading = true) // Keep showing Loading... while waiting to retry
                 delay(2000L) // Wait 2 seconds before retry
                 retryCount++
@@ -1416,21 +1385,14 @@ fun ImageViewer(
                     color = Color.Gray
                 )
                 TextButton(
-                    enabled = mid != null && (resolveImageUrlForRetry != null || !imageUrl.isNullOrBlank()),
+                    enabled = mid != null && (ownerId != null || !imageUrl.isNullOrBlank()),
                     onClick = {
                         val retryMid = mid ?: return@TextButton
-                        val refreshedUrl = resolveImageUrlForRetry?.invoke()
-                            ?.takeIf { it.isNotBlank() }
-                            ?: imageUrl?.takeIf { it.isNotBlank() }
-                            ?: return@TextButton
                         loadState = loadState.copy(isLoading = true, hasError = false)
                         retryScope.launch {
                             try {
                                 BlackList.resetForRetry(retryMid)
-                                // Rebuild the URL from the owning tweet's current author
-                                // route. The route is mutable and may have been repaired
-                                // without changing this composable's original parameter.
-                                retryImageUrl = refreshedUrl
+                                ownerId?.let { imageRoutes?.invalidate(it) }
                                 // Changing the effect key also retries after the automatic budget
                                 // is exhausted, without granting another automatic retry loop.
                                 retryCount++

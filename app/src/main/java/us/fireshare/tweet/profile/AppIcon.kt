@@ -1,5 +1,6 @@
 package us.fireshare.tweet.profile
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
@@ -13,30 +14,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.getMediaUrl
 import us.fireshare.tweet.R
+import us.fireshare.tweet.TweetApplication.Companion.foregroundImageRoutes
+import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.widget.ImageCacheManager
-
-/**
- * State object for avatar loading to reduce recomposition
- */
-data class AvatarLoadState(
-    val bitmap: android.graphics.Bitmap? = null,
-    val avatarUrl: String? = null,
-    val isLoading: Boolean = false,
-    val hasError: Boolean = false
-)
 
 /**
  * AppIcon displays the app logo (singleton painter resource)
@@ -67,70 +64,42 @@ fun UserAvatar(
     useOriginalColors: Boolean = false
 ) {
     val context = LocalContext.current
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val isOnline by HproseInstance.isOnline.collectAsState()
+    val imageRoutes by foregroundImageRoutes.collectAsState()
+    val canDownload = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && isOnline && imageRoutes != null
+    val ownerId = user.mid
     val avatarMid = user.avatar
     val avatarBaseUrl = user.baseUrl
     val avatarCacheVersion by remember(avatarMid) {
         ImageCacheManager.getImageCacheVersionFlow(avatarMid.orEmpty())
     }.collectAsState()
 
-    // Watch both avatar and user object - state resets only when avatar ID changes,
-    // but we recompose when user object changes to ensure toolbar updates
-    var loadState by remember(avatarMid) { mutableStateOf(AvatarLoadState()) }
+    var bitmap by remember(avatarMid) { mutableStateOf<Bitmap?>(null) }
 
-    // React to avatar changes and route changes. If baseUrl was unavailable during
-    // the first render, this reruns as soon as profile refresh resolves the route.
-    // State reset only happens when avatarMid changes, but effect reruns to update URLs
-    LaunchedEffect(avatarMid, avatarBaseUrl, avatarCacheVersion) {
-        // Only reset state if avatarMid changed from the current loaded state
-        if (loadState.bitmap != null && !loadState.bitmap!!.isRecycled && !avatarMid.isNullOrEmpty()) {
-            // Same avatar ID is already rendered; route changes should not disturb id-keyed avatar cache.
+    LaunchedEffect(ownerId, avatarMid, avatarBaseUrl, avatarCacheVersion, canDownload, imageRoutes) {
+        if (avatarMid.isNullOrEmpty() || bitmap != null) return@LaunchedEffect
+
+        // The full-size original is reserved for the profile's avatar dialog.
+        ImageCacheManager.getCachedImage(context, avatarMid)?.let {
+            bitmap = it
             return@LaunchedEffect
         }
-        
-        // Reset state when avatar changes or first load
-        loadState = AvatarLoadState()
-        
-        if (!avatarMid.isNullOrEmpty()) {
-            // Use the cached thumbnail only. The full-size original ("${mid}_original") is
-            // for the full-size avatar dialog; drawing a small circle from it wastes memory.
-            val cachedBitmap = withContext(Dispatchers.IO) {
-                ImageCacheManager.getCachedImage(context, avatarMid)
-            }
-            if (cachedBitmap != null) {
-                // Use cached avatar immediately
-                loadState = AvatarLoadState(bitmap = cachedBitmap, isLoading = false, hasError = false)
-            } else {
-                // Not cached, need to load it
-                val avatarUrl = getMediaUrl(avatarMid, avatarBaseUrl)
-                if (avatarUrl.isNullOrBlank()) {
-                    loadState = AvatarLoadState()
-                    return@LaunchedEffect
-                }
-                loadState = AvatarLoadState(avatarUrl = avatarUrl, bitmap = null, isLoading = true, hasError = false)
+        if (!canDownload) return@LaunchedEffect
 
-                try {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        ImageCacheManager.downloadAndCacheImage(
-                            context = context,
-                            imageUrl = avatarUrl,
-                            mid = avatarMid,
-                            isVisible = true,
-                            isAvatar = true
-                        )
-                    }
-                    loadState = if (bitmap != null && !bitmap.isRecycled) {
-                        AvatarLoadState(avatarUrl = avatarUrl, bitmap = bitmap, isLoading = false, hasError = false)
-                    } else {
-                        AvatarLoadState(isLoading = false, hasError = true)
-                    }
-                } catch (e: Exception) {
-                    loadState = AvatarLoadState(isLoading = false, hasError = true)
-                    Timber.e("UserAvatar - Error loading avatar: $e")
-                }
-            }
-        } else {
-            // No avatar
-            loadState = AvatarLoadState()
+        try {
+            BlackList.resetSessionFailures(avatarMid)
+            bitmap = ImageCacheManager.downloadAndCacheImage(
+                context = context,
+                imageUrl = getMediaUrl(avatarMid, avatarBaseUrl?.takeIf { it.isNotBlank() }),
+                mid = avatarMid,
+                isAvatar = true,
+                ownerId = ownerId
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("UserAvatar").e(e, "Could not load avatar $avatarMid")
         }
     }
 
@@ -145,55 +114,21 @@ fun UserAvatar(
             }
         }
 
-    if (loadState.bitmap != null) {
-        // Show cached avatar image
+    val avatar = bitmap
+    if (avatar != null) {
         Image(
-            bitmap = loadState.bitmap!!.asImageBitmap(),
+            bitmap = avatar.asImageBitmap(),
             contentDescription = stringResource(R.string.user_avatar),
             contentScale = ContentScale.Crop,
             modifier = modifier
         )
-    } else if (!loadState.avatarUrl.isNullOrEmpty() && !loadState.hasError) {
-        // Show loading state or try to load from URL
-        if (loadState.isLoading) {
-            // Show manyone.png icon while loading
-            Image(
-                painter = painterResource(id = R.drawable.manyone),
-                contentDescription = stringResource(R.string.user_avatar),
-                contentScale = ContentScale.Crop,
-                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
-                modifier = modifier
-            )
-        } else {
-            // Fallback to manyone.png icon
-            Image(
-                painter = painterResource(id = R.drawable.manyone),
-                contentDescription = stringResource(R.string.user_avatar),
-                contentScale = ContentScale.Crop,
-                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
-                modifier = modifier
-            )
-        }
     } else {
-        // Show default system icon with 50% gray color when avatar is null or empty
-        if (user.avatar.isNullOrEmpty() || avatarMid.isNullOrEmpty()) {
-            // Use manyone.png as default system icon
-            Image(
-                painter = painterResource(id = R.drawable.manyone),
-                contentDescription = stringResource(R.string.user_avatar),
-                contentScale = ContentScale.Crop,
-                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
-                modifier = modifier
-            )
-        } else {
-            // Show fallback manyone.png icon for other cases (like loading errors)
-            Image(
-                painter = painterResource(id = R.drawable.manyone),
-                contentDescription = stringResource(R.string.user_avatar),
-                contentScale = ContentScale.Crop,
-                colorFilter = if (useOriginalColors) null else androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFFB0B0B0), blendMode = androidx.compose.ui.graphics.BlendMode.Screen), // Light gray and white or original colors
-                modifier = modifier
-            )
-        }
+        Image(
+            painter = painterResource(R.drawable.manyone),
+            contentDescription = stringResource(R.string.user_avatar),
+            contentScale = ContentScale.Crop,
+            colorFilter = if (useOriginalColors) null else ColorFilter.tint(Color(0xFFB0B0B0), BlendMode.Screen),
+            modifier = modifier
+        )
     }
 }

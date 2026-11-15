@@ -590,7 +590,7 @@ object HproseInstance {
     // when DNS/network stabilizes a moment later during app startup.
     private const val entryResolveFailureBackoffMs = 1_500L
     private val entryIPResolveMutex = Mutex()
-    private var entryIPResolveInFlight: CompletableDeferred<String>? = null
+    private var entryIPResolveInFlight: Deferred<String>? = null
     private var entryResolveCache: EntryResolveCache? = null
     private var entryResolveFailureCache: EntryResolveFailureCache? = null
 
@@ -810,87 +810,57 @@ object HproseInstance {
      * App_Url is the network entrance of the App. Use it to initiate appId, and BASE_URL.
      * */
     /**
-     * Find the best IP by trying URLs and parsing HTML parameters
+     * Return the entry IP. On foreground return, probe the saved IP before trying the app URLs.
      */
-    internal suspend fun findEntryIP(forceRefresh: Boolean = false): String {
-        var inFlightResolve: CompletableDeferred<String>? = null
-        var shouldResolveNow = false
-        var cachedResult: String? = null
-        var cachedFailure: IllegalStateException? = null
+    internal suspend fun findEntryIP(checkCached: Boolean = false): String {
+        val request = entryIPResolveMutex.withLock {
+            entryIPResolveInFlight?.takeUnless { it.isCompleted }?.let {
+                return@withLock it
+            }
 
-        entryIPResolveMutex.withLock {
-            val existing = entryIPResolveInFlight
-            if (existing != null) {
-                Timber.tag("findEntryIP").d("Reusing in-flight entry IP resolution")
-                inFlightResolve = existing
-            } else {
-                val now = System.currentTimeMillis()
-                val failureCache = entryResolveFailureCache
-                val isFailureBackoffActive = failureCache != null &&
-                    now - failureCache.timestampMs <= entryResolveFailureBackoffMs
-                val cache = entryResolveCache
-                val isCacheValid = cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs
+            val now = System.currentTimeMillis()
+            val failure = entryResolveFailureCache
+            val cache = entryResolveCache
+            if (!checkCached && failure != null && now - failure.timestampMs <= entryResolveFailureBackoffMs) {
+                throw IllegalStateException("Entry IP resolution is in failure backoff: ${failure.message}")
+            }
+            if (!checkCached && cache != null && now - cache.timestampMs <= entryResolveCacheTtlMs) {
+                _appId = cache.appId
+                return cache.ip
+            }
 
-                if (!forceRefresh && isFailureBackoffActive) {
-                    val age = now - failureCache.timestampMs
-                    Timber.tag("findEntryIP").w(
-                        "Skipping entry IP network retry during failure backoff (${age}ms): ${failureCache.message}"
-                    )
-                    cachedFailure = IllegalStateException(
-                        "Entry IP resolution is in failure backoff (${age}ms): ${failureCache.message}"
-                    )
-                } else if (!forceRefresh && isCacheValid) {
-                    // Keep appId aligned with the cached entry resolution metadata.
-                    _appId = cache.appId
-                    cachedResult = cache.ip
-                    Timber.tag("findEntryIP").d(
-                        "Using cached entry IP ${cache.ip} (age=${now - cache.timestampMs}ms)"
-                    )
-                } else {
-                    inFlightResolve = CompletableDeferred()
-                    entryIPResolveInFlight = inFlightResolve
-                    shouldResolveNow = true
-                    Timber.tag("findEntryIP").d("Created new entry IP resolution task")
+            val savedEntry = cache.takeIf { checkCached }
+            // Once revalidation starts, a failed probe must leave no usable entry cached.
+            if (checkCached) entryResolveCache = null
+            TweetApplication.applicationScope.async {
+                try {
+                    val resolvedIP = if (savedEntry != null &&
+                        isServerHealthy(normalizeHealthCheckUrl(savedEntry.ip), useCache = false)
+                    ) {
+                        _appId = savedEntry.appId
+                        savedEntry.ip
+                    } else {
+                        resolveEntryIPInternal()
+                    }
+                    entryIPResolveMutex.withLock {
+                        entryResolveCache = EntryResolveCache(resolvedIP, appId, System.currentTimeMillis())
+                        entryResolveFailureCache = null
+                    }
+                    resolvedIP
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    entryIPResolveMutex.withLock {
+                        entryResolveFailureCache = EntryResolveFailureCache(
+                            message = e.message ?: e.javaClass.simpleName,
+                            timestampMs = System.currentTimeMillis()
+                        )
+                    }
+                    throw e
                 }
-            }
+            }.also { entryIPResolveInFlight = it }
         }
-
-        cachedResult?.let { return it }
-        cachedFailure?.let { throw it }
-
-        if (!shouldResolveNow) {
-            return inFlightResolve!!.await()
-        }
-
-        try {
-            val resolvedIP = resolveEntryIPInternal()
-            val resolvedAppId = appId
-            entryIPResolveMutex.withLock {
-                entryResolveCache = EntryResolveCache(
-                    ip = resolvedIP,
-                    appId = resolvedAppId,
-                    timestampMs = System.currentTimeMillis()
-                )
-                entryResolveFailureCache = null
-            }
-            inFlightResolve!!.complete(resolvedIP)
-            return resolvedIP
-        } catch (e: Exception) {
-            entryIPResolveMutex.withLock {
-                entryResolveFailureCache = EntryResolveFailureCache(
-                    message = e.message ?: e.javaClass.simpleName,
-                    timestampMs = System.currentTimeMillis()
-                )
-            }
-            inFlightResolve!!.completeExceptionally(e)
-            throw e
-        } finally {
-            entryIPResolveMutex.withLock {
-                if (entryIPResolveInFlight === inFlightResolve) {
-                    entryIPResolveInFlight = null
-                }
-            }
-        }
+        return request.await()
     }
 
     private suspend fun resolveEntryIPInternal(): String {
@@ -5443,51 +5413,83 @@ object HproseInstance {
      * three. Cached content is rendered by the ViewModel before this starts and is
      * not treated as proof that its old route still serves the author.
      */
-    suspend fun fetchUserForDetail(userId: MimeiId): User? = coroutineScope {
+    suspend fun fetchUserForDetail(userId: MimeiId): User? {
         val candidates = getProviderCandidatesForDetail(userId)
-        if (candidates.isEmpty()) return@coroutineScope null
+        if (candidates.isEmpty()) return null
+        val winningRoute = raceUserRoutes(getUserInstance(userId), candidates)
+        if (winningRoute == null) {
+            recordReliabilityFailureUser(userId)
+            return null
+        }
 
+        val user = getUserInstance(userId)
+        setUserBaseUrlForRequest(user, winningRoute.baseUrl)
+        processUserDataResponse(user, winningRoute.userData, skipRetryAndBlacklist = false)
+        UserRoutes.confirmReadRoute(user.mid, winningRoute.baseUrl, user.baseUrl)
+        user.hostIds?.getOrNull(1)?.let { accessNodeMid ->
+            NodePool.updateNodeIP(
+                accessNodeMid,
+                winningRoute.baseUrl.removePrefix("http://").removePrefix("https://")
+            )
+        }
+        TweetCacheManager.saveUser(user)
+        return user
+    }
+
+    /** Resolve the image owner's route without changing the account's read or write routing. */
+    internal suspend fun resolveImageOwnerRoute(userId: MimeiId, suppliedBaseUrl: String?): String? {
+        if (!isOnline.value) return null
+        val owner = TweetCacheManager.getCachedUser(userId) ?: getUserInstance(userId)
+        val knownRoutes = listOfNotNull(owner.baseUrl, suppliedBaseUrl, UserRoutes.readRoute(userId))
+            .filter { it.isNotBlank() }
+            .distinctBy(::normalizeIPHealthCacheKey)
+        val previousAppId = appId
+        for (address in knownRoutes) {
+            readUserAtRoute(owner, address)?.let { return it.baseUrl }
+        }
+        val candidates = getProviderCandidatesForDetail(userId)
+        // Discovery can update the manifest used by get_user, so retry candidates under the new ID.
+        if (appId != previousAppId) return raceUserRoutes(owner, candidates)?.baseUrl
+        val attemptedRoutes = knownRoutes.map(::normalizeIPHealthCacheKey).toSet()
+        return raceUserRoutes(owner, candidates.filterNot { normalizeIPHealthCacheKey(it) in attemptedRoutes })?.baseUrl
+    }
+
+    private suspend fun readUserAtRoute(owner: User, address: String): UserRouteRaceResult? {
         val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v3",
-            "userid" to userId,
+            "userid" to owner.mid,
             "v4only" to v4Only.toString()
         )
-        val routeOwner = getUserInstance(userId)
+        return try {
+            val baseUrl = normalizeHealthCheckUrl(address).removeSuffix("/")
+            withTimeoutOrNull(15_000L) {
+                val service = storageCompatibleRequestedService(baseUrl, owner, params, timeoutMillis = 15_000)
+                val raw = service.runMApp<Any>("get_user", params)
+                val userData = unwrapV2Response<Map<String, Any>>(raw) ?: return@withTimeoutOrNull null
+                val username = userData["username"] as? String
+                val hostIds = userData["hostIds"] as? List<*>
+                if (userData["mid"] != owner.mid || username.isNullOrBlank() || hostIds.isNullOrEmpty()) {
+                    return@withTimeoutOrNull null
+                }
+                UserRouteRaceResult(userData, baseUrl)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("get_user").d(e, "get_user failed via $address")
+            null
+        }
+    }
 
+    private suspend fun raceUserRoutes(owner: User, candidates: List<String>): UserRouteRaceResult? = coroutineScope {
         for ((batchIndex, batch) in candidates.chunked(3).withIndex()) {
             Timber.tag("fetchUserForDetail").d(
-                "Racing get_user batch ${batchIndex + 1} with ${batch.size} route(s) for $userId"
+                "Racing get_user batch ${batchIndex + 1} with ${batch.size} route(s) for ${owner.mid}"
             )
             val activeJobs = batch.map { address ->
-                async(Dispatchers.IO) {
-                    try {
-                        val baseUrl = normalizeHealthCheckUrl(address).removeSuffix("/")
-                        withTimeoutOrNull(15_000L) {
-                            val service = storageCompatibleRequestedService(
-                                baseUrl,
-                                routeOwner,
-                                params,
-                                timeoutMillis = 15_000
-                            )
-                            val raw = service.runMApp<Any>("get_user", params)
-                            val userData = unwrapV2Response<Map<String, Any>>(raw)
-                                ?: return@withTimeoutOrNull null
-                            val username = userData["username"] as? String
-                            val hostIds = userData["hostIds"] as? List<*>
-                            if (userData["mid"] != userId || username.isNullOrBlank() || hostIds.isNullOrEmpty()) {
-                                return@withTimeoutOrNull null
-                            }
-                            UserRouteRaceResult(userData, baseUrl)
-                        }
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Timber.tag("fetchUserForDetail").d(e, "get_user failed via $address")
-                        null
-                    }
-                }
+                async(Dispatchers.IO) { readUserAtRoute(owner, address) }
             }.toMutableList()
 
             var winner: UserRouteRaceResult? = null
@@ -5500,24 +5502,9 @@ object HproseInstance {
             }
             activeJobs.forEach { it.cancel() }
 
-            val winningRoute = winner ?: continue
-            run {
-                val user = getUserInstance(userId)
-                setUserBaseUrlForRequest(user, winningRoute.baseUrl)
-                processUserDataResponse(user, winningRoute.userData, skipRetryAndBlacklist = false)
-                UserRoutes.confirmReadRoute(user.mid, winningRoute.baseUrl, user.baseUrl)
-                user.hostIds?.getOrNull(1)?.let { accessNodeMid ->
-                    NodePool.updateNodeIP(
-                        accessNodeMid,
-                        winningRoute.baseUrl.removePrefix("http://").removePrefix("https://")
-                    )
-                }
-                TweetCacheManager.saveUser(user)
-                return@coroutineScope user
-            }
+            if (winner != null) return@coroutineScope winner
         }
 
-        recordReliabilityFailureUser(userId)
         null
     }
 

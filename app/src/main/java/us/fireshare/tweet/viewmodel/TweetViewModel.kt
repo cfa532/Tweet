@@ -820,9 +820,11 @@ class TweetViewModel @AssistedInject constructor(
                     
                     if (fullImage == null) {
                         // Download image if not cached
-                        val imageUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL).toString()
+                        val imageUrl = HproseInstance.getMediaUrl(attachment.mid, baseURL)
                         Timber.tag("SHARE").d("Loading image from URL: $imageUrl")
-                        fullImage = ImageCacheManager.downloadAndCacheImage(context, imageUrl, attachment.mid)
+                        fullImage = ImageCacheManager.downloadAndCacheImage(
+                            context, imageUrl, attachment.mid, ownerId = sourceTweet.authorId
+                        )
                         Timber.tag("SHARE").d("Image loaded: ${fullImage != null}")
                     } else {
                         Timber.tag("SHARE").d("Found cached image")

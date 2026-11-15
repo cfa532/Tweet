@@ -151,13 +151,14 @@ fun MediaItemView(
                     fullScreenMediaItems.map {
                         MediaItem(
                             it.mid,
-                            getMediaUrl(it.mid, authorBaseUrl.orEmpty()).toString(),
+                            getMediaUrl(it.mid, authorBaseUrl).orEmpty(),
                             it.type
                         )
                     },
                     fullScreenIndex,
                     tweet.mid,
-                    tweet.authorId
+                    tweet.authorId,
+                    imageOwnerId = tweet.authorId
                 )
 
                 if (enableCoordinator) {
@@ -254,12 +255,7 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
-                        resolveImageUrlForRetry = {
-                            (cachedAuthor?.baseUrl
-                                ?: viewModel.tweetState.value.author?.baseUrl)
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let { baseUrl -> getMediaUrl(mediaItems[index].mid, baseUrl) }
-                        },
+                        ownerId = tweet.authorId
                     )
                 }
             }
@@ -359,7 +355,7 @@ fun MediaItemView(
         val imageAttachments = itemsForNavigation.mapIndexedNotNull { idx, item ->
             val inferredType = inferMediaTypeFromAttachment(item)
             if (inferredType == MediaType.Image) {
-                Triple(idx, item.mid, getMediaUrl(item.mid, authorBaseUrl.orEmpty()).toString())
+                Triple(idx, item.mid, getMediaUrl(item.mid, authorBaseUrl).orEmpty())
             } else {
                 null
             }
@@ -371,11 +367,7 @@ fun MediaItemView(
         }
         
         // Get current media URL based on current imageMid
-        val mediaUrl = if (currentImageIndexInList >= 0) {
-            imageAttachments[currentImageIndexInList].third
-        } else {
-            getMediaUrl(imageMid, authorBaseUrl.orEmpty()).toString()
-        }
+        val mediaUrl = getMediaUrl(imageMid, authorBaseUrl)
         
         // Get list of image URLs
         val imageUrls = imageAttachments.map { (_, _, url) -> url }
@@ -397,6 +389,7 @@ fun MediaItemView(
                     AdvancedImageViewer(
                         imageUrl = mediaUrl,
                         imageMid = imageMid,
+                        ownerId = tweet.authorId,
                         enableLongPress = true,
                         initialBitmap = null, // Always start fresh for smooth animation
                         onClose = { showFullScreenImage = false },

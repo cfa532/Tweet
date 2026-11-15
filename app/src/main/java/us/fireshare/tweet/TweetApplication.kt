@@ -15,11 +15,18 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.datamodel.BlackList
 import us.fireshare.tweet.datamodel.User
@@ -28,6 +35,7 @@ import us.fireshare.tweet.service.CleanUpWorker
 import us.fireshare.tweet.service.MainFeedCheckWorker
 import us.fireshare.tweet.service.MessageCheckWorker
 import us.fireshare.tweet.service.SystemNotificationManager
+import us.fireshare.tweet.widget.ForegroundImageRoutes
 import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.VideoManager
 import java.util.concurrent.TimeUnit
@@ -37,22 +45,42 @@ class TweetApplication : Application(), ComponentCallbacks2 {
     companion object {
         // Use SupervisorJob to prevent one child's failure from cancelling others
         val applicationScope = CoroutineScope(SupervisorJob() + IO)
+
+        @Volatile
+        internal var foregroundEntryCheck: Job? = null
+            private set
+
+        private val _foregroundImageRoutes = MutableStateFlow<ForegroundImageRoutes?>(ForegroundImageRoutes())
+        internal val foregroundImageRoutes = _foregroundImageRoutes.asStateFlow()
     }
 
     private val appLifecycleObserver = object : DefaultLifecycleObserver {
+        private var hasBeenBackgrounded = false
+
         override fun onStart(owner: LifecycleOwner) {
             // App has come to foreground
             Timber.tag("AppLifecycle").d("App came to foreground, online=${HproseInstance.isOnline.value}")
             MainFeedCheckWorker.reschedule(this@TweetApplication)
-            // Session blocks never expire on their own, so a stale-background app would keep
-            // hiding tweets and skipping media that failed while it was away.
-            applicationScope.launch { BlackList.resetAllSessionFailures() }
-            if (!HproseInstance.isOnline.value) {
-                Timber.tag("AppLifecycle").d("Offline: skipping appUser refresh")
-                return
-            }
+            val entryCheck = if (hasBeenBackgrounded) {
+                applicationScope.launch {
+                    // Clear process-local failures before releasing foreground reads and downloads.
+                    BlackList.resetAllSessionFailures()
+                    HproseInstance.isOnline.first { it }
+                    try {
+                        HproseInstance.findEntryIP(checkCached = true)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("AppLifecycle").w(e, "Foreground entry IP check failed")
+                    }
+                    withContext(Main) { _foregroundImageRoutes.value = ForegroundImageRoutes() }
+                }
+            } else null
+            foregroundEntryCheck = entryCheck
             applicationScope.launch {
                 try {
+                    entryCheck?.join()
+                    if (entryCheck?.isCancelled == true || !HproseInstance.isOnline.value) return@launch
                     // Only refresh if appUser is properly initialized (has baseUrl) and is not a guest
                     if (!HproseInstance.appUser.isGuest() &&
                         !HproseInstance.appUser.baseUrl.isNullOrBlank()) {
@@ -71,6 +99,8 @@ class TweetApplication : Application(), ComponentCallbacks2 {
                     } else {
                         Timber.tag("AppLifecycle").d("Skipping appUser refresh - user is guest or not initialized (baseUrl: ${HproseInstance.appUser.baseUrl})")
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag("AppLifecycle").e(e, "Error refreshing appUser on foreground")
                 }
@@ -78,6 +108,10 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         }
 
         override fun onStop(owner: LifecycleOwner) {
+            hasBeenBackgrounded = true
+            // Close the gate before Activity views can restart on the next foreground return.
+            _foregroundImageRoutes.value = null
+            foregroundEntryCheck?.cancel()
             // App has gone to background
             Timber.tag("AppLifecycle").d("App went to background")
         }

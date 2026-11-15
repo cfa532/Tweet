@@ -28,12 +28,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import okhttp3.Protocol
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
+import us.fireshare.tweet.TweetApplication.Companion.foregroundImageRoutes
 import us.fireshare.tweet.datamodel.MediaType
+import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
 import java.io.File
 import java.io.FileOutputStream
@@ -72,7 +76,6 @@ object ImageCacheManager {
     private const val MAX_AVATAR_DOWNLOADS = 4
     private const val MAX_RETRY_ATTEMPTS = 2 // 2 retries for slow IPFS servers
     private const val PROGRESSIVE_SAMPLE_SIZE = 4 // Initial low-quality preview (1/4 resolution)
-    private const val MAX_DOWNLOAD_RESULTS = 20 // FIX P1-4: Limit size of downloadResults map
     private const val MAX_IMAGE_CACHE_VERSION_FLOWS = 500
     
     // Memory checking thresholds (similar to iOS MemoryCapManager)
@@ -131,8 +134,6 @@ object ImageCacheManager {
     private val backgroundDownloadSemaphore = Semaphore(MAX_BACKGROUND_DOWNLOADS)
     private val avatarDownloadSemaphore = Semaphore(MAX_AVATAR_DOWNLOADS)
     private val downloadQueue = ConcurrentHashMap<String, Boolean>()
-    private val downloadResults = ConcurrentHashMap<String, Bitmap>()
-    private val resultTimestamps = ConcurrentHashMap<String, Long>()
     
     // Mutex to prevent race conditions in download queue
     private val downloadQueueMutex = Any()
@@ -527,8 +528,11 @@ object ImageCacheManager {
      * Wait for concurrent download to complete with timeout
      * @return Cached image if download completed, null otherwise
      */
-    private suspend fun waitForConcurrentDownload(context: Context, mid: String): Bitmap? {
-        val maxWaitTime = 15000L // 15 seconds
+    private suspend fun waitForConcurrentDownload(
+        context: Context,
+        mid: String,
+        maxWaitTime: Long = 15_000L
+    ): Bitmap? {
         val startTime = System.currentTimeMillis()
         
         while (true) {
@@ -592,24 +596,39 @@ object ImageCacheManager {
         return true
     }
 
+    private suspend fun resolveDownloadUrl(
+        mid: MimeiId,
+        url: String?,
+        ownerId: MimeiId?,
+        isVisible: Boolean
+    ): String? {
+        while (true) {
+            val routes = if (isVisible) foregroundImageRoutes.first { it != null } else foregroundImageRoutes.value
+            if (routes == null || !HproseInstance.isOnline.value) return null
+            val resolvedUrl = routes.imageUrl(mid, url, ownerId, allowLookup = isVisible)
+            if (foregroundImageRoutes.value === routes) return resolvedUrl
+        }
+    }
+
     /**
      * Download and cache image from URL with improved error handling and retry logic
      * Includes deduplication to prevent multiple concurrent downloads of the same image
      */
     suspend fun downloadAndCacheImage(
         context: Context,
-        imageUrl: String,
+        imageUrl: String?,
         mid: String,
         isVisible: Boolean = true,
-        isAvatar: Boolean = false
+        isAvatar: Boolean = false,
+        ownerId: MimeiId? = null
     ): Bitmap? =
         withContext(Dispatchers.IO) {
             getCachedImage(context, mid)?.let { return@withContext it }
-
             if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
                 Timber.tag("ImageCacheManager").d("Skip blacklisted media image: $mid")
                 return@withContext null
             }
+            val verifiedUrl = resolveDownloadUrl(mid, imageUrl, ownerId, isVisible) ?: return@withContext null
 
             waitForFullScreenImageTurn(mid)
 
@@ -634,7 +653,7 @@ object ImageCacheManager {
             try {
                 if (!waitForMemoryWindow(mid, "[thumbnail]")) return@withContext null
 
-                permit = acquireDownloadPermit(mid, imageUrl, isVisible, isAvatar)
+                permit = acquireDownloadPermit(mid, verifiedUrl, isVisible, isAvatar)
                 downloadQueue[mid] = true
                 if (permit.priority == ImageDownloadPriority.BACKGROUND) {
                     activeInvisibleDownloads++
@@ -644,9 +663,10 @@ object ImageCacheManager {
 
                 var attempt = 0
                 while (attempt < MAX_RETRY_ATTEMPTS) {
+                    val attemptUrl = resolveDownloadUrl(mid, imageUrl, ownerId, isVisible) ?: return@withContext null
                     attempt++
                     try {
-                        val bitmap = performDownload(imageUrl, mid, context, isAvatar)
+                        val bitmap = performDownload(attemptUrl, mid, context, isAvatar)
                         if (bitmap != null && !bitmap.isRecycled) {
                             val cached = cacheImage(context, mid, bitmap, isAvatar)
                             us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
@@ -740,22 +760,7 @@ object ImageCacheManager {
                 // FIX P2-6: Aggressive cleanup on OOM to prevent cascading failures
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading image")
                 
-                // Clear all caches and intermediate results
                 clearMemoryCache()
-                synchronized(downloadQueueMutex) {
-                    // Recycle all cached download results
-                    downloadResults.values.forEach { bitmap ->
-                        if (!bitmap.isRecycled) {
-                            try {
-                                bitmap.recycle()
-                            } catch (_: Exception) {
-                                // Ignore recycle errors
-                            }
-                        }
-                    }
-                    downloadResults.clear()
-                    resultTimestamps.clear()
-                }
                 System.gc()  // Suggest immediate garbage collection
                 
                 return@withContext null
@@ -890,22 +895,7 @@ object ImageCacheManager {
                 // FIX P0-2 & P2-6: Aggressive cleanup on OOM to prevent cascading failures
                 Timber.tag("ImageCacheManager").e(e, "OutOfMemoryError downloading original image from $imageUrl")
                 
-                // Clear all caches and intermediate results
                 clearMemoryCache()
-                synchronized(downloadQueueMutex) {
-                    // Recycle all cached download results
-                    downloadResults.values.forEach { bitmap ->
-                        if (!bitmap.isRecycled) {
-                            try {
-                                bitmap.recycle()
-                            } catch (_: Exception) {
-                                // Ignore recycle errors
-                            }
-                        }
-                    }
-                    downloadResults.clear()
-                    resultTimestamps.clear()
-                }
                 System.gc()  // Suggest immediate garbage collection
                 
                 return@withContext null
@@ -952,213 +942,95 @@ object ImageCacheManager {
      * First returns low-quality preview, then full quality
      * Handles cancellation properly by cleaning up download queue
      */
-    suspend fun loadOriginalImage(
-        context: Context, 
-        imageUrl: String, 
-        mid: String, 
+    private suspend fun loadOriginalImage(
+        context: Context,
+        imageUrl: String?,
+        mid: String,
         isVisible: Boolean = true,
         isAvatar: Boolean = false,
+        ownerId: MimeiId? = null,
         onProgressiveLoad: ((Bitmap) -> Unit)? = null
-    ): Bitmap? =
-        withContext(Dispatchers.IO) {
-            var permit: DownloadPermit? = null
-            try {
-                // Use separate cache key for original images
-                val originalMid = "${mid}_original"
+    ): Bitmap? = withContext(Dispatchers.IO) {
+        val originalMid = "${mid}_original"
+        getCachedImage(context, originalMid)?.let { return@withContext it }
+        if (HproseInstance.isReliabilityBlacklistedMedia(mid)) {
+            Timber.tag("ImageCacheManager").d("Skip blacklisted original image: $mid")
+            return@withContext null
+        }
+        val verifiedUrl = resolveDownloadUrl(mid, imageUrl, ownerId, isVisible) ?: return@withContext null
+        waitForFullScreenImageTurn(originalMid)
 
-                // Check if original image is already cached first
-                getCachedImage(context, originalMid)?.let { return@withContext it }
-
-                if (us.fireshare.tweet.HproseInstance.isReliabilityBlacklistedMedia(mid)) {
-                    Timber.tag("ImageCacheManager").d("Skip blacklisted original image: $mid")
-                    return@withContext null
-                }
-
-                waitForFullScreenImageTurn(originalMid)
-
-                // Atomically check if downloading and mark as downloading to prevent race conditions
-                val shouldDownload = synchronized(downloadQueueMutex) {
-                    if (downloadQueue.containsKey(originalMid)) {
-                        false // Already downloading, wait for result
-                    } else {
-                        // Mark as downloading immediately to prevent other threads from starting
-                        downloadQueue[originalMid] = true
-                        downloadPriorityQueue[originalMid] = isVisible
-                        ongoingDownloads[originalMid] = System.currentTimeMillis()
-                        true // This thread will download
-                    }
-                }
-                
-                if (!shouldDownload) {
-                    if (isVisible) {
-                        promoteDownloadToVisible(originalMid)
-                    }
-                    // Another thread is downloading, wait for the result
-                    val maxAttempts = if (isVisible) 600 else 100
-                    var attempts = 0
-                    var shouldContinue = true
-                    while (attempts < maxAttempts && shouldContinue) {
-                        delay(100L)
-                        attempts++
-                        
-                        synchronized(downloadQueueMutex) {
-                            shouldContinue = downloadQueue.containsKey(originalMid)
-                        }
-                    }
-                    
-                    // Clean up old results before checking
-                    cleanupOldResults()
-                    
-                    // Return the result if available
-                    return@withContext downloadResults[originalMid]
-                }
-                
-                // This thread won - it will perform the download
-                // Check memory availability before starting download (similar to iOS)
-                if (!waitForMemoryWindow(originalMid, "[original]")) {
-                    synchronized(downloadQueueMutex) {
-                        downloadQueue.remove(originalMid)
-                        downloadPriorityQueue.remove(originalMid)
-                        ongoingDownloads.remove(originalMid)
-                    }
-                    return@withContext null
-                }
-                
-                permit = acquireDownloadPermit(originalMid, imageUrl, isVisible, isAvatar)
-                
-                // Track priority for monitoring
-                if (permit.priority == ImageDownloadPriority.BACKGROUND) {
-                    activeInvisibleDownloads++
-                } else {
-                    activeVisibleDownloads++
-                }
-                
-                // No artificial delays - let semaphore handle concurrency control
-
-                try {
-                    var bitmap: Bitmap? = null
-                    var attempt = 0
-
-                    while (bitmap == null && attempt < MAX_RETRY_ATTEMPTS) {
-                        attempt++
-                        try {
-                            bitmap = performDownloadOriginalProgressive(
-                                imageUrl,
-                                originalMid,
-                                context,
-                                onProgressiveLoad,
-                                isAvatar
-                            )
-                            if (bitmap != null && !bitmap.isRecycled) {
-                                // Store original bitmap in memory cache with original key
-                                addToMemoryCache(originalMid, bitmap)
-                                if (getMemoryCachedBitmap(mid) == null &&
-                                    getCachedImageFile(context, mid) == null
-                                ) {
-                                    cacheImage(context, mid, bitmap, isAvatar)
-                                }
-                                // FIX P1-4: Store result with size limit enforcement
-                                storeDownloadResult(originalMid, bitmap)
-                                notifyImageCached(originalMid)
-                                us.fireshare.tweet.HproseInstance.recordReliabilitySuccessMedia(mid)
-                                
-                                return@withContext bitmap
-                            }
-                        } catch (e: Exception) {
-                            val isTimeout = e is java.net.SocketTimeoutException
-                            if (attempt < MAX_RETRY_ATTEMPTS) {
-                                // For timeouts, retry immediately; for other errors, use backoff
-                                val delayMs = if (isTimeout) 100L else (1000L * attempt)
-                                delay(delayMs)
-                            } else {
-                                Timber.tag("ImageCacheManager").w("Download failed for $mid: ${e.message}")
-                            }
-                        }
-                    }
-
-                    // All attempts failed
-                    Timber.tag("ImageCacheManager").w("All download attempts failed for $mid")
-                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
-                    return@withContext null
-
-                } finally {
-                    // Always release the download slot and clean up
-                    // Update priority counters
-                    if (permit.priority == ImageDownloadPriority.BACKGROUND) {
-                        activeInvisibleDownloads--
-                    } else {
-                        activeVisibleDownloads--
-                    }
-                    
-                    synchronized(downloadQueueMutex) {
-                        downloadQueue.remove(originalMid)
-                        downloadPriorityQueue.remove(originalMid)
-                        ongoingDownloads.remove(originalMid)
-                    }
-                    
-                    // Release semaphore (we always acquire it in the normal path)
-                    releaseDownloadPermit(permit)
-                    permit = null
-                    
-                    // FIX P1-4: Use scheduled cleanup instead of GlobalScope
-                    // Clean up download results after a delay to allow other requests to get the result
-                    imageLoadingScope.launch {
-                        delay(5000L) // Reduced to 5 seconds
-                        synchronized(downloadQueueMutex) {
-                            downloadResults.remove(originalMid)
-                            resultTimestamps.remove(originalMid)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                // FIX P2-7: Handle cancellation with proper cleanup and race condition prevention
-                if (e is kotlinx.coroutines.CancellationException) {
-                    val originalMid = "${mid}_original"
-                    
-                    // Clean up download queue and release resources atomically
-                    synchronized(downloadQueueMutex) {
-                        // Check if we're actually in the download queue
-                        val wasInQueue = downloadQueue.containsKey(originalMid)
-                        val wasVisible = downloadPriorityQueue[originalMid] ?: false
-                        
-                        // Recycle bitmap before removing from results
-                        downloadResults[originalMid]?.let { bitmap ->
-                            if (!bitmap.isRecycled) {
-                                try {
-                                    bitmap.recycle()
-                                } catch (ex: Exception) {
-                                    Timber.tag("ImageCacheManager").w(ex, "Error recycling bitmap during cancellation")
-                                }
-                            }
-                        }
-                        
-                        // Remove all references atomically
-                        downloadQueue.remove(originalMid)
-                        downloadResults.remove(originalMid)
-                        downloadPriorityQueue.remove(originalMid)
-                        resultTimestamps.remove(originalMid)
-                        ongoingDownloads.remove(originalMid)
-                        
-                        // Update priority counters ONLY if we were in the queue
-                        if (wasInQueue) {
-                            if (wasVisible) {
-                                activeVisibleDownloads = maxOf(0, activeVisibleDownloads - 1)
-                            } else {
-                                activeInvisibleDownloads = maxOf(0, activeInvisibleDownloads - 1)
-                            }
-                        }
-                    }
-                    
-                    // Release the download slot only if we acquired it and haven't released it yet
-                    releaseDownloadPermit(permit)
-                    permit = null
-                } else {
-                    Timber.tag("ImageCacheManager").e(e, "Error in loadOriginalImage for $mid")
-                    us.fireshare.tweet.HproseInstance.recordReliabilityFailureMedia(mid)
-                }
-                null
+        val ownsDownload = synchronized(downloadQueueMutex) {
+            if (ongoingDownloads.containsKey(originalMid)) {
+                false
+            } else {
+                downloadQueue[originalMid] = true
+                downloadPriorityQueue[originalMid] = isVisible
+                ongoingDownloads[originalMid] = System.currentTimeMillis()
+                true
             }
         }
+        if (!ownsDownload) {
+            if (isVisible) promoteDownloadToVisible(originalMid)
+            return@withContext waitForConcurrentDownload(
+                context, originalMid, maxWaitTime = if (isVisible) 60_000L else 10_000L
+            )
+        }
+
+        var permit: DownloadPermit? = null
+        try {
+            if (!waitForMemoryWindow(originalMid, "[original]")) return@withContext null
+            permit = acquireDownloadPermit(originalMid, verifiedUrl, isVisible, isAvatar)
+            if (permit.priority == ImageDownloadPriority.BACKGROUND) {
+                activeInvisibleDownloads++
+            } else {
+                activeVisibleDownloads++
+            }
+
+            for (attempt in 1..MAX_RETRY_ATTEMPTS) {
+                val attemptUrl = resolveDownloadUrl(mid, imageUrl, ownerId, isVisible) ?: return@withContext null
+                try {
+                    val bitmap = performDownloadOriginalProgressive(
+                        attemptUrl, originalMid, context, onProgressiveLoad, isAvatar
+                    )
+                    if (bitmap != null && !bitmap.isRecycled) {
+                        addToMemoryCache(originalMid, bitmap)
+                        if (getMemoryCachedBitmap(mid) == null && getCachedImageFile(context, mid) == null) {
+                            cacheImage(context, mid, bitmap, isAvatar)
+                        }
+                        notifyImageCached(originalMid)
+                        HproseInstance.recordReliabilitySuccessMedia(mid)
+                        return@withContext bitmap
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (attempt < MAX_RETRY_ATTEMPTS) {
+                        delay(if (e is java.net.SocketTimeoutException) 100L else 1_000L * attempt)
+                    } else {
+                        Timber.tag("ImageCacheManager").w(e, "Download failed for $mid")
+                    }
+                }
+            }
+            HproseInstance.recordReliabilityFailureMedia(mid)
+            null
+        } finally {
+            // Only the owner can clear the registry. Waiters read the saved result from the cache.
+            synchronized(downloadQueueMutex) {
+                downloadQueue.remove(originalMid)
+                downloadPriorityQueue.remove(originalMid)
+                ongoingDownloads.remove(originalMid)
+            }
+            permit?.let {
+                if (it.priority == ImageDownloadPriority.BACKGROUND) {
+                    activeInvisibleDownloads--
+                } else {
+                    activeVisibleDownloads--
+                }
+                releaseDownloadPermit(it)
+            }
+        }
+    }
 
     /**
      * Check if there are available download slots
@@ -1204,10 +1076,11 @@ object ImageCacheManager {
      */
     fun loadOriginalImageDeferred(
         context: Context,
-        imageUrl: String,
+        imageUrl: String?,
         mid: String,
         isVisible: Boolean = true,
         isAvatar: Boolean = false,
+        ownerId: MimeiId? = null,
         onProgressiveLoad: ((Bitmap) -> Unit)? = null
     ): Deferred<Bitmap?> = imageLoadingScope.async {
         loadOriginalImage(
@@ -1216,6 +1089,7 @@ object ImageCacheManager {
             mid = mid,
             isVisible = isVisible,
             isAvatar = isAvatar,
+            ownerId = ownerId,
             onProgressiveLoad = onProgressiveLoad
         )
     }
@@ -1530,83 +1404,9 @@ object ImageCacheManager {
         val downloadsToCancel = activeDownloadsByContext[contextKey]
         
         if (downloadsToCancel != null) {
-            // Remove from download queue to prevent new downloads
-            downloadsToCancel.forEach { mid ->
-                downloadQueue.remove(mid)
-                downloadResults.remove(mid)
-            }
+            downloadsToCancel.forEach(::cancelImageLoad)
             // Clear the tracking for this context
             activeDownloadsByContext.remove(contextKey)
-        }
-    }
-
-    /**
-     * Clean up old results from the download results cache
-     */
-    /**
-     * FIX P1-4: Store download result with size limit enforcement
-     * Prevents unbounded growth of downloadResults map
-     */
-    private fun storeDownloadResult(mid: String, bitmap: Bitmap?) {
-        synchronized(downloadQueueMutex) {
-            // Enforce size limit
-            if (downloadResults.size >= MAX_DOWNLOAD_RESULTS) {
-                // Remove oldest entries (by timestamp)
-                val oldestEntries = resultTimestamps.entries
-                    .asSequence()
-                    .sortedBy { it.value }
-                    .take(5)
-                    .toList()
-                
-                oldestEntries.forEach { entry ->
-                    // Recycle bitmap before removing
-                    downloadResults[entry.key]?.let { oldBitmap ->
-                        if (!oldBitmap.isRecycled) {
-                            try {
-                                oldBitmap.recycle()
-                            } catch (_: Exception) {
-                                // Ignore recycle errors
-                            }
-                        }
-                    }
-                    downloadResults.remove(entry.key)
-                    resultTimestamps.remove(entry.key)
-                }
-                
-                Timber.tag("ImageCacheManager").d(
-                    "Cleaned up ${oldestEntries.size} old download results, size now: ${downloadResults.size}"
-                )
-            }
-            
-            // Store new result (only if non-null)
-            if (bitmap != null) {
-                downloadResults[mid] = bitmap
-                resultTimestamps[mid] = System.currentTimeMillis()
-            }
-        }
-    }
-
-    private fun cleanupOldResults() {
-        val currentTime = System.currentTimeMillis()
-        val fiveSecondsAgo = currentTime - 5000L
-
-        val iterator = resultTimestamps.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (entry.value < fiveSecondsAgo) {
-                // Recycle bitmap before removing
-                downloadResults[entry.key]?.let { bitmap ->
-                    if (!bitmap.isRecycled) {
-                        try {
-                            bitmap.recycle()
-                        } catch (e: Exception) {
-                            // Ignore recycle errors
-                        }
-                    }
-                }
-                downloadResults.remove(entry.key)
-                iterator.remove()
-            }
         }
     }
 
@@ -1650,7 +1450,7 @@ object ImageCacheManager {
     /**
      * Preload images for faster loading (similar to video preloading)
      */
-    suspend fun preloadImages(context: Context, mid: String, imageUrl: String) = withContext(Dispatchers.IO) {
+    suspend fun preloadImages(context: Context, mid: String, imageUrl: String?, ownerId: MimeiId) = withContext(Dispatchers.IO) {
         try {
             if (shouldDeferForFullScreen(mid)) {
                 return@withContext
@@ -1662,7 +1462,7 @@ object ImageCacheManager {
             }
             
             // Start downloading in background
-            downloadAndCacheImage(context, imageUrl, mid, isVisible = false)
+            downloadAndCacheImage(context, imageUrl, mid, isVisible = false, ownerId = ownerId)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1717,16 +1517,8 @@ object ImageCacheManager {
             if (hasMemoryCachedImage(key)) return@forEach
             scheduledPauseJobs.remove(key)?.cancel()
             imagePreloadJobs.remove(key)?.cancel()
-            synchronized(downloadQueueMutex) {
-                downloadQueue.remove(key)
-                downloadResults.remove(key)
-                downloadPriorityQueue.remove(key)
-                resultTimestamps.remove(key)
-                ongoingDownloads.remove(key)
-            }
-            synchronized(pausedDownloadMutex) {
-                pausedDownloads.remove(key)
-            }
+            // Cancelling a subscriber or preload must leave another caller's active download registered.
+            schedulePauseDownload(key)
         }
     }
 
@@ -1801,7 +1593,7 @@ object ImageCacheManager {
             }
             imagePreloadJobs[target.mid] = imageLoadingScope.launch {
                 try {
-                    preloadImages(context, target.mid, target.url)
+                    preloadImages(context, target.mid, target.url, target.ownerId)
                 } finally {
                     imagePreloadJobs.remove(target.mid)
                 }
@@ -1820,7 +1612,8 @@ object ImageCacheManager {
 
     private data class DirectionalImageTarget(
         val mid: String,
-        val url: String
+        val url: String?,
+        val ownerId: MimeiId
     )
 
     private fun collectDirectionalImageTargets(
@@ -1851,13 +1644,13 @@ object ImageCacheManager {
         for (index in indices) {
             val tweet = tweets.getOrNull(index) ?: continue
             tweetsVisited++
-            val baseUrl = tweet.author?.baseUrl.orEmpty()
+            val baseUrl = tweet.author?.baseUrl?.takeIf { it.isNotBlank() }
             tweet.attachments.orEmpty()
                 .filter { it.type == MediaType.Image }
                 .forEach { attachment ->
                     if (seen.add(attachment.mid)) {
-                        val url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, baseUrl)
-                        if (url != null) result.add(DirectionalImageTarget(attachment.mid, url))
+                        val url = HproseInstance.getMediaUrl(attachment.mid, baseUrl)
+                        result.add(DirectionalImageTarget(attachment.mid, url, tweet.authorId))
                     }
                 }
             if (tweetsVisited >= maxTweets) break

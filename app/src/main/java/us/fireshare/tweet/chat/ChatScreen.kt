@@ -144,7 +144,7 @@ fun ChatScreen(
                 }
                 MediaItem(
                     mid = attachment.mid,
-                    url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString(),
+                    url = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).orEmpty(),
                     type = type
                 )
             }
@@ -155,7 +155,8 @@ fun ChatScreen(
             mediaItems = visualMediaItems,
             index = startIndex,
             tweetId = message.id,
-            authorId = message.authorId
+            authorId = message.authorId,
+            imageOwnerId = appUser.mid
         )
         FullScreenPlayerManager.setVideoListFromMediaItems(params.mediaItems, params.index)
         VideoManager.suspendFeedActivityForFullScreen(tappedAttachmentMid)
@@ -486,7 +487,6 @@ fun ChatScreen(
     // Full screen overlays - rendered at the top level (same as MediaItemView)
     if (showFullScreen && fullScreenAttachment != null) {
         val attachment = fullScreenAttachment!!
-        val mediaUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
         
         when (attachment.type) {
             MediaType.Image -> {
@@ -528,8 +528,9 @@ fun ChatScreen(
                             .fillMaxSize()
                     ) {
                         us.fireshare.tweet.widget.AdvancedImageViewer(
-                            imageUrl = mediaUrl,
+                            imageUrl = us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl),
                             imageMid = attachment.mid,
+                            ownerId = appUser.mid,
                             enableLongPress = true,
                             initialBitmap = fullScreenBitmap,
                             onClose = { 
@@ -1052,7 +1053,7 @@ fun ChatMediaPreview(
     // For chat messages, we'll show a simple preview of the first attachment
     val attachment = if (attachments.isNotEmpty()) attachments.first() else null
     val mediaUrl = if (attachment != null) {
-        us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl).toString()
+        us.fireshare.tweet.HproseInstance.getMediaUrl(attachment.mid, appUser.baseUrl)
     } else {
         null
     }
@@ -1254,6 +1255,7 @@ fun ChatMediaPreview(
                     us.fireshare.tweet.widget.ImageViewer(
                         imageUrl = mediaUrl,
                         imageMid = attachment.mid,
+                        ownerId = appUser.mid,
                         modifier = Modifier.fillMaxSize(),
                         enableLongPress = false, // Disable long press to allow clickable to work
                         inPreviewGrid = true, // Use preview grid mode like MediaCell

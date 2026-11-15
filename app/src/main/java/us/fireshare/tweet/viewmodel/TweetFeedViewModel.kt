@@ -3,7 +3,6 @@ package us.fireshare.tweet.viewmodel
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.SystemClock
 import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -39,6 +38,7 @@ import us.fireshare.tweet.HproseInstance.getAlphaIds
 import us.fireshare.tweet.HproseInstance.loadCachedTweets
 import us.fireshare.tweet.R
 import us.fireshare.tweet.TweetApplication.Companion.applicationScope
+import us.fireshare.tweet.TweetApplication.Companion.foregroundEntryCheck
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
@@ -200,27 +200,11 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         isMainFeedAtTop = isAtTop
     }
 
-    private var backgroundStartedAt: Long? = null
-    private var entryResolutionPendingAfterBackground = false
     private var behindBannerRefreshJob: Job? = null
     private val appForegroundObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            backgroundStartedAt?.let { startedAt ->
-                if (SystemClock.elapsedRealtime() - startedAt > 30 * 60 * 1000L) {
-                    entryResolutionPendingAfterBackground = true
-                }
-                backgroundStartedAt = null
-                refreshFeedDirectlyAfterForeground()
-            }
+            foregroundEntryCheck?.let(::refreshFeedAfterForeground)
         }
-
-        override fun onStop(owner: LifecycleOwner) {
-            backgroundStartedAt = SystemClock.elapsedRealtime()
-        }
-    }
-
-    private fun shouldCheckNewTweetsBehindBanner(): Boolean {
-        return isInitialized && HproseInstance.isOnline.value
     }
 
     init {
@@ -425,12 +409,8 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
     private val minimumTweetsBeforeStoppingInitialLoad = 4
     private val maxAutoLoadedInitialPages = 200
 
-    private fun refreshFeedDirectlyAfterForeground() {
-        refreshFeedAfterForeground(reason = "Foreground return")
-    }
-
-    private fun refreshFeedAfterForeground(reason: String) {
-        if (!shouldCheckNewTweetsBehindBanner()) {
+    private fun refreshFeedAfterForeground(entryCheck: Job) {
+        if (!isInitialized) {
             return
         }
 
@@ -440,6 +420,9 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
         behindBannerRefreshJob = applicationScope.launch(IO) {
             try {
+                entryCheck.join()
+                if (entryCheck.isCancelled || !HproseInstance.isOnline.value) return@launch
+                val reason = "Foreground return"
                 Timber.tag("TweetFeedViewModel").d("$reason: checking latest main feed tweets with get_tweet_feed")
                 val freshTweets = fetchTopMainFeedTweetsForForeground(TW_CONST.PAGE_SIZE)
                 withContext(Main) {
@@ -501,17 +484,6 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
 
     suspend fun syncAppUserForUserPull() {
         if (!waitForAppUser(timeoutAction = "skipping main feed synchronization")) return
-        // A long background stay requires fresh entry discovery on the next manual pull.
-        if (entryResolutionPendingAfterBackground && HproseInstance.isOnline.value) {
-            try {
-                HproseInstance.findEntryIP(forceRefresh = true)
-                entryResolutionPendingAfterBackground = false
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Timber.tag("TweetFeedViewModel").e(e, "Entry IP resolution after long background stay failed")
-            }
-        }
         try {
             HproseInstance.syncAppUserForFeedRefresh()
         } catch (e: CancellationException) {

@@ -115,7 +115,7 @@ fun MediaBrowser(
     val routeMediaItems = params.mediaItems
 
     val tweetMediaItems = tweet.attachments?.map {
-        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl.orEmpty())!!
+        val mediaUrl = HproseInstance.getMediaUrl(it.mid, tweet.author?.baseUrl?.takeIf { url -> url.isNotBlank() }).orEmpty()
         val inferredType = inferMediaTypeFromAttachment(it)
         Timber.d("MediaBrowser - Creating MediaItem from tweet: mid=${it.mid}, type=$inferredType, url=$mediaUrl")
         MediaItem(it.mid, mediaUrl, inferredType)
@@ -425,8 +425,9 @@ fun MediaBrowser(
                 // image view with enhanced drag effects
                 else -> {
                     AdvancedImageViewer(
-                        imageUrl = mediaItem.url,
+                        imageUrl = mediaItem.url.takeIf { it.isNotBlank() },
                         imageMid = mediaItem.mid,
+                        ownerId = params.imageOwnerId ?: authorId.takeIf { routeMediaItems.isEmpty() },
                         drawBackdrop = false,
                         onDismissDrag = { mediaDismissOffset = it },
                         onClose = { navController.popBackStack() },
