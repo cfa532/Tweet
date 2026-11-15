@@ -174,6 +174,27 @@ data class Tweet(
             )
         }
 
+        /** Replace the shared snapshot without mutating a tweet already held by a UI list. */
+        fun replaceFromDetail(dict: Map<String, Any>, author: User, readNodeUrl: String?): Tweet {
+            val tweet = decode(dict).apply {
+                this.author = author
+                this.readNodeUrl = readNodeUrl
+            }
+            synchronized(instanceLock) {
+                instances[tweet.mid]?.let { previous ->
+                    tweet.parentTweetId = tweet.parentTweetId ?: previous.parentTweetId
+                    tweet.storageFormat = tweet.storageFormat ?: previous.storageFormat
+                    tweet.rowTimestamp = previous.rowTimestamp
+                    tweet.savedParentTweet = previous.savedParentTweet
+                    tweet.interactionHostAuthor = previous.interactionHostAuthor
+                    tweet.favoriteOverride = previous.favoriteOverride
+                    tweet.bookmarkOverride = previous.bookmarkOverride
+                }
+                instances[tweet.mid] = tweet
+            }
+            return tweet
+        }
+
         /**
          * Decode a network dictionary into a standalone Tweet WITHOUT registering it in
          * [instances].

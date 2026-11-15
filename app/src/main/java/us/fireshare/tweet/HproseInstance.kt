@@ -3851,11 +3851,7 @@ object HproseInstance {
             if (authorRouteData != null) {
                 if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                 recordReliabilitySuccessTweet(tweetId)
-                val tweet = Tweet.from(authorRouteData)
-                tweet.readNodeUrl = authorRouteNode
-                tweet.author = author
-                TweetCacheManager.saveTweet(tweet, authorId)
-                return tweet
+                return publishDetailTweet(authorRouteData, author, authorRouteNode)
             }
 
             // User-provider discovery is intentionally first because it is much
@@ -3872,11 +3868,7 @@ object HproseInstance {
                 if (fallback != null) {
                     if (TweetCacheManager.isTweetDeleted(tweetId)) return null
                     recordReliabilitySuccessTweet(tweetId)
-                    val tweet = Tweet.from(fallback.tweetData)
-                    tweet.readNodeUrl = fallback.readNodeUrl
-                    tweet.author = author
-                    TweetCacheManager.saveTweet(tweet, authorId)
-                    return tweet
+                    return publishDetailTweet(fallback.tweetData, author, fallback.readNodeUrl)
                 }
             }
 
@@ -3891,6 +3883,17 @@ object HproseInstance {
             Timber.tag("getTweet").e(e, "Error fetching tweet $tweetId")
             null
         }
+    }
+
+    private suspend fun publishDetailTweet(
+        data: Map<String, Any>,
+        author: User,
+        readNodeUrl: String?
+    ): Tweet {
+        val tweet = Tweet.replaceFromDetail(data, author, readNodeUrl)
+        TweetCacheManager.saveTweet(tweet, author.mid)
+        TweetNotificationCenter.post(TweetEvent.TweetUpdated(tweet))
+        return tweet
     }
 
     suspend fun refreshTweet(
@@ -3971,30 +3974,8 @@ object HproseInstance {
             
             tweetData?.let {
                 if (TweetCacheManager.isTweetDeleted(tweetId)) return null
-                // Record successful access
                 recordReliabilitySuccessTweet(tweetId)
-
-                val tweet = Tweet.from(it)
-                tweet.readNodeUrl = refreshedFrom
-                // Set cached author immediately
-                tweet.author = cachedAuthor
-
-                // Update author asynchronously in background
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val freshAuthor = fetchUser(authorId)
-                        if (freshAuthor != null) {
-                            tweet.author = freshAuthor
-                            Timber.tag("refreshTweet").d("✅ Updated refreshed tweet $tweetId with fresh author")
-                        } else {
-                            Timber.tag("refreshTweet").w("⚠️ Failed to fetch fresh author for refreshed tweet $tweetId, authorId: $authorId")
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("refreshTweet").e("Error updating author for refreshed tweet $tweetId: $e")
-                    }
-                }
-
-                tweet
+                publishDetailTweet(it, authorForApi, refreshedFrom)
             }
         } catch (e: Exception) {
             // Record failed access
