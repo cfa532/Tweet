@@ -4589,120 +4589,98 @@ object HproseInstance {
         }
     }
 
-    /**
-     * Toggle favorite on the exact storage owner's root.
-     */
-    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? {
+    suspend fun toggleFavorite(tweet: Tweet, isFavorite: Boolean): Tweet? =
+        toggleSavedTweet(tweet, SavedTweetList.FAVORITES, isFavorite)
+
+    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? =
+        toggleSavedTweet(tweet, SavedTweetList.BOOKMARKS, isBookmarked)
+
+    private suspend fun toggleSavedTweet(tweet: Tweet, list: SavedTweetList, wanted: Boolean): Tweet {
         if (!isOnline.value) throw Exception("No network connection")
 
+        val (entry, userParam, stateParam) = when (list) {
+            SavedTweetList.FAVORITES -> Triple("toggle_favorite", "appuserid", "isfavorite")
+            SavedTweetList.BOOKMARKS -> Triple("toggle_bookmark", "userid", "isbookmarked")
+        }
         val actingUser = appUser
-        val author = resolveSavedTweetStorageAuthor(tweet)
-        // A backend with engagementDelegation takes the toggle on the signed-in
-        // user's own root, signed by their session; that node asks the tweet
-        // author's node to perform its half. An older backend takes the toggle
-        // on the author's node, in the old form.
-        val delegates = nodeSupportsEngagementDelegation(author)
-        val targetUser = if (delegates) actingUser else author
-        val rawResponse = runWrite<Map<String, Any>>(
-            targetUser,
-            "toggleFavorite",
-            "toggle_favorite",
-            mutableMapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "appuserid" to actingUser.mid,
-                "tweetid" to tweet.mid,
-                "authorid" to author.mid,
-                "userhostid" to (actingUser.hostIds?.firstOrNull() ?: ""),
-                "isfavorite" to rpcBool(isFavorite)
-            ).apply {
-                if (delegates) put("hostid", author.hostIds?.firstOrNull().orEmpty())
-            },
-            TOGGLE_MUTATION_TIMEOUT_MS
+        val authorRoute = try {
+            val author = resolveSavedTweetStorageAuthor(tweet)
+            val url = author.resolveWritableUrl()
+                ?: throw IllegalStateException("Saved tweet author's writable host is unavailable")
+            author to url
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Explicit removals can write to the user's own list if the author
+            // route is unavailable before sending the mutation.
+            if (wanted) throw e
+            null
+        }
+
+        val capabilityParams = mapOf("aid" to appId, "ver" to "last")
+        val author = authorRoute?.first
+        val authorUrl = authorRoute?.second
+        val delegates = if (authorUrl != null) {
+            try {
+                storageCapabilities(authorUrl, capabilityParams).engagementDelegation
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.tag(entry).w(e, "Capability probe failed; using the old wire form")
+                false
+            }
+        } else {
+            true
+        }
+        val nodeUrl = if (delegates) {
+            actingUser.resolveWritableUrl()
+                ?: throw IllegalStateException("Signed-in user's writable host is unavailable")
+        } else {
+            checkNotNull(authorUrl)
+        }
+        if (author == null && !storageCapabilities(nodeUrl, capabilityParams).engagementDelegation) {
+            throw IllegalStateException("The signed-in user's server does not support saved tweet removal without an author")
+        }
+
+        val params = mutableMapOf(
+            "aid" to appId,
+            "ver" to "last",
+            "version" to "v2",
+            userParam to actingUser.mid,
+            "tweetid" to tweet.mid,
+            "userhostid" to actingUser.hostIds?.firstOrNull().orEmpty(),
+            stateParam to rpcBool(wanted)
         )
+        if (author != null) {
+            params["authorid"] = author.mid
+            if (delegates) params["hostid"] = author.hostIds?.firstOrNull().orEmpty()
+        }
+
+        val client = HproseClientPool.getWritableClient(nodeUrl, TOGGLE_MUTATION_TIMEOUT_MS)
+            ?: throw IllegalStateException("$entry failed: writable client not available for $nodeUrl")
+        val rawResponse = runWrite<Map<String, Any>>(nodeUrl, client, entry, params)
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-            ?: throw IllegalStateException("toggle_favorite returned invalid data")
-        // The tweet's counters live on the author's host; the app user's favorites list
-        // lives on its own (userhostid). Both sides were written.
-        adoptWriteRouteForReads(author, "toggle_favorite")
-        adoptWriteRouteForReads(actingUser, "toggle_favorite")
+            ?: throw IllegalStateException("$entry returned invalid data")
+        if (author != null) adoptWriteRouteForReads(author, entry)
+        adoptWriteRouteForReads(actingUser, entry)
         (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
             actingUser.from(updatedUserData)
             TweetCacheManager.saveUser(actingUser)
         }
         val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
             Tweet.from(updatedTweetData).also {
-                it.favoriteOverride = it.isFavorite
+                when (list) {
+                    SavedTweetList.FAVORITES -> it.favoriteOverride = it.isFavorite
+                    SavedTweetList.BOOKMARKS -> it.bookmarkOverride = it.isBookmarked
+                }
                 it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
             }
         }
-        if (!isFavorite) {
-            TweetCacheManager.removeTweetFromCache(
-                tweet.mid,
-                savedTweetCacheKey(SavedTweetList.FAVORITES)
-            )
+        if (!wanted) {
+            TweetCacheManager.removeTweetFromCache(tweet.mid, savedTweetCacheKey(list))
+            return updatedTweet ?: optimisticSavedTweetResult(tweet, list)
         }
-        return updatedTweet
-            ?: if (!isFavorite) optimisticSavedTweetResult(tweet, SavedTweetList.FAVORITES)
-            else throw IllegalStateException("toggle_favorite did not return a tweet")
-    }
-
-    /**
-     * Toggle bookmark on the exact storage owner's root.
-     */
-    suspend fun toggleBookmark(tweet: Tweet, isBookmarked: Boolean): Tweet? {
-        if (!isOnline.value) throw Exception("No network connection")
-
-        val actingUser = appUser
-        val author = resolveSavedTweetStorageAuthor(tweet)
-        // As with toggle_favorite: the user's own root on a delegating backend,
-        // the author's node otherwise.
-        val delegates = nodeSupportsEngagementDelegation(author)
-        val targetUser = if (delegates) actingUser else author
-        val rawResponse = runWrite<Map<String, Any>>(
-            targetUser,
-            "toggleBookmark",
-            "toggle_bookmark",
-            mutableMapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "userid" to actingUser.mid,
-                "tweetid" to tweet.mid,
-                "authorid" to author.mid,
-                "userhostid" to (actingUser.hostIds?.firstOrNull() ?: ""),
-                "isbookmarked" to rpcBool(isBookmarked)
-            ).apply {
-                if (delegates) put("hostid", author.hostIds?.firstOrNull().orEmpty())
-            },
-            TOGGLE_MUTATION_TIMEOUT_MS
-        )
-        val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-            ?: throw IllegalStateException("toggle_bookmark returned invalid data")
-        // Same split as toggle_favorite: author's host for the tweet, app user's host
-        // for the bookmark list.
-        adoptWriteRouteForReads(author, "toggle_bookmark")
-        adoptWriteRouteForReads(actingUser, "toggle_bookmark")
-        (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
-            actingUser.from(updatedUserData)
-            TweetCacheManager.saveUser(actingUser)
-        }
-        val updatedTweet = (response["tweet"] as? Map<String, Any>)?.let { updatedTweetData ->
-            Tweet.from(updatedTweetData).also {
-                it.bookmarkOverride = it.isBookmarked
-                it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
-            }
-        }
-        if (!isBookmarked) {
-            TweetCacheManager.removeTweetFromCache(
-                tweet.mid,
-                savedTweetCacheKey(SavedTweetList.BOOKMARKS)
-            )
-        }
-        return updatedTweet
-            ?: if (!isBookmarked) optimisticSavedTweetResult(tweet, SavedTweetList.BOOKMARKS)
-            else throw IllegalStateException("toggle_bookmark did not return a tweet")
+        return updatedTweet ?: throw IllegalStateException("$entry did not return a tweet")
     }
 
     /**
