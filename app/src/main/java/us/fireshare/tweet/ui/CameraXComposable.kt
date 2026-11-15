@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.net.Uri
 import android.view.inputmethod.InputMethodManager
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -45,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -76,6 +78,8 @@ fun CameraXPreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = LocalView.current
+    val activity = checkNotNull(LocalActivity.current)
+    val window = (view.parent as? DialogWindowProvider)?.window ?: activity.window
     val cameraManager = remember { CameraXManager(context, lifecycleOwner) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var isBackCamera by remember { mutableStateOf(value = true) }
@@ -98,8 +102,6 @@ fun CameraXPreview(
         cameraManager.initialize()
         
         // Force hide keyboard and system UI immediately when opening from composer
-        val activity = context as androidx.activity.ComponentActivity
-        val window = activity.window
         val windowInsetsController = WindowCompat.getInsetsController(window, view)
         
         // Aggressively hide keyboard using multiple methods
@@ -145,8 +147,6 @@ fun CameraXPreview(
     
     // Handle full screen mode and cleanup
     DisposableEffect(Unit) {
-        val activity = context as androidx.activity.ComponentActivity
-        val window = activity.window
         val windowInsetsController = WindowCompat.getInsetsController(window, view)
         
         // Hide all system UI elements for true full screen

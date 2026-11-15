@@ -38,8 +38,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.MimeiFileType
+import us.fireshare.tweet.widget.RetainedFilePreview
 import us.fireshare.tweet.widget.UploadFilePreview
 
 /**
@@ -54,7 +57,9 @@ fun ComposeTextField(
     onSuggestionSelected: (String) -> Unit,
     onClearSuggestions: () -> Unit,
     maxLines: Int = 10,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    minHeight: Dp = 200.dp
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -66,6 +71,7 @@ fun ComposeTextField(
 
     OutlinedTextField(
         value = text,
+        readOnly = readOnly,
         onValueChange = { newText ->
             onTextChange(newText)
             
@@ -83,7 +89,7 @@ fun ComposeTextField(
         maxLines = maxLines,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 200.dp)
+            .heightIn(min = minHeight)
             .alpha(0.7f)
             .focusRequester(focusRequester)
             .onFocusChanged {
@@ -137,23 +143,32 @@ fun ComposeTextField(
 fun AttachmentPreviewRow(
     attachments: List<Uri>,
     onRemoveAttachment: (Uri) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    retainedAttachments: List<MimeiFileType> = emptyList(),
+    retainedAttachmentBaseUrl: String? = null,
+    onRemoveRetainedAttachment: (MimeiFileType) -> Unit = {},
+    enabled: Boolean = true
 ) {
-    if (attachments.isNotEmpty()) {
+    if (attachments.isNotEmpty() || retainedAttachments.isNotEmpty()) {
         Column(modifier = modifier) {
             Spacer(modifier = Modifier.height(8.dp))
-            
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(retainedAttachments) { attachment ->
+                    RetainedFilePreview(
+                        attachment = attachment,
+                        baseUrl = retainedAttachmentBaseUrl,
+                        onRemove = { onRemoveRetainedAttachment(attachment) },
+                        enabled = enabled
+                    )
+                }
                 items(attachments) { uri ->
                     UploadFilePreview(
                         uri = uri,
                         onCheckedChange = { _, isChecked ->
-                            if (!isChecked) {
-                                onRemoveAttachment(uri)
-                            }
-                        }
+                            if (!isChecked) onRemoveAttachment(uri)
+                        },
+                        enabled = enabled
                     )
                 }
             }
@@ -173,7 +188,8 @@ fun ActionButtonsRow(
     onFilePickerClick: () -> Unit,
     onSendClick: () -> Unit,
     isLoading: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -189,7 +205,8 @@ fun ActionButtonsRow(
         ) {
             Checkbox(
                 checked = isChecked,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = onCheckedChange,
+                enabled = enabled
             )
             Text(
                 text = checkboxLabel,
@@ -200,7 +217,7 @@ fun ActionButtonsRow(
         Spacer(Modifier.weight(1f))
 
         // Camera button
-        IconButton(onClick = onCameraClick) {
+        IconButton(onClick = onCameraClick, enabled = enabled) {
             Icon(
                 painter = painterResource(R.drawable.ic_camera),
                 contentDescription = stringResource(R.string.open_camera),
@@ -212,7 +229,7 @@ fun ActionButtonsRow(
         Spacer(modifier = Modifier.width(8.dp))
 
         // File picker button
-        IconButton(onClick = onFilePickerClick) {
+        IconButton(onClick = onFilePickerClick, enabled = enabled) {
             Icon(
                 painter = painterResource(R.drawable.ic_photo_plus),
                 contentDescription = stringResource(R.string.upload_file),
