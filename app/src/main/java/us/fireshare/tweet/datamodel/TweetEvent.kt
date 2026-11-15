@@ -35,7 +35,7 @@ sealed class TweetEvent {
     
     // Chat events
     data class ChatMessageSent(val message: ChatMessage) : TweetEvent()
-    data class ChatMessageSendFailed(val error: String) : TweetEvent()
+    data class ChatMessageSendFailed(val error: String, val messageId: String? = null) : TweetEvent()
     data class ChatMessageReceived(val message: ChatMessage) : TweetEvent()
     data class ChatSessionUpdated(val sessionId: String, val hasNews: Boolean) : TweetEvent()
 }

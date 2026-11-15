@@ -81,7 +81,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -593,10 +592,8 @@ fun ChatItem(
     val context = LocalContext.current
     val guestReminderText = stringResource(R.string.guest_reminder)
     
-    // Check if this message is being sent (has placeholder content and no attachments yet, but it's from current user)
-    val isSending = isSentByCurrentUser && 
-                   (message.content == "sending_attachment" || (message.content.isNullOrBlank() && message.attachments.isNullOrEmpty()))
-    
+    val pendingAttachment = message.localAttachmentUri?.takeIf { isSentByCurrentUser }
+
     // Determine if this is the last message from this party
     val currentMessageIndex = messages.indexOf(message)
     val isLastMessageFromParty = if (isSentByCurrentUser) {
@@ -633,14 +630,9 @@ fun ChatItem(
                 modifier = if (isSentByCurrentUser) Modifier.fillMaxWidth(0.85f) else Modifier.fillMaxWidth(),
                 horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
             ) {
-                // First row: Text content (if any) - hide placeholder text for attachments
-                if (message.content?.isNotBlank() == true && message.content != "sending_attachment") {
+                if (message.content?.isNotBlank() == true) {
                     Surface(
-                        color = if (isSending) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                        } else {
-                            MaterialTheme.colorScheme.primaryContainer
-                        },
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         shape = if (isLastMessageFromParty) {
                             ChatBubbleShape(isSentByCurrentUser)
                         } else {
@@ -681,11 +673,7 @@ fun ChatItem(
                         } else {
                             // Media messages: keep background container
                             Surface(
-                                color = if (isSending) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                                } else {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                },
+                                color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = if (isLastMessageFromParty) {
                                     ChatBubbleShape(isSentByCurrentUser)
                                 } else {
@@ -695,7 +683,6 @@ fun ChatItem(
                             ) {
                                 ChatMediaPreview(
                                     attachments = attachments,
-                                    localAttachmentUri = message.localAttachmentUri,
                                     onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
                                     onVideoClick = { onVideoClick(attachments.first()) }
                                 )
@@ -704,47 +691,25 @@ fun ChatItem(
                     }
                 }
                 
-                // Show loading placeholder when sending attachment
-                if (isSending && message.attachments.isNullOrEmpty()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                        shape = if (isLastMessageFromParty) {
-                            ChatBubbleShape(isSentByCurrentUser)
-                        } else {
-                            regularChatBubbleShape()
-                        },
-                        modifier = Modifier.padding(4.dp)
+                if (pendingAttachment != null) {
+                    ChatMediaPreview(
+                        attachments = emptyList(),
+                        localAttachmentUri = pendingAttachment
+                    )
+                    Row(
+                        modifier = Modifier.padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth(0.7f)
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = stringResource(R.string.sending_attachment_background),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.uploading_attachment),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                        Text(
+                            text = stringResource(R.string.sending_attachment_background),
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
                 }
             }
-            
+
             // Show failure icon for failed messages sent by current user (behind message)
             if (isSentByCurrentUser && !message.success) {
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1070,7 +1035,7 @@ private fun isDocumentType(type: MediaType): Boolean {
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
-    localAttachmentUri: String? = null,  // Add parameter for local Uri
+    localAttachmentUri: String? = null,
     onImageClick: ((android.graphics.Bitmap?) -> Unit)? = null,
     onVideoClick: (() -> Unit)? = null
 ) {
@@ -1115,12 +1080,10 @@ fun ChatMediaPreview(
                 val localUri = remember(localAttachmentUri) { localAttachmentUri.toUri() }
                 
                 // Detect media type from local file
-                val mediaType = remember(localUri) {
-                    try {
+                var mediaType by remember(localUri) { mutableStateOf(MediaType.Unknown) }
+                LaunchedEffect(localUri) {
+                    mediaType = withContext(Dispatchers.IO) {
                         us.fireshare.tweet.service.FileTypeDetector.detectFileType(context, localUri)
-                    } catch (e: Exception) {
-                        Timber.tag("ChatMediaPreview").e(e, "Error detecting file type")
-                        MediaType.Unknown
                     }
                 }
                 
@@ -1132,8 +1095,10 @@ fun ChatMediaPreview(
                         LaunchedEffect(localUri) {
                             withContext(Dispatchers.IO) {
                                 try {
-                                    context.contentResolver.openInputStream(localUri)?.use { stream ->
-                                        localBitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, localUri)
+                                    localBitmap = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                                        val dimension = maxOf(info.size.width, info.size.height)
+                                        decoder.setTargetSampleSize((dimension / 640).coerceAtLeast(1))
                                     }
                                 } catch (e: Exception) {
                                     Timber.tag("ChatMediaPreview").e(e, "Error loading local image")
@@ -1179,7 +1144,9 @@ fun ChatMediaPreview(
                                 val retriever = android.media.MediaMetadataRetriever()
                                 try {
                                     retriever.setDataSource(context, localUri)
-                                    videoThumbnail = retriever.getFrameAtTime(0)
+                                    videoThumbnail = retriever.getScaledFrameAtTime(
+                                        0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 640, 640
+                                    )
                                 } catch (e: Exception) {
                                     Timber.tag("ChatMediaPreview").e(e, "Error loading video thumbnail")
                                 } finally {
@@ -1232,7 +1199,19 @@ fun ChatMediaPreview(
                         }
                     }
                     else -> {
-                        // Unknown file type, show placeholder
+                        // Show the selected filename for documents and audio.
+                        var fileName by remember(localUri) { mutableStateOf<String?>(null) }
+                        LaunchedEffect(localUri) {
+                            fileName = withContext(Dispatchers.IO) {
+                                try {
+                                    context.contentResolver.query(
+                                        localUri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+                                    )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                                } catch (_: RuntimeException) {
+                                    null
+                                }
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1240,7 +1219,8 @@ fun ChatMediaPreview(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.uploading),
+                                text = fileName ?: stringResource(R.string.unknown_file),
+                                modifier = Modifier.padding(12.dp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

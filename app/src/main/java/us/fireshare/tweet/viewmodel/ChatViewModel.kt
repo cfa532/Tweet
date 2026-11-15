@@ -131,36 +131,14 @@ class ChatViewModel @AssistedInject constructor(
                         if (event.message.receiptId == receiptId) {
                             Timber.tag("ChatViewModel").d("Received ChatMessageSent event: ${event.message.id}")
                             
-                            // Check if this is replacing an optimistic message
-                            val hasOptimisticMessage = _chatMessages.value.any { 
-                                it.timestamp == event.message.timestamp && 
-                                it.localAttachmentUri != null &&
-                                it.attachments == null
-                            }
-                            
-                            if (hasOptimisticMessage) {
-                                // Replace optimistic message with real message
-                                _chatMessages.update { messages ->
-                                    messages.map { msg ->
-                                        if (msg.timestamp == event.message.timestamp && 
-                                            msg.localAttachmentUri != null &&
-                                            msg.attachments == null) {
-                                            // Replace with real message
-                                            event.message
-                                        } else {
-                                            msg
-                                        }
-                                    }.sortedBy { it.timestamp }
-                                }
-                                Timber.tag("ChatViewModel").d("Replaced optimistic message with real message: ${event.message.id}")
-                            } else if (isNewMessage(event.message, _chatMessages.value)) {
-                                // Add the real message to UI only if it's new
-                                _chatMessages.update { messages ->
+                            _chatMessages.update { messages ->
+                                if (messages.any { it.id == event.message.id }) {
+                                    messages.map { if (it.id == event.message.id) event.message else it }
+                                } else if (isNewMessage(event.message, messages)) {
                                     (messages + event.message).sortedBy { it.timestamp }
+                                } else {
+                                    messages
                                 }
-                                Timber.tag("ChatViewModel").d("Added new message: ${event.message.id}")
-                            } else {
-                                Timber.tag("ChatViewModel").d("Skipping duplicate message: ${event.message.id}")
                             }
 
                             // Insert message to database
@@ -183,9 +161,10 @@ class ChatViewModel @AssistedInject constructor(
                     }
 
                     is TweetEvent.ChatMessageSendFailed -> {
-                        Timber.tag("ChatViewModel").e("Received ChatMessageSendFailed: ${event.error}")
-                        // Show error toast
-                        _toastMessage.value = "Failed to send message: ${event.error}"
+                        if (event.messageId == null || _chatMessages.value.any { it.id == event.messageId }) {
+                            _chatMessages.update { messages -> messages.filterNot { it.id == event.messageId } }
+                            _toastMessage.value = "Failed to send message: ${event.error}"
+                        }
                     }
 
                     else -> {
@@ -417,7 +396,10 @@ class ChatViewModel @AssistedInject constructor(
         val sessionId = chatSessionRepository.getOrCreateSessionId(appUser.mid, receiptId)
         Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loading from sessionId=$sessionId, appUser=${appUser.mid}, receipt=$receiptId")
         val messages = loadLatestMessages(receiptId).sortedBy { it.timestamp }
-        _chatMessages.value = messages
+        val loadedIds = messages.mapTo(mutableSetOf()) { it.id }
+        _chatMessages.update { current ->
+            (messages + current.filter { it.localAttachmentUri != null && it.id !in loadedIds }).sortedBy { it.timestamp }
+        }
         Timber.tag("ChatViewModel").d("reloadMessagesFromDatabase: Loaded ${messages.size} messages from database")
     }
 

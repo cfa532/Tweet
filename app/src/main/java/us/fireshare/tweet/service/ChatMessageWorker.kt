@@ -31,20 +31,16 @@ class SendChatMessageWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        val runAttemptCount = runAttemptCount
+        val optimisticMessageId = inputData.getString("optimisticMessageId")
         val receiptId = inputData.getString("receiptId") ?: run {
             Timber.tag("SendChatMessageWorker").e("Missing receiptId in input data")
-            // Only show toast on final attempt
-            if (runAttemptCount >= 3) {
-                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Missing recipient ID"))
-            }
+            TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Missing recipient ID", optimisticMessageId))
             return Result.failure()
         }
         
         val content = inputData.getString("content") ?: ""
         val attachmentUri = inputData.getString("attachmentUri")
         val messageTimestamp = inputData.getLong("messageTimestamp", System.currentTimeMillis())
-        val optimisticMessageId = inputData.getString("optimisticMessageId")
 
         Timber.tag("SendChatMessageWorker").d("Starting message send: receiptId=$receiptId, content=$content, attachmentUri=$attachmentUri, optimisticMessageId=$optimisticMessageId")
 
@@ -114,14 +110,14 @@ class SendChatMessageWorker @AssistedInject constructor(
                         Timber.tag("SendChatMessageWorker").e("Failed to upload file - uploadToIPFS returned null")
                         // Show localized error message to user
                         val errorMessage = applicationContext.getString(R.string.attachment_upload_failed)
-                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage))
+                        TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage, optimisticMessageId))
                         return Result.failure()
                     }
                 } catch (e: Exception) {
                     Timber.tag("SendChatMessageWorker").e(e, "Error uploading file: $attachmentUri")
                     // Show localized error message to user
                     val errorMessage = applicationContext.getString(R.string.attachment_upload_failed)
-                    TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage))
+                    TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed(errorMessage, optimisticMessageId))
                     return Result.failure()
                 }
             }
@@ -138,6 +134,7 @@ class SendChatMessageWorker @AssistedInject constructor(
                 ChatSession.generateDeterministicSessionId(appUser.mid, receiptId)
 
             val message = ChatMessage(
+                id = optimisticMessageId ?: ChatMessage.generateUniqueId(),
                 receiptId = receiptId,
                 authorId = appUser.mid,
                 timestamp = messageTimestamp,
@@ -217,10 +214,9 @@ class SendChatMessageWorker @AssistedInject constructor(
             }
         } catch (e: Exception) {
             Timber.tag("SendChatMessageWorker").e(e, "Unexpected error in doWork")
-            // Only show toast on final attempt
-            if (runAttemptCount >= 3) {
-                TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}"))
-            }
+            TweetNotificationCenter.postAsync(
+                TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}", optimisticMessageId)
+            )
             Result.failure()
         } finally {
             try {
