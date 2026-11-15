@@ -215,6 +215,7 @@
     <string name="updating_avatar">正在更新頭像…</string>
     <string name="avatar_update_success">頭像更新成功</string>
     <string name="delete_account">刪除帳號</string>
+    <string name="edit_by_admin">編輯（管理員）</string>
     <string name="edit_tweet">編輯推文</string>
     <string name="comment">留言</string>
     <string name="reply_to">回覆給</string>

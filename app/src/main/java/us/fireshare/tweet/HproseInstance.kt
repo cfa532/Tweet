@@ -4807,7 +4807,8 @@ object HproseInstance {
     suspend fun editTweetAsAdmin(
         tweet: Tweet,
         content: String,
-        attachments: List<MimeiFileType>?
+        attachments: List<MimeiFileType>?,
+        isPrivate: Boolean?
     ) {
         val admin = appUser
         check(canModerateTweet(tweet, admin)) { "Only admin can moderate a top-level tweet" }
@@ -4828,6 +4829,7 @@ object HproseInstance {
         if (attachments != null) {
             params["attachments"] = Json.encodeToString(attachments.map { it.copy(url = null) })
         }
+        if (isPrivate != null) params["isPrivate"] = isPrivate.toString()
         val raw = runWrite<Map<String, Any>>(admin, "editTweetAsAdmin", entry, params, UPDATE_TWEET_TIMEOUT_MS)
         val response = unwrapV2Response<Map<String, Any>>(raw)
         check(response?.get("mid") == tweet.mid) {
@@ -4837,6 +4839,7 @@ object HproseInstance {
         val current = Tweet.findInstance(tweet.mid) ?: tweet
         current.content = content
         if (attachments != null) current.attachments = attachments
+        if (isPrivate != null) current.isPrivate = isPrivate
         val updated = current.copy().also {
             it.rowTimestamp = current.rowTimestamp
             it.favoriteOverride = current.favoriteOverride

@@ -36,7 +36,8 @@ fun ComposeTopAppBar(
     onBackClick: () -> Unit,
     onSendClick: () -> Unit,
     hasContent: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sendDescription: String = stringResource(R.string.send)
 ) {
     // Only show TopAppBar when camera is not active
     if (!showCamera) {
@@ -72,7 +73,7 @@ fun ComposeTopAppBar(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = stringResource(R.string.send),
+                        contentDescription = sendDescription,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.rotate(180f)
                     )
