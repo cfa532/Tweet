@@ -2535,6 +2535,12 @@ object HproseInstance {
     private suspend fun userSession(accountId: String, nodeUrl: String, client: HproseService): String? {
         val credential = UserSession.loadCredential(applicationContext, accountId) ?: return null
         UserSession.cachedSession(accountId, nodeUrl)?.let { return it }
+        // The password is shown to the account's own root node and to no other.
+        // An owned entry can still be addressed elsewhere — a like or a comment
+        // sent in the old form goes to the other user's node — and signing in
+        // there would hand that node the password. It could not succeed there
+        // either: Leither keeps a guest's credential on the root only.
+        if (getInstance(accountId).writableUrl?.trimEnd('/') != nodeUrl.trimEnd('/')) return null
         return try {
             val capabilities = storageCapabilities(nodeUrl, mapOf("aid" to appId, "ver" to "last"))
             if (!capabilities.userSessions) return null
