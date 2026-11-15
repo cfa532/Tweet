@@ -587,7 +587,7 @@ fun ChatItem(
     onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
-    val attachmentWidth = LocalConfiguration.current.screenWidthDp.dp / 2
+    val attachmentWidth = LocalConfiguration.current.screenWidthDp.dp * 0.6f
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
     val navController = LocalNavController.current
