@@ -75,6 +75,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -586,6 +587,7 @@ fun ChatItem(
     onImageClick: (us.fireshare.tweet.datamodel.MimeiFileType, android.graphics.Bitmap?) -> Unit,
     onVideoClick: (us.fireshare.tweet.datamodel.MimeiFileType) -> Unit
 ) {
+    val attachmentWidth = LocalConfiguration.current.screenWidthDp.dp / 2
     val isSentByCurrentUser = message.authorId == appUser.mid
     val receipt by viewModel.receipt.collectAsState()
     val navController = LocalNavController.current
@@ -668,7 +670,7 @@ fun ChatItem(
                                 documents = attachments,
                                 baseUrl = appUser.baseUrl,
                                 maxDocuments = null,
-                                modifier = Modifier.padding(4.dp)
+                                modifier = Modifier.padding(4.dp).width(attachmentWidth)
                             )
                         } else {
                             // Media messages: keep background container
@@ -683,6 +685,7 @@ fun ChatItem(
                             ) {
                                 ChatMediaPreview(
                                     attachments = attachments,
+                                    modifier = Modifier.width(attachmentWidth),
                                     onImageClick = { bitmap -> onImageClick(attachments.first(), bitmap) },
                                     onVideoClick = { onVideoClick(attachments.first()) }
                                 )
@@ -694,10 +697,11 @@ fun ChatItem(
                 if (pendingAttachment != null) {
                     ChatMediaPreview(
                         attachments = emptyList(),
+                        modifier = Modifier.width(attachmentWidth),
                         localAttachmentUri = pendingAttachment
                     )
                     Row(
-                        modifier = Modifier.padding(4.dp),
+                        modifier = Modifier.width(attachmentWidth).padding(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -1035,6 +1039,7 @@ private fun isDocumentType(type: MediaType): Boolean {
 @Composable
 fun ChatMediaPreview(
     attachments: List<us.fireshare.tweet.datamodel.MimeiFileType>,
+    modifier: Modifier = Modifier.fillMaxWidth(0.8f),
     localAttachmentUri: String? = null,
     onImageClick: ((android.graphics.Bitmap?) -> Unit)? = null,
     onVideoClick: (() -> Unit)? = null
@@ -1066,8 +1071,7 @@ fun ChatMediaPreview(
     val adjustedAspectRatio = applyAspectRatioRule(attachment?.aspectRatio)
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth(0.8f)
+        modifier = modifier
             .aspectRatio(adjustedAspectRatio)
             .heightIn(max = 200.dp)
             .clip(RoundedCornerShape(8.dp))
