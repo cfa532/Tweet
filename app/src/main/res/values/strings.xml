@@ -20,6 +20,7 @@
     <string name="avatar_update_failed">Failed to update avatar</string>
     <string name="delete_account">Delete account</string>
     <string name="edit_tweet">Edit tweet</string>
+    <string name="edit_tweet_failed">Could not save the tweet.</string>
     <string name="comment">Comment</string>
     <string name="reply_to">Reply to</string>
     <string name="comment_as_tweet">Post as Tweet</string>
@@ -105,6 +106,7 @@
     <string name="delete_failed">Tweet deletion failed. Please try again.</string>
     <string name="delete_tweet_confirmation_title">Delete tweet?</string>
     <string name="delete_tweet_confirmation_message">This tweet will be permanently deleted. This action cannot be undone.</string>
+    <string name="admin_delete_tweet_confirmation_message">Delete this tweet for everyone? If the author\'s node cannot be found, the tweet will only be removed from your feed.</string>
     <string name="remove_tweet_from_feed_confirmation_message">This tweet will be removed from your feed. The author\'s tweet is not deleted.</string>
     <string name="delete_comment_confirmation_title">Delete comment?</string>
     <string name="delete_comment_confirmation_message">This comment will be permanently deleted. This action cannot be undone.</string>
