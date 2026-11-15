@@ -1179,7 +1179,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                                 withContext(Main) {
                                     Toast.makeText(
                                         context,
-                                        context.getString(R.string.tweet_failed),
+                                        event.error,
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }

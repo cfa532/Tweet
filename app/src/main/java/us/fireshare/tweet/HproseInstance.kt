@@ -4271,18 +4271,29 @@ object HproseInstance {
         }
     }
 
-    suspend fun uploadTweet(tweet: Tweet, requestId: String = UUID.randomUUID().toString()): Tweet? {
-        if (!isOnline.value) {
-            Timber.tag("uploadTweet").d("Offline: skipping")
-            throw Exception("No network connection")
-        }
-        Timber.tag("HproseInstance").d("uploadTweet called for tweet: ${tweet.mid}, content: '${tweet.content}', attachments: ${tweet.attachments?.size ?: 0}")
+    class TweetSessionRequiredException : IllegalStateException("Tweet submission requires a valid user session")
 
+    suspend fun uploadTweet(tweet: Tweet, requestId: String = UUID.randomUUID().toString()): Tweet? {
+        check(isOnline.value) { "No network connection" }
+        return try {
+            submitTweet(tweet, requestId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: OutOfMemoryError) {
+            Timber.tag("uploadTweet").e(e, "Out of memory during tweet upload")
+            null
+        } catch (e: Exception) {
+            Timber.tag("uploadTweet").e(e, "Tweet upload failed")
+            null
+        }
+    }
+
+    suspend fun submitTweet(tweet: Tweet, requestId: String): Tweet {
+        check(isOnline.value) { "No network connection" }
         val entry = "add_tweet"
-        // The requestid names this submission: the tweet's server id is derived
-        // from it, so a retry after a lost response resolves the same tweet
-        // instead of creating a duplicate. Old backends ignore the param.
-        val params = mutableMapOf<String, Any?>(
+        // The request ID names this submission so a retry after a lost response
+        // resolves the same tweet instead of creating a duplicate.
+        val params = mapOf(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
@@ -4290,70 +4301,39 @@ object HproseInstance {
             "tweet" to Json.encodeToString(tweet),
             "requestid" to "tw-$requestId"
         )
-        return try {
-            // Mutation: route through appUser's writable host (hostIds[0]).
-            val rawResponse = try {
-                runWrite<Map<String, Any>>(appUser, "uploadTweet", entry, params, ADD_TWEET_TIMEOUT_MS)
-            } catch (e: Exception) {
-                Timber.tag("uploadTweet").e(e, "Exception calling runMApp for uploadTweet")
-                throw e
+        val reply = runWrite<Map<String, Any>>(appUser, "uploadTweet", entry, params, ADD_TWEET_TIMEOUT_MS)
+        val response = unwrapV2Response<Map<String, Any>>(reply)
+        val newTweetId = response?.get("mid") as? String ?: run {
+            val message = reply?.get("message") as? String
+            if (UserSession.isSessionInvalid(reply) || message?.endsWith("is not bound to an identity; sign in again") == true) {
+                throw TweetSessionRequiredException()
             }
-            val response = unwrapV2Response<Map<String, Any>>(rawResponse)
-            if (response != null) {
-                val newTweetId = response["mid"] as? String
-                if (newTweetId != null) {
-                    // The tweet is stored on hostIds[0]; read it back from there rather
-                    // than from an access node that has not copied it yet.
-                    adoptWriteRouteForReads(appUser, entry)
-
-                    // Create a new tweet with the updated mid
-                    val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
-
-                    Timber.tag("HproseInstance").d("Tweet uploaded successfully with new ID: $newTweetId")
-
-                    // Post notification for successful upload (only for original tweets, not retweets)
-                    if (tweet.originalTweetId == null) {
-                        Timber.tag("HproseInstance").d("Posting TweetUploaded notification for tweet: ${updatedTweet.mid}, author: ${updatedTweet.authorId}")
-                        TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
-                    } else {
-                        Timber.tag("HproseInstance").d("Skipping TweetUploaded notification for retweet: ${updatedTweet.mid}, original: ${tweet.originalTweetId}")
-                    }
-                    
-                    // Refresh appUser from server to get updated tweetCount and other properties
-                    try {
-                        val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
-                        if (refreshedUser != null && !refreshedUser.isGuest()) {
-                            // Update singleton and set appUser to it
-                            User.updateUserInstance(refreshedUser, true)
-                            appUser = getInstance(refreshedUser.mid)
-                            
-                            // Notify other ViewModels that user data has been updated
-                            TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("uploadTweet").w("Failed to refresh appUser after upload: $e")
-                    }
-
-                    Timber.tag("uploadTweet").d("Tweet uploaded: $newTweetId")
-                    updatedTweet
-                } else {
-                    Timber.tag("uploadTweet").e("No tweet ID in response")
-                    null
-                }
-            } else {
-                val serverMessage = rawResponse?.get("message") as? String
-                Timber.tag("uploadTweet").e("Upload failed: ${serverMessage ?: "Unknown upload error"}")
-                null
-            }
-        } catch (e: OutOfMemoryError) {
-            Timber.tag("uploadTweet").e(e, "OUT OF MEMORY ERROR during tweet upload")
-            null
-        } catch (e: Exception) {
-            Timber.tag("uploadTweet").e("Upload exception: $e")
-            null
+            error("Tweet submission returned no tweet ID")
         }
-    }
 
+        // Read the stored tweet from its root while the access node catches up.
+        adoptWriteRouteForReads(appUser, entry)
+        val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
+        if (tweet.originalTweetId == null) {
+            TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
+        }
+
+        try {
+            val refreshedUser = fetchUser(appUser.mid, appUser.baseUrl, maxRetries = 1, forceRefresh = true)
+            if (refreshedUser != null && !refreshedUser.isGuest()) {
+                User.updateUserInstance(refreshedUser, true)
+                appUser = getInstance(refreshedUser.mid)
+                TweetNotificationCenter.post(TweetEvent.UserDataUpdated(appUser))
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag("uploadTweet").w(e, "Failed to refresh appUser after upload")
+        }
+
+        Timber.tag("uploadTweet").d("Tweet uploaded: $newTweetId")
+        return updatedTweet
+    }
 
     suspend fun delComment(parentTweet: Tweet, commentId: MimeiId, callback: (MimeiId) -> Unit) {
         if (!isOnline.value) {

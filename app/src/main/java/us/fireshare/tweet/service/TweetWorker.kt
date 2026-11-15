@@ -18,6 +18,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -209,10 +210,7 @@ class UploadTweetWorker @AssistedInject constructor(
             // Stop if we've already tried twice (runAttemptCount >= 2)
             if (runAttemptCount >= 2) {
                 Timber.tag("UploadTweetWorker").d("Maximum retry attempts reached (attempt $runAttemptCount), giving up")
-                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed after 2 attempts"))
-                val workId = id.toString()
-                HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                return Result.failure()
+                return reportFailure()
             }
             
             Timber.tag("UploadTweetWorker").d("Tweet upload attempt ${runAttemptCount + 1} of 2")
@@ -267,57 +265,13 @@ class UploadTweetWorker @AssistedInject constructor(
                 for ((index, uriString) in attachmentUris.withIndex()) {
                     Timber.tag("UploadTweetWorker").d("Processing attachment ${index + 1}/${attachmentUris.size}: ${uriString.takeLast(20)}")
 
-                    try {
-                        Timber.tag("UploadTweetWorker").d("Calling uploadToIPFS for URI: $uriString")
-                        val result = uploadToIPFS(uriString.toUri())
-
-                        if (result != null) {
-                            attachments.add(result)
-                            Timber.tag("UploadTweetWorker").d("Successfully uploaded attachment ${index + 1}: ${result.mid}")
-                        } else {
-                            Timber.tag("UploadTweetWorker").e("uploadToIPFS returned null for attachment ${index + 1}: $uriString")
-                            // Only show toast on final attempt and clean up incomplete upload
-                            if (runAttemptCount >= 1) {
-                                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
-                                // Clean up incomplete upload tracking on final failure
-                                val workId = id.toString()
-                                HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                            }
-                            return Result.failure()
-                        }
-                    } catch (e: Exception) {
-                        Timber.tag("UploadTweetWorker").e(e, "Error uploading attachment ${index + 1}: $uriString")
-                        // Only show toast on final attempt and clean up incomplete upload
-                        if (runAttemptCount >= 1) {
-                            TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachment upload failed"))
-                            // Clean up incomplete upload tracking on final failure
-                            val workId = id.toString()
-                            HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                        }
-                        return Result.failure()
+                    val attachment = uploadToIPFS(uriString.toUri())
+                    if (attachment == null) {
+                        Timber.tag("UploadTweetWorker").e("Upload failed for attachment ${index + 1}")
+                        return reportFailure()
                     }
+                    attachments.add(attachment)
                 }
-
-                Timber.tag("UploadTweetWorker").d("ALL ATTACHMENTS PROCESSED SUCCESSFULLY")
-                Timber.tag("UploadTweetWorker").d("REACHED TWEET CREATION SECTION")
-                Timber.tag("UploadTweetWorker").d("Attachment upload summary: uris=${attachmentUris.size}, attachments=${attachments.size}")
-                Timber.tag("UploadTweetWorker").d("Attachments list: ${attachments.map { it.mid }}")
-
-                if (attachmentUris.size != attachments.size) {
-                    Timber.tag("UploadTweetWorker").e("Attachments upload failure - size mismatch")
-                    // Only show toast on final attempt and clean up incomplete upload
-                    if (runAttemptCount >= 1) {
-                        TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Attachments upload failure"))
-                        // Clean up incomplete upload tracking on final failure
-                        val workId = id.toString()
-                        HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                    }
-                    return Result.failure()
-                }
-
-                Timber.tag("UploadTweetWorker").d("All attachments uploaded successfully, proceeding to create tweet")
-
-                Timber.tag("UploadTweetWorker").d("Creating tweet with content: '${tweetContent ?: " "}', attachments: ${attachments.size}")
 
                 val tweet = Tweet(
                     mid = System.currentTimeMillis().toString(), // placeholder
@@ -327,56 +281,37 @@ class UploadTweetWorker @AssistedInject constructor(
                     isPrivate = isPrivate
                 )
 
-                Timber.tag("UploadTweetWorker").d("Calling uploadTweet for tweet: ${tweet.mid}")
                 val requestId = inputData.getString("requestId") ?: id.toString()
-                val uploadResult = HproseInstance.uploadTweet(tweet, requestId)
-                Timber.tag("UploadTweetWorker").d("uploadTweet returned: ${uploadResult?.mid ?: "null"}")
-
-                uploadResult?.let { uploadedTweet: Tweet ->
-                    Timber.tag("UploadTweetWorker").d("Tweet uploaded successfully: ${uploadedTweet.mid}")
-
-                    // Remove incomplete upload from tracking since it completed successfully
-                    val workId = id.toString()
-                    HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                    showAppToast(applicationContext.getString(R.string.tweet_uploaded))
-
-                    return Result.success()
-                }
-
-                // uploadTweet failed and returned null
-                Timber.tag("UploadTweetWorker").e("uploadTweet returned null - tweet upload failed")
-                // Only show toast on final attempt and clean up incomplete upload
-                if (runAttemptCount >= 1) {
-                    TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed"))
-                    // Clean up incomplete upload tracking on final failure
-                    val workId = id.toString()
-                    HproseInstance.removeIncompleteUpload(applicationContext, workId)
-                }
-                Result.failure()
+                HproseInstance.submitTweet(tweet, requestId)
+                HproseInstance.removeIncompleteUpload(applicationContext, id.toString())
+                showAppToast(applicationContext.getString(R.string.tweet_uploaded))
+                Result.success()
             } finally {
                 wakeLock.release()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: HproseInstance.TweetSessionRequiredException) {
+            Timber.tag("UploadTweetWorker").w(e, "Tweet submission rejected")
+            reportFailure(R.string.tweet_session_required)
         } catch (e: OutOfMemoryError) {
-            Timber.tag("UploadTweetWorker").e(e, "OUT OF MEMORY ERROR during tweet upload (attempt ${runAttemptCount + 1})")
-            // Show error and clean up on final attempt (runAttemptCount >= 1 means 2nd+ attempt)
-            if (runAttemptCount >= 1) {
-                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: Out of memory"))
-                val workId = id.toString()
-                HproseInstance.removeIncompleteUpload(applicationContext, workId)
-            }
-            // WorkManager will retry once more if runAttemptCount < 2
-            return Result.failure()
+            Timber.tag("UploadTweetWorker").e(e, "Out of memory during tweet upload")
+            reportFailure()
         } catch (e: Exception) {
-            Timber.tag("UploadTweetWorker").e(e, "Error in doWork (attempt ${runAttemptCount + 1})")
-            // Show error and clean up on final attempt (runAttemptCount >= 1 means 2nd+ attempt)
-            if (runAttemptCount >= 1) {
-                TweetNotificationCenter.postAsync(TweetEvent.TweetUploadFailed("Tweet upload failed: ${e.message}"))
-                val workId = id.toString()
-                HproseInstance.removeIncompleteUpload(applicationContext, workId)
-            }
-            // WorkManager will retry once more if runAttemptCount < 2
-            return Result.failure()
+            Timber.tag("UploadTweetWorker").e(e, "Tweet upload failed")
+            reportFailure()
         }
+    }
+
+    private suspend fun reportFailure(messageRes: Int = R.string.tweet_failed): Result {
+        // WorkManager treats failure as terminal even on its first attempt.
+        TweetNotificationCenter.post(
+            TweetEvent.TweetUploadFailed(applicationContext.getString(messageRes))
+        )
+        if (runAttemptCount >= 1) {
+            HproseInstance.removeIncompleteUpload(applicationContext, id.toString())
+        }
+        return Result.failure()
     }
 
     private suspend fun showAppToast(message: String) {
