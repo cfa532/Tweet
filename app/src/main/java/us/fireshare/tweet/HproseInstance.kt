@@ -298,14 +298,11 @@ object HproseInstance {
         val formats: Set<String>,
         // health flags beyond storage: userSessions says this node checks the
         // caller's Leither session ("usersid"); commentDelegation says it routes
-        // comments through the writer's own root; engagementDelegation the same
-        // for likes, bookmarks and retweet counts; messageDelegation for
-        // messages. All false on an older backend, which keeps the old wire
-        // forms.
+        // comments through the writer's own root; engagementDelegation does the
+        // same for likes, bookmarks and retweet counts.
         val userSessions: Boolean,
         val commentDelegation: Boolean,
         val engagementDelegation: Boolean,
-        val messageDelegation: Boolean,
         val guestRegistration: Boolean,
         val checkedAt: Long
     )
@@ -391,7 +388,6 @@ object HproseInstance {
                 userSessions = reply["userSessions"] == true,
                 commentDelegation = reply["commentDelegation"] == true,
                 engagementDelegation = reply["engagementDelegation"] == true,
-                messageDelegation = reply["messageDelegation"] == true,
                 guestRegistration = reply["guestRegistration"] != false,
                 checkedAt = System.currentTimeMillis()
             )
@@ -1166,48 +1162,13 @@ object HproseInstance {
         return BuildConfig.ALPHA_ID.split(",").map { it.trim() }
     }
 
-    /**
-     * Send a chat message to a recipient.
-     * This function performs two steps:
-     * 1. Send message_outgoing to sender's own node (with retry and baseUrl refresh)
-     * 2. Send message_incoming to recipient's node (with retry and baseUrl refresh)
-     */
+    /** Send through the sender's root, which delivers the recipient's copy. */
     suspend fun sendMessage(receiptId: MimeiId, msg: ChatMessage): Pair<Boolean, String?> {
         if (!isOnline.value) {
             Timber.tag("sendMessage").d("Offline: skipping")
             throw Exception("No network connection")
         }
-        // Step 1: Send to sender's own node (message_outgoing) with retry
-        Timber.tag("sendMessage").d("📤 Step 1: Sending message_outgoing to sender's node")
-        val senderSendResult = sendToSenderNodeWithRetry(receiptId, msg, maxRetries = 2)
-
-        if (!senderSendResult.first) {
-            return senderSendResult
-        }
-
-        Timber.tag("sendMessage").d("✅ Step 1 completed: Successfully sent to sender's node")
-
-        // On a delegating backend, message_outgoing delivered both halves — it
-        // asked the recipient's node itself, through the guarded peer entry no
-        // client may call. Only an older backend still needs the client to
-        // write the recipient's copy directly.
-        if (nodeSupportsMessageDelegation(appUser)) {
-            Timber.tag("sendMessage").d("✅ Sender's node delivered both halves; skipping direct recipient write")
-            return Pair(true, null)
-        }
-
-        // Step 2: Send to recipient's node (message_incoming) with retry
-        Timber.tag("sendMessage").d("📤 Step 2: Sending message_incoming to recipient's node")
-        val recipientSendResult = sendToRecipientNodeWithRetry(receiptId, msg, maxRetries = 2)
-
-        if (!recipientSendResult.first) {
-            return recipientSendResult
-        }
-
-        Timber.tag("sendMessage").d("✅ Step 2 completed: Successfully sent to recipient's node")
-
-        // Both steps succeeded
-        return Pair(true, null)
+        return sendToSenderNodeWithRetry(receiptId, msg)
     }
 
     /**
@@ -1329,108 +1290,6 @@ object HproseInstance {
         return Pair(false, finalError)
     }
     
-    /**
-     * Helper function to send message_incoming to recipient's node with retry and baseUrl refresh
-     */
-    private suspend fun sendToRecipientNodeWithRetry(
-        receiptId: MimeiId,
-        msg: ChatMessage,
-        maxRetries: Int = 2
-    ): Pair<Boolean, String?> {
-        var receiptUser: User?
-        var lastError: String? = null
-        var lastFailureWasTimeout = false
-        
-        for (attempt in 0..maxRetries) {
-            val forceRefresh = attempt > 0
-            if (forceRefresh && lastFailureWasTimeout) {
-                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: previous recipient-node send timed out; keeping current baseUrl for userId: $receiptId")
-            } else if (forceRefresh) {
-                Timber.tag("sendMessage").d("🔄 Retry attempt $attempt: Refreshing recipient's baseUrl for userId: $receiptId")
-            }
-            
-            // Fetch recipient user (with forced refresh on retry)
-            receiptUser = fetchUser(receiptId, baseUrl = if (forceRefresh && !lastFailureWasTimeout) "" else null)
-            
-            if (receiptUser == null) {
-                val errorMsg = "Recipient user not found"
-                Timber.tag("sendMessage").e("❌ $errorMsg for userId: $receiptId")
-                return Pair(false, errorMsg)
-            }
-            
-            val receiptEntry = "message_incoming"
-            val receiptParams = mapOf(
-                "aid" to appId,
-                "ver" to "last",
-                "version" to "v2",
-                "entry" to receiptEntry,
-                "senderid" to appUser.mid,
-                "receiptid" to receiptId,
-                "msg" to Json.encodeToString(msg)
-            )
-            
-            val recipientClient = messagingClient(receiptUser, forceResolve = forceRefresh && !lastFailureWasTimeout)
-            if (recipientClient == null) {
-                val errorMsg = "Failed to create client for recipient node"
-                Timber.tag("sendMessage").e("❌ $errorMsg - writableUrl: ${receiptUser.writableUrl}")
-                if (attempt < maxRetries) {
-                    delay(((attempt + 1) * 1000L).milliseconds)
-                    continue
-                }
-                return Pair(false, errorMsg)
-            }
-            
-            Timber.tag("sendMessage").d("📤 Sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}) - writableUrl: ${receiptUser.writableUrl}")
-            
-            try {
-                val receiptResponse = recipientClient.runMApp<Any>(receiptEntry, receiptParams)
-                
-                // Handle different response types
-                val success = when (receiptResponse) {
-                    is Boolean -> receiptResponse
-                    is Map<*, *> -> {
-                        val responseMap = receiptResponse as? Map<String, Any>
-                        val successValue = responseMap?.get("success") as? Boolean
-                        if (successValue == false) {
-                            lastError = responseMap["error"] as? String ?: "Failed to send to recipient node"
-                        }
-                        successValue ?: true // Default to true for backward compatibility
-                    }
-                    else -> true // Default to true for backward compatibility
-                }
-                
-                if (success) {
-                    Timber.tag("sendMessage").d("✅ Successfully sent to recipient node (attempt ${attempt + 1})")
-                    return Pair(true, null)
-                } else {
-                    lastError = lastError ?: "Failed to send to recipient node"
-                    Timber.tag("sendMessage").e("❌ Failed to send to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
-                    
-                    if (attempt < maxRetries) {
-                        val delay = (attempt + 1) * 2000L // 2, 4 seconds
-                        Timber.tag("sendMessage").d("⏳ Waiting ${delay / 1000} seconds before retry...")
-                        delay(delay.milliseconds)
-                        continue
-                    }
-                }
-            } catch (e: Exception) {
-                lastFailureWasTimeout = e.hasTimeoutCause()
-                lastError = ErrorMessageUtils.getNetworkErrorMessage(applicationContext, e)
-                Timber.tag("sendMessage").e("❌ Error sending to recipient node (attempt ${attempt + 1}/${maxRetries + 1}): $lastError")
-                
-                if (attempt < maxRetries) {
-                    delay(((attempt + 1) * 2000L).milliseconds)
-                    continue
-                }
-            }
-        }
-        
-        // All retries exhausted
-        val finalError = lastError ?: "Failed to send message to recipient node after ${maxRetries + 1} attempts"
-        Timber.tag("sendMessage").e("❌ All retry attempts exhausted for recipient node: $finalError")
-        return Pair(false, finalError)
-    }
-
     // get the recent unread message from a sender.
     // Matches iOS implementation which unwraps v2 response and filters out outgoing messages.
     suspend fun fetchMessages(senderId: MimeiId): List<ChatMessage>? {
@@ -2619,9 +2478,6 @@ object HproseInstance {
 
     private suspend fun nodeSupportsEngagementDelegation(user: User) =
         nodeAdvertises(user) { it.engagementDelegation }
-
-    private suspend fun nodeSupportsMessageDelegation(user: User) =
-        nodeAdvertises(user) { it.messageDelegation }
 
     /**
      * Signing out ends the caller's identity everywhere: the guest credential
