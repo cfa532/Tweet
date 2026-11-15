@@ -33,7 +33,7 @@ sealed interface NavTweet {
     data object Search : NavTweet
 
     @Serializable
-    data object ComposeTweet : NavTweet
+    data class ComposeTweet(val draftWorkId: String? = null) : NavTweet
 
     @Serializable
     data object ChatList: NavTweet

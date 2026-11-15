@@ -15,10 +15,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
@@ -61,7 +57,6 @@ fun ComposeTopAppBar(
                 }
             },
             actions = {
-                var isLoading by remember { mutableStateOf(false) }
                 val context = LocalContext.current
                 val activity = LocalActivity.current as ComponentActivity
                 val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
@@ -71,13 +66,8 @@ fun ComposeTopAppBar(
                 }
 
                 IconButton(
-                    enabled = !isLoading && hasContent,
-                    onClick = {
-                        if (hasContent) {
-                            isLoading = true
-                            onSendClick()
-                        }
-                    },
+                    enabled = hasContent,
+                    onClick = onSendClick,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     Icon(

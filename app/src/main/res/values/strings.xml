@@ -80,6 +80,7 @@
     <string name="keyphrase_required">Key phrase is required</string>
     <string name="tweet_uploaded">Tweet uploaded successfully</string>
     <string name="tweet_failed">Tweet upload failed.</string>
+    <string name="tweet_attachment_failed">Could not upload an attachment. Your draft is saved.</string>
     <string name="tweet_session_required">Tweet could not be posted. Sign out and sign back in, then retry.</string>
     <string name="tweet_uploading_background">Tweet will be uploaded in background</string>
     <string name="clipboard_copy">Content copied to clipboard</string>

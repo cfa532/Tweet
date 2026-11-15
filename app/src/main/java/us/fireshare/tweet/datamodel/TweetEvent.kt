@@ -17,7 +17,6 @@ enum class FeedResetReason {
 
 sealed class TweetEvent {
     data class TweetUploaded(val tweet: Tweet) : TweetEvent()
-    data class TweetUploadFailed(val error: String) : TweetEvent()
     data class TweetDeleted(val tweetId: String, val authorId: String) : TweetEvent()
     data class TweetRestored(val tweet: Tweet) : TweetEvent()
     data class CommentUploaded(val comment: Tweet, val parentTweet: Tweet) : TweetEvent()

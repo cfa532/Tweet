@@ -204,85 +204,45 @@ class UploadTweetWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        val runAttemptCount = runAttemptCount
+        val author = appUser
+        val draftAuthor = inputData.getString("authorId")
+        if (author.isGuest() || (draftAuthor != null && draftAuthor != author.mid)) {
+            return reportFailure(R.string.tweet_session_required)
+        }
+
         return try {
-            // Limit to 2 total attempts: initial attempt (0) + 1 retry (1)
-            // Stop if we've already tried twice (runAttemptCount >= 2)
-            if (runAttemptCount >= 2) {
-                Timber.tag("UploadTweetWorker").d("Maximum retry attempts reached (attempt $runAttemptCount), giving up")
-                return reportFailure()
-            }
-            
-            Timber.tag("UploadTweetWorker").d("Tweet upload attempt ${runAttemptCount + 1} of 2")
-
-            // Force baseUrl refresh before retrying (matching iOS behavior)
-            if (runAttemptCount >= 1) {
-                Timber.tag("UploadTweetWorker").d("Retry detected (attempt $runAttemptCount), forcing baseUrl refresh for appUser: ${appUser.mid}")
-                try {
-                    // Force IP re-resolution by passing empty baseUrl (matching iOS fetchUser with baseUrl: "")
-                    val refreshedUser = HproseInstance.fetchUser(appUser.mid, baseUrl = "", maxRetries = 1, forceRefresh = true)
-                    if (refreshedUser != null && !refreshedUser.isGuest() && !refreshedUser.baseUrl.isNullOrBlank()) {
-                        // Update singleton and set appUser to it
-                        User.updateUserInstance(refreshedUser, true)
-                        HproseInstance.appUser = User.getInstance(refreshedUser.mid)
-                        Timber.tag("UploadTweetWorker").d("Successfully refreshed baseUrl for appUser during tweet upload retry: ${refreshedUser.baseUrl}")
-                    } else {
-                        Timber.tag("UploadTweetWorker").w("Failed to refresh baseUrl for appUser during tweet upload retry (invalid baseUrl: ${refreshedUser?.baseUrl})")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("UploadTweetWorker").e(e, "Error refreshing baseUrl for appUser during tweet upload retry")
-                }
-            }
-            
-            val tweetContent = inputData.getString("tweetContent")
-            val attachmentUris =
-                inputData.getStringArray("attachmentUris")?.toList() ?: emptyList()
-            val isPrivate = inputData.getBoolean("isPrivate", false)
-
-            Timber.tag("UploadTweetWorker").d("Starting tweet upload - content: '${tweetContent ?: "empty"}', uris: ${attachmentUris.size}, private: $isPrivate")
-
-            val powerManager =
-                applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val attachmentUris = inputData.getStringArray("attachmentUris").orEmpty()
+            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Tweet:UploadWakeLockTag"
             )
-            wakeLock.acquire(3 * 60 * 60 * 1000L /*3 hours*/)
-
-            // Create foreground notification for long-running video processing
-            val notification = createForegroundNotification(applicationContext)
-            setForeground(
-                ForegroundInfo(
-                    1,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                )
-            )
+            wakeLock.acquire(3 * 60 * 60 * 1000L)
             try {
+                val steps = attachmentUris.size + 1
+                setForeground(uploadForegroundInfo(steps, completed = 0))
                 val attachments = mutableListOf<MimeiFileType>()
-                Timber.tag("UploadTweetWorker").d("Processing ${attachmentUris.size} attachments sequentially")
-
-                for ((index, uriString) in attachmentUris.withIndex()) {
-                    Timber.tag("UploadTweetWorker").d("Processing attachment ${index + 1}/${attachmentUris.size}: ${uriString.takeLast(20)}")
-
-                    val attachment = uploadToIPFS(uriString.toUri())
+                for ((index, uri) in attachmentUris.withIndex()) {
+                    val attachment = uploadToIPFS(uri.toUri(), uploadUser = author)
                     if (attachment == null) {
                         Timber.tag("UploadTweetWorker").e("Upload failed for attachment ${index + 1}")
-                        return reportFailure()
+                        return reportFailure(R.string.tweet_attachment_failed)
                     }
                     attachments.add(attachment)
+                    setForeground(uploadForegroundInfo(steps, completed = index + 1))
                 }
 
+                if (appUser.mid != author.mid) {
+                    return reportFailure(R.string.tweet_session_required)
+                }
                 val tweet = Tweet(
-                    mid = System.currentTimeMillis().toString(), // placeholder
-                    authorId = appUser.mid,
-                    content = tweetContent ?: " ",
+                    mid = System.currentTimeMillis().toString(),
+                    authorId = author.mid,
+                    content = inputData.getString("tweetContent") ?: " ",
                     attachments = attachments,
-                    isPrivate = isPrivate
+                    isPrivate = inputData.getBoolean("isPrivate", false)
                 )
-
-                val requestId = inputData.getString("requestId") ?: id.toString()
-                HproseInstance.submitTweet(tweet, requestId)
+                HproseInstance.submitTweet(tweet, inputData.getString("requestId") ?: id.toString())
                 HproseInstance.removeIncompleteUpload(applicationContext, id.toString())
                 showAppToast(applicationContext.getString(R.string.tweet_uploaded))
                 Result.success()
@@ -303,16 +263,8 @@ class UploadTweetWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun reportFailure(messageRes: Int = R.string.tweet_failed): Result {
-        // WorkManager treats failure as terminal even on its first attempt.
-        TweetNotificationCenter.post(
-            TweetEvent.TweetUploadFailed(applicationContext.getString(messageRes))
-        )
-        if (runAttemptCount >= 1) {
-            HproseInstance.removeIncompleteUpload(applicationContext, id.toString())
-        }
-        return Result.failure()
-    }
+    private fun reportFailure(messageRes: Int = R.string.tweet_failed): Result =
+        Result.failure(workDataOf("error" to applicationContext.getString(messageRes)))
 
     private suspend fun showAppToast(message: String) {
         withContext(Dispatchers.Main) {
@@ -324,30 +276,22 @@ class UploadTweetWorker @AssistedInject constructor(
         }
     }
 
-    private fun createForegroundNotification(context: Context): Notification {
-        val channelId = "video_upload_channel"
-        val channelName = context.getString(R.string.video_upload)
-
-        // Create notification channel for Android 8.0+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                channelName,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = context.getString(R.string.video_upload_progress_description)
-            }
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        return NotificationCompat.Builder(context, channelId)
-            .setContentTitle(context.getString(R.string.uploading_video))
-            .setContentText(context.getString(R.string.processing_video_upload))
+    private fun uploadForegroundInfo(steps: Int, completed: Int): ForegroundInfo {
+        val context = applicationContext
+        val channelId = "tweet_upload_channel"
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channelId, context.getString(R.string.uploading), NotificationManager.IMPORTANCE_LOW)
+        )
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setContentTitle(context.getString(R.string.uploading))
+            .setContentText(context.getString(R.string.tweet_uploading_background))
             .setSmallIcon(android.R.drawable.ic_menu_upload)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setProgress(steps, completed, false)
+            .setOnlyAlertOnce(true)
             .setOngoing(true)
             .build()
+        return ForegroundInfo(id.hashCode(), notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 }
 

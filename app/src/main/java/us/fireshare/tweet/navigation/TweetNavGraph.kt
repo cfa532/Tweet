@@ -9,6 +9,9 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +25,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -34,11 +39,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
+import us.fireshare.tweet.HproseInstance.appUserState
+import us.fireshare.tweet.R
 import us.fireshare.tweet.HproseInstance.getAlphaIds
 import us.fireshare.tweet.chat.ChatListScreen
 import us.fireshare.tweet.chat.ChatScreen
@@ -51,6 +61,7 @@ import us.fireshare.tweet.profile.SystemSettings
 import us.fireshare.tweet.profile.UserBookmarks
 import us.fireshare.tweet.profile.UserFavorites
 import us.fireshare.tweet.service.SearchScreen
+import us.fireshare.tweet.service.UploadTweetWorker
 import us.fireshare.tweet.service.SearchViewModel
 import us.fireshare.tweet.tweet.NewTweetsBanner
 import us.fireshare.tweet.tweet.ComposeCommentScreen
@@ -156,8 +167,8 @@ fun TweetNavGraph(
                     parentAuthorId = args.parentAuthorId
                 )
             }
-            composable<NavTweet.ComposeTweet> {
-                ComposeTweetScreen(navController)
+            composable<NavTweet.ComposeTweet> { entry ->
+                ComposeTweetScreen(navController, entry.toRoute<NavTweet.ComposeTweet>().draftWorkId)
             }
             composable<ComposeComment> {
                 var lastClickTime by remember { mutableLongStateOf(0L) }
@@ -312,7 +323,63 @@ fun TweetNavGraph(
                 )
             }
         }
+        TweetUploadFailureDialog(
+            onEditDraft = if (currentRoute?.contains("ComposeTweet") == true) {
+                null
+            } else {
+                { workId -> navController.navigate(NavTweet.ComposeTweet(workId)) }
+            }
+        )
     }
+}
+
+@Composable
+private fun TweetUploadFailureDialog(onEditDraft: ((String) -> Unit)?) {
+    val context = LocalContext.current
+    val account by appUserState.collectAsState()
+    val workManager = remember(context) { WorkManager.getInstance(context) }
+    val uploadWork by remember(workManager) {
+        workManager.getWorkInfosByTagFlow(UploadTweetWorker::class.java.name)
+    }.collectAsState(initial = emptyList())
+    var dismissed by remember(account.mid) { mutableStateOf(emptySet<String>()) }
+
+    val failure = remember(uploadWork, account.mid, dismissed) {
+        if (account.isGuest()) return@remember null
+        val failedWork = uploadWork.filter {
+            it.state == WorkInfo.State.FAILED || it.state == WorkInfo.State.CANCELLED
+        }.associateBy { it.id.toString() }
+        HproseInstance.getIncompleteUploads(context)
+            .filter { draft ->
+                (draft.authorId == null || draft.authorId == account.mid) &&
+                    !draft.errorDismissed && draft.workId !in dismissed && draft.workId in failedWork
+            }
+            .minByOrNull { it.timestamp }
+            ?.let { it to failedWork.getValue(it.workId) }
+    } ?: return
+    val (draft, work) = failure
+    val error = work.outputData.getString("error") ?: stringResource(R.string.tweet_failed)
+    val dismiss: () -> Unit = {
+        HproseInstance.saveIncompleteUpload(context, draft.copy(errorDismissed = true))
+        dismissed = dismissed + draft.workId
+    }
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        text = { Text(error) },
+        confirmButton = {
+            TextButton(onClick = {
+                dismiss()
+                onEditDraft?.invoke(draft.workId)
+            }) {
+                Text(stringResource(if (onEditDraft == null) R.string.close else R.string.edit))
+            }
+        },
+        dismissButton = if (onEditDraft != null) {
+            { TextButton(onClick = dismiss) { Text(stringResource(R.string.close)) } }
+        } else {
+            null
+        }
+    )
 }
 
 private fun NavHostController.openExternalDeepLink(destination: NavTweet.DeepLink) {

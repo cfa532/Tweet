@@ -39,11 +39,9 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,7 +57,6 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class TweetActivity : ComponentActivity() {
-    private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: ActivityViewModel by viewModels()
     
     @Inject
@@ -124,7 +121,7 @@ class TweetActivity : ComponentActivity() {
         }
 
         // Start initialization
-        initJob = lifecycleScope.async {
+        lifecycleScope.launch {
             try {
                 // Maximum 3-second splash screen timeout
                 launch {
@@ -155,11 +152,6 @@ class TweetActivity : ComponentActivity() {
                     if (::chatSessionRepository.isInitialized) {
                         checkMessagesAndUpdateBadge()
                     }
-                }
-
-                launch(IO) {
-                    delay(10000)
-                    HproseInstance.resumeIncompleteUploads(this@TweetActivity)
                 }
 
                 requestNotificationPermissionIfNeeded()
@@ -196,10 +188,6 @@ class TweetActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Resume incomplete uploads when app comes to foreground
-        if (::initJob.isInitialized && initJob.isCompleted) {
-            HproseInstance.resumeIncompleteUploads(this)
-        }
         
         // Always check for new messages and update badge when app comes to foreground
         // This ensures badge is updated even if initialization is still in progress

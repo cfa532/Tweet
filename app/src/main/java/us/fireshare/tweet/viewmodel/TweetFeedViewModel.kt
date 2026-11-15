@@ -10,11 +10,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
+import androidx.work.await
 import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -1023,84 +1023,55 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         callback()
     }
 
-    /**
-     * Use WorkManager to update tweet. When the upload succeeds, a message will be sent back.
-     * Toast messages are shown when notifications are received.
-     * */
-    fun uploadTweet(
+    suspend fun uploadTweet(
         context: Context,
         content: String,
-        attachments: List<Uri>?,
-        isPrivate: Boolean = false
+        attachments: List<Uri>,
+        isPrivate: Boolean,
+        previousDraft: HproseInstance.IncompleteUpload?
     ) {
-        val data = workDataOf(
-            "tweetContent" to content,
-            "attachmentUris" to attachments?.map { it.toString() }?.toTypedArray(),
-            "isPrivate" to isPrivate
-        )
-        val constraints = Constraints.Builder()
-            .setRequiresCharging(false) // Allow running on battery
-            .setRequiredNetworkType(NetworkType.CONNECTED) // Require network
-            .setRequiresDeviceIdle(false) // Don't require device idle
-            .setRequiresStorageNotLow(false) // Allow when storage is low
+        val requestId = previousDraft?.let { it.requestId ?: it.workId }
+            ?: java.util.UUID.randomUUID().toString()
+        val authorId = appUser.mid
+        val attachmentUris = attachments.map(Uri::toString)
+        val request = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
+            .setInputData(workDataOf(
+                "tweetContent" to content,
+                "attachmentUris" to attachmentUris.toTypedArray(),
+                "isPrivate" to isPrivate,
+                "requestId" to requestId,
+                "authorId" to authorId
+            ))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
 
-        val uploadRequest = OneTimeWorkRequest.Builder(UploadTweetWorker::class.java)
-            .setInputData(data)
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                2_000L, // 2 seconds
-                java.util.concurrent.TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        val workManager = WorkManager.getInstance(context)
-        workManager.enqueue(uploadRequest)
-        val workId = uploadRequest.id.toString()
-
-        // Take persistent URI permissions to survive app restarts and process changes
-        attachments?.forEach { uri ->
+        attachments.forEach { uri ->
             try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {
-                Timber.tag("TweetFeedViewModel").w("Failed to take persistable permission for URI: $uri")
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: SecurityException) {
+                // Camera URIs are app-owned and do not need a document grant.
             }
         }
-
-        // Check if there are video attachments and show background upload message
-        val hasVideoAttachments = attachments?.any { uri ->
-            try {
-                val mimeType = context.contentResolver.getType(uri)
-                mimeType?.startsWith("video/") == true
-            } catch (_: Exception) {
-                false
-            }
-        } ?: false
-
-        if (hasVideoAttachments) {
-            // Show toast immediately informing user about background upload
-            Toast.makeText(
-                context,
-                context.getString(R.string.tweet_uploading_background),
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-
-        // Save incomplete upload for potential resume
-        val incompleteUpload = HproseInstance.IncompleteUpload(
-            workId = workId,
+        val draft = HproseInstance.IncompleteUpload(
+            workId = request.id.toString(),
             tweetContent = content,
-            attachmentUris = attachments?.map { it.toString() } ?: emptyList(),
+            attachmentUris = attachmentUris,
             isPrivate = isPrivate,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            authorId = authorId,
+            requestId = requestId
         )
-        HproseInstance.saveIncompleteUpload(context, incompleteUpload)
-
-        // No need to observe work status; UI will update via notification system
+        HproseInstance.saveIncompleteUpload(context, draft, replacesWorkId = previousDraft?.workId)
+        try {
+            WorkManager.getInstance(context).enqueue(request).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            previousDraft?.let {
+                HproseInstance.saveIncompleteUpload(context, it, replacesWorkId = draft.workId)
+            }
+            throw e
+        }
     }
 
     private var notificationContextRef: WeakReference<Context>? = null
@@ -1172,21 +1143,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
                             }
                         }
 
-                        is TweetEvent.TweetUploadFailed -> {
-                            // Show failure toast
-                            val context = notificationContextRef?.get()
-                            if (context != null) {
-                                withContext(Main) {
-                                    Toast.makeText(
-                                        context,
-                                        event.error,
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                            Timber.tag("TweetFeedViewModel")
-                                .e("Tweet upload failed: ${event.error}")
-                        }
+
 
                         is TweetEvent.TweetDeleted -> {
                             // Remove tweet from feed if it still exists (in case optimistic removal failed)

@@ -3,9 +3,11 @@ package us.fireshare.tweet.tweet
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.net.toUri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,16 +31,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUserState
 import us.fireshare.tweet.R
 import us.fireshare.tweet.navigation.SharedViewModel
@@ -50,16 +60,22 @@ import us.fireshare.tweet.ui.components.ComposeTopAppBar
 import us.fireshare.tweet.ui.components.ExitConfirmationDialog
 import us.fireshare.tweet.utils.FileSizeUtils
 import us.fireshare.tweet.viewmodel.TweetFeedViewModel
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposeTweetScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    draftWorkId: String?
 ) {
     // Observe appUser changes via StateFlow
     val appUser by appUserState.collectAsState()
     val context = LocalContext.current
     val activity = LocalActivity.current as ComponentActivity
+    val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    val workManager = remember(context) { WorkManager.getInstance(context) }
+    val genericPublishError = stringResource(R.string.tweet_failed)
     val sharedViewModel: SharedViewModel = hiltViewModel()
     val tweetFeedViewModel = hiltViewModel<TweetFeedViewModel>(viewModelStoreOwner = activity)
     // Capture string resources at composable level to avoid Android Studio warnings
@@ -71,18 +87,48 @@ fun ComposeTweetScreen(
     }
 
     // State management
-    var tweetContent by remember { mutableStateOf("") }
-    var isPrivate by remember { mutableStateOf(false) }
+    var tweetContent by remember(appUser.mid) { mutableStateOf("") }
+    var isPrivate by remember(appUser.mid) { mutableStateOf(false) }
+    var draft by remember(appUser.mid) { mutableStateOf<HproseInstance.IncompleteUpload?>(null) }
+    var enqueuing by remember { mutableStateOf(false) }
+    var restoringDraft by remember(appUser.mid) { mutableStateOf(true) }
+    var publishError by remember(appUser.mid) { mutableStateOf<String?>(null) }
+    val isBusy = restoringDraft || enqueuing
     var showCamera by remember { mutableStateOf(false) }
     var showExitConfirmation by remember { mutableStateOf(false) }
     var showNodeRequiredDialog by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    val selectedAttachments = remember { mutableStateListOf<Uri>() }
+    val selectedAttachments = remember(appUser.mid) { mutableStateListOf<Uri>() }
+
+    LaunchedEffect(appUser.mid, draftWorkId) {
+        val saved = HproseInstance.getIncompleteUploads(context)
+            .filter {
+                !appUser.isGuest() && (it.authorId == null || it.authorId == appUser.mid) &&
+                    (draftWorkId == null || it.workId == draftWorkId)
+            }
+            .sortedByDescending { it.timestamp }
+        for (upload in saved) {
+            val id = runCatching { UUID.fromString(upload.workId) }.getOrNull()
+            val info = id?.let { workManager.getWorkInfoByIdFlow(it).first() }
+            if (info?.state == WorkInfo.State.SUCCEEDED) {
+                HproseInstance.removeIncompleteUpload(context, upload.workId)
+                continue
+            }
+            if (info?.state?.isFinished == false) continue
+            draft = upload
+            tweetContent = upload.tweetContent
+            isPrivate = upload.isPrivate
+            selectedAttachments.addAll(upload.attachmentUris.map(String::toUri))
+            break
+        }
+        restoringDraft = false
+    }
+
     var fileSizeWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
 
     // Update file size warnings when attachments change
-    LaunchedEffect(selectedAttachments) {
+    LaunchedEffect(selectedAttachments.toList()) {
         fileSizeWarnings = selectedAttachments.map { uri ->
             val fileSize = FileSizeUtils.getFileSize(context, uri)
             FileSizeUtils.getFileSizeWarningMessage(context, fileSize)
@@ -133,46 +179,45 @@ fun ComposeTweetScreen(
         suggestions = emptyList()
     }
 
-    // Handle send action
-    val onSendClick = {
-        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-            // Require node setup after the free posting threshold.
+    val onSendClick: () -> Unit = {
+        if (!enqueuing && !restoringDraft && (tweetContent.isNotBlank() || selectedAttachments.isNotEmpty())) {
             if (!appUser.isGuest() && appUser.tweetCount > 10 && appUser.cloudDrivePort == 0) {
                 showNodeRequiredDialog = true
+            } else {
+                focusManager.clearFocus()
+                enqueuing = true
+                scope.launch {
+                    try {
+                        tweetFeedViewModel.uploadTweet(
+                            context, tweetContent.trim(), selectedAttachments.toList(), isPrivate, draft
+                        )
+                        Toast.makeText(
+                            context, context.getString(R.string.tweet_uploading_background), Toast.LENGTH_SHORT
+                        ).show()
+                        navController.popBackStack()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.tag("ComposeTweetScreen").e(e, "Could not queue tweet upload")
+                        publishError = genericPublishError
+                        enqueuing = false
+                    }
+                }
             }
-            else {
-                // Store content before clearing
-                val contentToUpload = tweetContent.trim()
-                val attachmentsToUpload = selectedAttachments.toList()
-                
-                // Clear UI immediately for better UX
-                selectedAttachments.clear()
-                tweetContent = ""
-                
-                // Upload tweet using TweetFeedViewModel
-                tweetFeedViewModel.uploadTweet(
-                    context,
-                    contentToUpload,
-                    attachmentsToUpload,
-                    isPrivate
-                )
-                
-                // Navigate back
+        }
+    }
+
+    val onBackClick: () -> Unit = {
+        if (!isBusy) {
+            if (tweetContent.isNotBlank() || selectedAttachments.isNotEmpty()) {
+                showExitConfirmation = true
+            } else {
+                draft?.let { HproseInstance.removeIncompleteUpload(context, it.workId) }
                 navController.popBackStack()
             }
         }
-        Unit
     }
-
-    // Handle back action
-    val onBackClick = {
-        if (tweetContent.trim().isNotEmpty() || selectedAttachments.isNotEmpty()) {
-            showExitConfirmation = true
-        } else {
-            navController.popBackStack()
-        }
-        Unit
-    }
+    BackHandler(onBack = onBackClick)
 
     // Handle camera click
     val onCameraClick = {
@@ -194,7 +239,7 @@ fun ComposeTweetScreen(
                 showCamera = showCamera,
                 onBackClick = onBackClick,
                 onSendClick = onSendClick,
-                hasContent = hasContent
+                hasContent = hasContent && !isBusy
             )
         }
     ) { innerPadding ->
@@ -209,7 +254,7 @@ fun ComposeTweetScreen(
                 // Text input field with mention suggestions
                 ComposeTextField(
                     text = tweetContent,
-                    onTextChange = { tweetContent = it },
+                    onTextChange = { if (!isBusy) tweetContent = it },
                     onMentionSearch = onMentionSearch,
                     suggestions = suggestions,
                     onSuggestionSelected = onSuggestionSelected,
@@ -220,7 +265,7 @@ fun ComposeTweetScreen(
                 // Attachment preview row
                 AttachmentPreviewRow(
                     attachments = selectedAttachments,
-                    onRemoveAttachment = { selectedAttachments.remove(it) }
+                    onRemoveAttachment = { if (!isBusy) selectedAttachments.remove(it) }
                 )
 
                 // File size warnings
@@ -243,16 +288,17 @@ fun ComposeTweetScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Action buttons row
-                ActionButtonsRow(
-                    isChecked = isPrivate,
-                    onCheckedChange = { isPrivate = it },
-                    checkboxLabel = stringResource(R.string.private_tweet),
-                    onCameraClick = onCameraClick,
-                    onFilePickerClick = onFilePickerClick,
-                    onSendClick = onSendClick,
-                    isLoading = false
-                )
+                if (!restoringDraft) {
+                    ActionButtonsRow(
+                        isChecked = isPrivate,
+                        onCheckedChange = { isPrivate = it },
+                        checkboxLabel = stringResource(R.string.private_tweet),
+                        onCameraClick = onCameraClick,
+                        onFilePickerClick = onFilePickerClick,
+                        onSendClick = onSendClick,
+                        isLoading = enqueuing
+                    )
+                }
             }
         }
     }
@@ -260,9 +306,27 @@ fun ComposeTweetScreen(
     // Exit confirmation dialog
     ExitConfirmationDialog(
         showDialog = showExitConfirmation,
-        onDismiss = { },
-        onConfirm = { navController.popBackStack() }
+        onDismiss = { showExitConfirmation = false },
+        onConfirm = {
+            draft?.let { HproseInstance.removeIncompleteUpload(context, it.workId) }
+            navController.popBackStack()
+        }
     )
+
+    publishError?.let { message ->
+        AlertDialog(
+            onDismissRequest = {},
+            text = { Text(message) },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            confirmButton = {
+                TextButton(onClick = {
+                    publishError = null
+                }) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        )
+    }
 
     // Camera handler
     CameraHandler(

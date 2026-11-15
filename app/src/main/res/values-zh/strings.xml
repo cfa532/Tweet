@@ -232,6 +232,7 @@
     <string name="keyphrase_required">請輸入通關短語</string>
     <string name="tweet_uploaded">推文上傳成功</string>
     <string name="tweet_failed">推文上傳失敗。</string>
+    <string name="tweet_attachment_failed">無法上傳附件。草稿已儲存。</string>
     <string name="tweet_session_required">無法發佈推文。請登出並重新登入後再試。</string>
     <string name="tweet_uploading_background">推文將在背景上傳</string>
     <string name="clipboard_copy">內容已複製到剪貼簿</string>

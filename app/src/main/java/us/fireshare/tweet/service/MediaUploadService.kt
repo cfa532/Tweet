@@ -9,10 +9,10 @@ import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.exifinterface.media.ExifInterface
 import androidx.media3.common.util.UnstableApi
-import com.google.gson.Gson
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -451,8 +451,7 @@ class MediaUploadService(
         var offset = 0L
         var byteRead: Int
         val buffer = ByteArray(TW_CONST.CHUNK_SIZE)
-        val json = """{"aid": $appId, "ver": "last", "offset": 0}"""
-        val request = Gson().fromJson(json, Map::class.java).toMutableMap()
+        val request = mutableMapOf("aid" to appId, "ver" to "last", "offset" to "0")
 
         try {
             Timber.tag(TAG).d("Starting file upload, opening input stream...")
@@ -464,19 +463,22 @@ class MediaUploadService(
                     if (chunkCount % 10 == 0) {
                         Timber.tag(TAG).d("Upload progress: $chunkCount chunks, ${offset / 1024}KB uploaded")
                     }
-                    request["fsid"] = writableClient.runMApp(
-                        "upload_ipfs",
-                        request.toMap(), listOf(buffer)
-                    )
-
+                    val chunk = if (byteRead == buffer.size) buffer else buffer.copyOf(byteRead)
+                    val handle = writableClient.runMApp<String>("upload_ipfs", request, listOf(chunk))
+                    if (handle.isNullOrBlank()) {
+                        Timber.tag(TAG).e("Attachment upload chunk at offset $offset was not acknowledged")
+                        return null
+                    }
+                    request["fsid"] = handle
                     offset += byteRead
-                    request["offset"] = offset
+                    request["offset"] = offset.toString()
                 }
                 Timber.tag(TAG).d("Upload loop completed: $chunkCount chunks, ${offset / 1024}KB total")
             } ?: run {
                 Timber.tag(TAG).e("Failed to open input stream for URI: $uri")
                 return null
             }
+            if (offset == 0L) return null
             // Do not know the tweet mid yet, cannot add reference as 2nd argument.
             // Do it later when uploading tweet.
             request["finished"] = "true"
@@ -510,8 +512,10 @@ class MediaUploadService(
 
             Timber.tag(TAG).d("Upload complete: $cid (${fileSize / 1024}KB)")
             return MimeiFileType(cid, mediaType, fileSize, fileName, fileTimestamp, aspectRatio)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error: ${e.message}")
+            Timber.tag(TAG).e(e, "Attachment upload failed")
         }
         return null
     }

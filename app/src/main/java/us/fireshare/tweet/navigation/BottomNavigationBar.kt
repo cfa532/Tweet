@@ -94,7 +94,7 @@ fun BottomNavigationBar(
             ),
             BottomNavigationItem(
                 titleRes = R.string.nav_post,
-                route = NavTweet.ComposeTweet,
+                route = NavTweet.ComposeTweet(),
                 selectedIcon = Icons.Filled.Create,
                 unselectedIcon = Icons.Outlined.Create,
                 hasNews = true
@@ -222,7 +222,7 @@ fun BottomNavigationBar(
                         .fillMaxWidth()
                         .fillMaxHeight() // Full height touchable area
                         .clickable {
-                            val requiresLogin = item.route == NavTweet.ChatList || item.route == NavTweet.ComposeTweet
+                            val requiresLogin = item.route == NavTweet.ChatList || item.route is NavTweet.ComposeTweet
                             if (requiresLogin && !requireAuthenticatedUser(context, navController, guestReminderText)) {
                                 return@clickable
                             }

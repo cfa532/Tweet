@@ -271,6 +271,7 @@
     <string name="keyphrase_required">キーフレーズを入力してください</string>
     <string name="tweet_uploaded">ツイートをアップロードしました</string>
     <string name="tweet_failed">ツイートをアップロードできませんでした。</string>
+    <string name="tweet_attachment_failed">添付ファイルをアップロードできませんでした。下書きは保存されています。</string>
     <string name="tweet_session_required">ツイートを投稿できませんでした。ログアウトしてから再度ログインし、投稿し直してください。</string>
     <string name="tweet_uploading_background">ツイートをバックグラウンドでアップロードします</string>
     <string name="clipboard_copy">内容をクリップボードにコピーしました</string>
