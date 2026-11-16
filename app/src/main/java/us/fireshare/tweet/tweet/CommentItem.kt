@@ -81,7 +81,7 @@ fun CommentItem(
         parentEntry,
         key = comment.mid
     ) { factory ->
-        factory.create(comment)
+        factory.create(comment, parentTweetViewModel?.tweetState?.value?.authorId)
     }
     
     // Observe author changes reactively via StateFlow
@@ -190,7 +190,7 @@ fun CommentItem(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             CommentButton(viewModel)
-            RetweetButton(viewModel)
+            RetweetButton(viewModel, commentParent = parentTweetViewModel?.tweetState?.value)
             LikeButton(viewModel)
             BookmarkButton(viewModel)
             // Pass parent tweet info to ShareButton for comments

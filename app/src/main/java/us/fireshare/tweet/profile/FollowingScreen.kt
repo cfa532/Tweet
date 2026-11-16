@@ -153,9 +153,9 @@ fun FollowingItem(
 
     val user = cachedUser?.takeIf { !it.username.isNullOrBlank() } ?: viewModelUser
     val isLoading = user.username.isNullOrEmpty()
+    val followings by appUserViewModel.followings.collectAsState()
 
-    // Show loading placeholder
-    if (isLoading) {
+    if (isLoading && userId !in followings) {
         HorizontalDivider(
             modifier = Modifier.padding(vertical = 1.dp),
             thickness = 1.dp,
@@ -215,13 +215,14 @@ fun FollowingItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !user.isGuest()) {
+            .clickable(enabled = !isLoading && !user.isGuest()) {
                 navController.navigate(NavTweet.UserProfile(user.mid))
             }
             .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
             .wrapContentHeight(Alignment.CenterVertically)
     ) {
         IconButton(
+            enabled = !isLoading,
             onClick = {
                 if (!user.isGuest()) {
                     navController.navigate(NavTweet.UserProfile(user.mid))
@@ -242,15 +243,17 @@ fun FollowingItem(
                     modifier = Modifier.weight(1f)
                 ) {
                     UserRowIdentityText(
-                        displayName = user.name ?: stringResource(R.string.no_one),
+                        displayName = if (isLoading) userId else user.name ?: stringResource(R.string.no_one),
                         username = user.username
                     )
-                    Text(
-                        text = stringResource(R.string.profile_joined_date, formatUserCreationDate(user.timestamp, androidx.compose.ui.platform.LocalLocale.current.platformLocale)),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
+                    if (!isLoading) {
+                        Text(
+                            text = stringResource(R.string.profile_joined_date, formatUserCreationDate(user.timestamp, androidx.compose.ui.platform.LocalLocale.current.platformLocale)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
                 ToggleFollowingButton(userId, viewModel, appUserViewModel)
             }

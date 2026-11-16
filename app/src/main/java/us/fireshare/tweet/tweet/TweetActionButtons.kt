@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
+import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.navigation.ComposeComment
 import us.fireshare.tweet.navigation.LocalNavController
@@ -108,7 +109,7 @@ fun CommentButton(
 }
 
 @Composable
-fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
+fun RetweetButton(viewModel: TweetViewModel, color: Color? = null, commentParent: Tweet? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember {
         derivedStateOf { tweet.retweetCount }
@@ -135,7 +136,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null) {
             viewModel.viewModelScope.launch(Dispatchers.IO) {
                 try {
                     // The retweet will be added to feed automatically via notification system
-                    viewModel.retweetTweet()
+                    viewModel.retweetTweet(commentParent)
                     Timber.tag("RetweetButton").d("Retweet action completed")
                 } catch (e: Exception) {
                     Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
@@ -176,7 +177,7 @@ fun LikeButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count = tweet.favoriteCount
     val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
-    val isFavorite = tweet.favorites?.get(UserActions.FAVORITE) ?: false
+    val isFavorite = tweet.isFavorite
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()
@@ -233,7 +234,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
     val tweet by viewModel.tweetState.collectAsState()
     val count by remember { derivedStateOf { tweet.bookmarkCount } }
     val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
-    val hasBookmarked = tweet.favorites?.get(UserActions.BOOKMARK) ?: false
+    val hasBookmarked = tweet.isBookmarked
     val navController = LocalNavController.current
     val context = LocalContext.current
     val sharedViewModel = hiltViewModel<SharedViewModel>()

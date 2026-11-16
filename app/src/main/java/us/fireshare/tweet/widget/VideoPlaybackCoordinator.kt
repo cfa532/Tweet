@@ -199,14 +199,6 @@ class VideoPlaybackCoordinator(
     val playbackCommands: SharedFlow<VideoPlaybackCommand> = _playbackCommands.asSharedFlow()
 
     /**
-     * Add embedded tweet videos to the video list when they become available
-     * Called by TweetItem when embedded tweets are loaded
-     */
-    fun addEmbeddedTweetVideos(quotingTweetId: MimeiId, embeddedTweet: Tweet) {
-        addVideosFromTweet(quotingTweetId, embeddedTweet, "embedded")
-    }
-
-    /**
      * Add retweet videos to the video list when the original tweet becomes available
      * Called by TweetItem when retweet original tweets are loaded
      */
@@ -220,7 +212,7 @@ class VideoPlaybackCoordinator(
      * buildVideoList (which relies on getCachedTweetMemoryOnly and may still miss the tweet),
      * this inserts the already-available videos immediately.
      *
-     * Called from IO thread (RetweetContent/QuotedTweetContent), so dispatch to Main
+     * Called from IO thread (RetweetContent), so dispatch to Main
      * since allVideos/videoMetaMap are not thread-safe.
      */
     private fun addVideosFromTweet(parentTweetId: MimeiId, tweet: Tweet, source: String) {
@@ -299,7 +291,6 @@ class VideoPlaybackCoordinator(
             val hasOwnContent = hasContentText || hasAttachments
             val hasOriginalTweet = tweet.originalTweetId != null
             val isPureRetweet = hasOriginalTweet && !hasOwnContent
-            val isQuotedTweet = hasOriginalTweet && hasOwnContent
 
             if (isPureRetweet) {
                 if (tweet.originalTweetId != null) {
@@ -336,23 +327,6 @@ class VideoPlaybackCoordinator(
                     }
                 }
 
-                if (isQuotedTweet && tweet.originalTweetId != null) {
-                    // Same: memory-only to avoid blocking the main thread with a DB query.
-                    val embeddedTweet = TweetCacheManager.getCachedTweetMemoryOnly(tweet.originalTweetId!!)
-
-                    embeddedTweet?.attachments?.forEachIndexed { index, attachment ->
-                        if (attachment.type == MediaType.Video || attachment.type == MediaType.HLS_VIDEO) {
-                            val videoInfo = VideoPlaybackInfo(
-                                tweetId = tweet.mid,
-                                videoMid = attachment.mid,
-                                index = index,
-                                mediaType = attachment.type,
-                                playbackParentTweetId = tweet.mid
-                            )
-                            videos.add(videoInfo)
-                        }
-                    }
-                }
             }
         }
 

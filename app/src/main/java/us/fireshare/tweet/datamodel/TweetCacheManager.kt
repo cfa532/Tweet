@@ -114,18 +114,7 @@ object TweetCacheManager {
         return "$cacheKey|$tweetId"
     }
 
-    private fun Tweet.isPureRetweetOf(originalId: MimeiId): Boolean {
-        return originalTweetId == originalId &&
-            content.isNullOrBlank() &&
-            title.isNullOrBlank() &&
-            attachments.isNullOrEmpty()
-    }
-
-    private fun isBlockedByDeletionLocked(tweet: Tweet): Boolean {
-        if (tweet.mid in deletedTweetIds) return true
-        val originalId = tweet.originalTweetId ?: return false
-        return originalId in deletedTweetIds && tweet.isPureRetweetOf(originalId)
-    }
+    private fun isBlockedByDeletionLocked(tweet: Tweet): Boolean = tweet.mid in deletedTweetIds
 
     fun isTweetDeleted(tweetId: MimeiId): Boolean = synchronized(cacheLock) {
         tweetId in deletedTweetIds
@@ -304,62 +293,23 @@ object TweetCacheManager {
         }
     }
 
-    /**
-     * Establish a deletion barrier, then remove the tweet from memory, Room, and
-     * the singleton store. Pure retweet wrappers are removed with it; quote
-     * tweets keep their own content and remain cached.
-     */
-    suspend fun evictDeletedTweet(
-        tweetId: MimeiId,
-        includePureRetweets: Boolean = true
-    ): Set<MimeiId> = withContext(Dispatchers.IO) {
-        val deletedIds = mutableSetOf(tweetId)
+    /** Establish a deletion barrier for the affected tweet ID. */
+    suspend fun evictDeletedTweet(tweetId: MimeiId): Set<MimeiId> = withContext(Dispatchers.IO) {
         synchronized(cacheLock) {
             deletedTweetIds.add(tweetId)
-            memoryCache.values.forEach { cached ->
-                if (cached.mid == tweetId ||
-                    (includePureRetweets && cached.originalTweet.isPureRetweetOf(tweetId))
-                ) {
-                    deletedIds.add(cached.mid)
-                }
-            }
-        }
-
-        val databaseCopies = runCatching {
-            HproseInstance.dao.getAllCachedTweets()
-        }.getOrElse { error ->
-            Timber.tag("TweetCacheManager")
-                .e(error, "Failed to scan pure retweets for deleted tweet $tweetId")
-            emptyList()
-        }
-        databaseCopies.forEach { cached ->
-            if (cached.mid == tweetId ||
-                (includePureRetweets && cached.originalTweet.isPureRetweetOf(tweetId))
-            ) {
-                deletedIds.add(cached.mid)
-            }
-        }
-
-        synchronized(cacheLock) {
-            deletedTweetIds.addAll(deletedIds)
             val iterator = memoryCache.entries.iterator()
             while (iterator.hasNext()) {
-                if (iterator.next().value.mid in deletedIds) {
-                    iterator.remove()
-                }
+                if (iterator.next().value.mid == tweetId) iterator.remove()
             }
         }
 
-        if (deletedIds.isNotEmpty()) {
-            runCatching {
-                HproseInstance.dao.deleteCachedTweets(deletedIds.toList())
-            }.onFailure { error ->
-                Timber.tag("TweetCacheManager")
-                    .e(error, "Failed to delete cached tweet IDs $deletedIds")
-            }
-            deletedIds.forEach(Tweet::clearInstance)
+        runCatching {
+            HproseInstance.dao.deleteCachedTweets(listOf(tweetId))
+        }.onFailure { error ->
+            Timber.tag("TweetCacheManager").e(error, "Failed to delete cached tweet $tweetId")
         }
-        deletedIds
+        Tweet.clearInstance(tweetId)
+        setOf(tweetId)
     }
 
     /**

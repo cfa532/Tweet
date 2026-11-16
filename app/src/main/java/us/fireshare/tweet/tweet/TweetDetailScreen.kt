@@ -120,7 +120,7 @@ fun TweetDetailScreen(
     val viewModel = hiltViewModel<TweetViewModel, TweetViewModel.TweetViewModelFactory>(
         viewModelStoreOwner = activity, key = tweetId
     ) { factory ->
-        factory.create(Tweet(mid = tweetId, authorId = authorId))
+        factory.create(Tweet(mid = tweetId, authorId = authorId, parentTweetId = parentTweetId), parentAuthorId)
     }
     val tweet by viewModel.tweetState.collectAsState()
     val comments by viewModel.comments.collectAsState()

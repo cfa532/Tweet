@@ -149,11 +149,12 @@ enum class ShareLinkStyle {
 @HiltViewModel(assistedFactory = TweetViewModel.TweetViewModelFactory::class)
 class TweetViewModel @AssistedInject constructor(
     @Assisted private val tweet: Tweet,
+    @Assisted private val storageAuthorId: MimeiId?,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     @AssistedFactory
     interface TweetViewModelFactory {
-        fun create(tweet: Tweet): TweetViewModel
+        fun create(tweet: Tweet, storageAuthorId: MimeiId? = null): TweetViewModel
     }
 
     private val _tweetState = MutableStateFlow(tweet)
@@ -290,7 +291,7 @@ class TweetViewModel @AssistedInject constructor(
          * Usually a tweet object has been well initialized in the tweet feed list.
          * However if invoked by Deeplink, the tweet object has to be initiated separately.
          * */
-        initialTweetLoad = if (tweetState.value.author == null) {
+        initialTweetLoad = if (tweetState.value.author == null && tweet.authorId.isNotEmpty()) {
             viewModelScope.async(Dispatchers.IO) {
                 // Render cached content before resolving the author or probing its node.
                 @Suppress("SENSELESS_COMPARISON")
@@ -323,7 +324,9 @@ class TweetViewModel @AssistedInject constructor(
                 var resolvedAuthor: User? = null
                 val isDeeplinkStub = !tweetState.value.hasDisplayPayload()
                 @Suppress("SENSELESS_COMPARISON")
-                if (tweet.authorId != null) {
+                val isCommentDetail = storageAuthorId != null ||
+                    (tweetState.value.parentTweetId != null && tweetState.value.originalTweetId == null)
+                if (tweet.authorId != null && !isCommentDetail) {
                     try {
                         val serverAuthor = if (isDeeplinkStub) {
                             HproseInstance.authorForDetail(tweet.authorId)
@@ -348,12 +351,13 @@ class TweetViewModel @AssistedInject constructor(
                 // is enough; cross-node sync is handled by the detail screen on appear.
                 val provenAuthor = resolvedAuthor
                 @Suppress("SENSELESS_COMPARISON")
-                if (tweet.mid != null && tweet.authorId != null && provenAuthor != null) {
+                if (tweet.mid != null && tweet.authorId != null && (provenAuthor != null || isCommentDetail)) {
                     val fetched = HproseInstance.getTweet(
                         tweet.mid,
                         tweet.authorId,
                         bypassCache = true,
-                        resolvedAuthor = provenAuthor
+                        resolvedAuthor = provenAuthor,
+                        storageAuthorId = storageAuthorId
                     )
                     if (fetched != null) {
                         applyFetchedTweet(fetched)
@@ -454,7 +458,7 @@ class TweetViewModel @AssistedInject constructor(
             fetched
         } else false
         val currentTweet = tweetState.value
-        val originalId = currentTweet.originalTweetId
+        val originalId = currentTweet.originalTweetId.takeIf { storageAuthorId == null }
         val originalAuthor = currentTweet.originalAuthorId
 
         try {
@@ -471,7 +475,8 @@ class TweetViewModel @AssistedInject constructor(
                             if (alreadyRead) null else HproseInstance.getTweet(
                                 currentTweet.mid,
                                 currentTweet.authorId,
-                                bypassCache = true
+                                bypassCache = true,
+                                storageAuthorId = storageAuthorId
                             )
                         }
                         val originalJob = async {
@@ -486,7 +491,9 @@ class TweetViewModel @AssistedInject constructor(
                 // Reaching here with no content means the init read above failed (or the
                 // Retry button re-entered). Use the same saved-route author check as the
                 // init read so this second attempt does not depend on the entry node again.
-                val stubAuthor = if (allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()) {
+                val stubAuthor = if (storageAuthorId == null && currentTweet.parentTweetId == null &&
+                    allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()
+                ) {
                     try {
                         HproseInstance.authorForDetail(currentTweet.authorId)
                     } catch (e: CancellationException) {
@@ -500,12 +507,13 @@ class TweetViewModel @AssistedInject constructor(
                     currentTweet.mid,
                     currentTweet.authorId,
                     bypassCache = true,
-                    resolvedAuthor = stubAuthor
+                    resolvedAuthor = stubAuthor,
+                    storageAuthorId = storageAuthorId
                 )
                 if (fetched != null) {
                     applyFetchedTweet(fetched)
                 } else if (allowRecoveryOnMissingPayload && !currentTweet.hasDisplayPayload()) {
-                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
+                    HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId, storageAuthorId)?.let { refreshed ->
                         applyFetchedTweet(refreshed)
                     }
                 }
@@ -524,7 +532,7 @@ class TweetViewModel @AssistedInject constructor(
      */
     suspend fun doResyncTweet() {
         val currentTweet = tweetState.value
-        val originalId = currentTweet.originalTweetId
+        val originalId = currentTweet.originalTweetId.takeIf { storageAuthorId == null }
         val originalAuthor = currentTweet.originalAuthorId
 
         try {
@@ -537,7 +545,7 @@ class TweetViewModel @AssistedInject constructor(
                 } else {
                     coroutineScope {
                         val wrapperJob = async {
-                            HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)
+                            HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId, storageAuthorId)
                         }
                         val originalJob = async {
                             HproseInstance.refreshTweet(originalId, originalAuthor)
@@ -551,7 +559,7 @@ class TweetViewModel @AssistedInject constructor(
                     }
                 }
             } else {
-                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId)?.let { refreshed ->
+                HproseInstance.refreshTweet(currentTweet.mid, currentTweet.authorId, storageAuthorId)?.let { refreshed ->
                     if (refreshed.content != null || !refreshed.attachments.isNullOrEmpty()) {
                         applyFetchedTweet(refreshed)
                     }
@@ -1121,12 +1129,12 @@ class TweetViewModel @AssistedInject constructor(
         val originalTweet = tweetState.value.copy(
             favorites = tweetState.value.favorites?.toMutableList()
         )
-        val isFavorite = originalTweet.isFavorite
+        val isFavorite = tweetState.value.isFavorite
+        originalTweet.isFavorite = isFavorite
+        originalTweet.isBookmarked = tweetState.value.isBookmarked
         val desiredFavorite = !isFavorite
         val optimisticTweet = originalTweet.copy(
             favorites = originalTweet.favorites?.toMutableList(),
-            favoriteCount = if (isFavorite) max(0, originalTweet.favoriteCount - 1)
-            else originalTweet.favoriteCount + 1,
         )
         optimisticTweet.isFavorite = desiredFavorite
         optimisticTweet.favoriteOverride = desiredFavorite
@@ -1174,12 +1182,12 @@ class TweetViewModel @AssistedInject constructor(
         val originalTweet = tweetState.value.copy(
             favorites = tweetState.value.favorites?.toMutableList()
         )
-        val hasBookmarked = originalTweet.isBookmarked
+        val hasBookmarked = tweetState.value.isBookmarked
+        originalTweet.isBookmarked = hasBookmarked
+        originalTweet.isFavorite = tweetState.value.isFavorite
         val desiredBookmark = !hasBookmarked
         val optimisticTweet = originalTweet.copy(
             favorites = originalTweet.favorites?.toMutableList(),
-            bookmarkCount = if (hasBookmarked) max(0, originalTweet.bookmarkCount - 1)
-            else originalTweet.bookmarkCount + 1,
         )
         optimisticTweet.isBookmarked = desiredBookmark
         optimisticTweet.bookmarkOverride = desiredBookmark
@@ -1218,26 +1226,13 @@ class TweetViewModel @AssistedInject constructor(
         }
     }
 
-    /**
-     * Perform a retweet action and update the UI immediately for better user experience.
-     * */
-    suspend fun retweetTweet() {
-        // Optimistic update of retweet count and status immediately for better UX
-        val currentCount = tweetState.value.retweetCount
-        _tweetState.value = tweetState.value.copy(
-            retweetCount = currentCount + 1,
+    suspend fun retweetTweet(commentParent: Tweet? = null) {
+        HproseInstance.retweet(
+            tweetState.value,
+            commentParent = commentParent,
+            knownParentId = tweet.parentTweetId.takeIf { storageAuthorId != null },
+            knownParentAuthorId = storageAuthorId
         )
-
-        // Perform the actual retweet operation
-        try {
-            HproseInstance.retweet(tweetState.value)
-        } catch (e: Exception) {
-            // Revert the UI changes if the retweet failed
-            _tweetState.value = tweetState.value.copy(
-                retweetCount = currentCount,
-            )
-            throw e
-        }
     }
 
     private var notificationContextRef: WeakReference<Context>? = null

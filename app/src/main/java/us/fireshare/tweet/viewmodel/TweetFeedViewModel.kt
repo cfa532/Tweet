@@ -895,9 +895,7 @@ class TweetFeedViewModel @Inject constructor() : ViewModel() {
         // STEP 3: Establish a cache barrier before the backend call so in-flight
         // reads and queued writes cannot restore the optimistically deleted tweet.
         val evictedTweetIds = try {
-            // Keep wrapper rows during the optimistic phase so a failed backend
-            // delete can restore them simply by removing the deletion barrier.
-            TweetCacheManager.evictDeletedTweet(tweetId, includePureRetweets = false)
+            TweetCacheManager.evictDeletedTweet(tweetId)
         } catch (e: Exception) {
             Timber.tag("TweetFeedViewModel").w(e, "Failed to evict tweet from cache")
             setOf(tweetId)

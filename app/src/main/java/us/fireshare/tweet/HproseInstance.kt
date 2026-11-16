@@ -35,6 +35,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import okhttp3.Protocol
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance.fetchTweet
@@ -225,9 +228,10 @@ object HproseInstance {
     private const val RESYNC_USER_TIMEOUT_MS = 300_000
     private const val MIGRATION_TIMEOUT_MS = 60_000
     private const val ADD_TWEET_TIMEOUT_MS = 60_000
-    private const val ADD_TWEET_WITH_ATTACHMENTS_TIMEOUT_MS = 180_000
+    private const val ADD_TWEET_EXTENDED_TIMEOUT_MS = 180_000
     private const val DELETE_ACCOUNT_TIMEOUT_MS = 300_000
     private const val TOGGLE_MUTATION_TIMEOUT_MS = 60_000
+    private const val SAVED_TWEET_MUTATION_TIMEOUT_MS = 120_000
     private const val UPDATE_TWEET_TIMEOUT_MS = 240_000
     private const val GET_TWEET_FEED_TIMEOUT_MS = 15_000
     private const val UPDATE_FOLLOWING_TWEETS_TIMEOUT_MS = 30_000
@@ -299,6 +303,7 @@ object HproseInstance {
         val userSessions: Boolean,
         val commentDelegation: Boolean,
         val engagementDelegation: Boolean,
+        val independentSavedTweetWrites: Boolean,
         val guestRegistration: Boolean,
         val checkedAt: Long
     )
@@ -384,6 +389,7 @@ object HproseInstance {
                 userSessions = reply["userSessions"] == true,
                 commentDelegation = reply["commentDelegation"] == true,
                 engagementDelegation = reply["engagementDelegation"] == true,
+                independentSavedTweetWrites = reply["independentSavedTweetWrites"] == true,
                 guestRegistration = reply["guestRegistration"] != false,
                 checkedAt = System.currentTimeMillis()
             )
@@ -1893,6 +1899,7 @@ object HproseInstance {
                         "version" to "v2",
                         "followingid" to alphaId,
                         "followingid_hostid" to targetHostId,
+                        "isfollowing" to rpcBool(true),
                         "userid" to registeredUserId,
                         "userid_hostid" to registeredUserHostId
                     )
@@ -3591,7 +3598,8 @@ object HproseInstance {
      */
     suspend fun fetchTweet(
         tweetId: MimeiId,
-        authorId: MimeiId
+        authorId: MimeiId,
+        originalReadNodeUrl: String? = null
     ): Tweet? {
         if (TweetCacheManager.isTweetDeleted(tweetId)) return null
 
@@ -3634,18 +3642,19 @@ object HproseInstance {
 
             // Get cached author for immediate use
             val cachedAuthor = TweetCacheManager.getCachedUser(authorId)
-            val authorForApi = fetchUser(authorId) ?: cachedAuthor
+            val authorForApi = if (originalReadNodeUrl == null) fetchUser(authorId) ?: cachedAuthor
+            else cachedAuthor ?: getUserInstance(authorId)
 
             var servedBy: String? = null
             val rawResponse = try {
                 authorForApi?.let { owner ->
-                    val (raw, node) = runStorageReadFrom<Map<String, Any>>(
-                        owner,
-                        entry,
-                        params,
-                        Tweet.findInstance(tweetId)?.storageFormat
-                            ?: TweetCacheManager.getCachedTweet(tweetId)?.storageFormat
-                    )
+                    val requiredFormat = Tweet.findInstance(tweetId)?.storageFormat
+                    val (raw, node) = if (originalReadNodeUrl == null) {
+                        runStorageReadFrom<Map<String, Any>>(owner, entry, params, requiredFormat)
+                    } else {
+                        val service = storageCompatibleRequestedService(originalReadNodeUrl, owner, params, requiredFormat)
+                        service.runMApp<Map<String, Any>>(entry, params) to originalReadNodeUrl
+                    }
                     servedBy = node
                     raw
                 }
@@ -3732,7 +3741,8 @@ object HproseInstance {
         tweetId: MimeiId?,
         authorId: MimeiId?,
         bypassCache: Boolean = false,
-        resolvedAuthor: User? = null
+        resolvedAuthor: User? = null,
+        storageAuthorId: MimeiId? = null
     ): Tweet? {
         if (!isOnline.value) {
             Timber.tag("getTweet").d("Offline: skipping")
@@ -3762,6 +3772,11 @@ object HproseInstance {
         }
 
         return try {
+            val cached = Tweet.findInstance(tweetId) ?: TweetCacheManager.getCachedTweet(tweetId)
+            val commentOwnerId = commentStorageAuthorId(cached, storageAuthorId)
+            if (commentOwnerId != null) {
+                return readCommentAtRoot(tweetId, authorId, commentOwnerId, cached?.storageFormat)
+            }
             val author = (resolvedAuthor
                 ?: if (bypassCache) fetchUserForDetail(authorId)
                 else TweetCacheManager.getCachedUser(authorId) ?: fetchUser(authorId))
@@ -3783,11 +3798,7 @@ object HproseInstance {
             )
             // Opening a detail view lets the access node become a provider when it
             // is neither the author's root host nor already serving the tweet.
-            // MiMeiProvide performs Leither's synchronization internally; get_tweet
-            // does not explicitly invoke MiMeiSync. bypassCache is only ever set by
-            // the detail-view paths.
-            // authorhostid saves the node a get_user_core_data lookup, which assumes
-            // the author's core data is already synced there. Mirrors iOS.
+            // On a local miss the server uses the storage owner's root for the pull.
             if (bypassCache) {
                 params["fromdetailview"] = rpcBool(true)
                 author.hostIds?.firstOrNull()?.let { params["authorhostid"] = it }
@@ -3849,17 +3860,85 @@ object HproseInstance {
     private suspend fun publishDetailTweet(
         data: Map<String, Any>,
         author: User,
-        readNodeUrl: String?
+        readNodeUrl: String?,
+        storageAuthor: User? = null
     ): Tweet {
         val tweet = Tweet.replaceFromDetail(data, author, readNodeUrl)
+        if (storageAuthor != null) tweet.interactionHostAuthor = storageAuthor
         TweetCacheManager.saveTweet(tweet, author.mid)
         TweetNotificationCenter.post(TweetEvent.TweetUpdated(tweet))
         return tweet
     }
 
+    private suspend fun commentParentAuthorId(parentId: MimeiId, servingNode: String?): MimeiId {
+        val cached = Tweet.findInstance(parentId) ?: TweetCacheManager.getCachedTweet(parentId)
+        cached?.authorId?.takeIf { it.isNotBlank() }?.let { return it }
+
+        val client = servingNode?.let { HproseClientPool.getRegularClient(it, 15_000) }
+            ?: error("Parent tweet $parentId is not available")
+        val response = client.runMApp<Any>(
+            "get_tweet",
+            mapOf("aid" to appId, "ver" to "last", "version" to "v2",
+                "tweetid" to parentId, "appuserid" to appUser.mid)
+        )
+        val parent = unwrapV2Response<Map<String, Any>>(response)
+        check(parent?.get("mid") == parentId) { "Parent tweet $parentId is not available" }
+        return (parent?.get("authorId") as? String)?.takeIf { it.isNotBlank() }
+            ?: error("Parent tweet $parentId has no author")
+    }
+
+    private suspend fun commentStorageAuthorId(tweet: Tweet?, knownAuthorId: MimeiId?): MimeiId? {
+        knownAuthorId?.takeIf { it.isNotBlank() }?.let { return it }
+        tweet?.interactionHostAuthor?.mid?.let { return it }
+        // Older standalone quote posts may carry a parent ID. Their original
+        // reference does not make them a child stored on somebody else's node.
+        if (tweet == null || tweet.originalTweetId != null) return null
+        val parentId = tweet.parentTweetId ?: return null
+        check(parentId != tweet.mid) { "Invalid parent reference for ${tweet.mid}" }
+        return tweet.savedParentTweet?.authorId ?: commentParentAuthorId(parentId, tweet.readNodeUrl)
+    }
+
+    private suspend fun readCommentAtRoot(
+        tweetId: MimeiId,
+        authorId: MimeiId,
+        storageAuthorId: MimeiId,
+        requiredFormat: String?,
+        refresh: Boolean = false
+    ): Tweet? {
+        val storageAuthor = getUserInstance(storageAuthorId).takeIf { !it.hostIds?.firstOrNull().isNullOrBlank() }
+            ?: TweetCacheManager.getCachedUser(storageAuthorId)?.takeIf { !it.hostIds?.firstOrNull().isNullOrBlank() }
+            ?: fetchUser(storageAuthorId)
+            ?: error("Parent author $storageAuthorId is not available")
+        val hostId = storageAuthor.hostIds?.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: error("Parent author $storageAuthorId has no root")
+        val address = getHostIP(hostId, v4Only = "false", usePool = false)
+            ?: error("Cannot resolve comment storage root $hostId")
+        val root = User.resolvedNodeUrl(address)
+        val params = mutableMapOf(
+            "aid" to appId, "ver" to "last", "version" to "v2",
+            "tweetid" to tweetId, "appuserid" to appUser.mid
+        )
+        val entry = if (refresh) {
+            params["hostid"] = hostId
+            "refresh_tweet"
+        } else {
+            "get_tweet"
+        }
+        val client = storageCompatibleRequestedService(root, storageAuthor, params, requiredFormat)
+        val record = unwrapV2Response<Map<String, Any>>(client.runMApp<Any>(entry, params)) ?: return null
+        check(record["mid"] == tweetId && record["authorId"] == authorId) { "Unexpected comment record for $tweetId" }
+        if (TweetCacheManager.isTweetDeleted(tweetId)) return null
+
+        val writer = TweetCacheManager.getCachedUser(authorId) ?: getUserInstance(authorId)
+        refreshTweetAuthorsInBackground(setOf(authorId), reason = "comment detail")
+        recordReliabilitySuccessTweet(tweetId)
+        return publishDetailTweet(record, writer, normalizedServerBaseUrl(root), storageAuthor)
+    }
+
     suspend fun refreshTweet(
         tweetId: MimeiId?,
-        authorId: MimeiId?
+        authorId: MimeiId?,
+        storageAuthorId: MimeiId? = null
     ): Tweet? {
         if (!isOnline.value) {
             Timber.tag("refreshTweet").d("Offline: skipping")
@@ -3871,13 +3950,17 @@ object HproseInstance {
         }
         if (TweetCacheManager.isTweetDeleted(tweetId)) return null
 
-        // Check if tweet is blacklisted
-        if (isReliabilityBlacklistedTweet(tweetId)) {
-            Timber.tag("refreshTweet").d("Tweet $tweetId is blacklisted, returning null")
-            return null
-        }
-
         return try {
+            val cached = Tweet.findInstance(tweetId) ?: TweetCacheManager.getCachedTweet(tweetId)
+            val commentOwnerId = commentStorageAuthorId(cached, storageAuthorId)
+            if (commentOwnerId != null) {
+                return readCommentAtRoot(tweetId, authorId, commentOwnerId, cached?.storageFormat, refresh = true)
+            }
+            if (isReliabilityBlacklistedTweet(tweetId)) {
+                Timber.tag("refreshTweet").d("Tweet $tweetId is blacklisted, returning null")
+                return null
+            }
+
             // Get cached author for immediate use
             val cachedAuthor = TweetCacheManager.getCachedUser(authorId)
             if (cachedAuthor == null) {
@@ -3891,6 +3974,7 @@ object HproseInstance {
                 return null
             }
             val entry = "refresh_tweet"
+            val sourceHost = authorForApi.hostIds?.firstOrNull()
             val params = mapOf(
                 "aid" to appId,
                 "ver" to "last",
@@ -3898,7 +3982,7 @@ object HproseInstance {
                 "tweetid" to tweetId,
                 "appuserid" to appUser.mid,
                 "userid" to authorId,
-                "hostid" to (authorForApi.hostIds?.first() ?: "")
+                "hostid" to sourceHost.orEmpty()
             )
             var refreshedFrom: String? = null
             val rawResponse = try {
@@ -3938,6 +4022,8 @@ object HproseInstance {
                 recordReliabilitySuccessTweet(tweetId)
                 publishDetailTweet(it, authorForApi, refreshedFrom)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Record failed access
             recordReliabilityFailureTweet(tweetId)
@@ -4234,10 +4320,14 @@ object HproseInstance {
 
     class TweetSessionRequiredException : IllegalStateException("Tweet submission requires a valid user session")
 
-    suspend fun uploadTweet(tweet: Tweet, requestId: String = UUID.randomUUID().toString()): Tweet? {
+    suspend fun uploadTweet(
+        tweet: Tweet,
+        requestId: String = UUID.randomUUID().toString(),
+        quotedCommentId: MimeiId? = null
+    ): Tweet? {
         check(isOnline.value) { "No network connection" }
         return try {
-            submitTweet(tweet, requestId)
+            submitTweet(tweet, requestId, quotedCommentId)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: OutOfMemoryError) {
@@ -4249,9 +4339,16 @@ object HproseInstance {
         }
     }
 
-    suspend fun submitTweet(tweet: Tweet, requestId: String): Tweet {
+    suspend fun submitTweet(tweet: Tweet, requestId: String, quotedCommentId: MimeiId? = null): Tweet {
         check(isOnline.value) { "No network connection" }
         val entry = "add_tweet"
+        val payload = Json.encodeToJsonElement(Tweet.serializer(), tweet).jsonObject
+        val originalAuthorHost = tweet.originalAuthorId?.let { authorId ->
+            getUserInstance(authorId).hostIds?.firstOrNull()
+                ?: TweetCacheManager.getCachedUser(authorId)?.hostIds?.firstOrNull()
+        }
+        val submitted = if (quotedCommentId == null) payload
+        else JsonObject(payload + ("quotedCommentId" to JsonPrimitive(quotedCommentId)))
         // The request ID names this submission so a retry after a lost response
         // resolves the same tweet instead of creating a duplicate.
         val params = mapOf(
@@ -4259,14 +4356,15 @@ object HproseInstance {
             "ver" to "last",
             "version" to "v2",
             "hostid" to (appUser.hostIds?.first() ?: ""),
-            "tweet" to Json.encodeToString(tweet),
+            "tweet" to submitted.toString(),
+            "originalauthorhostid" to originalAuthorHost.orEmpty(),
             "requestid" to "tw-$requestId"
         )
         // Attaching media can take longer while the root commits the tweet and author references.
-        val timeout = if (tweet.attachments.isNullOrEmpty()) {
+        val timeout = if (tweet.originalTweetId == null && tweet.attachments.isNullOrEmpty()) {
             ADD_TWEET_TIMEOUT_MS
         } else {
-            ADD_TWEET_WITH_ATTACHMENTS_TIMEOUT_MS
+            ADD_TWEET_EXTENDED_TIMEOUT_MS
         }
         val reply = runWrite<Map<String, Any>>(appUser, "uploadTweet", entry, params, timeout)
         val response = unwrapV2Response<Map<String, Any>>(reply)
@@ -4281,6 +4379,14 @@ object HproseInstance {
         // Read the stored tweet from its root while the access node catches up.
         adoptWriteRouteForReads(appUser, entry)
         val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
+        val originalCount = (response["originalRetweetCount"] as? Number)?.toInt()
+        if (originalCount != null) {
+            tweet.originalTweetId?.let { TweetCacheManager.getCachedTweet(it) }?.let { original ->
+                original.retweetCount = originalCount
+                updateCachedTweet(original, userId = original.authorId)
+                TweetNotificationCenter.post(TweetEvent.TweetUpdated(original))
+            }
+        }
         if (tweet.originalTweetId == null) {
             TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
         }
@@ -4350,6 +4456,7 @@ object HproseInstance {
      * */
     suspend fun toggleFollowing(
         followedId: MimeiId,
+        isFollowing: Boolean,
         followingId: MimeiId = appUser.mid
     ): Boolean? {
         if (!isOnline.value) {
@@ -4357,25 +4464,19 @@ object HproseInstance {
             throw Exception("No network connection")
         }
         val entry = "toggle_following"
-        // followingid_hostid hints the target's primary host so the call routes
-        // to the right shard (matches iOS cachedFollowing.hostIds?.first).
-        val cachedFollowing = getInstance(followedId)
+        val targetRoot = getInstance(followedId).hostIds?.firstOrNull()
+            ?: TweetCacheManager.getCachedUser(followedId)?.hostIds?.firstOrNull()
         val params = mutableMapOf<String, Any?>(
             "aid" to appId,
             "ver" to "last",
             "version" to "v2",
             "followingid" to followedId,
             "userid" to followingId,
-            "followingid_hostid" to (cachedFollowing.hostIds?.firstOrNull() ?: "")
+            "isfollowing" to rpcBool(isFollowing)
         )
+        if (!targetRoot.isNullOrBlank()) params["followingid_hostid"] = targetRoot
         return try {
-            // Route the call directly to the acting user's primary host (hostIds[0]) so
-            // toggle_following.js's `userHostId === nodeId` check fires and the
-            // local handler runs. The cross-node delegation path
-            // (lines 101-126) drops the response payload (cross-node bridge
-            // returns a Java-Map-backed object that wrapResponse mishandles),
-            // making a clearly successful operation look like failure on the
-            // client. By calling the home node directly we never hit it.
+            // The acting user's root owns the relationship write.
             val actingUser = if (followingId == appUser.mid) {
                 appUser
             } else {
@@ -4480,29 +4581,40 @@ object HproseInstance {
      * Send a retweet request to backend and get a new tweet object back.
      * */
     suspend fun retweet(
-        tweet: Tweet     // original tweet to be retweeted
+        tweet: Tweet,
+        commentParent: Tweet? = null,
+        knownParentId: MimeiId? = null,
+        knownParentAuthorId: MimeiId? = null
     ) {
         if (!isOnline.value) {
             Timber.tag("retweet").d("Offline: skipping")
             throw Exception("No network connection")
         }
         try {
-            // upload the retweet, simply a few dozen bytes.
+            val parent = commentParent ?: tweet.savedParentTweet
+            val parentId = parent?.mid ?: knownParentId
+                ?: tweet.parentTweetId?.takeIf { tweet.originalTweetId == null }
+            val isComment = parentId != null
+            check(isComment || (knownParentAuthorId == null && tweet.interactionHostAuthor == null)) {
+                "Missing parent for comment ${tweet.mid}"
+            }
+            val originalAuthorId = if (parentId != null) {
+                check(parentId != tweet.mid) { "Invalid parent reference for ${tweet.mid}" }
+                parent?.authorId ?: knownParentAuthorId ?: tweet.interactionHostAuthor?.mid
+                    ?: commentParentAuthorId(parentId, tweet.readNodeUrl)
+            } else tweet.authorId
             val retweet = uploadTweet(
                 Tweet(
-                    mid = TW_CONST.GUEST_ID,    // placeholder will be replaced in backend.
+                    mid = TW_CONST.GUEST_ID,
                     authorId = appUser.mid,
-                    originalTweetId = tweet.mid,
-                    originalAuthorId = tweet.authorId
-                )
+                    originalTweetId = parentId ?: tweet.mid,
+                    originalAuthorId = originalAuthorId,
+                    title = if (isComment) tweet.title else null,
+                    content = if (isComment) tweet.content else null,
+                    attachments = if (isComment) tweet.attachments?.map { it.copy(url = null) } else null
+                ),
+                quotedCommentId = tweet.mid.takeIf { isComment }
             ) ?: throw IllegalStateException("Retweet upload failed")
-
-            // Counting is what makes the retweet visible on the original. updateRetweetCount
-            // caches the result and publishes TweetUpdated, so no extra caching is needed here.
-            if (updateRetweetCount(tweet, retweet.mid) == null) {
-                Timber.tag("retweet")
-                    .w("retweet_added failed for ${tweet.mid} — original's retweetCount not updated")
-            }
 
             // Cache the retweet by its authorId
             updateCachedTweet(retweet, userId = retweet.authorId)
@@ -4510,8 +4622,6 @@ object HproseInstance {
             // Post notification for retweet
             TweetNotificationCenter.post(TweetEvent.TweetRetweeted(tweet, retweet))
         } catch (e: Exception) {
-            // Rethrow: retweetTweet() reverts its optimistic +1 on failure, and swallowing the
-            // error left the UI showing a count the server never recorded.
             Timber.tag("retweet").e(e.toString())
             throw e
         }
@@ -4544,18 +4654,21 @@ object HproseInstance {
 
     private fun optimisticSavedTweetResult(
         tweet: Tweet,
-        list: SavedTweetList
+        list: SavedTweetList,
+        wanted: Boolean
     ): Tweet = tweet.copy(
         favorites = tweet.favorites?.toMutableList()
     ).also { updatedTweet ->
+        updatedTweet.favoriteOverride = tweet.favoriteOverride
+        updatedTweet.bookmarkOverride = tweet.bookmarkOverride
         when (list) {
             SavedTweetList.FAVORITES -> {
-                updatedTweet.isFavorite = false
-                updatedTweet.favoriteOverride = false
+                updatedTweet.isFavorite = wanted
+                updatedTweet.favoriteOverride = wanted
             }
             SavedTweetList.BOOKMARKS -> {
-                updatedTweet.isBookmarked = false
-                updatedTweet.bookmarkOverride = false
+                updatedTweet.isBookmarked = wanted
+                updatedTweet.bookmarkOverride = wanted
             }
         }
     }
@@ -4574,44 +4687,25 @@ object HproseInstance {
             SavedTweetList.BOOKMARKS -> Triple("toggle_bookmark", "userid", "isbookmarked")
         }
         val actingUser = appUser
-        val authorRoute = try {
-            val author = resolveSavedTweetStorageAuthor(tweet)
-            val url = author.resolveWritableUrl()
-                ?: throw IllegalStateException("Saved tweet author's writable host is unavailable")
-            author to url
+        val capabilityParams = mapOf("aid" to appId, "ver" to "last")
+        val ownerUrl = try {
+            actingUser.resolveWritableUrl()
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Explicit removals can write to the user's own list if the author
-            // route is unavailable before sending the mutation.
-            if (wanted) throw e
+            Timber.tag(entry).w(e, "Could not resolve the user's root")
             null
         }
-
-        val capabilityParams = mapOf("aid" to appId, "ver" to "last")
-        val author = authorRoute?.first
-        val authorUrl = authorRoute?.second
-        val delegates = if (authorUrl != null) {
+        val independent = ownerUrl?.let { url ->
             try {
-                storageCapabilities(authorUrl, capabilityParams).engagementDelegation
+                storageCapabilities(url, capabilityParams).independentSavedTweetWrites
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Timber.tag(entry).w(e, "Capability probe failed; using the old wire form")
+                Timber.tag(entry).w(e, "Could not check saved-list support on the user's root")
                 false
             }
-        } else {
-            true
-        }
-        val nodeUrl = if (delegates) {
-            actingUser.resolveWritableUrl()
-                ?: throw IllegalStateException("Signed-in user's writable host is unavailable")
-        } else {
-            checkNotNull(authorUrl)
-        }
-        if (author == null && !storageCapabilities(nodeUrl, capabilityParams).engagementDelegation) {
-            throw IllegalStateException("The signed-in user's server does not support saved tweet removal without an author")
-        }
+        } == true
 
         val params = mutableMapOf(
             "aid" to appId,
@@ -4622,19 +4716,68 @@ object HproseInstance {
             "userhostid" to actingUser.hostIds?.firstOrNull().orEmpty(),
             stateParam to rpcBool(wanted)
         )
-        if (author != null) {
-            params["authorid"] = author.mid
-            if (delegates) params["hostid"] = author.hostIds?.firstOrNull().orEmpty()
+
+        val nodeUrl: String
+        var writeRouteAuthor: User? = null
+        if (independent) {
+            nodeUrl = checkNotNull(ownerUrl)
+            val storageTweet = tweet.parentTweetId?.let { TweetCacheManager.getCachedTweet(it) }
+                ?: tweet.takeIf { it.parentTweetId == null }
+            val author = tweet.interactionHostAuthor ?: storageTweet?.author
+                ?: storageTweet?.authorId?.let { TweetCacheManager.getCachedUser(it) }
+            (author?.mid ?: storageTweet?.authorId)?.let { params["authorid"] = it }
+            author?.hostIds?.firstOrNull()?.takeIf { it.isNotEmpty() }?.let { params["hostid"] = it }
+        } else {
+            val authorRoute = try {
+                val author = resolveSavedTweetStorageAuthor(tweet)
+                val url = author.resolveWritableUrl()
+                    ?: throw IllegalStateException("Saved tweet author's writable host is unavailable")
+                author to url
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (wanted) throw e
+                val removalUrl = ownerUrl ?: actingUser.resolveWritableUrl() ?: throw e
+                if (!storageCapabilities(removalUrl, capabilityParams).engagementDelegation) throw e
+                null
+            }
+            val author = authorRoute?.first
+            val authorUrl = authorRoute?.second
+            val delegates = if (authorUrl != null) {
+                try {
+                    storageCapabilities(authorUrl, capabilityParams).engagementDelegation
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag(entry).w(e, "Capability probe failed; using the old wire form")
+                    false
+                }
+            } else {
+                true
+            }
+            if (author != null) {
+                params["authorid"] = author.mid
+                author.hostIds?.firstOrNull()?.takeIf { it.isNotEmpty() }?.let { params["hostid"] = it }
+            }
+            nodeUrl = if (delegates) {
+                ownerUrl ?: actingUser.resolveWritableUrl()
+                    ?: throw IllegalStateException("Signed-in user's writable host is unavailable")
+            } else {
+                checkNotNull(authorUrl)
+            }
+            writeRouteAuthor = author
         }
 
-        val client = HproseClientPool.getWritableClient(nodeUrl, TOGGLE_MUTATION_TIMEOUT_MS)
+        val client = HproseClientPool.getWritableClient(nodeUrl, SAVED_TWEET_MUTATION_TIMEOUT_MS)
             ?: throw IllegalStateException("$entry failed: writable client not available for $nodeUrl")
         val rawResponse = runWrite<Map<String, Any>>(nodeUrl, client, entry, params)
         val response = unwrapV2Response<Map<String, Any>>(rawResponse)
             ?: throw IllegalStateException("$entry returned invalid data")
-        if (author != null) adoptWriteRouteForReads(author, entry)
+        writeRouteAuthor?.let { adoptWriteRouteForReads(it, entry) }
         adoptWriteRouteForReads(actingUser, entry)
-        (response["user"] as? Map<String, Any>)?.let { updatedUserData ->
+        @Suppress("UNCHECKED_CAST")
+        val updatedUserData = response["user"] as? Map<String, Any>
+        if (updatedUserData != null) {
             actingUser.from(updatedUserData)
             TweetCacheManager.saveUser(actingUser)
         }
@@ -4647,11 +4790,22 @@ object HproseInstance {
                 it.author = tweet.author ?: TweetCacheManager.getCachedUser(it.authorId)
             }
         }
-        if (!wanted) {
-            TweetCacheManager.removeTweetFromCache(tweet.mid, savedTweetCacheKey(list))
-            return updatedTweet ?: optimisticSavedTweetResult(tweet, list)
+        val saved = response["saved"] as? Boolean ?: wanted
+        val result = updatedTweet ?: if (updatedUserData != null) {
+            optimisticSavedTweetResult(tweet, list, saved)
+        } else {
+            throw IllegalStateException("$entry did not confirm the saved-list change")
         }
-        return updatedTweet ?: throw IllegalStateException("$entry did not return a tweet")
+        Tweet.findInstance(tweet.mid)?.let { cached ->
+            when (list) {
+                SavedTweetList.FAVORITES -> cached.favoriteOverride = saved
+                SavedTweetList.BOOKMARKS -> cached.bookmarkOverride = saved
+            }
+        }
+        if (!saved) {
+            TweetCacheManager.removeTweetFromCache(tweet.mid, savedTweetCacheKey(list))
+        }
+        return result
     }
 
     /**
@@ -4710,6 +4864,15 @@ object HproseInstance {
                 // If the element is null, keep it as null
                 if (tweetJson == null) {
                     null
+                } else if (tweetJson["savedTweetUnavailable"] == true) {
+                    (tweetJson["mid"] as? String)?.let { mid ->
+                        Tweet(mid = mid, authorId = "").apply {
+                            if (user.mid == appUser.mid) {
+                                isFavorite = type == UserContentType.FAVORITES
+                                isBookmarked = type == UserContentType.BOOKMARKS
+                            }
+                        }
+                    }
                 } else {
                     // Try to decode the tweet
                     try {
@@ -4719,16 +4882,18 @@ object HproseInstance {
 
                         // Membership in the saved list is authoritative even when
                         // the access-node interaction flags are stale.
-                        when (type) {
-                            UserContentType.BOOKMARKS -> {
-                                tweet.isBookmarked = true
-                                tweet.bookmarkOverride = true
+                        if (user.mid == appUser.mid) {
+                            when (type) {
+                                UserContentType.BOOKMARKS -> {
+                                    tweet.isBookmarked = true
+                                    tweet.bookmarkOverride = true
+                                }
+                                UserContentType.FAVORITES -> {
+                                    tweet.isFavorite = true
+                                    tweet.favoriteOverride = true
+                                }
+                                else -> Unit
                             }
-                            UserContentType.FAVORITES -> {
-                                tweet.isFavorite = true
-                                tweet.favoriteOverride = true
-                            }
-                            else -> Unit
                         }
 
                         // Reuse the existing quote-tweet presentation for a saved
@@ -4883,6 +5048,7 @@ object HproseInstance {
             runWrite(requestUser, "deleteTweet", entry, request, TOGGLE_MUTATION_TIMEOUT_MS)
 
         var entry = if (delegated) "admin_mutate_tweet" else "delete_tweet"
+        var peerUpdateDeferred = false
         val deletedTweetId = try {
             var raw = delete(entry, if (delegated) params + ("action" to "delete") else params)
             if (delegated && raw?.get("success") == false &&
@@ -4894,7 +5060,10 @@ object HproseInstance {
             }
             val response = unwrapV2Response<Map<String, Any>>(raw)
             when {
-                response?.get("tweetid") == tweetId -> tweetId
+                response?.get("tweetid") == tweetId -> {
+                    peerUpdateDeferred = response["peerUpdateDeferred"] == true
+                    tweetId
+                }
                 response == null && isTweetNotFoundDeleteFailure(response = raw) -> tweetId
                 else -> throw IllegalStateException(
                     raw?.get("message") as? String ?: "The server did not confirm the deletion"
@@ -4925,7 +5094,7 @@ object HproseInstance {
         }
         adoptWriteRouteForReads(requestUser, entry)
 
-        if (isOwnTweet && linkedOriginalId != null && linkedOriginalAuthorId != null) {
+        if (!peerUpdateDeferred && isOwnTweet && linkedOriginalId != null && linkedOriginalAuthorId != null) {
             val original = TweetCacheManager.getCachedTweet(linkedOriginalId)
                 ?: getTweet(linkedOriginalId, linkedOriginalAuthorId)
             if (original != null) updateRetweetCount(original, tweetId, -1)
@@ -5041,6 +5210,7 @@ object HproseInstance {
                     val comment = Tweet.from(entry)
                     // A comment's own replies are read from the node that served it.
                     comment.readNodeUrl = readNodeUrl
+                    comment.parentTweetId = tweet.mid
                     favoriteOverride?.let { comment.isFavorite = it }
                     bookmarkOverride?.let { comment.isBookmarked = it }
                     comment.favoriteOverride = favoriteOverride

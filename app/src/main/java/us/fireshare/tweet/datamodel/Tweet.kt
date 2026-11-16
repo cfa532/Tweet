@@ -171,7 +171,12 @@ data class Tweet(
                     isPrivate = tweet.isPrivate,
                     downloadable = tweet.downloadable,
                     storageFormat = tweet.storageFormat
-            )
+            ).also {
+                if (dict["viewerSavedStateAtRoot"] == true) {
+                    it.favoriteOverride = null
+                    it.bookmarkOverride = null
+                }
+            }
         }
 
         /** Replace the shared snapshot without mutating a tweet already held by a UI list. */
@@ -187,8 +192,10 @@ data class Tweet(
                     tweet.rowTimestamp = previous.rowTimestamp
                     tweet.savedParentTweet = previous.savedParentTweet
                     tweet.interactionHostAuthor = previous.interactionHostAuthor
-                    tweet.favoriteOverride = previous.favoriteOverride
-                    tweet.bookmarkOverride = previous.bookmarkOverride
+                    if (dict["viewerSavedStateAtRoot"] != true) {
+                        tweet.favoriteOverride = previous.favoriteOverride
+                        tweet.bookmarkOverride = previous.bookmarkOverride
+                    }
                 }
                 instances[tweet.mid] = tweet
             }
@@ -274,7 +281,7 @@ data class Tweet(
 
     // Computed properties for user interaction states
     var isFavorite: Boolean
-        get() = favorites?.getOrNull(0) ?: false
+        get() = favoriteOverride ?: favorites?.getOrNull(0) ?: false
         set(value) {
             if (favorites == null) {
                 favorites = mutableListOf(false, false, false)
@@ -283,7 +290,7 @@ data class Tweet(
         }
 
     var isBookmarked: Boolean
-        get() = favorites?.getOrNull(1) ?: false
+        get() = bookmarkOverride ?: favorites?.getOrNull(1) ?: false
         set(value) {
             if (favorites == null) {
                 favorites = mutableListOf(false, false, false)

@@ -24,7 +24,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import us.fireshare.tweet.HproseInstance
 import us.fireshare.tweet.HproseInstance.appUser
-import us.fireshare.tweet.HproseInstance.updateRetweetCount
 import us.fireshare.tweet.HproseInstance.uploadToIPFS
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MimeiFileType
@@ -168,13 +167,9 @@ class UploadCommentWorker @AssistedInject constructor(
                 // updatedTweet is the original tweet with new comment. After uploading comment,
                 // !!!comment.mid is updated by uploadComment() with newly created mid!!!
                 if (quotePayload != null) {
-                    // Creating the quote increments the original's retweetCount here; deleting
-                    // it decrements via HproseInstance.deleteTweet, keyed by the same mid.
-                    HproseInstance.uploadTweet(quotePayload, "$id-quote")?.let { quoteTweet ->
-                        updateRetweetCount(parentTweet, quoteTweet.mid)?.let {
-                            updatedTweet.retweetCount = it.retweetCount
-                        }
-                    } ?: Timber.tag("UploadCommentWorker").e("Quote tweet upload failed")
+                    if (HproseInstance.uploadTweet(quotePayload, "$id-quote") == null) {
+                        Timber.tag("UploadCommentWorker").e("Quote tweet upload failed")
+                    }
                 }
                 cleanupPermissions()
                 return Result.success()
@@ -337,9 +332,6 @@ class FollowUserWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
-    // toggle_following is NOT idempotent — single attempt only. A timed-out
-    // request may still have been processed server-side; a retry would flip the
-    // state back. Matches iOS HproseInstance.toggleFollowing.
     override suspend fun doWork(): Result {
         return try {
             val followedId = inputData.getString("followedId") ?: return Result.failure()
@@ -348,7 +340,7 @@ class FollowUserWorker @AssistedInject constructor(
 
             Timber.tag("FollowUserWorker").d("Starting follow operation: followedId=$followedId, followingId=$followingId, isFollowing=$isFollowing")
 
-            val result = HproseInstance.toggleFollowing(followedId, followingId)
+            val result = HproseInstance.toggleFollowing(followedId, isFollowing, followingId)
 
             if (result != null) {
                 if (result != isFollowing) {

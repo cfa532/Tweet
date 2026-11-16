@@ -658,10 +658,6 @@ class UserViewModel @AssistedInject constructor(
             "followingId" to userId,
             "isFollowing" to newFollowingState
         )
-        // toggle_following is NOT idempotent — never retry. A timed-out request
-        // may still have been processed server-side; a retry would flip it back.
-        // (Matches iOS HproseInstance.toggleFollowing.) No setBackoffCriteria —
-        // FollowUserWorker only returns success/failure, never Result.retry().
         val followRequest = OneTimeWorkRequest.Builder(FollowUserWorker::class.java)
             .setInputData(data)
             .build()
