@@ -777,9 +777,13 @@ private fun QuotePreviewCard(original: Tweet) {
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth().aspectRatio(2f).clickable {
-            navController.navigate(original.detailRoute())
-        },
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .fillMaxWidth()
+            .aspectRatio(2f)
+            .clickable {
+                navController.navigate(original.detailRoute())
+            },
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(Dp.Hairline, mediaGridBorderColor)
     ) {
