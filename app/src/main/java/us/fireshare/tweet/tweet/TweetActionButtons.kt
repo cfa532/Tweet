@@ -7,7 +7,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,7 +51,7 @@ import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
 private const val RETWEET_TAP_DEBOUNCE_MS = 2_000L
-private val TweetActionIconSize = 21.dp
+private val TweetActionIconSize = 19.dp
 private val TweetActionButtonWidth = 54.dp
 private val TweetActionShareButtonWidth = 48.dp
 
@@ -278,8 +277,7 @@ fun BookmarkButton(viewModel: TweetViewModel, color: Color? = null) {
                     id = if (hasBookmarked) R.drawable.ic_ms_bookmark_filled else R.drawable.ic_ms_bookmark
                 ),
                 contentDescription = stringResource(R.string.like),
-                modifier = Modifier.size(TweetActionIconSize)
-                    .padding(bottom = 1.dp),
+                modifier = Modifier.size(TweetActionIconSize),
                 tint = if (hasBookmarked) color ?: Color(0xFF4477BB) else color ?: MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(2.dp))
@@ -327,8 +325,7 @@ fun ShareButton(
             Icon(
                 painter = painterResource(id = R.drawable.ic_ms_share),
                 contentDescription = stringResource(R.string.share),
-                modifier = Modifier.size(TweetActionIconSize)
-                    .padding(1.dp),
+                modifier = Modifier.size(TweetActionIconSize),
                 tint = if (isSharing) {
                     (color ?: MaterialTheme.colorScheme.secondary).copy(alpha = 0.5f)
                 } else {
@@ -338,9 +335,7 @@ fun ShareButton(
             // Show spinner overlay when sharing
             if (isSharing) {
                 CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(TweetActionIconSize * 2)
-                        .padding(0.dp),
+                    modifier = Modifier.size(TweetActionIconSize * 2),
                     strokeWidth = 3.dp
                 )
             }
