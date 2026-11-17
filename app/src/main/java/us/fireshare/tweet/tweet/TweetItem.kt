@@ -509,12 +509,8 @@ private fun RetweetWithContent(
         derivedStateOf { !tweet.attachments.isNullOrEmpty() }
     }
 
-    val isQuote = tweet.originalTweetId != null
     Surface {
         Column {
-            if (isQuote) {
-                ForwardedByLabel(tweet.authorId, author?.username)
-            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -561,7 +557,7 @@ private fun RetweetWithContent(
                     // Top row: User info and dropdown menu
                     Row(
                         modifier = Modifier
-                            .padding(top = if (isQuote) 2.dp else 4.dp)
+                            .padding(top = 4.dp)
                             .fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
