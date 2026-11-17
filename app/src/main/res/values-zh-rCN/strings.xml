@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">众众</string>
+    <string name="forwarding">正在转发…</string>
     <string name="forward_by">你已转发</string>
     <string name="delete">删除</string>
     <string name="login">登录</string>
@@ -94,6 +95,7 @@
     <string name="delete_failed">推文删除失败，请重试。</string>
     <string name="delete_tweet_confirmation_title">删除推文？</string>
     <string name="delete_tweet_confirmation_message">此推文将被永久删除。此操作无法撤销。</string>
+    <string name="admin_delete_tweet_confirmation_message">要为所有用户删除这条推文吗？如果找不到作者的节点，这条推文只会从你的动态中移除。</string>
     <string name="remove_tweet_from_feed_confirmation_message">此推文将从你的动态中移除，作者的原推文不会被删除。</string>
     <string name="delete_comment_confirmation_title">删除评论？</string>
     <string name="delete_comment_confirmation_message">此评论将被永久删除。此操作无法撤销。</string>

@@ -45,7 +45,10 @@ data class Tweet(
     // (the node that supplied the parent), so it is persisted with the cached tweet and
     // deliberately independent of the author's current route. Null until a read records it.
     var readNodeUrl: String? = null,
+    var quotedCommentAuthorId: MimeiId? = null,
 ) {
+    val displayedAuthorId: MimeiId get() = quotedCommentAuthorId ?: authorId
+
     companion object {
         // Singleton dictionary to store tweet instances
         private val instances = mutableMapOf<String, Tweet>()
@@ -72,7 +75,8 @@ data class Tweet(
             attachments: List<MimeiFileType>? = null,
             isPrivate: Boolean = false,
             downloadable: Boolean = false,
-            storageFormat: String? = null
+            storageFormat: String? = null,
+            quotedCommentAuthorId: MimeiId? = null
         ): Tweet {
             synchronized(instanceLock) {
                 val existingInstance = instances[mid]
@@ -90,6 +94,7 @@ data class Tweet(
                     existingInstance.isPrivate = isPrivate
                     existingInstance.downloadable = downloadable
                     existingInstance.storageFormat = storageFormat ?: existingInstance.storageFormat
+                    quotedCommentAuthorId?.let { existingInstance.quotedCommentAuthorId = it }
                     return existingInstance
                 }
 
@@ -110,7 +115,8 @@ data class Tweet(
                     attachments = attachments,
                     isPrivate = isPrivate,
                     downloadable = downloadable,
-                    storageFormat = storageFormat
+                    storageFormat = storageFormat,
+                    quotedCommentAuthorId = quotedCommentAuthorId
                 )
                 instances[mid] = newInstance
                 return newInstance
@@ -170,7 +176,8 @@ data class Tweet(
                     attachments = tweet.attachments,
                     isPrivate = tweet.isPrivate,
                     downloadable = tweet.downloadable,
-                    storageFormat = tweet.storageFormat
+                    storageFormat = tweet.storageFormat,
+                    quotedCommentAuthorId = tweet.quotedCommentAuthorId
             ).also {
                 if (dict["viewerSavedStateAtRoot"] == true) {
                     it.favoriteOverride = null
@@ -338,6 +345,7 @@ data class Tweet(
         this.downloadable = from.downloadable
         this.timestamp = from.timestamp
         from.readNodeUrl?.let { this.readNodeUrl = it }
+        from.quotedCommentAuthorId?.let { this.quotedCommentAuthorId = it }
     }
 
     /**
@@ -403,6 +411,7 @@ data class Tweet(
             tempTweet.content?.let { this.content = it }
             tempTweet.title?.let { this.title = it }
             tempTweet.author?.let { this.author = it }
+            tempTweet.quotedCommentAuthorId?.let { this.quotedCommentAuthorId = it }
             tempTweet.favorites?.let { this.favorites = it.toMutableList() }
             this.favoriteCount = tempTweet.favoriteCount
             this.bookmarkCount = tempTweet.bookmarkCount

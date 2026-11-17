@@ -1,5 +1,6 @@
 package us.fireshare.tweet.tweet
 
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
@@ -18,8 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +51,7 @@ import us.fireshare.tweet.utils.CountFormatUtils
 import us.fireshare.tweet.viewmodel.ShareLinkStyle
 import us.fireshare.tweet.viewmodel.TweetViewModel
 
+private const val RETWEET_TAP_DEBOUNCE_MS = 2_000L
 private val TweetActionIconSize = 21.dp
 private val TweetActionButtonWidth = 54.dp
 private val TweetActionShareButtonWidth = 48.dp
@@ -116,6 +121,7 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null, commentParent
     }
     val countText = if (count > 0) CountFormatUtils.formatCount(count) else ""
     val hasRetweeted = tweet.favorites?.get(UserActions.RETWEET) ?: false
+    var lastRetweetTap by remember(viewModel, tweet.mid) { mutableLongStateOf(-RETWEET_TAP_DEBOUNCE_MS) }
     val navController = LocalNavController.current
     val context = LocalContext.current
     val errorMessage = stringResource(R.string.tweet_failed)
@@ -129,21 +135,24 @@ fun RetweetButton(viewModel: TweetViewModel, color: Color? = null, commentParent
     IconButton(
         modifier = Modifier.width(TweetActionButtonWidth),
         onClick = {
-            if (!requireAuthenticatedUser(context, navController, guestReminderText)) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastRetweetTap < RETWEET_TAP_DEBOUNCE_MS ||
+                !requireAuthenticatedUser(context, navController, guestReminderText)
+            ) {
                 return@IconButton
             }
 
-            viewModel.viewModelScope.launch(Dispatchers.IO) {
+            lastRetweetTap = now
+            Toast.makeText(context, R.string.forwarding, Toast.LENGTH_SHORT).show()
+            viewModel.viewModelScope.launch {
                 try {
-                    // The retweet will be added to feed automatically via notification system
-                    viewModel.retweetTweet(commentParent)
+                    withContext(Dispatchers.IO) { viewModel.retweetTweet(commentParent) }
                     Timber.tag("RetweetButton").d("Retweet action completed")
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag("RetweetButton").e(e, "Failed to retweet tweet ${tweet.mid}")
-                    // Show error message to user
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
-                    }
+                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                 }
             }
         }

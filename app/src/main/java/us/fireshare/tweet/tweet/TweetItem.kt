@@ -659,7 +659,7 @@ private fun RetweetWithContent(
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
-private fun QuotedTweetContent(
+internal fun QuotedTweetContent(
     tweet: Tweet,
     embeddedTweet: Tweet? = null
 ) {

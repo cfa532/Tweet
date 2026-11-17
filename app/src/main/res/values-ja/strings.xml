@@ -45,6 +45,7 @@
     <string name="cancel">キャンセル</string>
     <string name="delete_tweet_confirmation_title">ツイートを削除しますか？</string>
     <string name="delete_tweet_confirmation_message">このツイートは完全に削除されます。この操作は元に戻せません。</string>
+    <string name="admin_delete_tweet_confirmation_message">このツイートをすべてのユーザーに対して削除しますか？投稿者のノードが見つからない場合は、あなたのフィードからのみ削除されます。</string>
     <string name="remove_tweet_from_feed_confirmation_message">このツイートはフィードから削除されます。投稿者のツイート自体は削除されません。</string>
     <string name="delete_comment_confirmation_title">コメントを削除しますか？</string>
     <string name="delete_comment_confirmation_message">このコメントは完全に削除されます。この操作は元に戻せません。</string>
@@ -243,6 +244,7 @@
     <string name="hide_password">パスワードを非表示</string>
 
     <!-- Shared screens, dialogs, notifications, and errors -->
+    <string name="forwarding">リポスト中…</string>
     <string name="forward_by">自分がリポスト</string>
     <string name="delete">削除</string>
     <string name="login">ログイン</string>

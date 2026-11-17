@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -51,6 +52,7 @@ import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.TweetCacheManager
 import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.navigation.LocalNavController
@@ -62,6 +64,18 @@ import us.fireshare.tweet.widget.DocumentAttachmentsView
 import us.fireshare.tweet.widget.MediaGrid
 import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
+
+@Composable
+internal fun displayTweetAuthor(tweet: Tweet): User? {
+    val commenterId = tweet.quotedCommentAuthorId
+    val cachedAuthor by collectCachedUserAsState(tweet.displayedAuthorId)
+    LaunchedEffect(commenterId) {
+        if (commenterId != null && cachedAuthor?.username.isNullOrBlank()) {
+            withContext(Dispatchers.IO) { HproseInstance.fetchUser(commenterId) }
+        }
+    }
+    return cachedAuthor ?: tweet.author.takeIf { commenterId == null }
+}
 
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
@@ -83,8 +97,7 @@ fun TweetItemBody(
 
     // Observe author changes reactively via StateFlow
     // This ensures all tweets from the same author update when user data becomes available
-    val cachedAuthor by collectCachedUserAsState(tweet.authorId)
-    val author = cachedAuthor ?: tweet.author
+    val author = displayTweetAuthor(tweet)
 
     val hasContent by remember(tweet.content) {
         derivedStateOf { !tweet.content.isNullOrEmpty() }
@@ -118,8 +131,8 @@ fun TweetItemBody(
                 ) {
                     IconButton(
                         onClick = {
-                            if (tweet.authorId != currentUserId) {
-                                navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                            if (tweet.displayedAuthorId != currentUserId) {
+                                navController.navigate(NavTweet.UserProfile(tweet.displayedAuthorId))
                             } else {
                                 coroutineScope.launch { onScrollToTop?.invoke() }
                             }
@@ -243,9 +256,9 @@ fun TweetItemBody(
                     IconButton(
                         onClick = {
                             timber.log.Timber.tag("TweetItemBody").d("Avatar clicked: authorId=${tweet.authorId}, currentUserId=$currentUserId")
-                            if (tweet.authorId != currentUserId) {
-                                timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.authorId}")
-                                navController.navigate(NavTweet.UserProfile(tweet.authorId))
+                            if (tweet.displayedAuthorId != currentUserId) {
+                                timber.log.Timber.tag("TweetItemBody").d("Navigating to profile: ${tweet.displayedAuthorId}")
+                                navController.navigate(NavTweet.UserProfile(tweet.displayedAuthorId))
                             } else {
                                 timber.log.Timber.tag("TweetItemBody").d("Already on this user's profile, scrolling to top")
                                 coroutineScope.launch { onScrollToTop?.invoke() }
@@ -351,6 +364,10 @@ fun TweetItemBody(
                                 )
                             }
                         }
+                    }
+
+                    if (tweet.quotedCommentAuthorId != null && tweet.originalTweetId != null) {
+                        QuotedTweetContent(tweet)
                     }
 
                     // Action buttons

@@ -4341,7 +4341,7 @@ object HproseInstance {
 
     suspend fun submitTweet(tweet: Tweet, requestId: String, quotedCommentId: MimeiId? = null): Tweet {
         check(isOnline.value) { "No network connection" }
-        val entry = "add_tweet"
+        val entry = if (quotedCommentId == null) "add_tweet" else "retweet_comment"
         val payload = Json.encodeToJsonElement(Tweet.serializer(), tweet).jsonObject
         val originalAuthorHost = tweet.originalAuthorId?.let { authorId ->
             getUserInstance(authorId).hostIds?.firstOrNull()
@@ -4377,8 +4377,24 @@ object HproseInstance {
         }
 
         // Read the stored tweet from its root while the access node catches up.
+        val commentQuoteId = if (quotedCommentId != null) {
+            checkNotNull((response["commentQuoteId"] as? String)?.takeIf { it.isNotBlank() && it != newTweetId }) {
+                "Comment retweet returned no generated quote"
+            }
+        } else null
         adoptWriteRouteForReads(appUser, entry)
-        val updatedTweet = tweet.copy(mid = newTweetId, author = appUser)
+        val updatedTweet = if (commentQuoteId != null) {
+            Tweet(
+                mid = newTweetId,
+                authorId = tweet.authorId,
+                originalTweetId = commentQuoteId,
+                originalAuthorId = tweet.authorId,
+                author = appUser,
+                isPrivate = tweet.isPrivate
+            )
+        } else {
+            tweet.copy(mid = newTweetId, author = appUser)
+        }
         val originalCount = (response["originalRetweetCount"] as? Number)?.toInt()
         if (originalCount != null) {
             tweet.originalTweetId?.let { TweetCacheManager.getCachedTweet(it) }?.let { original ->
