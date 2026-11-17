@@ -34,7 +34,6 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -52,7 +51,6 @@ import us.fireshare.tweet.ui.theme.TweetTheme
 
 @AndroidEntryPoint
 class PlayTweetActivity : ComponentActivity() {
-    private lateinit var initJob: Deferred<Unit>
     private val activityViewModel: PlayActivityViewModel by viewModels()
 
     // Register activity result launcher for notification permission
@@ -128,11 +126,6 @@ class PlayTweetActivity : ComponentActivity() {
                     activityViewModel.loadEntryUrls()
                 }
 
-                launch(IO) {
-                    delay(10000)
-                    HproseInstance.resumeIncompleteUploads(this@PlayTweetActivity)
-                }
-
                 requestNotificationPermissionIfNeeded()
 
             } catch (e: Exception) {
@@ -158,14 +151,6 @@ class PlayTweetActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_VIEW && intent.data != null) {
             activityViewModel.currentIntent.value = intent
             activityViewModel.currentIntentSequence.value += 1
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Resume incomplete uploads when app comes to foreground
-        if (::initJob.isInitialized && initJob.isCompleted) {
-            HproseInstance.resumeIncompleteUploads(this)
         }
     }
 
