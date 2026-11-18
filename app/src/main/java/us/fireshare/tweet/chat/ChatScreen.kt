@@ -776,20 +776,9 @@ fun ChatItem(
                 Spacer(modifier = Modifier.width(40.dp))
             }
         }
-        
-        // Show timestamp for last message from each party
-        if (isLastMessageFromParty) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = formatTimestamp(message.timestamp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.padding(
-                    start = if (isSentByCurrentUser) 0.dp else 40.dp,
-                    end = if (isSentByCurrentUser) 40.dp else 0.dp
-                )
-            )
-        }
+
+        // Timestamps only appear as the centered divider in the message list when
+        // two consecutive messages are more than an hour apart.
     }
 }
 
