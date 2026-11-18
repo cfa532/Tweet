@@ -1011,6 +1011,14 @@ fun ImageViewer(
     // Load image using proper cache checking: compressed first, then original, then server
     LaunchedEffect(mid, imageUrl, ownerId, canDownload, imageRoutes, retryCount) {
         if ((imageUrl == null && ownerId == null) || mid == null || !canDownload) {
+            // Nothing to load yet — offline, author routes unresolved, or no mid.
+            // The effect re-runs when any key changes (canDownload flipping
+            // restarts it), so leaving the spinner up here would show
+            // "Loading..." indefinitely with no way to tell it apart from a
+            // download in flight. Show the quiet placeholder instead.
+            if (loadState.bitmap == null && loadState.isLoading) {
+                loadState = loadState.copy(isLoading = false)
+            }
             return@LaunchedEffect
         }
 

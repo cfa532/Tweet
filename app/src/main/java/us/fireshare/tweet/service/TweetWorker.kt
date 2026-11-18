@@ -181,6 +181,11 @@ class UploadCommentWorker @AssistedInject constructor(
                 cleanupPermissions()
                 return Result.failure()
             }
+        } catch (e: CancellationException) {
+            // A system-driven cancellation (constraints, app standby) is not a
+            // failed upload; rethrow so WorkManager reschedules instead of the
+            // UI reporting a permanent failure the user never saw happen.
+            throw e
         } catch (e: Exception) {
             Timber.tag("UploadCommentWorker").e(e, "Error in doWork")
             // Only show toast on final attempt
@@ -188,7 +193,13 @@ class UploadCommentWorker @AssistedInject constructor(
                 TweetNotificationCenter.postAsync(TweetEvent.CommentUploadFailed("Comment upload failed: ${e.message}"))
             }
             cleanupPermissions()
-            Result.failure()
+            // Transient errors use the configured backoff for one retry; the
+            // runAttemptCount gates above expect Result.retry to be reachable.
+            if (runAttemptCount < 1) {
+                Result.retry()
+            } else {
+                Result.failure()
+            }
         }
     }
 }

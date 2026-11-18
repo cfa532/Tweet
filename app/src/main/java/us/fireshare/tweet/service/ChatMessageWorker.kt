@@ -9,6 +9,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -212,12 +213,23 @@ class SendChatMessageWorker @AssistedInject constructor(
                 TweetNotificationCenter.postAsync(TweetEvent.ChatMessageSent(failedMessage))
                 Result.failure()
             }
+        } catch (e: CancellationException) {
+            // A system-driven cancellation (constraints, app standby) is not a
+            // failed send; rethrow so WorkManager reschedules instead of the
+            // optimistic message being marked failed.
+            throw e
         } catch (e: Exception) {
             Timber.tag("SendChatMessageWorker").e(e, "Unexpected error in doWork")
-            TweetNotificationCenter.postAsync(
-                TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}", optimisticMessageId)
-            )
-            Result.failure()
+            if (runAttemptCount < 1) {
+                // Transient errors use the configured backoff for one retry;
+                // the failure event is only posted on the final attempt.
+                Result.retry()
+            } else {
+                TweetNotificationCenter.postAsync(
+                    TweetEvent.ChatMessageSendFailed("Message send failed: ${e.message}", optimisticMessageId)
+                )
+                Result.failure()
+            }
         } finally {
             try {
                 wakeLock.release()
