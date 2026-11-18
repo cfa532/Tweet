@@ -1330,7 +1330,8 @@ object VideoManager {
         videoMid: MimeiId,
         videoUrl: String?,
         videoType: MediaType?,
-        resolvedHlsUrl: String?
+        resolvedHlsUrl: String?,
+        allowRemoteExtraction: Boolean = false
     ) {
         if (videoUrl.isNullOrBlank()) return
         if (posterBitmaps.containsKey(videoMid)) {
@@ -1338,13 +1339,13 @@ object VideoManager {
             return
         }
         if (posterJobs[videoMid]?.isActive == true) return
-        if (isRemotePosterGenerationUnsupported(videoUrl, videoType, resolvedHlsUrl)) {
+        if (!allowRemoteExtraction && isRemotePosterGenerationUnsupported(videoUrl, videoType, resolvedHlsUrl)) {
             return
         }
 
         posterJobs[videoMid] = videoLoadingScope.launch {
             val poster = withContext(Dispatchers.IO) {
-                createPosterBitmap(context, videoUrl, videoType, resolvedHlsUrl)
+                createPosterBitmap(context, videoUrl, videoType, resolvedHlsUrl, allowRemoteExtraction)
             }
             if (poster != null && !poster.isRecycled) {
                 if (posterBitmaps.containsKey(videoMid)) {
@@ -1402,7 +1403,8 @@ object VideoManager {
         context: Context,
         videoUrl: String,
         videoType: MediaType?,
-        resolvedHlsUrl: String?
+        resolvedHlsUrl: String?,
+        allowRemoteExtraction: Boolean
     ): Bitmap? {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -1416,7 +1418,8 @@ object VideoManager {
             }
 
             if (isRemotePosterGenerationUnsupported(sourceUrl, videoType, resolvedHlsUrl)) {
-                return null
+                if (!allowRemoteExtraction) return null
+                return extractRemotePoster(retriever, videoUrl, videoType, resolvedHlsUrl)
             }
 
             if (sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://")) {
@@ -1427,21 +1430,7 @@ object VideoManager {
 
             val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: return null
-            val maxDimension = 640
-            val largerDimension = maxOf(frame.width, frame.height)
-            if (largerDimension <= maxDimension) {
-                frame
-            } else {
-                val scale = maxDimension.toFloat() / largerDimension.toFloat()
-                Bitmap.createScaledBitmap(
-                    frame,
-                    (frame.width * scale).toInt().coerceAtLeast(1),
-                    (frame.height * scale).toInt().coerceAtLeast(1),
-                    true
-                ).also {
-                    if (it !== frame) frame.recycle()
-                }
-            }
+            scalePosterBitmap(frame)
         } catch (e: Exception) {
             MediaLog.d("VideoManager") { "Poster generation failed for $videoUrl: ${e.message}" }
             null
@@ -1449,6 +1438,56 @@ object VideoManager {
             try {
                 retriever.release()
             } catch (_: Exception) { }
+        }
+    }
+
+    /**
+     * Extract a poster from a remote video for static previews (quote cards) whose
+     * video is never played in the feed, so no rendered player can snapshot a frame.
+     * Progressive URLs are read directly; remote HLS playlists cannot be read by
+     * MediaMetadataRetriever, so fall back to the first .ts segment — the same
+     * layout the upload pipeline produces and the share preview in
+     * TweetViewModel.generateVideoPreviewImage consumes.
+     */
+    private fun extractRemotePoster(
+        retriever: MediaMetadataRetriever,
+        videoUrl: String,
+        videoType: MediaType?,
+        resolvedHlsUrl: String?
+    ): Bitmap? {
+        val baseUrl = if (videoUrl.endsWith("/")) videoUrl else "$videoUrl/"
+        val candidates = if (videoType == MediaType.HLS_VIDEO || !resolvedHlsUrl.isNullOrBlank()) {
+            listOf("${baseUrl}480p/segment000.ts", "${baseUrl}720p/segment000.ts")
+        } else {
+            listOf(videoUrl)
+        }
+        for (sourceUrl in candidates) {
+            try {
+                retriever.setDataSource(sourceUrl, mapOf("timeout" to "3000"))
+                val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: continue
+                return scalePosterBitmap(frame)
+            } catch (e: Exception) {
+                MediaLog.d("VideoManager") { "Remote poster extraction failed for $sourceUrl: ${e.message}" }
+            }
+        }
+        return null
+    }
+
+    private fun scalePosterBitmap(frame: Bitmap): Bitmap {
+        val maxDimension = 640
+        val largerDimension = maxOf(frame.width, frame.height)
+        if (largerDimension <= maxDimension) {
+            return frame
+        }
+        val scale = maxDimension.toFloat() / largerDimension.toFloat()
+        return Bitmap.createScaledBitmap(
+            frame,
+            (frame.width * scale).toInt().coerceAtLeast(1),
+            (frame.height * scale).toInt().coerceAtLeast(1),
+            true
+        ).also {
+            if (it !== frame) frame.recycle()
         }
     }
 

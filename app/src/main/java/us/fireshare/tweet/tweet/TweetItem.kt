@@ -7,6 +7,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +21,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
@@ -772,7 +776,13 @@ private fun QuotePreviewCard(original: Tweet) {
         if (mediaType == MediaType.Image) {
             image = ImageCacheManager.downloadAndCacheImage(context, mediaUrl, attachment.mid, ownerId = original.authorId)
         } else if (isVideo) {
-            VideoManager.ensureVideoPoster(context, attachment.mid, mediaUrl, mediaType, null)
+            // The quoted video is never played in the feed, so its poster cannot
+            // come from a rendered player snapshot; opt into bounded remote
+            // extraction or the card stays a gray box.
+            VideoManager.ensureVideoPoster(
+                context, attachment.mid, mediaUrl, mediaType, null,
+                allowRemoteExtraction = true
+            )
         }
     }
 
@@ -811,13 +821,29 @@ private fun QuotePreviewCard(original: Tweet) {
                             val bitmap = if (isVideo) VideoManager.posterBitmaps[attachment.mid] else image
                             if (bitmap != null) {
                                 Image(bitmap.asImageBitmap(), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-                            } else {
+                            } else if (!isVideo) {
                                 Text(
-                                    if (isVideo) "▶" else attachment.fileName ?: attachment.type.name,
+                                    attachment.fileName ?: attachment.type.name,
                                     modifier = Modifier.padding(4.dp),
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                            if (isVideo) {
+                                // Same play badge style as AttachmentPreview video thumbnails
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(32.dp)
+                                        .background(Color.LightGray.copy(alpha = 0.5f), CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = stringResource(R.string.play_video),
+                                        tint = Color.White,
+                                        modifier = Modifier.align(Alignment.Center).size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
