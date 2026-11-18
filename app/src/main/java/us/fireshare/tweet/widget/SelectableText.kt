@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalUriHandler
@@ -42,6 +43,14 @@ fun SelectableText(
     // Placed before `callback` so trailing-lambda call sites still bind the
     // lambda to `callback`.
     expansionKey: String? = null,
+    // When false the text is not wrapped in a SelectionContainer; used by
+    // surfaces that own long-press behavior themselves (chat bubbles show a
+    // copy menu instead of selection handles, which would swallow it).
+    selectable: Boolean = true,
+    // Long-press handler. Routed through this composable's own tap detector:
+    // a parent's separate detectTapGestures never fires because this detector
+    // consumes the gesture first.
+    onLongPress: ((Offset) -> Unit)? = null,
     callback: (String) -> Unit = {} // Callback for when username is clicked
 )
 {
@@ -80,7 +89,7 @@ fun SelectableText(
         blankLineHeight = blankLineHeight,
     )
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    SelectionContainer {
+    val coreText: @Composable () -> Unit = {
         Text(
             text = annotatedText,
             maxLines = if (isExpanded) Int.MAX_VALUE else maxLines,
@@ -92,35 +101,43 @@ fun SelectableText(
             color = color,
             modifier = modifier
                 .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        layoutResult?.let { textLayoutResult ->
-                            val position = textLayoutResult.getOffsetForPosition(offset)
-                            val urlAnnotations = annotatedText.getStringAnnotations(
-                                tag = "URL",
-                                start = position,
-                                end = position
-                            )
-                            val usernameAnnotations = annotatedText.getStringAnnotations(
-                                tag = "USERNAME_CLICK",
-                                start = position,
-                                end = position
-                            )
-                            if (urlAnnotations.isNotEmpty()) {
-                                uriHandler.openUri(urlAnnotations[0].item)
-                            } else if (usernameAnnotations.isNotEmpty()) {
-                                val username = usernameAnnotations[0].item
-                                callback(username)  // navigate to the user account
-                            } else {
-                                // Not clicking on a username, trigger text click callback if provided
+                    detectTapGestures(
+                        onLongPress = onLongPress,
+                        onTap = { offset ->
+                            layoutResult?.let { textLayoutResult ->
+                                val position = textLayoutResult.getOffsetForPosition(offset)
+                                val urlAnnotations = annotatedText.getStringAnnotations(
+                                    tag = "URL",
+                                    start = position,
+                                    end = position
+                                )
+                                val usernameAnnotations = annotatedText.getStringAnnotations(
+                                    tag = "USERNAME_CLICK",
+                                    start = position,
+                                    end = position
+                                )
+                                if (urlAnnotations.isNotEmpty()) {
+                                    uriHandler.openUri(urlAnnotations[0].item)
+                                } else if (usernameAnnotations.isNotEmpty()) {
+                                    val username = usernameAnnotations[0].item
+                                    callback(username)  // navigate to the user account
+                                } else {
+                                    // Not clicking on a username, trigger text click callback if provided
+                                    onTextClick?.invoke()
+                                }
+                            } ?: run {
+                                // No layout result yet, trigger text click callback if provided
                                 onTextClick?.invoke()
                             }
-                        } ?: run {
-                            // No layout result yet, trigger text click callback if provided
-                            onTextClick?.invoke()
                         }
-                    }
+                    )
                 },
         )
+    }
+    if (selectable) {
+        SelectionContainer { coreText() }
+    } else {
+        coreText()
     }
     if (!isExpanded && lineCount >= maxLines) {
         Text(

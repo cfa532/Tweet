@@ -351,6 +351,7 @@
     <string name="photo_mode">Photo Mode</string>
     <string name="video_mode">Video Mode</string>
     <string name="copy_tweet_id">Copy tweet ID</string>
+    <string name="copy_text">Copy</string>
     
     <!-- File size warnings -->
     <string name="file_size_warning">File size: %s (Max: 512MB)</string>

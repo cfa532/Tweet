@@ -52,6 +52,7 @@
     <string name="photo_mode">写真モード</string>
     <string name="video_mode">動画モード</string>
     <string name="copy_tweet_id">ツイートIDをコピー</string>
+    <string name="copy_text">コピー</string>
     
     <!-- File size warnings -->
     <string name="file_size_warning">ファイルサイズ：%s（最大：512MB）</string>

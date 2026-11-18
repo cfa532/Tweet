@@ -85,7 +85,14 @@ object Gadget {
         // of that would render as multiple line breaks.
         val processed = text.replace(Regex("\n{2,}"), "\u200B")
 
-        val urlRegex = "(https?://[\\w.-]+(?:/[\\w.-]*)*)".toRegex()
+        // Scheme + host + optional path segments + optional query string and/or
+        // fragment (e.g. billing links like "?checkout_order=…" or
+        // "#checkout=…", whose values contain '=', '_' and '-'). The character
+        // classes stay ASCII so URLs glued to CJK text don't swallow the CJK,
+        // and the lookbehinds drop trailing sentence punctuation (.,;:!?)) from
+        // the link.
+        val urlRegex =
+            "(https?://[\\w.-]+(?:/[\\w.-]*)*(?:\\?[\\w~.%&=;,+!':()/@-]*(?<![.,;:!?)]))?(?:#[\\w~.%&=;,+!':()/@-]*(?<![.,;:!?)]))?)".toRegex()
         val mentionRegex = "@([\\w_]+)".toRegex()
         var lastIndex = 0
 

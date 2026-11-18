@@ -1,5 +1,7 @@
 package us.fireshare.tweet.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -28,18 +30,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -107,7 +110,7 @@ import us.fireshare.tweet.service.BadgeStateManager
 import us.fireshare.tweet.service.SystemNotificationManager
 import us.fireshare.tweet.viewmodel.ChatViewModel
 import us.fireshare.tweet.widget.FullScreenPlayerManager
-import us.fireshare.tweet.widget.Gadget.buildAnnotatedText
+import us.fireshare.tweet.widget.SelectableText
 import us.fireshare.tweet.widget.VideoManager
 import us.fireshare.tweet.widget.inferMediaTypeFromAttachment
 import java.text.SimpleDateFormat
@@ -625,15 +628,21 @@ fun ChatItem(
             if (!isSentByCurrentUser) {
                 UserAvatar(user = receipt, size = 32)
                 Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                // Reserve the other party's avatar column (32dp avatar + 8dp spacing)
+                // so long bubbles fill the middle area and stop exactly where their
+                // bubble would start, matching the iOS chat layout.
+                Spacer(modifier = Modifier.width(40.dp))
             }
-            
-            // Message content in a column with two rows
-            // Limit width to leave space for avatar when sent by current user
+
+            // Message content in a column with two rows. weight(1f) fills the
+            // space between the two avatar columns.
             Column(
-                modifier = if (isSentByCurrentUser) Modifier.fillMaxWidth(0.85f) else Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f),
                 horizontalAlignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
             ) {
                 if (message.content?.isNotBlank() == true) {
+                    var copyMenuExpanded by remember { mutableStateOf(false) }
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = if (isLastMessageFromParty) {
@@ -643,15 +652,37 @@ fun ChatItem(
                         },
                         modifier = Modifier.padding(4.dp)
                     ) {
-                        SelectionContainer {
-                            BasicText(
-                                text = buildAnnotatedText(
-                                    message.content,
-                                    linkColor = MaterialTheme.colorScheme.primary,
-                                ),
-                                style = MaterialTheme.typography.bodyLarge,
+                        Box {
+                            // SelectableText renders URLs/mentions via buildAnnotatedText
+                            // (same as tweet bodies) and opens URL taps in the browser.
+                            // selectable=false: no selection handles; long-press shows
+                            // the copy menu through SelectableText's own gesture
+                            // detector (a parent's separate detector never fires).
+                            SelectableText(
+                                text = message.content,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectable = false,
+                                onLongPress = { copyMenuExpanded = true },
                                 modifier = Modifier.padding(8.dp)
                             )
+                            DropdownMenu(
+                                expanded = copyMenuExpanded,
+                                onDismissRequest = { copyMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.copy_text)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        message.content?.let {
+                                            val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboardManager.setPrimaryClip(ClipData.newPlainText("Chat message", it))
+                                        }
+                                        copyMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -740,6 +771,9 @@ fun ChatItem(
             if (isSentByCurrentUser) {
                 Spacer(modifier = Modifier.width(8.dp))
                 UserAvatar(user = appUser, size = 32)
+            } else {
+                // Reserve the current user's avatar column (see comment on the left side).
+                Spacer(modifier = Modifier.width(40.dp))
             }
         }
         

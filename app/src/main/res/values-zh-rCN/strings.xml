@@ -390,6 +390,7 @@
     <string name="photo_mode">拍照模式</string>
     <string name="video_mode">录像模式</string>
     <string name="copy_tweet_id">复制推文 ID</string>
+    <string name="copy_text">复制</string>
     <string name="file_size_warning">文件大小：%s（最大：512MB）</string>
     <string name="file_size_ok">文件大小：%s ✓</string>
     <string name="file_size_large_warning">已选择大文件（%s），上传可能需要更长时间</string>
