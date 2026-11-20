@@ -459,4 +459,21 @@
     <string name="video_memory_usage">メモリ：使用 %1$dMB、空き %2$dMB、合計 %3$dMB、上限 %4$dMB</string>
     <string name="image_memory_usage">メモリ：%1$d件（%2$dMB/%3$dMB）、空き枠：表示中 %4$d/%5$d、バックグラウンド %6$d/%7$d、アバター %8$d/%9$d</string>
     <string name="more_documents">他 %1$d 件</string>
+
+    <!-- Material settings -->
+    <string name="settings_theme">テーマ</string>
+    <string name="settings_cached_tweets">ツイート</string>
+    <string name="settings_cached_users">ユーザー</string>
+    <string name="settings_video_cache">動画キャッシュ</string>
+    <string name="settings_active_players">使用中のプレーヤー</string>
+    <string name="settings_app_memory">アプリのメモリ</string>
+    <string name="settings_image_memory">画像のメモリ</string>
+    <string name="settings_tweet_counts">メモリ %1$d · ローカル %2$d</string>
+    <string name="settings_user_counts">合計 %1$d · 有効 %2$d</string>
+    <string name="settings_size_mb">%1$d MB</string>
+    <string name="settings_clear_cache">すべてのキャッシュを削除</string>
+    <string name="settings_logout">ログアウト</string>
+    <string name="settings_delete_account">アカウントを削除</string>
+    <string name="settings_show_cache_info">キャッシュ情報を表示</string>
+    <string name="settings_hide_cache_info">キャッシュ情報を非表示</string>
 </resources>

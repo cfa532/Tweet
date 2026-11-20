@@ -453,4 +453,21 @@
     <string name="video_memory_usage">記憶體：已用 %1$dMB，可用 %2$dMB，共 %3$dMB，上限 %4$dMB</string>
     <string name="image_memory_usage">記憶體：%1$d 項（%2$dMB/%3$dMB），可用名額：可見圖片 %4$d/%5$d，背景 %6$d/%7$d，頭像 %8$d/%9$d</string>
     <string name="more_documents">另外 %1$d 個</string>
+
+    <!-- Material settings -->
+    <string name="settings_theme">主題</string>
+    <string name="settings_cached_tweets">推文</string>
+    <string name="settings_cached_users">使用者</string>
+    <string name="settings_video_cache">影片快取</string>
+    <string name="settings_active_players">使用中的播放器</string>
+    <string name="settings_app_memory">應用程式記憶體</string>
+    <string name="settings_image_memory">圖片記憶體</string>
+    <string name="settings_tweet_counts">記憶體 %1$d · 本機 %2$d</string>
+    <string name="settings_user_counts">%1$d · 有效 %2$d</string>
+    <string name="settings_size_mb">%1$d MB</string>
+    <string name="settings_clear_cache">清除所有快取</string>
+    <string name="settings_logout">登出</string>
+    <string name="settings_delete_account">刪除帳號</string>
+    <string name="settings_show_cache_info">展開快取資訊</string>
+    <string name="settings_hide_cache_info">收合快取資訊</string>
 </resources>

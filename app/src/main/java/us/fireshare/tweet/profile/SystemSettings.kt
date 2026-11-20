@@ -1,39 +1,51 @@
 package us.fireshare.tweet.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Login
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,10 +58,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewModelScope
@@ -80,396 +95,277 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
     var isDeletingAccount by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
-                title = {
-                    Column {
-                        UserAvatar(user = appUser, size = 36)
-                        Text(
-                            text = appUser.name ?: "",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { 
-                        if (!navController.popBackStack()) {
-                            navController.navigate(NavTweet.TweetFeed) {
-                                launchSingleTop = true
-                                popUpTo(NavTweet.Settings) {
-                                    inclusive = true
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    title = {
+                        Text(stringResource(R.string.settings))
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            if (!navController.popBackStack()) {
+                                navController.navigate(NavTweet.TweetFeed) {
+                                    launchSingleTop = true
+                                    popUpTo(NavTweet.Settings) {
+                                        inclusive = true
+                                    }
                                 }
                             }
+                        })
+                        {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
                         }
-                    })
-                    {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
-        var showDialog by remember { mutableStateOf(false) }
+                    },
+                )
+            },
+            bottomBar = {
+                Text(
+                    text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+            },
+        ) { innerPadding ->
+            var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
+            var showDialog by remember { mutableStateOf(false) }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-        ) {
             LazyColumn(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(bottom = 12.dp)
             ) {
                 item {
-                    // Theme settings section
-                    var expanded by remember { mutableStateOf(false) }
+                    var showThemeDialog by remember { mutableStateOf(false) }
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.theme_settings),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
+                    SettingsRow(
+                        title = stringResource(R.string.settings_theme),
+                        icon = Icons.Outlined.Palette,
+                        supportingText = when (currentThemeMode) {
+                            "system" -> stringResource(R.string.theme_system)
+                            "dark" -> stringResource(R.string.theme_dark)
+                            else -> stringResource(R.string.theme_light)
+                        },
+                        trailingIcon = Icons.Outlined.ExpandMore,
+                        onClick = { showThemeDialog = true }
+                    )
 
-                        ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = when (currentThemeMode) {
-                                    "system" -> stringResource(R.string.theme_system)
-                                    "light" -> stringResource(R.string.theme_light)
-                                    "dark" -> stringResource(R.string.theme_dark)
-                                    else -> stringResource(R.string.theme_light)
-                                },
-                                onValueChange = {},
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.theme_system)) },
-                                    onClick = {
-                                        currentThemeMode = "system"
-                                        HproseInstance.preferenceHelper.setThemeMode("system")
-                                        ThemeManager.updateThemeMode("system")
-                                        expanded = false
+                    if (showThemeDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showThemeDialog = false },
+                            title = { Text(stringResource(R.string.theme_mode)) },
+                            text = {
+                                Column(Modifier.selectableGroup()) {
+                                    listOf(
+                                        "system" to R.string.theme_system,
+                                        "light" to R.string.theme_light,
+                                        "dark" to R.string.theme_dark
+                                    ).forEach { (mode, label) ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .selectable(
+                                                    selected = currentThemeMode == mode,
+                                                    role = Role.RadioButton,
+                                                    onClick = {
+                                                        currentThemeMode = mode
+                                                        HproseInstance.preferenceHelper.setThemeMode(mode)
+                                                        ThemeManager.updateThemeMode(mode)
+                                                        showThemeDialog = false
+                                                    }
+                                                )
+                                                .heightIn(min = 48.dp)
+                                                .padding(vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = currentThemeMode == mode,
+                                                onClick = null
+                                            )
+                                            Spacer(Modifier.width(16.dp))
+                                            Text(stringResource(label))
+                                        }
                                     }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.theme_light)) },
-                                    onClick = {
-                                        currentThemeMode = "light"
-                                        HproseInstance.preferenceHelper.setThemeMode("light")
-                                        ThemeManager.updateThemeMode("light")
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.theme_dark)) },
-                                    onClick = {
-                                        currentThemeMode = "dark"
-                                        HproseInstance.preferenceHelper.setThemeMode("dark")
-                                        ThemeManager.updateThemeMode("dark")
-                                        expanded = false
-                                    }
-                                )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showThemeDialog = false }) {
+                                    Text(stringResource(R.string.close))
+                                }
                             }
-                        }
+                        )
                     }
+
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
 
                 item {
-                    // Cache information section
                     var showCacheInfo by remember { mutableStateOf(false) }
+                    var isCachedCleared by remember { mutableStateOf(false) }
 
+                    // Keep cache disclosure, statistics, and cleanup on one shared surface.
                     Column(
                         modifier = Modifier
+                            .padding(horizontal = 16.dp)
                             .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = stringResource(R.string.cache_information),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            androidx.compose.material3.Switch(
-                                checked = showCacheInfo,
-                                onCheckedChange = { showCacheInfo = it }
-                            )
-                        }
+                        SettingsRow(
+                            title = stringResource(R.string.cache_information),
+                            icon = Icons.Outlined.Storage,
+                            trailingIcon = if (showCacheInfo) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            onClickLabel = stringResource(
+                                if (showCacheInfo) R.string.settings_hide_cache_info else R.string.settings_show_cache_info
+                            ),
+                            onClick = { showCacheInfo = !showCacheInfo }
+                        )
 
-                        // Show cache information when expanded
                         if (showCacheInfo) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                thickness = DividerDefaults.Thickness,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
-
                             var tweetCacheStats by remember {
-                                mutableStateOf(
-                                    TweetCacheManager.CacheStats(
-                                        0,
-                                        0,
-                                        0
-                                    )
-                                )
+                                mutableStateOf(TweetCacheManager.CacheStats(0, 0, 0))
                             }
                             var userCacheStats by remember {
-                                mutableStateOf(
-                                    TweetCacheManager.UserCacheStats(
-                                        0,
-                                        0,
-                                        0,
-                                        0
-                                    )
-                                )
+                                mutableStateOf(TweetCacheManager.UserCacheStats(0, 0, 0, 0))
                             }
-                            var videoCacheStats by remember { mutableStateOf("") }
-                            var videoManagerStats by remember { mutableStateOf("") }
-                            var videoMemoryStats by remember { mutableStateOf("") }
+                            var videoCacheBytes by remember { mutableStateOf(0L) }
+                            var activePlayers by remember { mutableStateOf(0) }
+                            var appMemoryBytes by remember { mutableStateOf(0L) }
+                            var imageCacheBytes by remember { mutableStateOf(0L) }
 
-                            LaunchedEffect(Unit) {
+                            LaunchedEffect(isCachedCleared) {
                                 tweetCacheStats = TweetCacheManager.getCacheStats()
                                 userCacheStats = TweetCacheManager.getUserCacheStats()
-                                videoCacheStats = VideoManager.getCacheStats(context)
-                                videoManagerStats = VideoManager.getPlayerStats(context)
-                                videoMemoryStats = VideoManager.getMemoryStats(context)
+                                videoCacheBytes = VideoManager.getCache(context).cacheSpace
+                                activePlayers = VideoManager.getActiveVideoCount()
+                                val runtime = Runtime.getRuntime()
+                                appMemoryBytes = runtime.totalMemory() - runtime.freeMemory()
+                                imageCacheBytes = ImageCacheManager.getMemoryCacheUsageBytes()
                             }
 
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
                             ) {
-                                Text(
+                                CacheStatRow(
+                                    stringResource(R.string.settings_cached_tweets),
                                     stringResource(
-                                        R.string.tweet_cache_stats,
+                                        R.string.settings_tweet_counts,
                                         tweetCacheStats.memoryCacheSize,
                                         tweetCacheStats.databaseCacheSize
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium
+                                    )
                                 )
-                                Text(
+                                CacheStatRow(
+                                    stringResource(R.string.settings_cached_users),
                                     stringResource(
-                                        R.string.user_cache_stats,
+                                        R.string.settings_user_counts,
                                         userCacheStats.totalUsers,
                                         userCacheStats.validUsers
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium
+                                    )
                                 )
-                                Text(
-                                    stringResource(R.string.video_cache_stats, videoCacheStats),
-                                    style = MaterialTheme.typography.bodyMedium
+                                CacheStatRow(
+                                    stringResource(R.string.settings_video_cache),
+                                    stringResource(R.string.settings_size_mb, videoCacheBytes / (1024 * 1024))
                                 )
-                                Text(
-                                    stringResource(R.string.video_players_stats, videoManagerStats),
-                                    style = MaterialTheme.typography.bodyMedium
+                                CacheStatRow(
+                                    stringResource(R.string.settings_active_players),
+                                    activePlayers.toString()
                                 )
-                                Text(
-                                    stringResource(R.string.video_memory_stats, videoMemoryStats),
-                                    style = MaterialTheme.typography.bodyMedium
+                                CacheStatRow(
+                                    stringResource(R.string.settings_app_memory),
+                                    stringResource(R.string.settings_size_mb, appMemoryBytes / (1024 * 1024))
                                 )
-                                Text(
-                                    stringResource(
-                                        R.string.image_cache_stats,
-                                        ImageCacheManager.getMemoryCacheStats(context)
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium
+                                CacheStatRow(
+                                    stringResource(R.string.settings_image_memory),
+                                    stringResource(R.string.settings_size_mb, imageCacheBytes / (1024 * 1024))
                                 )
                             }
                         }
-                    }
-                }
 
-                item {
-                    // Clear cache section
-                    var isCachedCleared by remember { mutableStateOf(false) }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp)
-                    ) {
                         if (isCachedCleared) {
                             Text(
                                 stringResource(R.string.cache_cleared_success),
                                 color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
                             )
                         }
 
-                        Button(
+                        TextButton(
                             onClick = {
                                 if (isCachedCleared) {
                                     isCachedCleared = false
                                 } else {
-                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO)
-                                    {
-                                        // Clear all tweet cache (memory + database)
+                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                         TweetCacheManager.clearAllCachedTweets()
-                                        // Clear video cache
                                         VideoManager.clearVideoCache(context)
-
-                                        // Clear all user cache
                                         TweetCacheManager.clearAllCachedUsers()
-
-                                        // Clear tweet instances from memory
                                         Tweet.clearAllInstances()
-
-                                        // Release all video players on main thread
                                         withContext(Dispatchers.Main) {
                                             VideoManager.releaseAllVideos()
                                         }
-
-                                        // Clear image cache
                                         ImageCacheManager.clearAllCachedImages(context)
-
-                                        @Suppress("UnsafeOptInUsageError")
                                         isCachedCleared = true
                                     }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = if (isCachedCleared) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                                contentColor = if (isCachedCleared) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onError
-                            )
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(horizontal = 8.dp)
+                                .heightIn(min = 48.dp)
                         ) {
                             Text(
-                                if (isCachedCleared) stringResource(R.string.close) else stringResource(
-                                    R.string.clear_all_cached_data
-                                ),
-                                fontWeight = FontWeight.Medium
+                                stringResource(
+                                    if (isCachedCleared) R.string.close else R.string.settings_clear_cache
+                                )
                             )
                         }
                     }
                 }
 
                 item {
-                    // Account section
                     var showLogoutDialog by remember { mutableStateOf(false) }
                     var showDeleteDialog by remember { mutableStateOf(false) }
 
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.account),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                    if (appUser.isGuest()) {
+                        SettingsRow(
+                            title = stringResource(R.string.login),
+                            icon = Icons.AutoMirrored.Outlined.Login,
+                            onClick = { navController.navigate(NavTweet.Login) }
                         )
-                        if (appUser.isGuest()) {
-                            Button(
-                                onClick = { navController.navigate(NavTweet.Login) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(stringResource(R.string.login), fontWeight = FontWeight.Medium)
-                            }
-                        } else {
-                            Button(
-                                onClick = { showLogoutDialog = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary,
-                                    contentColor = MaterialTheme.colorScheme.onSecondary
-                                )
-                            ) {
-                                Text(stringResource(R.string.logout), fontWeight = FontWeight.Medium)
-                            }
-                            Button(
-                                onClick = { showDeleteDialog = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError
-                                )
-                            ) {
-                                Text(stringResource(R.string.delete_account), fontWeight = FontWeight.Medium)
-                            }
-                        }
+                    } else {
+                        SettingsRow(
+                            title = stringResource(R.string.settings_logout),
+                            icon = Icons.AutoMirrored.Outlined.Logout,
+                            contentColor = MaterialTheme.colorScheme.error,
+                            onClick = { showLogoutDialog = true }
+                        )
+                        SettingsRow(
+                            title = stringResource(R.string.settings_delete_account),
+                            icon = Icons.Outlined.DeleteOutline,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            onClick = { showDeleteDialog = true }
+                        )
                     }
 
                     if (showLogoutDialog) {
-                        androidx.compose.material3.AlertDialog(
+                        AlertDialog(
                             onDismissRequest = { showLogoutDialog = false },
                             title = { Text(stringResource(R.string.logout)) },
                             text = { Text(stringResource(R.string.logout_confirmation)) },
@@ -492,7 +388,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     }
 
                     if (showDeleteDialog) {
-                        androidx.compose.material3.AlertDialog(
+                        AlertDialog(
                             onDismissRequest = { showDeleteDialog = false },
                             title = { Text(stringResource(R.string.delete_account)) },
                             text = { Text(stringResource(R.string.delete_account_confirmation)) },
@@ -522,100 +418,149 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     }
                 }
 
-
+                item {
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    SettingsRow(
+                        title = stringResource(R.string.privacy_policy),
+                        icon = Icons.Outlined.Shield,
+                        trailingIcon = Icons.Outlined.ChevronRight,
+                        onClick = { showDialog = true }
+                    )
+                    if (appUser.isGuest()) {
+                        SelectableText(
+                            text = appUser.baseUrl ?: "",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 56.dp, end = 16.dp, top = 8.dp)
+                        )
+                    }
+                }
             }
 
-            // Bottom section with version, user ID, and privacy policy
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                TextButton(
-                    onClick = { showDialog = true },
-                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
+            if (showDialog) {
+                BasicAlertDialog(
+                    onDismissRequest = { showDialog = false }
                 ) {
-                    Text(stringResource(R.string.privacy_policy))
-                }
-                // Show IP address for guest users
-                if (appUser.isGuest()) {
-                    SelectableText(
-                        text = appUser.baseUrl ?: "",
-                        color = MaterialTheme.colorScheme.secondary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                Text(
-                    stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                    color = MaterialTheme.colorScheme.secondary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-            }
-        }
-
-        if (showDialog) {
-            BasicAlertDialog(
-                onDismissRequest = { showDialog = false }
-            ) {
-                ConstraintLayout(
-                    modifier = Modifier
-                        .width(500.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White),
-                ) {
-                    val (_, button) = createRefs()
-                    LazyColumn(
+                    ConstraintLayout(
                         modifier = Modifier
-                            .padding(8.dp)
-                            .height(800.dp)
+                            .width(500.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White),
                     ) {
-                        item {
-                            Text(
-                                stringResource(R.string.privacy_policy_body),
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
-                            TextButton(
-                                onClick = { showDialog = false },
-                                modifier = Modifier.constrainAs(button) {
-                                    bottom.linkTo(parent.bottom)
-                                    centerHorizontallyTo(parent)
-                                },
-                            ) {
+                        val (_, button) = createRefs()
+                        LazyColumn(
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .height(800.dp)
+                        ) {
+                            item {
                                 Text(
-                                    stringResource(R.string.confirm),
-                                    fontWeight = FontWeight.Bold
+                                    stringResource(R.string.privacy_policy_body),
                                 )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                TextButton(
+                                    onClick = { showDialog = false },
+                                    modifier = Modifier.constrainAs(button) {
+                                        bottom.linkTo(parent.bottom)
+                                        centerHorizontallyTo(parent)
+                                    },
+                                ) {
+                                    Text(
+                                        stringResource(R.string.confirm),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
 
-    // Full-screen spinner overlay while deleting account
-    if (isDeletingAccount) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .pointerInput(Unit) { /* consume all touch events */ },
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = Color.White)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.deleting_account),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+        // Full-screen spinner overlay while deleting account
+        if (isDeletingAccount) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .pointerInput(Unit) { /* consume all touch events */ },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color.White)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.deleting_account),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
     }
-    } // end Box
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    supportingText: String? = null,
+    trailingIcon: ImageVector? = null,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClickLabel: String? = null
+) {
+    ListItem(
+        modifier = Modifier.clickable(
+            role = Role.Button,
+            onClickLabel = onClickLabel,
+            onClick = onClick
+        ),
+        headlineContent = { Text(title) },
+        supportingContent = if (supportingText != null) {
+            { Text(supportingText) }
+        } else null,
+        leadingContent = {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+        },
+        trailingContent = if (trailingIcon != null) {
+            { Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(24.dp)) }
+        } else null,
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent,
+            headlineColor = contentColor,
+            leadingIconColor = if (contentColor != MaterialTheme.colorScheme.onSurface) {
+                contentColor
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            supportingColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            trailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
+}
+
+@Composable
+private fun CacheStatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 24.dp)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(0.4f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(0.6f)
+        )
+    }
 }

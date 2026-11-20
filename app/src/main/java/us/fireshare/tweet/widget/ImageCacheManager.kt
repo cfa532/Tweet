@@ -1618,6 +1618,9 @@ object ImageCacheManager {
     // Note: clearSignificantCachedImages() removed as modern Android (API 34+) 
     // only sends UI_HIDDEN and BACKGROUND memory levels
 
+    /** Current bitmap cache usage for the compact settings summary. */
+    fun getMemoryCacheUsageBytes(): Long = currentMemoryUsage.get().toLong()
+
     /**
      * Get memory cache statistics
      */

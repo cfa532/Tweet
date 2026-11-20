@@ -465,4 +465,21 @@
     <string name="video_memory_usage">内存：已用 %1$dMB，可用 %2$dMB，共 %3$dMB，上限 %4$dMB</string>
     <string name="image_memory_usage">内存：%1$d 项（%2$dMB/%3$dMB），可用名额：可见图片 %4$d/%5$d，后台 %6$d/%7$d，头像 %8$d/%9$d</string>
     <string name="more_documents">另外 %1$d 个</string>
+
+    <!-- Material settings -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_cached_tweets">推文</string>
+    <string name="settings_cached_users">用户</string>
+    <string name="settings_video_cache">视频缓存</string>
+    <string name="settings_active_players">活跃播放器</string>
+    <string name="settings_app_memory">应用内存</string>
+    <string name="settings_image_memory">图片内存</string>
+    <string name="settings_tweet_counts">内存 %1$d · 本地 %2$d</string>
+    <string name="settings_user_counts">%1$d · 有效 %2$d</string>
+    <string name="settings_size_mb">%1$d MB</string>
+    <string name="settings_clear_cache">清除所有缓存</string>
+    <string name="settings_logout">退出登录</string>
+    <string name="settings_delete_account">删除账号</string>
+    <string name="settings_show_cache_info">展开缓存信息</string>
+    <string name="settings_hide_cache_info">收起缓存信息</string>
 </resources>

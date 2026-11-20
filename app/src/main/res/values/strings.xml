@@ -485,4 +485,21 @@
     <string name="video_memory_usage">Memory: %1$dMB used, %2$dMB free, %3$dMB total, %4$dMB max</string>
     <string name="image_memory_usage">Memory: %1$d items (%2$dMB/%3$dMB), Available Slots: visible=%4$d/%5$d, background=%6$d/%7$d, avatar=%8$d/%9$d</string>
     <string name="more_documents">+%1$d more</string>
+
+    <!-- Material settings -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_cached_tweets">Tweets</string>
+    <string name="settings_cached_users">Users</string>
+    <string name="settings_video_cache">Video cache</string>
+    <string name="settings_active_players">Active players</string>
+    <string name="settings_app_memory">App memory</string>
+    <string name="settings_image_memory">Image memory</string>
+    <string name="settings_tweet_counts">%1$d in memory · %2$d on disk</string>
+    <string name="settings_user_counts">%1$d total · %2$d valid</string>
+    <string name="settings_size_mb">%1$d MB</string>
+    <string name="settings_clear_cache">Clear all cached data</string>
+    <string name="settings_logout">Log out</string>
+    <string name="settings_delete_account">Delete account</string>
+    <string name="settings_show_cache_info">Show cache information</string>
+    <string name="settings_hide_cache_info">Hide cache information</string>
 </resources>
