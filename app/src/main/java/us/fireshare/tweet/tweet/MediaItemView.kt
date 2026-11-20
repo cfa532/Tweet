@@ -255,7 +255,8 @@ fun MediaItemView(
                         inPreviewGrid = inPreviewGrid,
                         isVisible = isVisible,
                         loadOriginalImage = loadOriginalImage,
-                        ownerId = tweet.authorId
+                        ownerId = tweet.authorId,
+                        previewMid = mediaItems[index].previewMid
                     )
                 }
             }

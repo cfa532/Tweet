@@ -154,6 +154,15 @@ interface CachedTweetDao {
     @Query("SELECT * FROM CachedTweet")
     fun getAllCachedTweets(): List<CachedTweet>
 
+    // TweetConverter writes compact Gson JSON. Narrow the rows before decoding so
+    // video allocation does not deserialize the entire public feed under the cache lock.
+    @Query("""
+        SELECT * FROM CachedTweet
+        WHERE uid LIKE 'bookmark_list_%' OR uid LIKE 'favorite_list_%'
+           OR originalTweet LIKE '%"isPrivate":true%'
+    """)
+    fun getPermanentCachedTweets(): List<CachedTweet>
+
     /**
      * Get cached tweets by user ID.
      * Bookmarks and favorites are written sequentially in server order, so their
@@ -176,7 +185,7 @@ interface CachedTweetDao {
      * IMPORTANT: Never-expiring tweets:
      * - Bookmarks (uid LIKE 'bookmark_list_%') - User's saved tweets
      * - Favorites (uid LIKE 'favorite_list_%') - User's favorited tweets
-     * - AppUser's private tweets - Checked in CleanUpWorker code
+     * - Private tweets across cached accounts - Checked in CleanUpWorker code
      * 
      * Expiration applies to other caches:
      * - Tweets cached by authorId (public tweets from profiles)
@@ -199,8 +208,8 @@ interface CachedTweetDao {
     /**
      * The least recently cached rows that the size trim is allowed to drop, oldest
      * first. Bookmarks and favorites are excluded here for the same reason they are
-     * excluded from expiry: they never expire. AppUser's private tweets cannot be
-     * filtered in SQL (isPrivate lives inside the serialized payload) and are skipped
+     * excluded from expiry: they never expire. Private tweets cannot be filtered in SQL
+     * (isPrivate lives inside the serialized payload) and are skipped across accounts
      * by the caller, exactly as CleanUpWorker already does for expiry.
      */
     @Query("SELECT * FROM CachedTweet WHERE uid NOT LIKE 'bookmark_list_%' AND uid NOT LIKE 'favorite_list_%' ORDER BY timestamp ASC LIMIT :limit")

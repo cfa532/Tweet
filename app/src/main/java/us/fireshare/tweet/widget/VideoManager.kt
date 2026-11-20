@@ -10,7 +10,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.Cache
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +26,7 @@ import timber.log.Timber
 import us.fireshare.tweet.datamodel.MediaType
 import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.Tweet
+import us.fireshare.tweet.datamodel.TweetCacheManager
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -98,7 +98,7 @@ object VideoManager {
 
     // ===== CACHE MANAGEMENT =====
     private var videoCache: SimpleCache? = null
-    private const val CACHE_SIZE_BYTES = 2000L * 1024 * 1024 // 2GB cache size
+    private const val CACHE_SIZE_BYTES = 10L * 1024 * 1024 * 1024 // 10 GB, matching iOS
     private const val VIDEO_CACHE_DIR = "video_cache"
 
     // ===== SEQUENTIAL PLAYBACK =====
@@ -157,11 +157,35 @@ object VideoManager {
         synchronized(cacheLock) {
             if (videoCache == null) {
                 val cacheDir = File(context.cacheDir, VIDEO_CACHE_DIR)
-                val evictor = LeastRecentlyUsedCacheEvictor(CACHE_SIZE_BYTES)
+                val appContext = context.applicationContext
+                val evictor = SavedMediaCacheEvictor(CACHE_SIZE_BYTES) {
+                    TweetCacheManager.permanentMediaIds(appContext)
+                }
                 val databaseProvider = StandaloneDatabaseProvider(context)
                 videoCache = SimpleCache(cacheDir, evictor, databaseProvider)
             }
             return videoCache ?: throw IllegalStateException("Video cache was not initialized")
+        }
+    }
+
+    /** Expire whole videos by their most recently read span, preserving every HLS key. */
+    internal fun cleanupDiskCache(context: Context, permanent: Set<MimeiId>) {
+        val cache = getCache(context)
+        val cutoff = System.currentTimeMillis() - TweetCacheManager.MEDIA_CACHE_RETENTION_TIME
+        synchronized(cache) {
+            val videos = cache.keys.groupBy { it.substringBefore('/') }
+                .mapNotNull { (mid, keys) ->
+                    val lastUsed = keys.flatMap { cache.getCachedSpans(it) }
+                        .maxOfOrNull { it.lastTouchTimestamp } ?: return@mapNotNull null
+                    Triple(mid, keys, lastUsed)
+                }.sortedBy { it.third }
+            var totalBytes = cache.cacheSpace
+            for ((mid, keys, lastUsed) in videos) {
+                if (mid !in permanent && (lastUsed < cutoff || totalBytes > CACHE_SIZE_BYTES)) {
+                    keys.forEach { cache.removeResource(it) }
+                    totalBytes = cache.cacheSpace
+                }
+            }
         }
     }
 

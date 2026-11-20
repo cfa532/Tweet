@@ -30,7 +30,7 @@ android {
         applicationId = "us.fireshare.tweet"
         minSdk = 29
         targetSdk = 37
-        versionCode = 165
+        versionCode = 166
         versionName = "77"  // Display metadata; direct-update ordering uses versionCode only.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -140,7 +140,7 @@ android {
         create("play") {
             dimension = "version"
             versionNameSuffix = "-play"
-            versionCode = 165  // Play version code increased for release
+            versionCode = 166  // Keep Play and direct releases aligned.
             ndk {
                 // FFmpeg AAR is arm64-only; adding x86_64 here would advertise unsupported ChromeOS installs.
                 //noinspection ChromeOsAbiSupport

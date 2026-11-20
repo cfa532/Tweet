@@ -446,7 +446,7 @@ fun AttachmentBrowser(
                         index = page,
                         autoPlay = pagerState.currentPage == page,
                         inPreviewGrid = false,
-                        loadOriginalImage = false,
+                        loadOriginalImage = true,
                         viewModel = viewModel,
                         onVideoCompleted = null,
                         useIndependentVideoMute = true,

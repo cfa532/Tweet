@@ -211,7 +211,7 @@ fun MediaGrid(
                 launch(Dispatchers.IO) {
                     preloadSemaphore.acquire()
                     try {
-                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl, tweet.authorId)
+                        ImageCacheManager.preloadImages(context, item.mid, mediaUrl, tweet.authorId, item.previewMid)
                     } catch (e: Exception) {
                         Timber.tag("MediaGrid").e(e, "Failed to preload image: ${item.mid}")
                     } finally {

@@ -63,7 +63,6 @@ import us.fireshare.tweet.tweet.TweetItem
 import us.fireshare.tweet.tweet.TweetListView
 import us.fireshare.tweet.viewmodel.UserViewModel
 import us.fireshare.tweet.viewmodel.collectUserAsState
-import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 
@@ -77,13 +76,6 @@ fun ProfileScreen(
     appUserViewModel: UserViewModel,
 ) {
     val context = LocalContext.current
-
-    // Cancel image loading when leaving the screen
-    DisposableEffect(Unit) {
-        onDispose {
-            ImageCacheManager.cancelImageLoadingForContext(context)
-        }
-    }
 
     // Create ViewModel - move hiltViewModel outside of remember
     val viewModel = if (userId == appUser.mid) appUserViewModel

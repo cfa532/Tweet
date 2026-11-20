@@ -771,10 +771,13 @@ private fun QuotePreviewCard(original: Tweet) {
     var image by remember(attachment?.mid) { mutableStateOf<Bitmap?>(null) }
     val isVideo = mediaType == MediaType.Video || mediaType == MediaType.HLS_VIDEO
 
-    LaunchedEffect(attachment?.mid, mediaUrl, mediaType) {
+    LaunchedEffect(attachment?.mid, attachment?.previewMid, mediaUrl, mediaType) {
         if (attachment == null) return@LaunchedEffect
         if (mediaType == MediaType.Image) {
-            image = ImageCacheManager.downloadAndCacheImage(context, mediaUrl, attachment.mid, ownerId = original.authorId)
+            image = ImageCacheManager.downloadAndCacheImage(
+                context, mediaUrl, attachment.mid,
+                ownerId = original.authorId, previewMid = attachment.previewMid
+            )
         } else if (isVideo) {
             // The quoted video is never played in the feed, so its poster cannot
             // come from a rendered player snapshot; opt into bounded remote

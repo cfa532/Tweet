@@ -1,5 +1,6 @@
 package us.fireshare.tweet.datamodel
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -32,14 +33,14 @@ import java.util.Locale
  * - Profile tweets: Cached by the profile user's `mid`
  * - Bookmarks: Cached by `bookmark_list_<appUser.mid>` (NEVER EXPIRES)
  * - Favorites: Cached by `favorite_list_<appUser.mid>` (NEVER EXPIRES)
- * - AppUser's private tweets: NEVER EXPIRE (preserved during cleanup)
+ * - Private tweets across cached accounts: NEVER EXPIRE (preserved during cleanup)
  * 
  * Expiration Policy:
  * - Public tweets in main feed: Expire after 30 days
  * - Public profile tweets: Expire after 30 days
  * - Bookmarks: NEVER expire
  * - Favorites: NEVER expire
- * - AppUser's private tweets: NEVER expire
+ * - Private tweets across cached accounts: NEVER expire
  * - User cache: Expires after 30 minutes
  * 
  * This ensures bookmarks and favorites don't pollute the main feed cache,
@@ -51,10 +52,32 @@ import java.util.Locale
  */
 object TweetCacheManager {
 
+    internal const val MEDIA_CACHE_RETENTION_TIME = 7 * 24 * 60 * 60 * 1000L
+
+    /**
+     * Read protection from disk, including accounts that are currently signed out.
+     * Feed/list copies share media, so expiring a feed row must not release saved media.
+     * Call from an IO thread; this deliberately does not use the session's memory cache.
+     */
+    internal fun permanentMediaIds(context: Context): Set<MimeiId> {
+        val dao = TweetCacheDatabase.getInstance(context).tweetDao()
+        return buildSet {
+            dao.getPermanentCachedTweets().forEach { row ->
+                if (row.originalTweet.isPrivate || row.uid.startsWith(BOOKMARKS_PREFIX) ||
+                    row.uid.startsWith(FAVORITES_PREFIX)) {
+                    row.originalTweet.attachments.orEmpty().forEach { attachment ->
+                        add(attachment.mid)
+                        attachment.previewMid?.let { add(it) }
+                    }
+                }
+            }
+        }
+    }
+
     // Cache expiration time (30 days in milliseconds). Enforced by CleanUpWorker,
     // which runs daily; internal so the worker reads this value instead of keeping
     // its own cutoff.
-    // Note: Does not apply to bookmarks, favorites, or appUser's private tweets
+    // Note: Does not apply to bookmarks, favorites, or private tweets
     internal const val CACHE_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000L
 
     // User cache expiration time (30 minutes in milliseconds)

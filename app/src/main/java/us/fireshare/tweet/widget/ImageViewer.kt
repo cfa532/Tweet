@@ -343,25 +343,10 @@ fun AdvancedImageViewer(
             if (initialBitmap == null) {
                 try {
                     val originalMid = "${mid}_original"
-                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible, ownerId = ownerId) { preview ->
-                        // Show partial (low-res) image while full image loads so user sees progress
-                        if (loadState.isLoading && !preview.isRecycled) {
-                            loadState = loadState.copy(bitmap = preview)
-                        }
-                    }
-                    val downloadedBitmap = try {
-                        deferred.await()
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        loadState = loadState.copy(isLoading = false)
-                        if (ImageCacheManager.isImageProtected(originalMid)) {
-                            ImageCacheManager.schedulePauseDownload(originalMid, 3000L)
-                        } else {
-                            ImageCacheManager.cancelImageLoad(originalMid)
-                        }
-                        MediaLog.d("ImageViewer") { "Image loading cancelled: $imageUrl" }
-                        return@LaunchedEffect
-                    }
-                    
+                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(
+                        context, imageUrl, mid, isVisible, ownerId = ownerId
+                    )
+
                     if (downloadedBitmap != null) {
                         compressedPreviewJob?.cancel()
                         // Update with original high-resolution image
@@ -429,11 +414,7 @@ fun AdvancedImageViewer(
             MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
             // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
             loadState = loadState.copy(isLoading = false)
-            if (ImageCacheManager.isImageProtected(mid)) {
-                ImageCacheManager.schedulePauseDownload("${mid}_original", 3000L)
-            } else {
-                ImageCacheManager.cancelImageLoad(mid)
-            }
+            ImageCacheManager.cancelImageLoad(mid)
             return@LaunchedEffect
         } catch (e: Exception) {
             loadState = loadState.copy(
@@ -872,7 +853,8 @@ fun ImageViewer(
     onClose: (() -> Unit)? = null,
     onLoadComplete: (() -> Unit)? = null,
     onBitmapLoaded: ((Bitmap?) -> Unit)? = null,
-    ownerId: MimeiId? = null
+    ownerId: MimeiId? = null,
+    previewMid: MimeiId? = null
 ) {
     val context = LocalContext.current
     val retryScope = rememberCoroutineScope()
@@ -1009,7 +991,7 @@ fun ImageViewer(
     }
 
     // Load image using proper cache checking: compressed first, then original, then server
-    LaunchedEffect(mid, imageUrl, ownerId, canDownload, imageRoutes, retryCount) {
+    LaunchedEffect(mid, imageUrl, previewMid, loadOriginalImage, ownerId, canDownload, imageRoutes, retryCount) {
         if ((imageUrl == null && ownerId == null) || mid == null || !canDownload) {
             // Nothing to load yet — offline, author routes unresolved, or no mid.
             // The effect re-runs when any key changes (canDownload flipping
@@ -1080,16 +1062,11 @@ fun ImageViewer(
             try {
                 if (retryCount == 0) BlackList.resetSessionFailures(mid)
                 if (loadOriginalImage) {
-                    // Load original high-res image from server (deferred so cancellation can be debounced)
                     val originalMid = "${mid}_original"
-                    val deferred = ImageCacheManager.loadOriginalImageDeferred(context, imageUrl, mid, isVisible, ownerId = ownerId) { preview ->
-                        // Show partial (low-res) image while full image loads so user sees progress
-                        if (loadState.isLoading && !preview.isRecycled) {
-                            loadState = loadState.copy(bitmap = preview)
-                        }
-                    }
-                    val downloadedBitmap = deferred.await()
-                    
+                    val downloadedBitmap = ImageCacheManager.loadOriginalImage(
+                        context, imageUrl, mid, isVisible, ownerId = ownerId
+                    )
+
                     if (downloadedBitmap != null) {
                         // Update with loaded original image
                         loadState = loadState.copy(bitmap = downloadedBitmap, isLoading = false, hasError = false)
@@ -1131,7 +1108,8 @@ fun ImageViewer(
                         imageUrl,
                         mid,
                         isVisible = isVisible,
-                        ownerId = ownerId
+                        ownerId = ownerId,
+                        previewMid = previewMid
                     )
                     
                     if (downloadedBitmap != null) {
@@ -1194,10 +1172,6 @@ fun ImageViewer(
             MediaLog.d("ImageViewer") { "Image loading cancelled due to composition change: $imageUrl" }
             // Clear loading state so we don't get stuck showing "Loading..." after navigate away / image change
             loadState = loadState.copy(isLoading = false)
-            if (loadOriginalImage) {
-                // The shared original download owns its queue entry even when this viewer stops awaiting it.
-                ImageCacheManager.schedulePauseDownload("${mid}_original")
-            }
             throw e
         } catch (e: Exception) {
             loadState = loadState.copy(

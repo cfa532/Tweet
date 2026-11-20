@@ -86,7 +86,6 @@ import us.fireshare.tweet.navigation.BottomNavigationBar
 import us.fireshare.tweet.navigation.LocalNavController
 import us.fireshare.tweet.navigation.NavTweet
 import us.fireshare.tweet.viewmodel.TweetViewModel
-import us.fireshare.tweet.widget.ImageCacheManager
 import us.fireshare.tweet.widget.LocalVideoCoordinator
 import us.fireshare.tweet.widget.VideoPlaybackCoordinator
 import kotlin.math.abs
@@ -133,13 +132,6 @@ fun TweetDetailScreen(
         if (tweetDeleted) {
             Timber.tag("TweetDetailScreen").d("Tweet ${tweet.mid} was deleted, navigating back")
             navController.popBackStack()
-        }
-    }
-
-    // Cancel image loading when leaving the screen
-    DisposableEffect(Unit) {
-        onDispose {
-            ImageCacheManager.cancelImageLoadingForContext(context)
         }
     }
 

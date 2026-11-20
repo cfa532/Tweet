@@ -6,12 +6,23 @@ import androidx.media3.common.util.UnstableApi
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import timber.log.Timber
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.datamodel.TweetCacheDatabase
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.widget.ImageCacheManager
+import us.fireshare.tweet.widget.VideoManager
 import java.util.Date
 
 class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(context, workerParams) {
+    companion object {
+        @OptIn(UnstableApi::class)
+        internal fun cleanupMediaCaches(context: Context) {
+            val permanent = TweetCacheManager.permanentMediaIds(context)
+            val avatars = TweetCacheDatabase.getInstance(context).tweetDao()
+                .getAllCachedUsers().mapNotNull { it.user.avatar }
+            ImageCacheManager.cleanupDiskCache(context, permanent + avatars)
+            VideoManager.cleanupDiskCache(context, permanent)
+        }
+    }
     @OptIn(UnstableApi::class)
     override fun doWork(): Result {
         try {
@@ -31,14 +42,13 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
             var preservedPrivateTweets = 0
             var deletedTweets = 0
             
-            // Filter out and preserve appUser's private tweets
+            // Preserve private posts across account switches and logout as well.
             oldTweets.forEach { cachedTweet ->
                 val tweet = cachedTweet.originalTweet
                 
-                // Preserve appUser's private tweets
-                if (tweet.authorId == appUser.mid && tweet.isPrivate) {
+                if (tweet.isPrivate) {
                     preservedPrivateTweets++
-                    Timber.tag("CleanUpWorker").d("Preserving appUser's private tweet: ${tweet.mid}")
+                    Timber.tag("CleanUpWorker").d("Preserving private tweet: ${tweet.mid}")
                 } else {
                     // Delete only this expired list membership. The same tweet may be
                     // preserved in another cache list such as bookmarks or favorites.
@@ -69,7 +79,7 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
                 cachedTweetDao.getOldestTrimmableCachedTweets(excess).forEach { cachedTweet ->
                     val tweet = cachedTweet.originalTweet
                     // Same permanence rule as expiry above.
-                    if (tweet.authorId == appUser.mid && tweet.isPrivate) {
+                    if (tweet.isPrivate) {
                         preservedPrivateOverCap++
                     } else {
                         cachedTweetDao.deleteCachedTweetFromCache(cachedTweet.mid, cachedTweet.uid)
@@ -82,9 +92,7 @@ class CleanUpWorker(context: Context, workerParams: WorkerParameters) : Worker(c
                 )
             }
 
-            // Note: VideoManager doesn't have clearOldCachedVideos method
-            // The memory management is handled automatically by VideoManager
-            Timber.d("CleanUpWorker - Video cache cleanup handled by VideoManager")
+            cleanupMediaCaches(applicationContext)
             Timber.tag("CleanUpWorker").d("Clean up finished!!!!")
 
             return Result.success()

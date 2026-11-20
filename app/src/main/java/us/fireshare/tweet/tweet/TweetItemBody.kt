@@ -193,7 +193,7 @@ fun TweetItemBody(
                 // Media files and documents
                 if (hasAttachments) {
                     // Stabilize attachments to prevent video recomposition
-                    val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
+                    val stableAttachments = remember(tweet.attachments?.map { it.mid to it.previewMid }) {
                         tweet.attachments!!
                     }
                     
@@ -322,7 +322,7 @@ fun TweetItemBody(
 
                     // Media files and documents
                     if (hasAttachments) {
-                        val stableAttachments = remember(tweet.attachments?.map { it.mid }) {
+                        val stableAttachments = remember(tweet.attachments?.map { it.mid to it.previewMid }) {
                             tweet.attachments!!
                         }
                         val mediaAttachments = remember(stableAttachments) {

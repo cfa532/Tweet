@@ -140,6 +140,14 @@ class TweetApplication : Application(), ComponentCallbacks2 {
         // Register lifecycle observer to refresh appUser when app comes to foreground
         ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
 
+        applicationScope.launch {
+            try {
+                CleanUpWorker.cleanupMediaCaches(this@TweetApplication)
+            } catch (e: Exception) {
+                Timber.tag("MediaCacheCleanup").e(e, "Launch media cleanup failed")
+            }
+        }
+
         // Schedule the CleanUpWorker
         val cleanUpRequest = PeriodicWorkRequestBuilder<CleanUpWorker>(1, TimeUnit.DAYS)
             .build()

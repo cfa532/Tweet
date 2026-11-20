@@ -478,4 +478,6 @@ data class MimeiFileType(
     val timestamp: Long = System.currentTimeMillis(),
     val aspectRatio: Float? = null,   // only used for video
     var url: String? = null,    // will not be persisted.
+    // Feeds use this smaller image; detail/fullscreen and downloads keep using mid.
+    val previewMid: MimeiId? = null,
 )
