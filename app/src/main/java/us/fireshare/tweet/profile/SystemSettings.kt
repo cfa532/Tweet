@@ -93,6 +93,8 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
     val appUser by appUserState.collectAsState()
     val context = LocalContext.current
     var isDeletingAccount by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -126,16 +128,37 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                 )
             },
             bottomBar = {
-                Text(
-                    text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                )
+                ) {
+                    // Keep account actions separate from everyday settings.
+                    if (!appUser.isGuest()) {
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                        SettingsRow(
+                            title = stringResource(R.string.settings_logout),
+                            icon = Icons.AutoMirrored.Outlined.Logout,
+                            contentColor = MaterialTheme.colorScheme.error,
+                            onClick = { showLogoutDialog = true }
+                        )
+                        SettingsRow(
+                            title = stringResource(R.string.settings_delete_account),
+                            icon = Icons.Outlined.DeleteOutline,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            onClick = { showDeleteDialog = true }
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
             },
         ) { innerPadding ->
             var currentThemeMode by remember { mutableStateOf(HproseInstance.preferenceHelper.getThemeMode()) }
@@ -215,7 +238,7 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                     var showCacheInfo by remember { mutableStateOf(false) }
                     var isCachedCleared by remember { mutableStateOf(false) }
 
-                    // Keep cache disclosure, statistics, and cleanup on one shared surface.
+                    // Keep cleanup inside the disclosure so the collapsed block stays compact.
                     Column(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
@@ -291,27 +314,24 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                     stringResource(R.string.settings_size_mb, imageCacheBytes / (1024 * 1024))
                                 )
                             }
-                        }
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        )
-
-                        if (isCachedCleared) {
-                            Text(
-                                stringResource(R.string.cache_cleared_success),
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                             )
-                        }
 
-                        TextButton(
-                            onClick = {
-                                if (isCachedCleared) {
+                            if (isCachedCleared) {
+                                Text(
+                                    stringResource(R.string.cache_cleared_success),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
                                     isCachedCleared = false
-                                } else {
                                     appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
                                         TweetCacheManager.clearAllCachedTweets()
                                         VideoManager.clearVideoCache(context)
@@ -323,97 +343,24 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                                         ImageCacheManager.clearAllCachedImages(context)
                                         isCachedCleared = true
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.End)
-                                .padding(horizontal = 8.dp)
-                                .heightIn(min = 48.dp)
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (isCachedCleared) R.string.close else R.string.settings_clear_cache
-                                )
-                            )
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.End)
+                                    .padding(horizontal = 8.dp)
+                                    .heightIn(min = 48.dp)
+                            ) {
+                                Text(stringResource(R.string.settings_clear_cache))
+                            }
                         }
                     }
                 }
 
-                item {
-                    var showLogoutDialog by remember { mutableStateOf(false) }
-                    var showDeleteDialog by remember { mutableStateOf(false) }
-
-                    if (appUser.isGuest()) {
+                if (appUser.isGuest()) {
+                    item {
                         SettingsRow(
                             title = stringResource(R.string.login),
                             icon = Icons.AutoMirrored.Outlined.Login,
                             onClick = { navController.navigate(NavTweet.Login) }
-                        )
-                    } else {
-                        SettingsRow(
-                            title = stringResource(R.string.settings_logout),
-                            icon = Icons.AutoMirrored.Outlined.Logout,
-                            contentColor = MaterialTheme.colorScheme.error,
-                            onClick = { showLogoutDialog = true }
-                        )
-                        SettingsRow(
-                            title = stringResource(R.string.settings_delete_account),
-                            icon = Icons.Outlined.DeleteOutline,
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            onClick = { showDeleteDialog = true }
-                        )
-                    }
-
-                    if (showLogoutDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showLogoutDialog = false },
-                            title = { Text(stringResource(R.string.logout)) },
-                            text = { Text(stringResource(R.string.logout_confirmation)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    showLogoutDialog = false
-                                    appUserViewModel.viewModelScope.launch {
-                                        appUserViewModel.logout {
-                                            navController.navigate(NavTweet.TweetFeed)
-                                        }
-                                    }
-                                }) { Text(stringResource(R.string.logout), color = MaterialTheme.colorScheme.error) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showLogoutDialog = false }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                            }
-                        )
-                    }
-
-                    if (showDeleteDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showDeleteDialog = false },
-                            title = { Text(stringResource(R.string.delete_account)) },
-                            text = { Text(stringResource(R.string.delete_account_confirmation)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    showDeleteDialog = false
-                                    isDeletingAccount = true
-                                    appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
-                                        appUserViewModel.deleteAccount(
-                                            onDone = {
-                                                appUserViewModel.viewModelScope.launch(Dispatchers.Main) {
-                                                    isDeletingAccount = false
-                                                    navController.navigate(NavTweet.TweetFeed)
-                                                }
-                                            },
-                                            onError = { isDeletingAccount = false }
-                                        )
-                                    }
-                                }) { Text(stringResource(R.string.delete_account), color = MaterialTheme.colorScheme.error) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showDeleteDialog = false }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                            }
                         )
                     }
                 }
@@ -435,6 +382,59 @@ fun SystemSettings(navController: NavController, appUserViewModel: UserViewModel
                         )
                     }
                 }
+            }
+
+            if (showLogoutDialog) {
+                AlertDialog(
+                    onDismissRequest = { showLogoutDialog = false },
+                    title = { Text(stringResource(R.string.logout)) },
+                    text = { Text(stringResource(R.string.logout_confirmation)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showLogoutDialog = false
+                            appUserViewModel.viewModelScope.launch {
+                                appUserViewModel.logout {
+                                    navController.navigate(NavTweet.TweetFeed)
+                                }
+                            }
+                        }) { Text(stringResource(R.string.logout), color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showLogoutDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
+            }
+
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text(stringResource(R.string.delete_account)) },
+                    text = { Text(stringResource(R.string.delete_account_confirmation)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showDeleteDialog = false
+                            isDeletingAccount = true
+                            appUserViewModel.viewModelScope.launch(Dispatchers.IO) {
+                                appUserViewModel.deleteAccount(
+                                    onDone = {
+                                        appUserViewModel.viewModelScope.launch(Dispatchers.Main) {
+                                            isDeletingAccount = false
+                                            navController.navigate(NavTweet.TweetFeed)
+                                        }
+                                    },
+                                    onError = { isDeletingAccount = false }
+                                )
+                            }
+                        }) { Text(stringResource(R.string.delete_account), color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
             }
 
             if (showDialog) {
