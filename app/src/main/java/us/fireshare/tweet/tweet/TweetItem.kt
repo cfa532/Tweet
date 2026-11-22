@@ -759,6 +759,8 @@ internal fun QuotedTweetContent(
     }
 }
 
+private const val QUOTE_PREVIEW_MAX_CHARS = 4_096
+
 @Composable
 private fun QuotePreviewCard(original: Tweet) {
     val navController = LocalNavController.current
@@ -851,8 +853,18 @@ private fun QuotePreviewCard(original: Tweet) {
                         }
                     }
                 }
+                // The fixed 2:1 card clips its text, but Compose still measures and lays
+                // out every character it is given, so a long quoted document stalled the
+                // feed. Hand it a bounded prefix, far more than the card can show
+                // (matches the iOS quote card's bound).
+                val previewText = remember(original.title, original.content) {
+                    listOfNotNull(original.title, original.content)
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n\n")
+                        .take(QUOTE_PREVIEW_MAX_CHARS)
+                }
                 Text(
-                    text = listOfNotNull(original.title, original.content).filter { it.isNotBlank() }.joinToString("\n\n"),
+                    text = previewText,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                     overflow = TextOverflow.Ellipsis
