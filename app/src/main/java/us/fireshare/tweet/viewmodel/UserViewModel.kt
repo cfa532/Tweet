@@ -1983,6 +1983,12 @@ class UserViewModel @AssistedInject constructor(
                         }
                     }
                     
+                    // An edit, like or bookmark made anywhere else, applied to this
+                    // view model's copies as TweetFeedViewModel does for the main feed.
+                    is TweetEvent.TweetUpdated -> replaceInLists(event.tweet)
+                    is TweetEvent.TweetLiked -> replaceInLists(event.tweet)
+                    is TweetEvent.TweetBookmarked -> replaceInLists(event.tweet)
+
                     is TweetEvent.TweetRestored -> {
                         // Restore tweet if it belongs to current user
                         if (event.tweet.authorId == latestUser.mid) {
@@ -2032,6 +2038,19 @@ class UserViewModel @AssistedInject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * These lists hold their own copies of each tweet, and a row rebuilds from its
+     * list copy when the screen is shown again. Swap [updated] in wherever it is
+     * listed, so every copy carries the same state.
+     */
+    private fun replaceInLists(updated: Tweet) {
+        fun List<Tweet>.withUpdate() = map { if (it.mid == updated.mid) updated else it }
+        _tweets.value = tweets.value.withUpdate()
+        _pinnedTweets.value = pinnedTweets.value.withUpdate()
+        _favorites.value = favorites.value.withUpdate()
+        _bookmarks.value = bookmarks.value.withUpdate()
     }
 
     /**

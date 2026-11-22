@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +78,8 @@ import us.fireshare.tweet.datamodel.MimeiId
 import us.fireshare.tweet.datamodel.TW_CONST
 import us.fireshare.tweet.datamodel.Tweet
 import us.fireshare.tweet.datamodel.TweetCacheManager
+import us.fireshare.tweet.datamodel.TweetEvent
+import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.collectCachedUserAsState
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.navigation.LocalNavController
@@ -397,6 +400,7 @@ private fun RetweetContent(
         var isLoadingOriginal by remember(originalTweetId) {
             mutableStateOf(cachedOriginalTweet == null)
         }
+        FollowTweetUpdates(originalTweetId) { originalTweet = it }
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
             originalTweet?.let {
@@ -661,6 +665,28 @@ private fun RetweetWithContent(
     }
 }
 
+/**
+ * An embedded card (a retweet's or a quote's original) keeps its own copy of the
+ * original. Apply the edit, like and bookmark messages the lists already apply,
+ * so a change made elsewhere reaches the card while it is on screen.
+ */
+@Composable
+private fun FollowTweetUpdates(tweetId: MimeiId?, onUpdate: (Tweet) -> Unit) {
+    val latestOnUpdate by rememberUpdatedState(onUpdate)
+    LaunchedEffect(tweetId) {
+        if (tweetId == null) return@LaunchedEffect
+        TweetNotificationCenter.events.collect { event ->
+            val updated = when (event) {
+                is TweetEvent.TweetUpdated -> event.tweet
+                is TweetEvent.TweetLiked -> event.tweet
+                is TweetEvent.TweetBookmarked -> event.tweet
+                else -> null
+            }
+            if (updated?.mid == tweetId) latestOnUpdate(updated)
+        }
+    }
+}
+
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 internal fun QuotedTweetContent(
@@ -678,6 +704,7 @@ internal fun QuotedTweetContent(
     var isLoadingOriginal by remember(originalTweetId) {
         mutableStateOf(cachedOriginalTweet == null)
     }
+    FollowTweetUpdates(originalTweetId) { originalTweet = it }
 
     LaunchedEffect(originalTweetId, embeddedTweet?.authorId, tweet.originalAuthorId) {
         originalTweet?.let {
