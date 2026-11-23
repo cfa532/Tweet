@@ -23,7 +23,11 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "us.fireshare.tweet"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
     ndkVersion = "28.0.12433566"
 
     defaultConfig {
