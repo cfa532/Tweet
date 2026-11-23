@@ -82,18 +82,26 @@ fun FollowerScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 title = {
-                    Column {
-                        UserAvatar(user = userOfProfile, size = 44)
+                    if (userId == appUser.mid) {
                         Text(
-                            text = if (userId == appUser.mid) {
-                                stringResource(R.string.your_fans)
-                            } else {
-                                val displayName = userOfProfile.name ?: userOfProfile.username ?: stringResource(R.string.no_one)
-                                stringResource(R.string.fans_at_username, displayName)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
+                            text = stringResource(R.string.your_fans),
+                            style = MaterialTheme.typography.bodyMedium
                         )
+                    } else {
+                        // Another user's list: a small avatar with the title beside it.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            UserAvatar(user = userOfProfile, size = 36)
+                            Text(
+                                text = stringResource(
+                                    R.string.fans_at_username,
+                                    userOfProfile.name ?: userOfProfile.username ?: stringResource(R.string.no_one)
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
