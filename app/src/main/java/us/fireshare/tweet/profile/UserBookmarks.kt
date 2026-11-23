@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -38,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import us.fireshare.tweet.HproseInstance.appUser
 import us.fireshare.tweet.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -64,7 +62,6 @@ fun UserBookmarks(
     val navController = LocalNavController.current
     val bookmarks by viewModel.bookmarks.collectAsState()
     val bookmarksInitialLoadComplete by viewModel.bookmarksInitialLoadComplete.collectAsState()
-    val user = appUser
 
     val bookmarksCoordinator = remember { VideoPlaybackCoordinator() }
     DisposableEffect(bookmarksCoordinator) {
@@ -125,14 +122,10 @@ fun UserBookmarks(
                         titleContentColor = MaterialTheme.colorScheme.primary,
                     ),
                     title = {
-                        Column {
-                            UserAvatar(user = user, size = 36)
-                            Text(
-                                text = stringResource(R.string.your_bookmarks),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
-                            )
-                        }
+                        Text(
+                            text = stringResource(R.string.your_bookmarks),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     },
                     navigationIcon = {
                         IconButton(onClick = {
