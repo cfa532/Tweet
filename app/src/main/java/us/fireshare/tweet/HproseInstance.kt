@@ -61,6 +61,7 @@ import us.fireshare.tweet.datamodel.TweetNotificationCenter
 import us.fireshare.tweet.datamodel.User
 import us.fireshare.tweet.datamodel.UserRoutes
 import us.fireshare.tweet.datamodel.User.Companion.getInstance
+import us.fireshare.tweet.datamodel.UserActions
 import us.fireshare.tweet.datamodel.UserContentType
 import us.fireshare.tweet.network.HproseClientPool
 import us.fireshare.tweet.network.UserSession
@@ -4395,13 +4396,21 @@ object HproseInstance {
         } else {
             tweet.copy(mid = newTweetId, author = appUser)
         }
+        // The original's root records the retweet after add_tweet answers, so a current
+        // server sends no confirmed total; count this retweet on the original then.
         val originalCount = (response["originalRetweetCount"] as? Number)?.toInt()
-        if (originalCount != null) {
-            tweet.originalTweetId?.let { TweetCacheManager.getCachedTweet(it) }?.let { original ->
-                original.retweetCount = originalCount
-                updateCachedTweet(original, userId = original.authorId)
-                TweetNotificationCenter.post(TweetEvent.TweetUpdated(original))
-            }
+        tweet.originalTweetId?.let { TweetCacheManager.getCachedTweet(it) }?.let { cached ->
+            // A new copy: lists compare by equality, so an in-place change can go unseen.
+            // The signed-in user now holds a retweet of it, which lights its retweet button.
+            val flags = (cached.favorites ?: mutableListOf()).toMutableList()
+            while (flags.size <= UserActions.RETWEET) flags.add(false)
+            flags[UserActions.RETWEET] = true
+            val original = cached.copy(
+                retweetCount = originalCount ?: (cached.retweetCount + 1),
+                favorites = flags
+            )
+            updateCachedTweet(original, userId = original.authorId)
+            TweetNotificationCenter.post(TweetEvent.TweetUpdated(original))
         }
         if (tweet.originalTweetId == null) {
             TweetNotificationCenter.post(TweetEvent.TweetUploaded(updatedTweet))
@@ -4807,6 +4816,14 @@ object HproseInstance {
             }
         }
         val saved = response["saved"] as? Boolean ?: wanted
+        // Every later server read of this tweet carries the confirmed state, even one
+        // from a node whose copy of the viewer's account has not caught up yet.
+        Tweet.recordConfirmedSavedFlag(
+            actingUser.mid,
+            tweet.mid,
+            if (list == SavedTweetList.FAVORITES) 0 else 1,
+            saved
+        )
         val result = updatedTweet ?: if (updatedUserData != null) {
             optimisticSavedTweetResult(tweet, list, saved)
         } else {

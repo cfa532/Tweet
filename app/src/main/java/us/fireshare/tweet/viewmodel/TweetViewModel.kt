@@ -1133,8 +1133,11 @@ class TweetViewModel @AssistedInject constructor(
         originalTweet.isFavorite = isFavorite
         originalTweet.isBookmarked = tweetState.value.isBookmarked
         val desiredFavorite = !isFavorite
+        // The server's reply carries no tweet (the tweet-side like list is written
+        // after it answers), so the count moves here; a failure restores originalTweet.
         val optimisticTweet = originalTweet.copy(
             favorites = originalTweet.favorites?.toMutableList(),
+            favoriteCount = maxOf(0, originalTweet.favoriteCount + if (desiredFavorite) 1 else -1),
         )
         optimisticTweet.isFavorite = desiredFavorite
         optimisticTweet.favoriteOverride = desiredFavorite
@@ -1186,8 +1189,10 @@ class TweetViewModel @AssistedInject constructor(
         originalTweet.isBookmarked = hasBookmarked
         originalTweet.isFavorite = tweetState.value.isFavorite
         val desiredBookmark = !hasBookmarked
+        // The server's reply carries no tweet, so the count moves here.
         val optimisticTweet = originalTweet.copy(
             favorites = originalTweet.favorites?.toMutableList(),
+            bookmarkCount = maxOf(0, originalTweet.bookmarkCount + if (desiredBookmark) 1 else -1),
         )
         optimisticTweet.isBookmarked = desiredBookmark
         optimisticTweet.bookmarkOverride = desiredBookmark

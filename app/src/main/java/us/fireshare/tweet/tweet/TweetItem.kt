@@ -400,7 +400,7 @@ private fun RetweetContent(
         var isLoadingOriginal by remember(originalTweetId) {
             mutableStateOf(cachedOriginalTweet == null)
         }
-        FollowTweetUpdates(originalTweetId) { originalTweet = it }
+        FollowTweetUpdates(originalTweetId) { change -> originalTweet = originalTweet?.let(change) }
 
         LaunchedEffect(originalTweetId, tweet.originalAuthorId) {
             originalTweet?.let {
@@ -667,11 +667,12 @@ private fun RetweetWithContent(
 
 /**
  * An embedded card (a retweet's or a quote's original) keeps its own copy of the
- * original. Apply the edit, like and bookmark messages the lists already apply,
- * so a change made elsewhere reaches the card while it is on screen.
+ * original. Apply the edit, like, bookmark and comment messages the lists already
+ * apply, so a change made elsewhere reaches the card while it is on screen.
+ * [onUpdate] receives the change to apply to the card's current copy.
  */
 @Composable
-private fun FollowTweetUpdates(tweetId: MimeiId?, onUpdate: (Tweet) -> Unit) {
+private fun FollowTweetUpdates(tweetId: MimeiId?, onUpdate: ((Tweet) -> Tweet) -> Unit) {
     val latestOnUpdate by rememberUpdatedState(onUpdate)
     LaunchedEffect(tweetId) {
         if (tweetId == null) return@LaunchedEffect
@@ -682,7 +683,14 @@ private fun FollowTweetUpdates(tweetId: MimeiId?, onUpdate: (Tweet) -> Unit) {
                 is TweetEvent.TweetBookmarked -> event.tweet
                 else -> null
             }
-            if (updated?.mid == tweetId) latestOnUpdate(updated)
+            when {
+                updated?.mid == tweetId -> latestOnUpdate { updated }
+                // Like the lists, take only the count from a comment message.
+                event is TweetEvent.CommentUploaded && event.parentTweet.mid == tweetId ->
+                    latestOnUpdate { it.copy(commentCount = event.parentTweet.commentCount) }
+                event is TweetEvent.CommentDeleted && event.parentTweetId == tweetId ->
+                    latestOnUpdate { it.copy(commentCount = maxOf(0, it.commentCount - 1)) }
+            }
         }
     }
 }
@@ -704,7 +712,7 @@ internal fun QuotedTweetContent(
     var isLoadingOriginal by remember(originalTweetId) {
         mutableStateOf(cachedOriginalTweet == null)
     }
-    FollowTweetUpdates(originalTweetId) { originalTweet = it }
+    FollowTweetUpdates(originalTweetId) { change -> originalTweet = originalTweet?.let(change) }
 
     LaunchedEffect(originalTweetId, embeddedTweet?.authorId, tweet.originalAuthorId) {
         originalTweet?.let {

@@ -7,6 +7,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import kotlinx.serialization.Serializable
 import timber.log.Timber
+import us.fireshare.tweet.HproseInstance
 
 @Serializable
 @Entity(tableName = "tweets")
@@ -140,6 +141,42 @@ data class Tweet(
         fun clearInstance(mid: MimeiId) {
             synchronized(instanceLock) {
                 instances.remove(mid)
+            }
+        }
+
+        /**
+         * The viewer's confirmed like/bookmark state per tweet for this session, as iOS
+         * and web keep it. A node other than the viewer's root reads the save flags from
+         * its replica of the viewer's account, which can lag a like, so every server
+         * tweet [decode]s with these flags written into [favorites] until a read on the
+         * viewer's root confirms them. Writing them into [favorites] rather than an
+         * override keeps them on every copy: lists and rows detect changes by data-class
+         * equality, which sees [favorites] and nothing outside the constructor.
+         * Keyed by viewer, so one account's state never shows for another.
+         */
+        private val confirmedSavedFlags =
+            mutableMapOf<MimeiId, MutableMap<MimeiId, MutableMap<Int, Boolean>>>()
+
+        /** Record a like (index 0) or bookmark (index 1) the viewer's root confirmed. */
+        fun recordConfirmedSavedFlag(viewerId: MimeiId, tweetId: MimeiId, index: Int, saved: Boolean) {
+            synchronized(confirmedSavedFlags) {
+                confirmedSavedFlags.getOrPut(viewerId) { mutableMapOf() }
+                    .getOrPut(tweetId) { mutableMapOf() }[index] = saved
+            }
+        }
+
+        internal fun applyConfirmedSavedFlags(tweet: Tweet, viewerId: MimeiId, readAtViewerRoot: Boolean) {
+            synchronized(confirmedSavedFlags) {
+                val forViewer = confirmedSavedFlags[viewerId] ?: return
+                if (readAtViewerRoot) {
+                    forViewer.remove(tweet.mid)
+                    return
+                }
+                val saved = forViewer[tweet.mid] ?: return
+                val flags = tweet.favorites?.toMutableList() ?: mutableListOf()
+                while (flags.size < 3) flags.add(false)
+                saved.forEach { (index, value) -> flags[index] = value }
+                tweet.favorites = flags
             }
         }
 
@@ -278,7 +315,13 @@ data class Tweet(
                 }
                 
                 val jsonString = gson.toJson(processedDict)
-                return gson.fromJson(jsonString, Tweet::class.java)
+                return gson.fromJson(jsonString, Tweet::class.java).also {
+                    applyConfirmedSavedFlags(
+                        it,
+                        HproseInstance.appUser.mid,
+                        dict["viewerSavedStateAtRoot"] == true
+                    )
+                }
             } catch (e: Exception) {
                 Timber.e("Error converting dictionary to Tweet: $e")
                 throw RuntimeException("Cannot convert dictionary to Tweet", e)
