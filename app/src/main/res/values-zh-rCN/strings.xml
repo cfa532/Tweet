@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">众众</string>
-    <string name="forwarding">正在转发…</string>
+    <string name="forwarding">正在后台转发…</string>
     <string name="forward_by">你已转发</string>
     <string name="delete">删除</string>
     <string name="login">登录</string>
@@ -375,6 +375,8 @@
     <string name="download_in_progress">正在下载，请等待下载完成。</string>
     <string name="crop_avatar">裁剪头像</string>
     <string name="downloading_file">正在下载文件…</string>
+    <string name="downloading_file_background">正在后台下载文件…</string>
+    <string name="download_complete">下载完成</string>
     <string name="error_unknown_error">未知错误</string>
     <string name="error_message_failed">错误：%s</string>
     <string name="video_file_too_large">视频文件必须小于 512MB</string>

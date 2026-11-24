@@ -475,7 +475,7 @@ private suspend fun monitorDocumentDownload(context: Context, downloadId: Long):
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(
                                         context,
-                                        context.getString(R.string.downloading_file),
+                                        context.getString(R.string.download_complete),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }

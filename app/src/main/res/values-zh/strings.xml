@@ -15,6 +15,8 @@
     
     <!-- Additional missing strings -->
     <string name="downloading_file">正在下載文件...</string>
+    <string name="downloading_file_background">正在背景下載文件...</string>
+    <string name="download_complete">下載完成</string>
     <string name="error_unknown_error">未知錯誤</string>
     <string name="error_message_failed">錯誤：%s</string>
     <string name="video_file_too_large">視頻文件必須小於512MB</string>
@@ -205,7 +207,7 @@
 
     <!-- Shared screens, dialogs, notifications, and errors -->
     <string name="app_name">眾眾</string>
-    <string name="forwarding">正在轉發…</string>
+    <string name="forwarding">正在背景轉發…</string>
     <string name="forward_by">您已轉發</string>
     <string name="delete">刪除</string>
     <string name="login">登入</string>

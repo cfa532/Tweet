@@ -22,6 +22,8 @@
     
     <!-- Additional missing strings -->
     <string name="downloading_file">ファイルをダウンロード中...</string>
+    <string name="downloading_file_background">バックグラウンドでファイルをダウンロード中...</string>
+    <string name="download_complete">ダウンロード完了</string>
     <string name="error_unknown_error">不明なエラー</string>
     <string name="error_message_failed">エラー：%s</string>
     <string name="video_file_too_large">動画ファイルは512MB未満である必要があります</string>
@@ -245,7 +247,7 @@
     <string name="hide_password">パスワードを非表示</string>
 
     <!-- Shared screens, dialogs, notifications, and errors -->
-    <string name="forwarding">リポスト中…</string>
+    <string name="forwarding">バックグラウンドでリポスト中…</string>
     <string name="forward_by">自分がリポスト</string>
     <string name="delete">削除</string>
     <string name="login">ログイン</string>

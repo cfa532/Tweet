@@ -473,6 +473,6 @@ fun downloadFile(context: Context, url: String, fileName: String) {
     val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     downloadManager.enqueue(request)
 
-    val downloadingMessage = context.getString(R.string.downloading_file)
+    val downloadingMessage = context.getString(R.string.downloading_file_background)
     Toast.makeText(context, downloadingMessage, Toast.LENGTH_SHORT).show()
 }
