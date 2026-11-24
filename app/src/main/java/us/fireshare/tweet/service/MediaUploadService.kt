@@ -1,7 +1,9 @@
 package us.fireshare.tweet.service
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -126,6 +128,20 @@ class MediaUploadService(
         } catch (e: Exception) {
             Timber.tag(TAG).w("Failed to get MIME type: ${e.message}")
             null
+        }
+
+        // HEIC/HEIF cannot be shown by Chrome, Edge or Firefox. Post it as JPEG at
+        // 80%, as iOS and TweetWeb do.
+        if (mimeType == "image/heic" || mimeType == "image/heif" ||
+            fileName?.substringAfterLast('.', "")?.lowercase() in setOf("heic", "heif")
+        ) {
+            val jpeg = heicToJpeg(uri) ?: return null
+            return try {
+                val jpegName = (fileName?.substringBeforeLast('.') ?: "image") + ".jpg"
+                uploadToIPFSOriginal(Uri.fromFile(jpeg), jpegName, fileTimestamp, referenceId, MediaType.Image)
+            } finally {
+                jpeg.delete()
+            }
         }
 
         val mediaType = when {
@@ -412,6 +428,32 @@ class MediaUploadService(
     /**
      * Original IPFS upload method for non-video files or fallback
      */
+    /**
+     * Decodes a HEIC/HEIF image (ImageDecoder applies its rotation) and writes it as
+     * a JPEG in the cache directory. Null when it cannot be decoded or written.
+     */
+    private suspend fun heicToJpeg(uri: Uri): File? = withContext(Dispatchers.IO) {
+        try {
+            val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, _, _ ->
+                // A hardware bitmap cannot be compressed.
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+            val file = File.createTempFile("heic-", ".jpg", context.cacheDir)
+            try {
+                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+            } finally {
+                bitmap.recycle()
+            }
+            Timber.tag(TAG).d("HEIC converted to JPEG: ${file.length() / 1024}KB")
+            file
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Could not convert HEIC to JPEG")
+            null
+        }
+    }
+
     private suspend fun uploadToIPFSOriginal(
         uri: Uri,
         fileName: String?,
